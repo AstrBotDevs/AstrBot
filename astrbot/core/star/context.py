@@ -106,7 +106,7 @@ class Context:
     def get_provider_by_id(self, provider_id: str) -> Provider | None:
         """通过 ID 获取对应的 LLM Provider(Chat_Completion 类型)。"""
         prov = self.provider_manager.inst_map.get(provider_id)
-        if not isinstance(prov, Provider):
+        if prov and not isinstance(prov, Provider):
             raise ValueError("返回的 Provider 不是 Provider 类型")
         return prov
 
@@ -137,7 +137,7 @@ class Context:
             provider_type=ProviderType.CHAT_COMPLETION,
             umo=umo,
         )
-        if not isinstance(prov, Provider):
+        if prov and not isinstance(prov, Provider):
             raise ValueError("返回的 Provider 不是 Provider 类型")
         return prov
 
@@ -152,11 +152,11 @@ class Context:
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
-        if not isinstance(prov, TTSProvider):
+        if prov and not isinstance(prov, TTSProvider):
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
-    def get_using_stt_provider(self, umo: str | None = None) -> STTProvider:
+    def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """
         获取当前使用的用于 STT 任务的 Provider。
 
@@ -167,7 +167,7 @@ class Context:
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
-        if not isinstance(prov, STTProvider):
+        if prov and not isinstance(prov, STTProvider):
             raise ValueError("返回的 Provider 不是 STTProvider 类型")
         return prov
 
@@ -257,7 +257,11 @@ class Context:
     """
 
     def register_llm_tool(
-        self, name: str, func_args: list, desc: str, func_obj: Callable[..., Awaitable[Any]]
+        self,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
         """
         为函数调用（function-calling / tools-use）添加工具。
@@ -279,9 +283,7 @@ class Context:
             desc=desc,
         )
         star_handlers_registry.append(md)
-        self.provider_manager.llm_tools.add_func(
-            name, func_args, desc, func_obj
-        )
+        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
     def unregister_llm_tool(self, name: str) -> None:
         """删除一个函数调用工具。如果再要启用，需要重新注册。"""
