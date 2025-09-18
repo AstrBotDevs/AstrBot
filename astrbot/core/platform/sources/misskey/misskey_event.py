@@ -25,10 +25,6 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
-        # 检测系统指令，如果是系统指令则阻止进入LLM对话历史
-        if self._is_system_command(message_str):
-            self.should_call_llm(True)
-
     def _is_system_command(self, message_str: str) -> bool:
         """检测是否为系统指令"""
         if not message_str or not message_str.strip():
