@@ -9,6 +9,7 @@ from astrbot.core import logger, LogManager, LogBroker
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+import shutil
 
 # add parent path to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -50,6 +51,22 @@ async def check_dashboard_files(webui_dir: str | None = None):
             logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
+
+    # Way B: If a local built dashboard/dist exists, copy it to data/dist
+    try:
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        local_dist = os.path.join(repo_root, "dashboard", "dist")
+        if os.path.exists(local_dist):
+            logger.info(f"检测到本地 WebUI 构建产物: {local_dist}，复制到 {data_dist_path}")
+            if os.path.exists(data_dist_path):
+                try:
+                    shutil.rmtree(data_dist_path)
+                except Exception as e:
+                    logger.warning(f"清理旧的 data/dist 失败: {e}")
+            shutil.copytree(local_dist, data_dist_path)
+            return data_dist_path
+    except Exception as e:
+        logger.warning(f"使用本地 WebUI 构建产物失败: {e}，将尝试使用已有或下载的面板文件")
     if os.path.exists(data_dist_path):
         v = await get_dashboard_version()
         if v is not None:

@@ -11,6 +11,7 @@ from .conversation import ConversationRoute
 from .file import FileRoute
 from .session_management import SessionManagementRoute
 from .persona import PersonaRoute
+from .plugin_config_files import PluginConfigFileFieldRoute
 
 __all__ = [
     "AuthRoute",
@@ -26,4 +27,5 @@ __all__ = [
     "FileRoute",
     "SessionManagementRoute",
     "PersonaRoute",
+    "PluginConfigFileFieldRoute",
 ]
