@@ -830,19 +830,22 @@ export default {
     },
     getStatusColor(status) {
       switch (status) {
-        case 'available':
-          return 'success';
-        case 'unavailable':
-          return 'error';
-        case 'pending':
-          return 'grey';
-        default:
-          return 'default';
+        case 'available': return 'success'
+        case 'unavailable': return 'error'
+        case 'disabled': return 'warning'
+        case 'not_loaded': return 'warning'
+        default: return 'info'
       }
     },
 
     getStatusText(status) {
-      return this.messages.status[status] || status;
+      switch(status) {
+      case 'available': return '可用'
+      case 'unavailable': return '不可用'
+      case 'disabled': return '已禁用'
+      case 'not_loaded': return '加载失败'
+      default: return '未知'
+      }
     },
   }
 }
