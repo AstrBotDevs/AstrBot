@@ -102,27 +102,29 @@
                 <v-row>
                   <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
                     <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
-                      <v-card-item>
-                        <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
-                        <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
-                        <v-progress-circular
-                          v-else-if="status.status === 'pending'"
-                          indeterminate
-                          color="primary"
-                          size="20"
-                          width="2"
-                          class="me-2"
-                        ></v-progress-circular>
+                    <v-card-item>
+                      <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
+                      <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
+                      <v-icon v-else-if="status.status === 'disabled'" color="warning" class="me-2">mdi-minus-circle</v-icon>
+                      <v-icon v-else-if="status.status === 'not_loaded'" color="warning" class="me-2">mdi-alert-circle-outline</v-icon>
+                      <v-progress-circular
+                        v-else-if="status.status === 'pending'"
+                        indeterminate
+                        color="primary"
+                        size="20"
+                        width="2"
+                        class="me-2"
+                      ></v-progress-circular>
 
-                        <span class="font-weight-bold">{{ status.id }}</span>
+                      <span class="font-weight-bold">{{ status.id }}</span>
 
-                        <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
-                          {{ getStatusText(status.status) }}
-                        </v-chip>
-                      </v-card-item>
-                      <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
-                        <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
-                      </v-card-text>
+                      <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
+                        {{ getStatusText(status.status) }}
+                      </v-chip>
+                    </v-card-item>
+                    <v-card-text v-if="status.status === 'unavailable' || status.status === 'disabled' || status.status === 'not_loaded'" class="text-caption text-medium-emphasis">
+                      <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
+                    </v-card-text>
                     </v-card>
                   </v-col>
                 </v-row>
