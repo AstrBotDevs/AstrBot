@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from deprecated import deprecated
-from typing import Awaitable, Literal, Any, Optional
+from typing import Awaitable, Callable, Literal, Any, Optional
 from .mcp_client import MCPClient
 
 
@@ -8,10 +8,10 @@ from .mcp_client import MCPClient
 class FunctionTool:
     """A class representing a function tool that can be used in function calling."""
 
-    name: str | None = None
+    name: str
     parameters: dict | None = None
     description: str | None = None
-    handler: Awaitable | None = None
+    handler: Callable[..., Awaitable[Any]] | None = None
     """处理函数, 当 origin 为 mcp 时，这个为空"""
     handler_module_path: str | None = None
     """处理函数的模块路径，当 origin 为 mcp 时，这个为空
@@ -51,7 +51,7 @@ class ToolSet:
     This class provides methods to add, remove, and retrieve tools, as well as
     convert the tools to different API formats (OpenAI, Anthropic, Google GenAI)."""
 
-    def __init__(self, tools: list[FunctionTool] = None):
+    def __init__(self, tools: list[FunctionTool] | None = None):
         self.tools: list[FunctionTool] = tools or []
 
     def empty(self) -> bool:
@@ -79,7 +79,13 @@ class ToolSet:
         return None
 
     @deprecated(reason="Use add_tool() instead", version="4.0.0")
-    def add_func(self, name: str, func_args: list, desc: str, handler: Awaitable):
+    def add_func(
+        self,
+        name: str,
+        func_args: list,
+        desc: str,
+        handler: Callable[..., Awaitable[Any]],
+    ):
         """Add a function tool to the set."""
         params = {
             "type": "object",  # hard-coded here
@@ -104,7 +110,7 @@ class ToolSet:
         self.remove_tool(name)
 
     @deprecated(reason="Use get_tool() instead", version="4.0.0")
-    def get_func(self, name: str) -> list[FunctionTool]:
+    def get_func(self, name: str) -> FunctionTool | None:
         """Get all function tools."""
         return self.get_tool(name)
 
@@ -125,7 +131,11 @@ class ToolSet:
                 },
             }
 
-            if tool.parameters.get("properties") or not omit_empty_parameter_field:
+            if (
+                tool.parameters
+                and tool.parameters.get("properties")
+                or not omit_empty_parameter_field
+            ):
                 func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
@@ -135,14 +145,14 @@ class ToolSet:
         """Convert tools to Anthropic API format."""
         result = []
         for tool in self.tools:
+            input_schema = {"type": "object"}
+            if tool.parameters:
+                input_schema["properties"] = tool.parameters.get("properties", {})
+                input_schema["required"] = tool.parameters.get("required", [])
             tool_def = {
                 "name": tool.name,
                 "description": tool.description,
-                "input_schema": {
-                    "type": "object",
-                    "properties": tool.parameters.get("properties", {}),
-                    "required": tool.parameters.get("required", []),
-                },
+                "input_schema": input_schema,
             }
             result.append(tool_def)
         return result
@@ -210,14 +220,15 @@ class ToolSet:
 
             return result
 
-        tools = [
-            {
+        tools = []
+        for tool in self.tools:
+            d = {
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": convert_schema(tool.parameters),
             }
-            for tool in self.tools
-        ]
+            if tool.parameters:
+                d["parameters"] = convert_schema(tool.parameters)
+            tools.append(d)
 
         declarations = {}
         if tools:

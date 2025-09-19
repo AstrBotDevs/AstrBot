@@ -4,7 +4,7 @@ import os
 import asyncio
 import aiohttp
 
-from typing import Dict, List, Awaitable
+from typing import Dict, List, Awaitable, Callable, Any
 from astrbot import logger
 from astrbot.core import sp
 
@@ -109,7 +109,7 @@ class FunctionToolManager:
         name: str,
         func_args: list,
         desc: str,
-        handler: Awaitable,
+        handler: Callable[..., Awaitable[Any]],
     ) -> FuncTool:
         params = {
             "type": "object",  # hard-coded here
@@ -132,7 +132,7 @@ class FunctionToolManager:
         name: str,
         func_args: list,
         desc: str,
-        handler: Awaitable,
+        handler: Callable[..., Awaitable[Any]],
     ) -> None:
         """添加函数调用工具
 
@@ -220,7 +220,7 @@ class FunctionToolManager:
         name: str,
         cfg: dict,
         event: asyncio.Event,
-        ready_future: asyncio.Future = None,
+        ready_future: asyncio.Future | None = None,
     ) -> None:
         """初始化 MCP 客户端的包装函数，用于捕获异常"""
         try:

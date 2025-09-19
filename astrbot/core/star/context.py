@@ -23,7 +23,7 @@ from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
-from typing import Awaitable
+from typing import Awaitable, Any, Callable
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
@@ -105,7 +105,10 @@ class Context:
 
     def get_provider_by_id(self, provider_id: str) -> Provider | None:
         """通过 ID 获取对应的 LLM Provider(Chat_Completion 类型)。"""
-        return self.provider_manager.inst_map.get(provider_id)
+        prov = self.provider_manager.inst_map.get(provider_id)
+        if prov and not isinstance(prov, Provider):
+            raise ValueError("返回的 Provider 不是 Provider 类型")
+        return prov
 
     def get_all_providers(self) -> List[Provider]:
         """获取所有用于文本生成任务的 LLM Provider(Chat_Completion 类型)。"""
@@ -130,34 +133,43 @@ class Context:
         Args:
             umo(str): unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，则使用该会话偏好的提供商。
         """
-        return self.provider_manager.get_using_provider(
+        prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.CHAT_COMPLETION,
             umo=umo,
         )
+        if prov and not isinstance(prov, Provider):
+            raise ValueError("返回的 Provider 不是 Provider 类型")
+        return prov
 
-    def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider:
+    def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
         """
         获取当前使用的用于 TTS 任务的 Provider。
 
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        return self.provider_manager.get_using_provider(
+        prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
+        if prov and not isinstance(prov, TTSProvider):
+            raise ValueError("返回的 Provider 不是 TTSProvider 类型")
+        return prov
 
-    def get_using_stt_provider(self, umo: str | None = None) -> STTProvider:
+    def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """
         获取当前使用的用于 STT 任务的 Provider。
 
         Args:
             umo(str): unified_message_origin 值，如果传入，则使用该会话偏好的提供商。
         """
-        return self.provider_manager.get_using_provider(
+        prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )
+        if prov and not isinstance(prov, STTProvider):
+            raise ValueError("返回的 Provider 不是 STTProvider 类型")
+        return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
         """获取 AstrBot 的配置。"""
@@ -245,7 +257,11 @@ class Context:
     """
 
     def register_llm_tool(
-        self, name: str, func_args: list, desc: str, func_obj: Awaitable
+        self,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
         """
         为函数调用（function-calling / tools-use）添加工具。
@@ -267,9 +283,7 @@ class Context:
             desc=desc,
         )
         star_handlers_registry.append(md)
-        self.provider_manager.llm_tools.add_func(
-            name, func_args, desc, func_obj, func_obj
-        )
+        self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
     def unregister_llm_tool(self, name: str) -> None:
         """删除一个函数调用工具。如果再要启用，需要重新注册。"""
@@ -281,7 +295,7 @@ class Context:
         command_name: str,
         desc: str,
         priority: int,
-        awaitable: Awaitable,
+        awaitable: Callable[..., Awaitable[Any]],
         use_regex=False,
         ignore_prefix=False,
     ):

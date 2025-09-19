@@ -65,13 +65,16 @@ class AssistantMessageSegment:
     role: str = "assistant"
 
     def to_dict(self):
-        ret = {
+        ret: dict[str, str | list[dict]] = {
             "role": self.role,
         }
         if self.content:
             ret["content"] = self.content
         if self.tool_calls:
-            ret["tool_calls"] = self.tool_calls
+            tool_calls_dict = [
+                tc if isinstance(tc, dict) else tc.to_dict() for tc in self.tool_calls
+            ]
+            ret["tool_calls"] = tool_calls_dict
         return ret
 
 
@@ -117,7 +120,14 @@ class ProviderRequest:
     """模型名称，为 None 时使用提供商的默认模型"""
 
     def __repr__(self):
-        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()}, tool_calls_result={self.tool_calls_result})"
+        return (
+            f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, "
+            f"image_count={len(self.image_urls or [])}, "
+            f"func_tool={self.func_tool}, "
+            f"contexts={self._print_friendly_context()}, "
+            f"system_prompt={self.system_prompt}, "
+            f"conversation_id={self.conversation.cid if self.conversation else 'N/A'}, "
+        )
 
     def __str__(self):
         return self.__repr__()

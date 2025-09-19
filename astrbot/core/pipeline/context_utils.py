@@ -10,7 +10,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 async def call_handler(
     event: AstrMessageEvent,
-    handler: T.Awaitable,
+    handler: T.Callable[..., T.Awaitable[T.Any]],
     *args,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
@@ -35,6 +35,9 @@ async def call_handler(
         ready_to_call = handler(event, *args, **kwargs)
     except TypeError:
         logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+
+    if not ready_to_call:
+        return
 
     if inspect.isasyncgen(ready_to_call):
         _has_yielded = False

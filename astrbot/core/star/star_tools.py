@@ -22,7 +22,7 @@ import inspect
 import os
 import uuid
 from pathlib import Path
-from typing import Union, Awaitable, List, Optional, ClassVar
+from typing import Union, Awaitable, Callable, Any, List, Optional, ClassVar
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.api.platform import MessageMember, AstrBotMessage, MessageType
@@ -221,7 +221,11 @@ class StarTools:
 
     @classmethod
     def register_llm_tool(
-        cls, name: str, func_args: list, desc: str, func_obj: Awaitable
+        cls,
+        name: str,
+        func_args: list,
+        desc: str,
+        func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
         """
         为函数调用（function-calling/tools-use）添加工具
