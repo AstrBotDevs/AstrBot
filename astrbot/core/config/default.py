@@ -71,6 +71,11 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
+        "error_handling": {
+            "retry_on_failure": 0,
+            "report_error_message": True,
+            "fallback_response": "",
+        },
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2083,6 +2088,27 @@ CONFIG_METADATA_3 = {
                     "provider_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                    },
+                },
+            },
+            "error_handling": {
+                "description": "错误处理",
+                "type": "object",
+                "items": {
+                    "provider_settings.error_handling.retry_on_failure": {
+                        "description": "LLM 请求失败时重试次数",
+                        "type": "int",
+                        "hint": "当请求失败时自动重试的次数。0 表示不重试。",
+                    },
+                    "provider_settings.error_handling.report_error_message": {
+                        "description": "向用户报告详细错误",
+                        "type": "bool",
+                        "hint": "是否将详细的技术性错误信息作为消息发送给用户。如果关闭，将使用下方的备用回复。",
+                    },
+                    "provider_settings.error_handling.fallback_response": {
+                        "description": "备用回复",
+                        "type": "string",
+                        "hint": "当“向用户报告详细错误”被关闭且所有重试都失败时，发送给用户的固定回复。如果留空，则不发送任何消息（静默失败）。",
                     },
                 },
             },

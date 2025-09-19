@@ -221,62 +221,87 @@ MAIN_AGENT_HOOKS = MainAgentHooks()
 
 
 async def run_agent(
-    agent_runner: AgentRunner, max_step: int = 30, show_tool_use: bool = True
+    agent_runner: AgentRunner,
+    max_step: int = 30,
+    show_tool_use: bool = True,
+    retry_on_failure: int = 0,
+    report_error_message: bool = True,
+    fallback_response: str = "",
 ) -> AsyncGenerator[MessageChain, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.event
-    while step_idx < max_step:
-        step_idx += 1
+    success = False
+    # Retry loop
+    for attempt in range(retry_on_failure + 1):
+        step_idx = 0
         try:
-            async for resp in agent_runner.step():
-                if astr_event.is_stopped():
-                    return
-                if resp.type == "tool_call_result":
-                    msg_chain = resp.data["chain"]
-                    if msg_chain.type == "tool_direct_result":
-                        # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
-                        resp.data["chain"].type = "tool_call_result"
-                        await astr_event.send(resp.data["chain"])
+            while step_idx < max_step:
+                step_idx += 1
+                async for resp in agent_runner.step():
+                    if astr_event.is_stopped():
+                        return
+                    if resp.type == "tool_call_result":
+                        msg_chain = resp.data["chain"]
+                        if msg_chain.type == "tool_direct_result":
+                            # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
+                            resp.data["chain"].type = "tool_call_result"
+                            await astr_event.send(resp.data["chain"])
+                            continue
+                        # 对于其他情况，暂时先不处理
                         continue
-                    # 对于其他情况，暂时先不处理
-                    continue
-                elif resp.type == "tool_call":
-                    if agent_runner.streaming:
-                        # 用来标记流式响应需要分节
-                        yield MessageChain(chain=[], type="break")
-                    if show_tool_use or astr_event.get_platform_name() == "webchat":
-                        resp.data["chain"].type = "tool_call"
-                        await astr_event.send(resp.data["chain"])
-                    continue
+                    elif resp.type == "tool_call":
+                        if agent_runner.streaming:
+                            # 用来标记流式响应需要分节
+                            yield MessageChain(chain=[], type="break")
+                        if show_tool_use or astr_event.get_platform_name() == "webchat":
+                            resp.data["chain"].type = "tool_call"
+                            await astr_event.send(resp.data["chain"])
+                        continue
 
-                if not agent_runner.streaming:
-                    content_typ = (
-                        ResultContentType.LLM_RESULT
-                        if resp.type == "llm_result"
-                        else ResultContentType.GENERAL_RESULT
-                    )
-                    astr_event.set_result(
-                        MessageEventResult(
-                            chain=resp.data["chain"].chain,
-                            result_content_type=content_typ,
+                    if not agent_runner.streaming:
+                        content_typ = (
+                            ResultContentType.LLM_RESULT
+                            if resp.type == "llm_result"
+                            else ResultContentType.GENERAL_RESULT
                         )
-                    )
-                    yield
-                    astr_event.clear_result()
-                else:
-                    if resp.type == "streaming_delta":
-                        yield resp.data["chain"]  # MessageChain
-            if agent_runner.done():
+                        astr_event.set_result(
+                            MessageEventResult(
+                                chain=resp.data["chain"].chain,
+                                result_content_type=content_typ,
+                            )
+                        )
+                        yield
+                        astr_event.clear_result()
+                    else:
+                        if resp.type == "streaming_delta":
+                            yield resp.data["chain"]  # MessageChain
+                if agent_runner.done():
+                    success = True
+                    break
+            if success:
                 break
 
         except Exception as e:
-            logger.error(traceback.format_exc())
-            astr_event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
-                )
+            logger.error(
+                f"Attempt {attempt + 1}/{retry_on_failure + 1} failed: {traceback.format_exc()}"
             )
-            return
+            if attempt >= retry_on_failure:
+                # All retries exhausted, handle final error
+                if report_error_message:
+                    astr_event.set_result(
+                        MessageEventResult().message(
+                            f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
+                        )
+                    )
+                elif fallback_response:
+                    astr_event.set_result(
+                        MessageEventResult().message(fallback_response)
+                    )
+                # If report_error_message is False and fallback_response is empty, do nothing (silent fail).
+                return
+            # If retries are left, continue to the next attempt
+            continue
+    if success:
         asyncio.create_task(
             Metric.upload(
                 llm_tick=1,
@@ -303,6 +328,14 @@ class LLMRequestSubStage(Stage):
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
+
+        # Load error handling settings
+        error_handling_settings = settings.get("error_handling", {})
+        self.retry_on_failure = error_handling_settings.get("retry_on_failure", 0)
+        self.report_error_message = error_handling_settings.get(
+            "report_error_message", True
+        )
+        self.fallback_response = error_handling_settings.get("fallback_response", "")
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -477,7 +510,14 @@ class LLMRequestSubStage(Stage):
                 MessageEventResult()
                 .set_result_content_type(ResultContentType.STREAMING_RESULT)
                 .set_async_stream(
-                    run_agent(agent_runner, self.max_step, self.show_tool_use)
+                    run_agent(
+                        agent_runner,
+                        self.max_step,
+                        self.show_tool_use,
+                        self.retry_on_failure,
+                        self.report_error_message,
+                        self.fallback_response,
+                    )
                 )
             )
             yield
@@ -496,7 +536,14 @@ class LLMRequestSubStage(Stage):
                         )
                     )
         else:
-            async for _ in run_agent(agent_runner, self.max_step, self.show_tool_use):
+            async for _ in run_agent(
+                agent_runner,
+                self.max_step,
+                self.show_tool_use,
+                self.retry_on_failure,
+                self.report_error_message,
+                self.fallback_response,
+            ):
                 yield
 
         await self._save_to_history(event, req, agent_runner.get_final_llm_resp())
