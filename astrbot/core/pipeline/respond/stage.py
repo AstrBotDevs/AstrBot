@@ -206,9 +206,11 @@ class RespondStage(Stage):
                     )
                     return
                 async with session_lock_manager.acquire_lock(event.unified_msg_origin):
-                    for comp in result.chain:
-                        i = await self._calc_comp_interval(comp)
-                        await asyncio.sleep(i)
+                    for index, comp in enumerate(result.chain):
+                        if index > 0:
+                            i = await self._calc_comp_interval(comp)
+                            await asyncio.sleep(i)
+
                         try:
                             if comp.type in need_separately:
                                 await event.send(MessageChain([comp]))
