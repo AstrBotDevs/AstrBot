@@ -137,6 +137,10 @@ class CommandFilter(HandlerFilter):
         return result
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        """向后兼容
+
+        注意：实际的指令匹配逻辑已经移到 WakingCheckStage 中处理
+        """
         if not event.is_at_or_wake_command:
             return False
 
