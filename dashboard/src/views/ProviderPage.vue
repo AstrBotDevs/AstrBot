@@ -753,7 +753,7 @@ export default {
           if (index !== -1) {
             const disabledStatus = {
               ...this.providerStatuses[index],
-              status: 'unavailable',
+              status: 'disabled',
               error: '该提供商未被用户启用'
             };
             this.providerStatuses.splice(index, 1, disabledStatus);
