@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import random
+from typing import Optional
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -11,6 +12,7 @@ from .engines import SearchResult
 from .engines.bing import Bing
 from .engines.sogo import Sogo
 from .engines.google import Google
+from .engines.zai import ZAI
 from readability import Document
 from bs4 import BeautifulSoup
 from .engines import HEADERS, USER_AGENTS
@@ -22,6 +24,7 @@ class Main(star.Star):
         "fetch_url",
         "web_search_tavily",
         "tavily_extract_web_page",
+        "web_search_zai",
     ]
 
     def __init__(self, context: star.Context) -> None:
@@ -176,6 +179,32 @@ class Main(star.Star):
                         "Error: Tavily web searcher does not return any results."
                     )
                 return results
+
+    async def _web_search_zai(
+        self, cfg: AstrBotConfig, payload: dict
+    ) -> list[SearchResult]:
+        """使用 ZAI 搜索引擎进行搜索"""
+        zai_keys = cfg.get("provider_settings", {}).get("websearch_zai_keys", [])
+        if not zai_keys:
+            raise ValueError("Error: ZAI API key is not configured in AstrBot.")
+
+        zai_engine = payload.get("search_engine", "search_pro")
+        zai = ZAI(zai_keys, zai_engine)
+
+        # 构建参数，只传递非空值
+        search_args = {
+            "query": payload["search_query"],
+            "count": payload["count"],
+        }
+
+        if "search_domain_filter" in payload:
+            search_args["search_domain_filter"] = payload["search_domain_filter"]
+        if "search_recency_filter" in payload:
+            search_args["search_recency_filter"] = payload["search_recency_filter"]
+        if "content_size" in payload:
+            search_args["content_size"] = payload["content_size"]
+
+        return await zai.search(**search_args)
 
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
@@ -332,15 +361,81 @@ class Main(star.Star):
             return "Error: Tavily web searcher does not return any results."
         return ret
 
+    @llm_tool("web_search_zai")
+    async def search_from_zai(
+        self,
+        event: AstrMessageEvent,
+        query: str,
+        max_results: Optional[int] = None,
+        search_domain_filter: str = "",
+        search_recency_filter: Optional[str] = None,
+        content_size: Optional[str] = None,
+    ) -> str:
+        """使用 Z.AI WebSearch API 进行网络搜索。
+
+        Args:
+            query(string): 搜索查询词。
+            max_results(number): 返回的最大搜索结果数量，范围 1-50。
+            search_domain_filter(string): 可选，指定搜索的域名。
+            search_recency_filter(string): 可选，搜索时间范围，可选值: noLimit/oneYear/oneMonth/oneWeek/oneDay。
+            content_size(string): 可选，网页摘要字数控制，可选值：low/medium/high。
+        """
+        logger.info(f"web_searcher - search_from_zai: {query}")
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        websearch_link = cfg["provider_settings"].get("web_search_link", False)
+
+        if not cfg.get("provider_settings", {}).get("websearch_zai_keys", []):
+            raise ValueError("Error: ZAI API key is not configured in AstrBot.")
+
+        # 获取配置参数
+        prov_settings = cfg["provider_settings"]
+        max_results = max_results or prov_settings.get("websearch_zai_max_results")
+        content_size = content_size or prov_settings.get("websearch_zai_content_size")
+        search_recency_filter = search_recency_filter or prov_settings.get(
+            "websearch_zai_recency_filter"
+        )
+
+        # 构建请求参数
+        payload = {
+            "search_engine": prov_settings.get("websearch_zai_engine"),
+            "search_query": query,
+            "count": min(max(max_results, 1), 50),
+        }
+
+        if search_domain_filter:
+            payload["search_domain_filter"] = search_domain_filter
+        if search_recency_filter and search_recency_filter != "noLimit":
+            payload["search_recency_filter"] = search_recency_filter
+        if content_size and content_size in ["low", "medium", "high"]:
+            payload["content_size"] = content_size
+
+        results = await self._web_search_zai(cfg, payload)
+        if not results:
+            return "Error: ZAI web searcher does not return any results."
+
+        ret_ls = []
+        for idx, result in enumerate(results, 1):
+            ret_ls.append(f"\n{idx}. {result.title}")
+            if websearch_link and result.url:
+                ret_ls.append(f"URL: {result.url}")
+            ret_ls.append(f"Content: {result.snippet}")
+        ret = "\n".join(ret_ls)
+
+        if websearch_link:
+            ret += "\n\n针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
+        return ret
+
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self, event: AstrMessageEvent, req: ProviderRequest
-    ) -> str:
-        """Get the session conversation for the given event."""
+    ):
+        """动态管理搜索工具的可用性"""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})
         websearch_enable = prov_settings.get("web_search", False)
         provider = prov_settings.get("websearch_provider", "default")
+
+        logger.info(f"web_searcher - provider: {provider}, enabled: {websearch_enable}")
 
         tool_set = req.func_tool
         if isinstance(tool_set, FunctionToolManager):
@@ -348,12 +443,15 @@ class Main(star.Star):
             tool_set = req.func_tool
 
         if not websearch_enable:
-            # pop tools
             for tool_name in self.TOOLS:
-                tool_set.remove_tool(tool_name)
+                try:
+                    tool_set.remove_tool(tool_name)
+                except Exception:
+                    pass
             return
 
         func_tool_mgr = self.context.get_llm_tool_manager()
+
         if provider == "default":
             web_search_t = func_tool_mgr.get_func("web_search")
             fetch_url_t = func_tool_mgr.get_func("fetch_url")
@@ -361,8 +459,15 @@ class Main(star.Star):
                 tool_set.add_tool(web_search_t)
             if fetch_url_t:
                 tool_set.add_tool(fetch_url_t)
-            tool_set.remove_tool("web_search_tavily")
-            tool_set.remove_tool("tavily_extract_web_page")
+            for tool in [
+                "web_search_tavily",
+                "tavily_extract_web_page",
+                "web_search_zai",
+            ]:
+                try:
+                    tool_set.remove_tool(tool)
+                except Exception:
+                    pass
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
@@ -370,5 +475,22 @@ class Main(star.Star):
                 tool_set.add_tool(web_search_tavily)
             if tavily_extract_web_page:
                 tool_set.add_tool(tavily_extract_web_page)
-            tool_set.remove_tool("web_search")
-            tool_set.remove_tool("fetch_url")
+            for tool in ["web_search", "fetch_url", "web_search_zai"]:
+                try:
+                    tool_set.remove_tool(tool)
+                except Exception:
+                    pass
+        elif provider == "zai":
+            web_search_zai = func_tool_mgr.get_func("web_search_zai")
+            if web_search_zai:
+                tool_set.add_tool(web_search_zai)
+            for tool in [
+                "web_search",
+                "fetch_url",
+                "web_search_tavily",
+                "tavily_extract_web_page",
+            ]:
+                try:
+                    tool_set.remove_tool(tool)
+                except Exception:
+                    pass

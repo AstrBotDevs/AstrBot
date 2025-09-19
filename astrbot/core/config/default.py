@@ -57,6 +57,11 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
+        "websearch_zai_keys": [],
+        "websearch_zai_engine": "search_pro",
+        "websearch_zai_max_results": 10,
+        "websearch_zai_content_size": "high",
+        "websearch_zai_recency_filter": "oneMonth",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -70,7 +75,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
-        "max_agent_step": 30,
+        "max_agent_step": 10,  # 降低默认值，减少重复查询（特别是付费API）
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2008,7 +2013,8 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily"],
+                        "options": ["default", "tavily", "zai"],
+                        "labels": ["默认搜索", "Tavily", "智谱AI"],
                     },
                     "provider_settings.websearch_tavily_key": {
                         "description": "Tavily API Key",
@@ -2017,6 +2023,63 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "tavily",
+                        },
+                    },
+                    "provider_settings.websearch_zai_keys": {
+                        "description": "智谱AI API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。获取地址: https://open.bigmodel.cn/usercenter/apikeys",
+                        "condition": {
+                            "provider_settings.websearch_provider": "zai",
+                        },
+                    },
+                    "provider_settings.websearch_zai_engine": {
+                        "description": "智谱AI 搜索引擎",
+                        "type": "string",
+                        "options": [
+                            "search_std",
+                            "search_pro",
+                            "search_pro_sogou",
+                            "search_pro_quark",
+                        ],
+                        "hint": "智谱AI 提供的不同搜索引擎选项。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "zai",
+                        },
+                    },
+                    "provider_settings.websearch_zai_max_results": {
+                        "description": "搜索结果数量",
+                        "type": "int",
+                        "hint": "控制 ZAI 搜索返回的结果数量，范围 1-50，默认为 10。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "zai",
+                        },
+                    },
+                    "provider_settings.websearch_zai_content_size": {
+                        "description": "网页摘要字数",
+                        "type": "string",
+                        "options": ["low", "medium", "high"],
+                        "labels": ["简短", "中等", "详细"],
+                        "hint": "控制 ZAI 搜索输出网页摘要的字数。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "zai",
+                        },
+                    },
+                    "provider_settings.websearch_zai_recency_filter": {
+                        "description": "搜索时间范围",
+                        "type": "string",
+                        "options": [
+                            "noLimit",
+                            "oneYear",
+                            "oneMonth",
+                            "oneWeek",
+                            "oneDay",
+                        ],
+                        "labels": ["不限制", "一年内", "一个月内", "一周内", "一天内"],
+                        "hint": "限制搜索结果的时间范围，默认为一个月内。追求信息时效性时可适当缩小范围。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "zai",
                         },
                     },
                     "provider_settings.web_search_link": {
@@ -2053,6 +2116,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
+                        "hint": "限制 AI 连续使用工具的次数，避免付费 API（如智谱搜索）的重复调用。建议设置为 5-15。",
                     },
                     "provider_settings.streaming_response": {
                         "description": "流式回复",
