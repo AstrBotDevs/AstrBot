@@ -192,6 +192,13 @@ class ProviderManager:
         if not provider_config["enable"]:
             return
 
+        # 预处理：确保 Provider 不会因空 api_key 列表而实例化失败
+        # 创建副本以避免修改原始配置
+        provider_config = provider_config.copy()
+        # 统一添加一个空的 api_key，防止 __init__ 抛出 "API key is required" 异常
+        if not provider_config.get("key"):
+            provider_config["key"] = [""]
+
         logger.info(
             f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ..."
         )
