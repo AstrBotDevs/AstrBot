@@ -75,6 +75,7 @@ DEFAULT_CONFIG = {
             "retry_on_failure": 0,
             "report_error_message": True,
             "fallback_response": "",
+            "retry_delay": 0,
         },
     },
     "provider_stt_settings": {
@@ -2109,6 +2110,11 @@ CONFIG_METADATA_3 = {
                         "description": "备用回复",
                         "type": "string",
                         "hint": "当“向用户报告详细错误”被关闭且所有重试都失败时，发送给用户的固定回复。如果留空，则不发送任何消息（静默失败）。",
+                    },
+                    "provider_settings.error_handling.retry_delay": {
+                        "description": "LLM 请求失败时重试间隔（秒）",
+                        "type": "float",
+                        "hint": "当请求失败并进行重试时，每次重试之间的等待时间（秒）。设置为 0 则不等待。",
                     },
                 },
             },
