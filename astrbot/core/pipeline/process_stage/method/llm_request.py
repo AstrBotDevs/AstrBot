@@ -227,6 +227,7 @@ async def run_agent(
     retry_on_failure: int = 0,
     report_error_message: bool = True,
     fallback_response: str = "",
+    retry_delay: float = 0,
 ) -> AsyncGenerator[MessageChain, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.event
@@ -299,6 +300,12 @@ async def run_agent(
                     )
                 # If report_error_message is False and fallback_response is empty, do nothing (silent fail).
                 return
+
+            # --- 新增的重试等待逻辑 ---
+            if retry_delay > 0:
+                logger.debug(f"Waiting for {retry_delay} seconds before retrying...")
+                await asyncio.sleep(retry_delay)
+
             # If retries are left, continue to the next attempt
             continue
     if success:
@@ -331,7 +338,25 @@ class LLMRequestSubStage(Stage):
 
         # Load error handling settings
         error_handling_settings = settings.get("error_handling", {})
-        self.retry_on_failure = error_handling_settings.get("retry_on_failure", 0)
+
+        # Validate retry_on_failure
+        retry_on_failure = error_handling_settings.get("retry_on_failure", 0)
+        if not isinstance(retry_on_failure, int) or not (0 <= retry_on_failure <= 10):
+            logger.warning(
+                f"Invalid value for retry_on_failure: {retry_on_failure}. Must be an integer between 0 and 10. Using default 0."
+            )
+            retry_on_failure = 0
+        self.retry_on_failure = retry_on_failure
+
+        # Validate and load retry_delay
+        retry_delay = error_handling_settings.get("retry_delay", 0)
+        if not isinstance(retry_delay, (int, float)) or not (0 <= retry_delay <= 10):
+            logger.warning(
+                f"Invalid value for retry_delay: {retry_delay}. Must be a number between 0 and 10. Using default 0."
+            )
+            retry_delay = 0
+        self.retry_delay = retry_delay
+
         self.report_error_message = error_handling_settings.get(
             "report_error_message", True
         )
@@ -517,6 +542,7 @@ class LLMRequestSubStage(Stage):
                         self.retry_on_failure,
                         self.report_error_message,
                         self.fallback_response,
+                        self.retry_delay,
                     )
                 )
             )
@@ -543,6 +569,7 @@ class LLMRequestSubStage(Stage):
                 self.retry_on_failure,
                 self.report_error_message,
                 self.fallback_response,
+                self.retry_delay,
             ):
                 yield
 
