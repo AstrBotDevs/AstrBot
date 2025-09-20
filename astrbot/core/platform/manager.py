@@ -90,6 +90,10 @@ class PlatformManager:
                     from .sources.discord.discord_platform_adapter import (
                         DiscordPlatformAdapter,  # noqa: F401
                     )
+                case "misskey":
+                    from .sources.misskey.misskey_adapter import (
+                        MisskeyPlatformAdapter,  # noqa: F401
+                    )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401
                 case "satori":
