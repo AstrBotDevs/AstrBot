@@ -44,7 +44,7 @@
         <div class="stat-box" :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}">
           <div class="stat-label">{{ t('charts.messageTrend.growthRate') }}</div>
           <div class="stat-number">
-            <v-icon size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
+            <v-icon v-show="growthRate !== 0" size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
             {{ Math.abs(growthRate) }}%
           </div>
         </div>
