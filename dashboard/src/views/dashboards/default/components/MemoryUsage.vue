@@ -98,6 +98,7 @@ export default {
 
 .stat-value-wrapper {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 4px;
