@@ -1329,6 +1329,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                             req.system_prompt += (
                                 f"Image Caption: {llm_resp.completion_text}\n"
                             )
+                    else:
+                        logger.warning("No provider found for image captioning.")
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
