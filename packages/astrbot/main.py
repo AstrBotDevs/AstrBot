@@ -1317,9 +1317,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     if img_cap_prov_id:
                         prov = self.context.get_provider_by_id(img_cap_prov_id)
                     if prov is None:
-                        prov = self.context.get_using_provider(
-                            event.unified_msg_origin
-                        )
+                        prov = self.context.get_using_provider(event.unified_msg_origin)
                     if prov:
                         llm_resp = await prov.text_chat(
                             prompt="Please describe the image content.",
