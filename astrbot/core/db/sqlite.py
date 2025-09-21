@@ -173,7 +173,6 @@ class SQLiteDatabase(BaseDatabase):
 
             # Get total count matching the filters
             count_query = select(func.count()).select_from(base_query.subquery())
-            print(count_query)
             total_count = await session.execute(count_query)
             total = total_count.scalar_one()
 
@@ -184,7 +183,6 @@ class SQLiteDatabase(BaseDatabase):
                 .offset(offset)
                 .limit(page_size)
             )
-            print(result_query)
             result = await session.execute(result_query)
             conversations = result.scalars().all()
 
