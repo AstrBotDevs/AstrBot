@@ -69,7 +69,7 @@ class Provider(AbstractProvider):
     def get_keys(self) -> List[str]:
         """获得提供商 Key"""
         keys = self.provider_config.get("key", [""])
-        return keys if keys else [""]
+        return keys or [""]
 
     @abc.abstractmethod
     def set_key(self, key: str):
