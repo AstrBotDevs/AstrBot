@@ -159,6 +159,7 @@ class SQLiteDatabase(BaseDatabase):
                     or_(
                         ConversationV2.title.ilike(f"%{search_query}%"),
                         ConversationV2.content.ilike(f"%{search_query}%"),
+                        ConversationV2.user_id.ilike(f"%{search_query}%"),
                     )
                 )
             if "message_types" in kwargs and len(kwargs["message_types"]) > 0:
