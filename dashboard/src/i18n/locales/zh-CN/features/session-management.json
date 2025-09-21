@@ -5,7 +5,7 @@
     "refresh": "刷新",
     "edit": "编辑",
     "apply": "应用批量设置",
-    "editName": "编辑会话名称",
+    "editName": "备注",
     "save": "保存",
     "cancel": "取消"
   },
@@ -22,13 +22,13 @@
   "table": {
     "headers": {
       "sessionStatus": "会话状态",
-      "sessionInfo": "会话信息",
+      "sessionInfo": "ID (UMO)",
       "persona": "人格",
-      "chatProvider": "Chat Provider",
-      "sttProvider": "STT Provider",
-      "ttsProvider": "TTS Provider",
-      "llmStatus": "LLM启停",
-      "ttsStatus": "TTS启停",
+      "chatProvider": "聊天模型",
+      "sttProvider": "语音识别模型",
+      "ttsProvider": "语音合成模型",
+      "llmStatus": "启用 LLM",
+      "ttsStatus": "启用 TTS",
       "pluginManagement": "插件管理"
     }
   },

@@ -18,6 +18,7 @@ from astrbot.core.db.po import (
 from sqlalchemy import select, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
+from sqlalchemy import or_
 
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
@@ -153,8 +154,21 @@ class SQLiteDatabase(BaseDatabase):
                     ConversationV2.platform_id.in_(platform_ids)
                 )
             if search_query:
+                search_query = search_query.encode("unicode_escape").decode("utf-8")
                 base_query = base_query.where(
-                    ConversationV2.title.ilike(f"%{search_query}%")
+                    or_(
+                        ConversationV2.title.ilike(f"%{search_query}%"),
+                        ConversationV2.content.ilike(f"%{search_query}%"),
+                    )
+                )
+            if "message_types" in kwargs and len(kwargs["message_types"]) > 0:
+                for msg_type in kwargs["message_types"]:
+                    base_query = base_query.where(
+                        ConversationV2.user_id.ilike(f"%:{msg_type}:%")
+                    )
+            if "platforms" in kwargs and len(kwargs["platforms"]) > 0:
+                base_query = base_query.where(
+                    ConversationV2.platform_id.in_(kwargs["platforms"])
                 )
 
             # Get total count matching the filters
