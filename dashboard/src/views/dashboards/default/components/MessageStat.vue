@@ -44,7 +44,7 @@
         <div class="stat-box" :class="{'trend-up': growthRate > 0, 'trend-down': growthRate < 0}">
           <div class="stat-label">{{ t('charts.messageTrend.growthRate') }}</div>
           <div class="stat-number">
-            <v-icon size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
+            <v-icon v-show="growthRate !== 0" size="small" :icon="growthRate > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"></v-icon>
             {{ Math.abs(growthRate) }}%
           </div>
         </div>
@@ -303,8 +303,10 @@ export default {
 
 .chart-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 10px;
   margin-bottom: 20px;
 }
 
@@ -321,7 +323,7 @@ export default {
 }
 
 .time-select {
-  max-width: 150px;
+  max-width: fit-content;
   font-size: 14px;
 }
 
@@ -349,6 +351,7 @@ export default {
   font-weight: 600;
   color: var(--v-theme-primaryText);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
 }
 
