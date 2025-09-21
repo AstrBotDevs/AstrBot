@@ -179,9 +179,9 @@ class ProviderAnthropic(Provider):
                             # 累积 JSON 输入
                             if "input_json" not in tool_use_buffer[event.index]:
                                 tool_use_buffer[event.index]["input_json"] = ""
-                            tool_use_buffer[event.index][
-                                "input_json"
-                            ] += event.delta.partial_json
+                            tool_use_buffer[event.index]["input_json"] += (
+                                event.delta.partial_json
+                            )
 
                 elif event.type == "content_block_stop":
                     # 内容块结束
