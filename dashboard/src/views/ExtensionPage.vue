@@ -470,7 +470,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
-    
+
     toast(tm('messages.refreshSuccess'), "success");
   } catch (err) {
     toast(tm('messages.refreshFailed') + " " + err, "error");
@@ -518,27 +518,12 @@ onMounted(async () => {
   <v-row>
     <v-col cols="12" md="12">
       <v-card variant="flat">
-        <v-card-item>
-          <template v-slot:prepend>
-            <div class="plugin-page-icon d-flex justify-center align-center rounded-lg mr-4">
-              <v-icon size="36" color="primary">mdi-puzzle</v-icon>
-            </div>
-          </template>
-          <v-card-title class="text-h4 font-weight-bold">
-            {{ tm('title') }}
-          </v-card-title>
-          <v-card-subtitle class="text-subtitle-1 mt-1 text-medium-emphasis">
-            {{ tm('subtitle') }}
-          </v-card-subtitle>
-        </v-card-item>
-
         <!-- 标签页 -->
         <v-card-text>
-
           <!-- 标签栏和搜索栏 - 响应式布局 -->
-          <div class="mb-4">
+          <div class="mb-4 d-flex flex-wrap">
             <!-- 标签栏 -->
-            <v-tabs v-model="activeTab" color="primary" class="mb-3">
+            <v-tabs v-model="activeTab" color="primary">
               <v-tab value="installed">
                 <v-icon class="mr-2">mdi-puzzle</v-icon>
                 {{ tm('tabs.installed') }}
@@ -550,17 +535,16 @@ onMounted(async () => {
             </v-tabs>
 
             <!-- 搜索栏 - 在移动端时独占一行 -->
-            <v-row class="mb-2">
-              <v-col cols="12" sm="6" md="4" lg="3">
-                <v-text-field v-if="activeTab == 'market'" v-model="marketSearch" density="compact"
-                  :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat
-                  hide-details single-line>
-                </v-text-field>
-                <v-text-field v-else v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
-                  prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details single-line>
-                </v-text-field>
-              </v-col>
-            </v-row>
+            <div style="flex-grow: 1; min-width: 250px; max-width: 400px; margin-left: auto; margin-top: 8px;">
+              <v-text-field v-if="activeTab == 'market'" v-model="marketSearch" density="compact"
+                :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat
+                hide-details single-line>
+              </v-text-field>
+              <v-text-field v-else v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
+                prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details single-line>
+              </v-text-field>
+            </div>
+
           </div>
 
 
@@ -776,18 +760,13 @@ onMounted(async () => {
               <div class="d-flex align-center mb-2" style="justify-content: space-between;">
                 <h2>{{ tm('market.allPlugins') }}</h2>
                 <div class="d-flex align-center">
-                  <v-btn 
-                    variant="tonal" 
-                    size="small" 
-                    @click="refreshPluginMarket" 
-                    :loading="refreshingMarket"
-                    class="mr-2"
-                  >
+                  <v-btn variant="tonal" size="small" @click="refreshPluginMarket" :loading="refreshingMarket"
+                    class="mr-2">
                     <v-icon>mdi-refresh</v-icon>
                     {{ tm('buttons.refresh') }}
                   </v-btn>
-                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details density="compact"
-                    style="margin-left: 12px" />
+                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
+                    density="compact" style="margin-left: 12px" />
                 </div>
               </div>
 
@@ -827,7 +806,7 @@ onMounted(async () => {
                   <template v-slot:item.tags="{ item }">
                     <span v-if="item.tags.length === 0">-</span>
                     <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'"
-                      size="x-small" v-show="tag !== 'danger'">
+                      size="x-small" v-show="tag !== 'danger'" class="ma-1">
                       {{ tag }}</v-chip>
                   </template>
                   <template v-slot:item.actions="{ item }">
