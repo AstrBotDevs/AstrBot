@@ -532,7 +532,6 @@ class ProviderManager:
             if instance in self.embedding_provider_insts:
                 self.embedding_provider_insts.remove(instance)
             if self.curr_provider_inst == instance:
-
                 self.curr_provider_inst = None
             if self.curr_stt_provider_inst == instance:
                 self.curr_stt_provider_inst = None
