@@ -5,7 +5,9 @@ from astrbot.core.star import StarMetadata, star_map
 _warned_register_star = False
 
 
-def register_star(name: str, author: str, desc: str, version: str, repo: str = None):
+def register_star(
+    name: str, author: str, desc: str, version: str, repo: str | None = None
+):
     """注册一个插件(Star)。
 
     [DEPRECATED] 该装饰器已废弃，将在未来版本中移除。

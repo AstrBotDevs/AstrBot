@@ -19,7 +19,7 @@ class ContentSafetyCheckStage(Stage):
         self.strategy_selector = StrategySelector(config)
 
     async def process(
-        self, event: AstrMessageEvent, check_text: str = None
+        self, event: AstrMessageEvent, check_text: str | None = None
     ) -> Union[None, AsyncGenerator[None, None]]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()

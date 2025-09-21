@@ -1,7 +1,7 @@
 from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
-from typing import Awaitable, List, Dict, TypeVar, Generic
+from typing import Callable, Awaitable, Any, List, Dict, TypeVar, Generic
 from .filter import HandlerFilter
 from .star import star_map
 
@@ -60,7 +60,7 @@ class StarHandlerRegistry(Generic[T]):
             handlers.append(handler)
         return handlers
 
-    def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata:
+    def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata | None:
         return self.star_handlers_map.get(full_name, None)
 
     def get_handlers_by_module_name(
@@ -87,7 +87,7 @@ class StarHandlerRegistry(Generic[T]):
         return len(self._handlers)
 
 
-star_handlers_registry = StarHandlerRegistry()
+star_handlers_registry = StarHandlerRegistry()  # type: ignore
 
 
 class EventType(enum.Enum):
@@ -123,7 +123,7 @@ class StarHandlerMetadata:
     handler_module_path: str
     """Handler 所在的模块路径。"""
 
-    handler: Awaitable
+    handler: Callable[..., Awaitable[Any]]
     """Handler 的函数对象，应当是一个异步函数"""
 
     event_filters: List[HandlerFilter]

@@ -43,7 +43,7 @@ class PluginManager:
         self.updator = PluginUpdator()
 
         self.context = context
-        self.context._star_manager = self
+        self.context._star_manager = self  # type: ignore
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
@@ -478,9 +478,10 @@ class PluginManager:
                         if isinstance(func_tool, HandoffTool):
                             need_apply = []
                             sub_tools = func_tool.agent.tools
-                            for sub_tool in sub_tools:
-                                if isinstance(sub_tool, FunctionTool):
-                                    need_apply.append(sub_tool)
+                            if sub_tools:
+                                for sub_tool in sub_tools:
+                                    if isinstance(sub_tool, FunctionTool):
+                                        need_apply.append(sub_tool)
                         else:
                             need_apply = [func_tool]
 
@@ -686,6 +687,9 @@ class PluginManager:
                 )
 
             # 从 star_registry 和 star_map 中删除
+            if plugin.module_path is None or root_dir_name is None:
+                raise Exception(f"插件 {plugin_name} 数据不完整，无法卸载。")
+
             await self._unbind_plugin(plugin_name, plugin.module_path)
 
             try:
@@ -800,6 +804,8 @@ class PluginManager:
 
     async def turn_on_plugin(self, plugin_name: str):
         plugin = self.context.get_registered_star(plugin_name)
+        if plugin is None:
+            raise Exception(f"插件 {plugin_name} 不存在。")
         inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])
         inactivated_llm_tools: list = await sp.global_get("inactivated_llm_tools", [])
         if plugin.module_path in inactivated_plugins:

@@ -12,7 +12,7 @@ from ..filter.platform_adapter_type import (
 from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.regex import RegexFilter
-from typing import Awaitable
+from typing import Awaitable, Any, Callable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.agent.agent import Agent
@@ -20,15 +20,19 @@ from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core import logger
 
 
-def get_handler_full_name(awaitable: Awaitable) -> str:
+def get_handler_full_name(awaitable: Callable[..., Awaitable[Any]]) -> str:
     """获取 Handler 的全名"""
     return f"{awaitable.__module__}_{awaitable.__name__}"
 
 
 def get_handler_or_create(
-    handler: Awaitable, event_type: EventType, dont_add=False, **kwargs
+    handler: Callable[..., Awaitable[Any]],
+    event_type: EventType,
+    dont_add=False,
+    **kwargs,
 ) -> StarHandlerMetadata:
     """获取 Handler 或者创建一个新的 Handler"""
     handler_full_name = get_handler_full_name(handler)
@@ -59,22 +63,35 @@ def get_handler_or_create(
 
 
 def register_command(
-    command_name: str = None, sub_command: str = None, alias: set = None, **kwargs
+    command_name: str | None = None,
+    sub_command: str | None = None,
+    alias: set | None = None,
+    **kwargs,
 ):
     """注册一个 Command."""
     new_command = None
     add_to_event_filters = False
     if isinstance(command_name, RegisteringCommandable):
         # 子指令
-        parent_command_names = command_name.parent_group.get_complete_command_names()
-        new_command = CommandFilter(
-            sub_command, alias, None, parent_command_names=parent_command_names
-        )
-        command_name.parent_group.add_sub_command_filter(new_command)
+        if sub_command is not None:
+            parent_command_names = (
+                command_name.parent_group.get_complete_command_names()
+            )
+            new_command = CommandFilter(
+                sub_command, alias, None, parent_command_names=parent_command_names
+            )
+            command_name.parent_group.add_sub_command_filter(new_command)
+        else:
+            logger.warning(
+                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。"
+            )
     else:
         # 裸指令
-        new_command = CommandFilter(command_name, alias, None)
-        add_to_event_filters = True
+        if command_name is None:
+            logger.warning("注册裸指令时未提供 command_name 参数。")
+        else:
+            new_command = CommandFilter(command_name, alias, None)
+            add_to_event_filters = True
 
     def decorator(awaitable):
         if not add_to_event_filters:
@@ -84,8 +101,9 @@ def register_command(
         handler_md = get_handler_or_create(
             awaitable, EventType.AdapterMessageEvent, **kwargs
         )
-        new_command.init_handler_md(handler_md)
-        handler_md.event_filters.append(new_command)
+        if new_command:
+            new_command.init_handler_md(handler_md)
+            handler_md.event_filters.append(new_command)
         return awaitable
 
     return decorator
@@ -163,26 +181,38 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
 
 def register_command_group(
-    command_group_name: str = None, sub_command: str = None, alias: set = None, **kwargs
+    command_group_name: str | None = None,
+    sub_command: str | None = None,
+    alias: set | None = None,
+    **kwargs,
 ):
     """注册一个 CommandGroup"""
     new_group = None
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
-        new_group = CommandGroupFilter(
-            sub_command, alias, parent_group=command_group_name.parent_group
-        )
-        command_group_name.parent_group.add_sub_command_filter(new_group)
+        if sub_command is None:
+            logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
+        else:
+            new_group = CommandGroupFilter(
+                sub_command, alias, parent_group=command_group_name.parent_group
+            )
+            command_group_name.parent_group.add_sub_command_filter(new_group)
     else:
         # 根指令组
-        new_group = CommandGroupFilter(command_group_name, alias)
+        if command_group_name is None:
+            logger.warning("根指令组的名称未指定")
+        else:
+            new_group = CommandGroupFilter(command_group_name, alias)
 
     def decorator(obj):
         # 根指令组
-        handler_md = get_handler_or_create(obj, EventType.AdapterMessageEvent, **kwargs)
-        handler_md.event_filters.append(new_group)
+        if new_group:
+            handler_md = get_handler_or_create(
+                obj, EventType.AdapterMessageEvent, **kwargs
+            )
+            handler_md.event_filters.append(new_group)
 
-        return RegisteringCommandable(new_group)
+            return RegisteringCommandable(new_group)
 
     return decorator
 
@@ -323,7 +353,7 @@ def register_on_llm_response(**kwargs):
     return decorator
 
 
-def register_llm_tool(name: str = None, **kwargs):
+def register_llm_tool(name: str | None = None, **kwargs):
     """为函数调用（function-calling / tools-use）添加工具。
 
     请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
@@ -361,9 +391,10 @@ def register_llm_tool(name: str = None, **kwargs):
     if kwargs.get("registering_agent"):
         registering_agent = kwargs["registering_agent"]
 
-    def decorator(awaitable: Awaitable):
+    def decorator(awaitable: Callable[..., Awaitable[Any]]):
         llm_tool_name = name_ if name_ else awaitable.__name__
-        docstring = docstring_parser.parse(awaitable.__doc__)
+        func_doc = awaitable.__doc__ or ""
+        docstring = docstring_parser.parse(func_doc)
         args = []
         for arg in docstring.params:
             if arg.type_name not in SUPPORTED_TYPES:
@@ -379,20 +410,18 @@ def register_llm_tool(name: str = None, **kwargs):
             )
         # print(llm_tool_name, registering_agent)
         if not registering_agent:
+            doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-            llm_tools.add_func(
-                llm_tool_name, args, docstring.description.strip(), md.handler
-            )
+            llm_tools.add_func(llm_tool_name, args, doc_desc, md.handler)
         else:
             assert isinstance(registering_agent, RegisteringAgent)
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
             if registering_agent._agent.tools is None:
                 registering_agent._agent.tools = []
-            registering_agent._agent.tools.append(
-                llm_tools.spec_to_func(
-                    llm_tool_name, args, docstring.description.strip(), awaitable
-                )
-            )
+
+            desc = docstring.description.strip() if docstring.description else ""
+            tool = llm_tools.spec_to_func(llm_tool_name, args, desc, awaitable)
+            registering_agent._agent.tools.append(tool)
 
         return awaitable
 
@@ -413,8 +442,8 @@ class RegisteringAgent:
 def register_agent(
     name: str,
     instruction: str,
-    tools: list[str | FunctionTool] = None,
-    run_hooks: BaseAgentRunHooks[AstrAgentContext] = None,
+    tools: list[str | FunctionTool] | None = None,
+    run_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
 ):
     """注册一个 Agent
 
@@ -426,7 +455,7 @@ def register_agent(
     """
     tools_ = tools or []
 
-    def decorator(awaitable: Awaitable):
+    def decorator(awaitable: Callable[..., Awaitable[Any]]):
         AstrAgent = Agent[AstrAgentContext]
         agent = AstrAgent(
             name=name,

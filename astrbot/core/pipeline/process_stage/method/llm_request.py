@@ -7,6 +7,7 @@ import copy
 import json
 import traceback
 from typing import AsyncGenerator, Union
+from astrbot.core.conversation_mgr import Conversation
 from astrbot.core import logger
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -133,6 +134,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         if agent_runner.done():
             llm_response = agent_runner.get_final_llm_resp()
+
+            if not llm_response:
+                text_content = mcp.types.TextContent(
+                    type="text",
+                    text=f"error when deligate task to {tool.agent.name}",
+                )
+                yield mcp.types.CallToolResult(content=[text_content])
+                return
+
             logger.debug(
                 f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}"
             )
@@ -148,7 +158,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
             yield mcp.types.CallToolResult(content=[text_content])
         else:
-            yield mcp.types.TextContent(
+            text_content = mcp.types.TextContent(
                 type="text",
                 text=f"error when deligate task to {tool.agent.name}",
             )
@@ -200,7 +210,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         if not tool.mcp_client:
             raise ValueError("MCP client is not available for MCP function tools.")
-        res = await tool.mcp_client.session.call_tool(
+
+        session = tool.mcp_client.session
+        if not session:
+            raise ValueError("MCP session is not available for MCP function tools.")
+        res = await session.call_tool(
             name=tool.name,
             arguments=tool_args,
         )
@@ -325,7 +339,7 @@ class LLMRequestSubStage(Stage):
 
         return _ctx.get_using_provider(umo=event.unified_msg_origin)
 
-    async def _get_session_conv(self, event: AstrMessageEvent):
+    async def _get_session_conv(self, event: AstrMessageEvent) -> Conversation:
         umo = event.unified_msg_origin
         conv_mgr = self.conv_manager
 
@@ -337,6 +351,8 @@ class LLMRequestSubStage(Stage):
         if not conversation:
             cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
             conversation = await conv_mgr.get_conversation(umo, cid)
+        if not conversation:
+            raise RuntimeError("无法创建新的对话。")
         return conversation
 
     async def process(
@@ -444,7 +460,10 @@ class LLMRequestSubStage(Stage):
         if event.plugins_name is not None and req.func_tool:
             new_tool_set = ToolSet()
             for tool in req.func_tool.tools:
-                plugin = star_map.get(tool.handler_module_path)
+                mp = tool.handler_module_path
+                if not mp:
+                    continue
+                plugin = star_map.get(mp)
                 if not plugin:
                     continue
                 if plugin.name in event.plugins_name or plugin.reserved:

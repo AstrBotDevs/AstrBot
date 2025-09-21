@@ -13,8 +13,8 @@ class CommandGroupFilter(HandlerFilter):
     def __init__(
         self,
         group_name: str,
-        alias: set = None,
-        parent_group: CommandGroupFilter = None,
+        alias: set | None = None,
+        parent_group: CommandGroupFilter | None = None,
     ):
         self.group_name = group_name
         self.alias = alias if alias else set()
@@ -54,8 +54,8 @@ class CommandGroupFilter(HandlerFilter):
         self,
         sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]],
         prefix: str = "",
-        event: AstrMessageEvent = None,
-        cfg: AstrBotConfig = None,
+        event: AstrMessageEvent | None = None,
+        cfg: AstrBotConfig | None = None,
     ) -> str:
         result = ""
         for sub_filter in sub_command_filters:

@@ -140,6 +140,9 @@ class SessionPluginManager:
                 filtered_handlers.append(handler)
                 continue
 
+            if plugin.name is None:
+                continue
+
             # 检查插件是否在当前会话中启用
             if SessionPluginManager.is_plugin_enabled_for_session(
                 session_id, plugin.name

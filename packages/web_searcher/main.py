@@ -178,7 +178,7 @@ class Main(star.Star):
                 return results
 
     @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
+    async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
         event.set_result(
             MessageEventResult().message(
                 "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。"
@@ -210,7 +210,7 @@ class Main(star.Star):
         processed_results = await asyncio.gather(*tasks, return_exceptions=True)
         ret = ""
         for processed_result in processed_results:
-            if isinstance(processed_result, Exception):
+            if isinstance(processed_result, BaseException):
                 logger.error(f"Error processing search result: {processed_result}")
                 continue
             ret += processed_result
@@ -335,7 +335,7 @@ class Main(star.Star):
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self, event: AstrMessageEvent, req: ProviderRequest
-    ) -> str:
+    ):
         """Get the session conversation for the given event."""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})
@@ -346,6 +346,9 @@ class Main(star.Star):
         if isinstance(tool_set, FunctionToolManager):
             req.func_tool = tool_set.get_full_tool_set()
             tool_set = req.func_tool
+
+        if not tool_set:
+            return
 
         if not websearch_enable:
             # pop tools
@@ -372,3 +375,5 @@ class Main(star.Star):
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
+
+        print(req.func_tool)
