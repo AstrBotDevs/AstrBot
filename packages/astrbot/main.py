@@ -1236,6 +1236,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
+        img_cap_prov_id = cfg.get("default_image_caption_provider_id")
         if req.conversation:
             # persona inject
             persona_id = req.conversation.persona_id or cfg.get("default_personality")
@@ -1276,7 +1277,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
             # image caption
-            img_cap_prov_id = cfg.get("default_image_caption_provider_id")
             if img_cap_prov_id and req.image_urls:
                 img_cap_prompt = cfg.get(
                     "image_caption_prompt", "Please describe the image."
@@ -1313,9 +1313,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         break
             if image_seg:
                 try:
-                    if prov := self.context.get_using_provider(
-                        event.unified_msg_origin
-                    ):
+                    prov = None
+                    if img_cap_prov_id:
+                        prov = self.context.get_provider_by_id(img_cap_prov_id)
+                    if prov is None:
+                        prov = self.context.get_using_provider(event.unified_msg_origin)
+                    if prov:
                         llm_resp = await prov.text_chat(
                             prompt="Please describe the image content.",
                             image_urls=[await image_seg.convert_to_file_path()],
@@ -1324,6 +1327,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                             req.system_prompt += (
                                 f"Image Caption: {llm_resp.completion_text}\n"
                             )
+                    else:
+                        logger.warning("No provider found for image captioning.")
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
