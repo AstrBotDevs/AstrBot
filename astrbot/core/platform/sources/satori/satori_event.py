@@ -18,14 +18,14 @@ class SatoriPlatformEvent(AstrMessageEvent):
         adapter: "SatoriPlatformAdapter",
     ):
         # 更新平台元数据
-        if adapter and hasattr(adapter, 'logins') and adapter.logins:
+        if adapter and hasattr(adapter, "logins") and adapter.logins:
             current_login = adapter.logins[0]
             platform_name = current_login.get("platform", "satori")
             user = current_login.get("user", {})
             user_id = user.get("id", "") if user else ""
             if not platform_meta.id and user_id:
                 platform_meta.id = f"{platform_name}({user_id})"
-        
+
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
         self.platform = None
