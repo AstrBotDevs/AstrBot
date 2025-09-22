@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.0.0"
+version = "4.1.5"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -49,6 +49,8 @@ dependencies = [
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",
     "wechatpy>=1.8.18",
+    "audioop-lts ; python_full_version >= '3.13'",
+    "click>=8.2.1",
 ]
 
 [project.scripts]

@@ -313,6 +313,8 @@ export default {
         return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
       } else if (name === 'satori' || name === 'Satori') {
         return new URL('@/assets/images/platform_logos/satori.png', import.meta.url).href
+      } else if (name === 'misskey') {
+        return new URL('@/assets/images/platform_logos/misskey.png', import.meta.url).href
       }
     },
 
@@ -332,6 +334,7 @@ export default {
         "kook": "https://docs.astrbot.app/deploy/platform/kook.html",
         "vocechat": "https://docs.astrbot.app/deploy/platform/vocechat.html",
         "satori": "https://docs.astrbot.app/deploy/platform/satori/llonebot.html",
+        "misskey": "https://docs.astrbot.app/deploy/platform/misskey.html",
       }
       return tutorial_map[platform_type] || "https://docs.astrbot.app";
     },

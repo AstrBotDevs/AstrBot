@@ -66,7 +66,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         return chunks
 
     @classmethod
-    async def send_with_client(cls, client: ExtBot, message: MessageChain, user_name: str):
+    async def send_with_client(
+        cls, client: ExtBot, message: MessageChain, user_name: str
+    ):
         image_path = None
 
         has_reply = False
@@ -216,7 +218,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     try:
                         msg = await self.client.send_message(text=delta, **payload)
                         current_content = delta
-                        delta = ""
                     except Exception as e:
                         logger.warning(f"发送消息失败(streaming): {e!s}")
                     message_id = msg.message_id

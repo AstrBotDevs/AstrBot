@@ -3,7 +3,7 @@
   "subtitle": "管理和查看用户对话历史记录",
   "filters": {
     "title": "筛选条件",
-    "platform": "平台",
+    "platform": "消息平台 ID",
     "type": "类型",
     "search": "搜索关键词",
     "reset": "重置"
@@ -15,9 +15,9 @@
   "table": {
     "headers": {
       "title": "对话标题",
-      "platform": "平台",
+      "platform": "消息平台 ID",
       "type": "类型",
-      "sessionId": "ID",
+      "sessionId": "ID (UMO)",
       "createdAt": "创建时间",
       "updatedAt": "更新时间",
       "actions": "操作"

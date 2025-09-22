@@ -53,7 +53,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
         # 解析消息链为 Discord 所需的对象
         try:
-            content, files, view, embeds, reference_message_id = await self._parse_to_discord(message)
+            (
+                content,
+                files,
+                view,
+                embeds,
+                reference_message_id,
+            ) = await self._parse_to_discord(message)
         except Exception as e:
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
@@ -206,8 +212,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         if await asyncio.to_thread(path.exists):
                             file_bytes = await asyncio.to_thread(path.read_bytes)
                             files.append(
-                                discord.File(BytesIO(file_bytes),
-                                             filename=i.name)
+                                discord.File(BytesIO(file_bytes), filename=i.name)
                             )
                         else:
                             logger.warning(

@@ -1214,6 +1214,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
             user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
 
+        if cfg.get("group_name_display") and event.message_obj.group_id:
+            group_name = event.message_obj.group.group_name
+
+            if group_name:
+                req.system_prompt += f"\nGroup name: {group_name}\n"
+
         # 启用附加时间戳
         if cfg.get("datetime_system_prompt"):
             current_time = None
@@ -1230,13 +1236,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
+        img_cap_prov_id = cfg.get("default_image_caption_provider_id")
         if req.conversation:
             # persona inject
-            persona_id = req.conversation.persona_id
+            persona_id = req.conversation.persona_id or cfg.get("default_personality")
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                persona_id = self.context.persona_manager.selected_default_persona_v3[
-                    "name"
-                ]
+                default_persona = (
+                    self.context.persona_manager.selected_default_persona_v3
+                )
+                if default_persona:
+                    persona_id = default_persona["name"]
             persona = next(
                 builtins.filter(
                     lambda persona: persona["name"] == persona_id,
@@ -1255,17 +1264,19 @@ UID: {user_id} 此 ID 可用于设置管理员。
             if (persona and persona.get("tools") is None) or not persona:
                 # select all
                 toolset = tmgr.get_full_tool_set()
+                for tool in toolset:
+                    if not tool.active:
+                        toolset.remove_tool(tool.name)
             else:
                 toolset = ToolSet()
                 for tool_name in persona["tools"]:
                     tool = tmgr.get_func(tool_name)
-                    if tool:
+                    if tool and tool.active:
                         toolset.add_tool(tool)
             req.func_tool = toolset
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
             # image caption
-            img_cap_prov_id = cfg.get("default_image_caption_provider_id")
             if img_cap_prov_id and req.image_urls:
                 img_cap_prompt = cfg.get(
                     "image_caption_prompt", "Please describe the image."
@@ -1302,9 +1313,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         break
             if image_seg:
                 try:
-                    if prov := self.context.get_using_provider(
-                        event.unified_msg_origin
-                    ):
+                    prov = None
+                    if img_cap_prov_id:
+                        prov = self.context.get_provider_by_id(img_cap_prov_id)
+                    if prov is None:
+                        prov = self.context.get_using_provider(event.unified_msg_origin)
+                    if prov:
                         llm_resp = await prov.text_chat(
                             prompt="Please describe the image content.",
                             image_urls=[await image_seg.convert_to_file_path()],
@@ -1313,6 +1327,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                             req.system_prompt += (
                                 f"Image Caption: {llm_resp.completion_text}\n"
                             )
+                    else:
+                        logger.warning("No provider found for image captioning.")
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 

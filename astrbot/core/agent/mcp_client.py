@@ -92,7 +92,7 @@ class MCPClient:
         self.session: Optional[mcp.ClientSession] = None
         self.exit_stack = AsyncExitStack()
 
-        self.name = None
+        self.name: str | None = None
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
@@ -198,6 +198,8 @@ class MCPClient:
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
+        if not self.session:
+            raise Exception("MCP Client is not initialized")
         response = await self.session.list_tools()
         self.tools = response.tools
         return response

@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import llm_tool, agent, logger, AstrBotConfig
+from astrbot.api import llm_tool, logger, AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
@@ -26,6 +26,23 @@ class Main(star.Star):
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
+        self.tavily_key_index = 0
+        self.tavily_key_lock = asyncio.Lock()
+
+        # 将 str 类型的 key 迁移至 list[str]，并保存
+        cfg = self.context.get_config()
+        provider_settings = cfg.get("provider_settings")
+        if provider_settings:
+            tavily_key = provider_settings.get("websearch_tavily_key")
+            if isinstance(tavily_key, str):
+                logger.info(
+                    "检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。"
+                )
+                if tavily_key:
+                    provider_settings["websearch_tavily_key"] = [tavily_key]
+                else:
+                    provider_settings["websearch_tavily_key"] = []
+                cfg.save_config()
 
         self.bing_search = Bing()
         self.sogo_search = Sogo()
@@ -94,13 +111,22 @@ class Main(star.Star):
 
         return results
 
+    async def _get_tavily_key(self, cfg: AstrBotConfig) -> str:
+        """并发安全的从列表中获取并轮换Tavily API密钥。"""
+        tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
+        if not tavily_keys:
+            raise ValueError("错误：Tavily API密钥未在AstrBot中配置。")
+
+        async with self.tavily_key_lock:
+            key = tavily_keys[self.tavily_key_index]
+            self.tavily_key_index = (self.tavily_key_index + 1) % len(tavily_keys)
+            return key
+
     async def _web_search_tavily(
         self, cfg: AstrBotConfig, payload: dict
     ) -> list[SearchResult]:
         """使用 Tavily 搜索引擎进行搜索"""
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+        tavily_key = await self._get_tavily_key(cfg)
         url = "https://api.tavily.com/search"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -128,9 +154,7 @@ class Main(star.Star):
 
     async def _extract_tavily(self, cfg: AstrBotConfig, payload: dict) -> list[dict]:
         """使用 Tavily 提取网页内容"""
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+        tavily_key = await self._get_tavily_key(cfg)
         url = "https://api.tavily.com/extract"
         header = {
             "Authorization": f"Bearer {tavily_key}",
@@ -154,7 +178,7 @@ class Main(star.Star):
                 return results
 
     @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
+    async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
         event.set_result(
             MessageEventResult().message(
                 "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。"
@@ -186,7 +210,7 @@ class Main(star.Star):
         processed_results = await asyncio.gather(*tasks, return_exceptions=True)
         ret = ""
         for processed_result in processed_results:
-            if isinstance(processed_result, Exception):
+            if isinstance(processed_result, BaseException):
                 logger.error(f"Error processing search result: {processed_result}")
                 continue
             ret += processed_result
@@ -235,8 +259,7 @@ class Main(star.Star):
         logger.info(f"web_searcher - search_from_tavily: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
+        if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         # build payload
@@ -288,8 +311,7 @@ class Main(star.Star):
             extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
         """
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        tavily_key = cfg.get("provider_settings", {}).get("websearch_tavily_key", None)
-        if not tavily_key:
+        if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         if not url:
@@ -313,7 +335,7 @@ class Main(star.Star):
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self, event: AstrMessageEvent, req: ProviderRequest
-    ) -> str:
+    ):
         """Get the session conversation for the given event."""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})
@@ -324,6 +346,9 @@ class Main(star.Star):
         if isinstance(tool_set, FunctionToolManager):
             req.func_tool = tool_set.get_full_tool_set()
             tool_set = req.func_tool
+
+        if not tool_set:
+            return
 
         if not websearch_enable:
             # pop tools
@@ -350,3 +375,5 @@ class Main(star.Star):
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
+
+        print(req.func_tool)
