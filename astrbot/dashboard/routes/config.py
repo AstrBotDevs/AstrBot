@@ -479,18 +479,70 @@ class ConfigRoute(Route):
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
         try:
             prov_mgr = self.core_lifecycle.provider_manager
-            target = prov_mgr.inst_map.get(provider_id)
 
-            if not target:
+            # 配置里没有
+            provider_config = None
+            for config in self.config["provider"]:
+                if config.get("id") == provider_id:
+                    provider_config = config
+                    break
+
+            if not provider_config:
                 logger.warning(
-                    f"Provider with id '{provider_id}' not found in provider_manager."
+                    f"Provider config with id '{provider_id}' not found in configuration."
                 )
                 return (
                     Response()
-                    .error(f"Provider with id '{provider_id}' not found")
+                    .error(
+                        f"Provider with id '{provider_id}' not found in configuration"
+                    )
                     .__dict__
                 )
 
+            # 没启用
+            if not provider_config.get("enable", False):
+                logger.info(f"Provider with id '{provider_id}' is disabled.")
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "id": provider_id,
+                            "model": provider_config.get("model", "Unknown Model"),
+                            "type": provider_config.get(
+                                "provider_type", "Unknown Type"
+                            ),
+                            "name": provider_config.get("name", provider_id),
+                            "status": "disabled",
+                            "error": "Provider is disabled",
+                        }
+                    )
+                    .__dict__
+                )
+
+            # 先等待加载
+            target = await prov_mgr.get_provider_by_id(provider_id)
+            if not target:
+                logger.warning(
+                    f"Provider with id '{provider_id}' is enabled but not loaded in provider_manager."
+                )
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "id": provider_id,
+                            "model": provider_config.get("model", "Unknown Model"),
+                            "type": provider_config.get(
+                                "provider_type", "Unknown Type"
+                            ),
+                            "name": provider_config.get("name", provider_id),
+                            "status": "not_loaded",
+                            "error": "Provider is enabled but failed to load. Check logs for details.",
+                        }
+                    )
+                    .__dict__
+                )
+
+            # 已加载
             result = await self._test_single_provider(target)
             return Response().ok(result).__dict__
 
