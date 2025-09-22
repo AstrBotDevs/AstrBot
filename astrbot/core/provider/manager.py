@@ -7,7 +7,13 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 
 from .entities import ProviderType
-from .provider import Provider, STTProvider, TTSProvider, EmbeddingProvider
+from .provider import (
+    Provider,
+    STTProvider,
+    TTSProvider,
+    EmbeddingProvider,
+    RerankProvider,
+)
 from .register import llm_tools, provider_cls_map
 from ..persona_mgr import PersonaManager
 
@@ -38,7 +44,12 @@ class ProviderManager:
         """加载的 Text To Speech Provider 的实例"""
         self.embedding_provider_insts: List[EmbeddingProvider] = []
         """加载的 Embedding Provider 的实例"""
-        self.inst_map: dict[str, Provider | STTProvider | TTSProvider] = {}
+        self.rerank_provider_insts: List[RerankProvider] = []
+        """加载的 Rerank Provider 的实例"""
+        self.inst_map: dict[
+            str,
+            Provider | STTProvider | TTSProvider | EmbeddingProvider | RerankProvider,
+        ] = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
 
@@ -378,14 +389,16 @@ class ProviderManager:
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
 
-            elif provider_metadata.provider_type in [
-                ProviderType.EMBEDDING,
-                ProviderType.RERANK,
-            ]:
+            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
                 inst = cls_type(provider_config, self.provider_settings)
                 if getattr(inst, "initialize", None):
                     await inst.initialize()
                 self.embedding_provider_insts.append(inst)
+            elif provider_metadata.provider_type == ProviderType.RERANK:
+                inst = cls_type(provider_config, self.provider_settings)
+                if getattr(inst, "initialize", None):
+                    await inst.initialize()
+                self.rerank_provider_insts.append(inst)
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
