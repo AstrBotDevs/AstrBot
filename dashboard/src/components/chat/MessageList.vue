@@ -31,7 +31,7 @@
                 <div v-else class="bot-message">
                     <div v-if="isStreaming && index === messages.length - 1" style="width: 36px; height: 36px;">
                         <v-progress-circular indeterminate size="28" width="2"
-                            style="margin-top: 16px;"></v-progress-circular>
+                            style="margin-top: 12px;"></v-progress-circular>
                     </div>
                     <v-avatar v-else class="bot-avatar" size="36">
                         <span class="text-h2">✨</span>
@@ -437,13 +437,13 @@ export default {
 }
 
 .message-bubble {
-    padding: 8px 16px;
+    padding: 2px 16px;
     border-radius: 12px;
 }
 
 .user-bubble {
     color: var(--v-theme-primaryText);
-    padding: 18px 20px;
+    padding: 12px 18px;
     font-size: 15px;
     max-width: 60%;
     border-radius: 1.5rem;
@@ -459,7 +459,7 @@ export default {
 .user-avatar,
 .bot-avatar {
     align-self: flex-start;
-    margin-top: 12px;
+    margin-top: 6px;
 }
 
 /* 附件样式 */

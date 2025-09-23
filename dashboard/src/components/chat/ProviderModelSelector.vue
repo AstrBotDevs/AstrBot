@@ -1,21 +1,11 @@
 <template>
     <div>
         <!-- 选择提供商和模型按钮 -->
-        <v-btn 
-            class="text-none" 
-            variant="tonal" 
-            rounded="xl" 
-            size="small" 
-            v-if="selectedProviderId && selectedModelName" 
-            @click="showDialog = true">
+        <v-btn class="text-none" variant="tonal" rounded="xl" size="small"
+            v-if="selectedProviderId && selectedModelName" @click="openDialog">
             {{ selectedProviderId }} / {{ selectedModelName }}
         </v-btn>
-        <v-btn 
-            variant="tonal" 
-            rounded="xl" 
-            size="small" 
-            v-else 
-            @click="showDialog = true">
+        <v-btn variant="tonal" rounded="xl" size="small" v-else @click="openDialog">
             选择模型
         </v-btn>
 
@@ -33,16 +23,12 @@
                                 <h4>提供商</h4>
                             </div>
                             <v-list density="compact" nav class="provider-list">
-                                <v-list-item 
-                                    v-for="provider in providerConfigs" 
-                                    :key="provider.id"
-                                    :value="provider.id"
-                                    @click="selectProvider(provider)"
-                                    :active="selectedProviderId === provider.id"
-                                    rounded="lg"
-                                    class="provider-item">
+                                <v-list-item v-for="provider in providerConfigs" :key="provider.id" :value="provider.id"
+                                    @click="selectProvider(provider)" :active="tempSelectedProviderId === provider.id"
+                                    rounded="lg" class="provider-item">
                                     <v-list-item-title>{{ provider.id }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="provider.api_base">{{ provider.api_base }}</v-list-item-subtitle>
+                                    <v-list-item-subtitle v-if="provider.api_base">{{ provider.api_base
+                                        }}</v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                             <div v-if="providerConfigs.length === 0" class="empty-state">
@@ -55,33 +41,28 @@
                         <div class="model-list-panel">
                             <div class="panel-header">
                                 <h4>模型</h4>
-                                <v-btn 
-                                    v-if="selectedProviderId" 
-                                    icon="mdi-refresh" 
-                                    size="small" 
-                                    variant="text" 
-                                    @click="refreshModels"
-                                    :loading="loadingModels">
+                                <v-btn v-if="tempSelectedProviderId" icon="mdi-refresh" size="small" variant="text"
+                                    @click="refreshModels" :loading="loadingModels">
                                 </v-btn>
                             </div>
-                            <v-list density="compact" nav class="model-list" v-if="selectedProviderId">
-                                <v-list-item 
-                                    v-for="model in modelList" 
-                                    :key="model"
-                                    :value="model"
-                                    @click="selectModel(model)"
-                                    :active="selectedModelName === model"
-                                    rounded="lg"
+                            <v-list density="compact" nav class="model-list" v-if="tempSelectedProviderId">
+
+                                <v-text-field v-model="tempSelectedModelName" placeholder="自定义模型" hide-details solo variant="outlined" density="compact" class="mb-2 mx-2"></v-text-field>
+
+                                <v-list-item v-for="model in modelList" :key="model" :value="model"
+                                    @click="selectModel(model)" :active="tempSelectedModelName === model" rounded="lg"
                                     class="model-item">
                                     <v-list-item-title>{{ model }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="model.description">{{ model.description }}</v-list-item-subtitle>
+                                    <v-list-item-subtitle v-if="model.description">{{ model.description
+                                        }}</v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                             <div v-else class="empty-state">
                                 <v-icon icon="mdi-robot-outline" size="large" color="grey-lighten-1"></v-icon>
                                 <div class="empty-text">请先选择提供商</div>
                             </div>
-                            <div v-if="selectedProviderId && modelList.length === 0 && !loadingModels" class="empty-state">
+                            <div v-if="tempSelectedProviderId && modelList.length === 0 && !loadingModels"
+                                class="empty-state">
                                 <v-icon icon="mdi-robot-off-outline" size="large" color="grey-lighten-1"></v-icon>
                                 <div class="empty-text">该提供商暂无可用模型</div>
                             </div>
@@ -91,11 +72,8 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn text @click="closeDialog" color="grey-darken-1">取消</v-btn>
-                    <v-btn 
-                        text 
-                        @click="confirmSelection" 
-                        color="primary"
-                        :disabled="!selectedProviderId || !selectedModelName">
+                    <v-btn text @click="confirmSelection" color="primary"
+                        :disabled="!tempSelectedProviderId || !tempSelectedModelName">
                         确认选择
                     </v-btn>
                 </v-card-actions>
@@ -127,12 +105,17 @@ export default {
             modelList: [],
             selectedProviderId: '',
             selectedModelName: '',
+            // 临时选择状态，用于对话框内的选择
+            tempSelectedProviderId: '',
+            tempSelectedModelName: '',
             loadingModels: false
         };
     },
     mounted() {
         // 从localStorage加载保存的选择
         this.loadFromStorage();
+        // 初始化临时选择
+        this.resetTempSelection();
         // 获取提供商列表
         this.loadProviderConfigs();
         // 如果有保存的选择，加载对应的模型列表
@@ -145,13 +128,13 @@ export default {
         loadFromStorage() {
             const savedProvider = localStorage.getItem('selectedProvider');
             const savedModel = localStorage.getItem('selectedModel');
-            
+
             if (savedProvider) {
                 this.selectedProviderId = savedProvider;
             } else if (this.initialProvider) {
                 this.selectedProviderId = this.initialProvider;
             }
-            
+
             if (savedModel) {
                 this.selectedModelName = savedModel;
             } else if (this.initialModel) {
@@ -215,36 +198,40 @@ export default {
 
         // 选择提供商
         selectProvider(provider) {
-            this.selectedProviderId = provider.id;
-            this.selectedModelName = ''; // 清空已选择的模型
+            this.tempSelectedProviderId = provider.id;
+            this.tempSelectedModelName = ''; // 清空已选择的模型
             this.modelList = []; // 清空模型列表
             this.getProviderModels(provider.id); // 获取该提供商的模型列表
         },
 
         // 选择模型
         selectModel(model) {
-            this.selectedModelName = model;
+            this.tempSelectedModelName = model;
         },
 
         // 刷新模型列表
         refreshModels() {
-            if (this.selectedProviderId) {
-                this.getProviderModels(this.selectedProviderId);
+            if (this.tempSelectedProviderId) {
+                this.getProviderModels(this.tempSelectedProviderId);
             }
         },
 
         // 确认选择
         confirmSelection() {
-            if (this.selectedProviderId && this.selectedModelName) {
+            if (this.tempSelectedProviderId && this.tempSelectedModelName) {
+                // 将临时选择应用到正式选择
+                this.selectedProviderId = this.tempSelectedProviderId;
+                this.selectedModelName = this.tempSelectedModelName;
+
                 // 保存到localStorage
                 this.saveToStorage();
-                
+
                 // 触发事件通知父组件
                 this.$emit('selection-changed', {
                     providerId: this.selectedProviderId,
                     modelName: this.selectedModelName
                 });
-                
+
                 this.closeDialog();
             }
         },
@@ -252,6 +239,24 @@ export default {
         // 关闭对话框
         closeDialog() {
             this.showDialog = false;
+            // 重置临时选择为当前选择
+            this.resetTempSelection();
+        },
+
+        // 重置临时选择
+        resetTempSelection() {
+            this.tempSelectedProviderId = this.selectedProviderId;
+            this.tempSelectedModelName = this.selectedModelName;
+            // 如果有临时选择的提供商，重新加载模型列表
+            if (this.tempSelectedProviderId) {
+                this.getProviderModels(this.tempSelectedProviderId);
+            }
+        },
+
+        // 打开对话框
+        openDialog() {
+            this.resetTempSelection();
+            this.showDialog = true;
         },
 
         // 公开方法：获取当前选择
