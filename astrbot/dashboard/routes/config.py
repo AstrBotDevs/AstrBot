@@ -51,24 +51,6 @@ def validate_config(
     def validate(data: dict, metadata: dict = schema, path=""):
         for key, value in data.items():
             if key not in metadata:
-                # 无 schema 的配置项，执行类型猜测
-                if isinstance(value, str):
-                    try:
-                        data[key] = int(value)
-                        continue
-                    except ValueError:
-                        pass
-
-                    try:
-                        data[key] = float(value)
-                        continue
-                    except ValueError:
-                        pass
-
-                    if value.lower() == "true":
-                        data[key] = True
-                    elif value.lower() == "false":
-                        data[key] = False
                 continue
             meta = metadata[key]
             if "type" not in meta:
@@ -127,12 +109,12 @@ def validate_config(
                 )
 
     if is_core:
-        for key, group in schema.items():
-            group_meta = group.get("metadata")
-            if not group_meta:
-                continue
-            # logger.info(f"验证配置: 组 {key} ...")
-            validate(data, group_meta, path=f"{key}.")
+        meta_all = {
+            **schema["platform_group"]["metadata"],
+            **schema["provider_group"]["metadata"],
+            **schema["misc_config_group"]["metadata"],
+        }
+        validate(data, meta_all)
     else:
         validate(data, schema)
 
@@ -142,6 +124,7 @@ def validate_config(
 def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
     """验证并保存配置"""
     errors = None
+    logger.info(f"Saving config, is_core={is_core}")
     try:
         if is_core:
             errors, post_config = validate_config(
