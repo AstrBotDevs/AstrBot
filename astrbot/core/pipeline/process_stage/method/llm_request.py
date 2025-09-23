@@ -285,11 +285,11 @@ async def run_agent(
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            astr_event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
-                )
-            )
+            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
+            if agent_runner.streaming:
+                yield MessageChain().message(err_msg)
+            else:
+                astr_event.set_result(MessageEventResult().message(err_msg))
             return
         asyncio.create_task(
             Metric.upload(
