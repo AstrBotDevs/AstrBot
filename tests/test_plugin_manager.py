@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.star import star_registry
-import shutil
 from astrbot.core.star.context import Context
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.sqlite import SQLiteDatabase
