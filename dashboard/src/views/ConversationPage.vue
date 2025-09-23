@@ -167,46 +167,12 @@
                             <p class="text-disabled mt-2">{{ tm('status.emptyContent') }}</p>
                         </div>
 
-                        <!-- 消息列表 -->
-                        <div v-else class="message-list">
-                            <div class="message-item" v-for="(msg, index) in conversationHistory" :key="index">
-                                <!-- 用户消息 -->
-                                <div v-if="msg.role === 'user'" class="user-message">
-                                    <div class="message-bubble user-bubble">
-                                        <span v-html="formatMessage(msg.content)"></span>
-
-                                        <!-- 图片附件 -->
-                                        <div class="image-attachments" v-if="msg.image_url && msg.image_url.length > 0">
-                                            <div v-for="(img, imgIndex) in msg.image_url" :key="imgIndex"
-                                                class="image-attachment">
-                                                <img :src="img" class="attached-image" />
-                                            </div>
-                                        </div>
-
-                                        <!-- 音频附件 -->
-                                        <div class="audio-attachment" v-if="msg.audio_url">
-                                            <audio controls class="audio-player">
-                                                <source :src="msg.audio_url" type="audio/wav">
-                                                {{ tm('status.audioNotSupported') }}
-                                            </audio>
-                                        </div>
-                                    </div>
-                                    <v-avatar class="user-avatar" color="deep-purple-lighten-3" size="36">
-                                        <v-icon icon="mdi-account" />
-                                    </v-avatar>
-                                </div>
-
-                                <!-- 机器人消息 -->
-                                <div v-else class="bot-message">
-                                    <v-avatar class="bot-avatar" color="deep-purple" size="36">
-                                        <span class="text-h6">✨</span>
-                                    </v-avatar>
-                                    <div class="message-bubble bot-bubble">
-                                        <div v-html="formatMessage(msg.content)" class="markdown-content"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- 消息列表组件 -->
+                        <MessageList 
+                            v-else
+                            :messages="formattedMessages" 
+                            :isDark="false"
+                        />
                     </div>
                 </v-card-text>
 
@@ -291,6 +257,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import MessageList from '@/components/chat/MessageList.vue';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
@@ -303,7 +270,8 @@ const md = new MarkdownIt({
 export default {
     name: 'ConversationPage',
     components: {
-        VueMonacoEditor
+        VueMonacoEditor,
+        MessageList
     },
 
     setup() {
@@ -484,6 +452,30 @@ export default {
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
+        },
+
+        // 将对话历史转换为 MessageList 组件期望的格式
+        formattedMessages() {
+            return this.conversationHistory.map(msg => {
+                console.log('处理消息:', msg.role, msg.image_url, msg.audio_url);
+                if (msg.role === 'user') {
+                    return {
+                        content: {
+                            type: 'user',
+                            message: this.extractTextFromContent(msg.content),
+                            image_url: this.extractImagesFromContent(msg.content),
+                        }
+                    };
+                } else {
+                    return {
+                        content: {
+                            type: 'bot',
+                            message: this.extractTextFromContent(msg.content),
+                            embedded_images: this.extractImagesFromContent(msg.content),
+                        }
+                    };
+                }
+            });
         }
     },
 
@@ -861,6 +853,30 @@ export default {
             this.message = message;
             this.messageType = 'error';
             this.showMessage = true;
+        },
+
+        // 从内容中提取文本
+        extractTextFromContent(content) {
+            if (typeof content === 'string') {
+                return content;
+            } else if (Array.isArray(content)) {
+                return content.filter(item => item.type === 'text')
+                    .map(item => item.text)
+                    .join('\n');
+            } else if (typeof content === 'object') {
+                return Object.values(content).filter(val => typeof val === 'string').join('');
+            }
+            return '';
+        },
+
+        // 从内容中提取图片URL
+        extractImagesFromContent(content) {
+            if (Array.isArray(content)) {
+                return content.filter(item => item.type === 'image_url')
+                    .map(item => item.image_url?.url)
+                    .filter(url => url);
+            }
+            return [];
         }
     }
 }
@@ -885,7 +901,7 @@ export default {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* 聊天消息样式 */
+/* 聊天消息容器样式 */
 .conversation-messages-container {
     max-height: 500px;
     overflow-y: auto;
@@ -894,181 +910,11 @@ export default {
     background-color: #f9f9f9;
 }
 
-.message-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.message-item {
-    margin-bottom: 8px;
-    animation: fadeIn 0.3s ease-out;
-}
-
-.user-message {
-    display: flex;
-    justify-content: flex-end;
-    align-items: flex-start;
-    gap: 12px;
-}
-
-.bot-message {
-    display: flex;
-    justify-content: flex-start;
-    align-items: flex-start;
-    gap: 12px;
-}
-
-.message-bubble {
-    padding: 12px 16px;
-    border-radius: 18px;
-    max-width: 80%;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.user-bubble {
-    background-color: #f0f4ff;
-    color: #333;
-    border-top-right-radius: 4px;
-}
-
-.bot-bubble {
-    background-color: #fff;
-    border: 1px solid #eaeaea;
-    color: #333;
-    border-top-left-radius: 4px;
-}
-
-.user-avatar,
-.bot-avatar {
-    margin-top: 2px;
-}
-
-/* 附件样式 */
-.image-attachments {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-}
-
-.attached-image {
-    width: 120px;
-    height: 120px;
-    object-fit: cover;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease;
-}
-
-.attached-image:hover {
-    transform: scale(1.05);
-}
-
-.audio-attachment {
-    margin-top: 8px;
-}
-
-.audio-player {
-    width: 100%;
-    height: 36px;
-    border-radius: 18px;
-}
-
 /* 对话详情卡片 */
 .conversation-detail-card {
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-}
-
-/* Markdown内容样式 */
-.markdown-content {
-    font-family: inherit;
-    line-height: 1.6;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
-    margin-top: 16px;
-    margin-bottom: 10px;
-    font-weight: 600;
-    color: #333;
-}
-
-.markdown-content h1 {
-    font-size: 1.8em;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 6px;
-}
-
-.markdown-content h2 {
-    font-size: 1.5em;
-}
-
-.markdown-content h3 {
-    font-size: 1.3em;
-}
-
-.markdown-content li {
-    margin-left: 16px;
-    margin-bottom: 4px;
-}
-
-.markdown-content p {
-    margin-top: 10px;
-    margin-bottom: 10px;
-}
-
-.markdown-content pre {
-    background-color: #f8f8f8;
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    margin: 12px 0;
-}
-
-.markdown-content code {
-    background-color: #f5f0ff;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-family: 'Fira Code', monospace;
-    font-size: 0.9em;
-    color: #673ab7;
-}
-
-.markdown-content img {
-    max-width: 100%;
-    border-radius: 8px;
-    margin: 10px 0;
-}
-
-.markdown-content blockquote {
-    border-left: 4px solid #673ab7;
-    padding-left: 16px;
-    color: #666;
-    margin: 16px 0;
-}
-
-.markdown-content table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 16px 0;
-}
-
-.markdown-content th,
-.markdown-content td {
-    border: 1px solid #eee;
-    padding: 8px 12px;
-    text-align: left;
-}
-
-.markdown-content th {
-    background-color: #f5f0ff;
 }
 
 /* 动画 */
