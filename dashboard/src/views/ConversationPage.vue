@@ -10,7 +10,7 @@
                         <v-col cols="12" sm="6" md="4">
                             <v-combobox v-model="platformFilter" :label="tm('filters.platform')"
                                 :items="availablePlatforms" chips multiple clearable variant="solo-filled" flat
-                                density="compact" hide-details>
+                                density="compact" hide-details :disabled="loading">
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" label>
                                         {{ item.title }}
@@ -21,7 +21,8 @@
 
                         <v-col cols="12" sm="6" md="4">
                             <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
-                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat>
+                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat
+                                :disabled="loading">
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" variant="solo-filled" label>
                                         {{ item.title }}
@@ -33,22 +34,33 @@
                         <v-col cols="12" sm="12" md="4">
                             <v-text-field v-model="search" prepend-inner-icon="mdi-magnify"
                                 :label="tm('filters.search')" hide-details density="compact" variant="solo-filled" flat
-                                clearable></v-text-field>
+                                clearable :disabled="loading"></v-text-field>
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
-                        :loading="loading" size="small">
+                        :loading="loading" size="small" class="mr-2">
                         {{ tm('history.refresh') }}
+                    </v-btn>
+                    <v-btn 
+                        v-if="selectedItems.length > 0" 
+                        color="error" 
+                        prepend-icon="mdi-delete"
+                        variant="tonal" 
+                        @click="confirmBatchDelete" 
+                        :disabled="loading"
+                        size="small">
+                        {{ tm('batch.deleteSelected', { count: selectedItems.length }) }}
                     </v-btn>
                 </v-card-title>
 
                 <v-divider></v-divider>
 
                 <v-card-text class="pa-0">
-                    <v-data-table :headers="tableHeaders" :items="conversations" :loading="loading"
-                        style="font-size: 12px;" density="comfortable" hide-default-footer items-per-page="10"
+                    <v-data-table v-model="selectedItems" :headers="tableHeaders" :items="conversations"
+                        :loading="loading" style="font-size: 12px;" density="comfortable" hide-default-footer
                         class="elevation-0" :items-per-page="pagination.page_size"
-                        :items-per-page-options="[10, 20, 50, 100]" @update:options="handleTableOptions">
+                        :items-per-page-options="pageSizeOptions" show-select return-object
+                        :disabled="loading" @update:options="handleTableOptions">
                         <template v-slot:item.title="{ item }">
                             <div class="d-flex align-center">
                                 <span>{{ item.title || tm('status.noTitle') }}</span>
@@ -82,15 +94,15 @@
                         <template v-slot:item.actions="{ item }">
                             <div class="actions-wrapper">
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="viewConversation(item)">
+                                    @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
                                 </v-btn>
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)">
+                                    @click="editConversation(item)" :disabled="loading">
                                     <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
-                                    @click="confirmDeleteConversation(item)">
+                                    @click="confirmDeleteConversation(item)" :disabled="loading">
                                     <v-icon>mdi-delete</v-icon>
                                 </v-btn>
                             </div>
@@ -105,9 +117,25 @@
                     </v-data-table>
 
                     <!-- 分页控制 -->
-                    <div class="d-flex justify-end">
+                    <div class="d-flex justify-center py-3">
+                        <!-- 每页大小选择器 -->
+                        <div class="d-flex justify-between align-center px-4 py-2 bg-grey-lighten-5">
+                            <div class="d-flex align-center">
+                                <span class="text-caption mr-2">{{ tm('pagination.itemsPerPage') }}:</span>
+                                <v-select v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
+                                    density="compact" hide-details style="max-width: 100px;"
+                                    :disabled="loading" @update:model-value="onPageSizeChange"></v-select>
+                            </div>
+                            <div class="text-caption ml-4">
+                                {{ tm('pagination.showingItems', {
+                                    start: Math.min((pagination.page - 1) * pagination.page_size + 1, pagination.total),
+                                    end: Math.min(pagination.page * pagination.page_size, pagination.total),
+                                    total: pagination.total
+                                }) }}
+                            </div>
+                        </div>
                         <v-pagination v-model="pagination.page" :length="pagination.total_pages" :disabled="loading"
-                            @update:model-value="fetchConversations" rounded="circle"></v-pagination>
+                            @update:model-value="fetchConversations" rounded="circle" :total-visible="7"></v-pagination>
                     </div>
                 </v-card-text>
             </v-card>
@@ -116,24 +144,20 @@
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
             <v-card class="conversation-detail-card">
-                <v-card-title class="bg-primary text-white py-3 d-flex align-center">
-                    <v-icon color="white" class="me-2">mdi-eye</v-icon>
+                <v-card-title class="ml-2 mt-2 d-flex align-center">
                     <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
                     <v-spacer></v-spacer>
-
                     <div class="d-flex align-center" v-if="selectedConversation?.sessionInfo">
-                        <v-chip color="white" text-color="primary" size="small" class="mr-2">
+                        <v-chip text-color="primary" size="small" class="mr-2" rounded="md">
                             {{ selectedConversation.sessionInfo.platform }}
                         </v-chip>
-                        <v-chip color="white" text-color="secondary" size="small">
+                        <v-chip text-color="secondary" size="small" rounded="md">
                             {{ getMessageTypeDisplay(selectedConversation.sessionInfo.messageType) }}
                         </v-chip>
                     </div>
                 </v-card-title>
 
-                <v-divider></v-divider>
-
-                <v-card-text class="py-4">
+                <v-card-text>
                     <div class="mb-4 d-flex align-center">
                         <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
                             @click="isEditingHistory = !isEditingHistory">
@@ -168,15 +192,9 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList 
-                            v-else
-                            :messages="formattedMessages" 
-                            :isDark="false"
-                        />
+                        <MessageList v-else :messages="formattedMessages" :isDark="false" />
                     </div>
                 </v-card-text>
-
-                <v-divider></v-divider>
 
                 <v-card-actions class="pa-4">
                     <v-spacer></v-spacer>
@@ -227,7 +245,7 @@
 
                 <v-card-text class="py-4">
                     <p>{{ tm('dialogs.delete.message', { title: selectedConversation?.title || tm('status.noTitle') })
-                    }}</p>
+                        }}</p>
                 </v-card-text>
 
                 <v-divider></v-divider>
@@ -239,6 +257,48 @@
                     </v-btn>
                     <v-btn color="error" @click="deleteConversation" :loading="loading">
                         {{ tm('dialogs.delete.confirm') }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 批量删除确认对话框 -->
+        <v-dialog v-model="dialogBatchDelete" max-width="600px">
+            <v-card>
+                <v-card-title class="bg-error text-white py-3">
+                    <v-icon color="white" class="me-2">mdi-delete</v-icon>
+                    <span>{{ tm('dialogs.batchDelete.title') }}</span>
+                </v-card-title>
+
+                <v-card-text class="py-4">
+                    <p class="mb-3">{{ tm('dialogs.batchDelete.message', { count: selectedItems.length }) }}</p>
+
+                    <!-- 显示前几个要删除的对话 -->
+                    <div v-if="selectedItems.length > 0" class="mb-3">
+                        <v-chip v-for="(item, index) in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
+                            size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)"
+                            :disabled="loading">
+                            {{ item.title || tm('status.noTitle') }}
+                        </v-chip>
+                        <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
+                            {{ tm('dialogs.batchDelete.andMore', { count: selectedItems.length - 5 }) }}
+                        </v-chip>
+                    </div>
+
+                    <v-alert type="warning" variant="tonal" class="mb-3">
+                        {{ tm('dialogs.batchDelete.warning') }}
+                    </v-alert>
+                </v-card-text>
+
+                <v-divider></v-divider>
+
+                <v-card-actions class="pa-4">
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
+                        {{ tm('dialogs.batchDelete.cancel') }}
+                    </v-btn>
+                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                        {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
             </v-card>
@@ -291,31 +351,12 @@ export default {
             conversations: [],
             search: '',
             headers: [],
+            selectedItems: [], // 批量选择的项目
 
             // 筛选条件
             platformFilter: [],
             messageTypeFilter: [],
             lastAppliedFilters: null, // 记录上次应用的筛选条件
-
-            // 平台颜色映射
-            platformColors: {
-                'telegram': 'blue-lighten-1',
-                'qq_official': 'purple-lighten-1',
-                'qq_official_webhook': 'purple-lighten-2',
-                'aiocqhttp': 'deep-purple-lighten-1',
-                'lark': 'cyan-darken-1',
-                'wecom': 'green-darken-1',
-                'dingtalk': 'blue-darken-2',
-                'default': 'grey-lighten-1'
-            },
-
-            // 消息类型颜色映射
-            messageTypeColors: {
-                'GroupMessage': 'green',
-                'FriendMessage': 'blue',
-                'GuildMessage': 'purple',
-                'default': 'grey'
-            },
 
             // 分页数据
             pagination: {
@@ -324,11 +365,13 @@ export default {
                 total: 0,
                 total_pages: 0
             },
+            pageSizeOptions: [10, 20, 50, 100], // 每页大小选项
 
             // 对话框控制
             dialogView: false,
             dialogEdit: false,
             dialogDelete: false,
+            dialogBatchDelete: false, // 批量删除对话框
 
             // 选中的对话
             selectedConversation: null,
@@ -336,11 +379,6 @@ export default {
 
             // 编辑表单
             editedItem: {
-                user_id: '',
-                cid: '',
-                title: ''
-            },
-            defaultItem: {
                 user_id: '',
                 cid: '',
                 title: ''
@@ -429,17 +467,6 @@ export default {
                 { title: this.tm('messageTypes.group'), value: 'GroupMessage' },
                 { title: this.tm('messageTypes.friend'), value: 'FriendMessage' },
             ];
-        },
-
-        // 筛选后的对话 - 现在只用于额外的客户端筛选（排除astrbot和webchat）
-        filteredConversations() {
-            return this.conversations.filter(conv => {
-                // 排除 user_id 为 astrbot 或 platform 为 webchat 的对话
-                if (conv.user_id === 'astrbot' || conv.sessionInfo?.platform === 'webchat') {
-                    return false;
-                }
-                return true;
-            });
         },
 
         // 当前的筛选条件对象
@@ -792,6 +819,88 @@ export default {
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.deleteError'));
             } finally {
                 this.loading = false;
+                this.selectedItems = this.selectedItems.filter(item =>
+                    !(item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid)
+                );
+                this.selectedConversation = null;
+            }
+        },
+
+        // 处理页面大小变更
+        onPageSizeChange() {
+            this.pagination.page = 1; // 重置到第一页
+            this.fetchConversations();
+        },
+
+        // 确认批量删除
+        confirmBatchDelete() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelected'));
+                return;
+            }
+            this.dialogBatchDelete = true;
+        },
+
+        // 从选择中移除项目
+        removeFromSelection(item) {
+            const index = this.selectedItems.findIndex(selected =>
+                selected.user_id === item.user_id && selected.cid === item.cid
+            );
+            if (index !== -1) {
+                this.selectedItems.splice(index, 1);
+            }
+        },
+
+        // 批量删除对话
+        async batchDeleteConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelected'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备批量删除的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/delete', {
+                    conversations: conversations
+                });
+
+                if (response.data.status === "ok") {
+                    const result = response.data.data;
+                    this.dialogBatchDelete = false;
+                    this.selectedItems = []; // 清空选择
+
+                    // 显示结果消息
+                    if (result.failed_count > 0) {
+                        this.showErrorMessage(
+                            this.tm('messages.batchDeletePartial', {
+                                deleted: result.deleted_count,
+                                failed: result.failed_count
+                            })
+                        );
+                    } else {
+                        this.showSuccessMessage(
+                            this.tm('messages.batchDeleteSuccess', {
+                                count: result.deleted_count
+                            })
+                        );
+                    }
+
+                    // 刷新列表
+                    this.fetchConversations();
+                } else {
+                    this.showErrorMessage(response.data.message || this.tm('messages.batchDeleteError'));
+                }
+            } catch (error) {
+                console.error('批量删除对话出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.batchDeleteError'));
+            } finally {
+                this.loading = false;
             }
         },
 
@@ -810,35 +919,6 @@ export default {
                 second: '2-digit',
                 hour12: false
             }).format(date);
-        },
-
-        // 格式化消息内容
-        formatMessage(content) {
-
-            // content 可能是数组
-            // [{"type": "image_url", "image_url": {"url": url_or_base64}}, {"type": "text", "text": "text"}]
-
-            let final_content = content;
-            if (Array.isArray(content)) {
-                // 处理数组内容
-                final_content = content.map(item => {
-                    if (item.type === 'image_url') {
-                        return `<img src="${item.image_url.url}" alt="Image" />`;
-                    } else if (item.type === 'text') {
-                        return item.text;
-                    }
-                    return '';
-                }).join('\n');
-            } else if (typeof content === 'object') {
-                // 处理对象内容
-                final_content = Object.values(content).join('');
-            } else if (typeof content === 'string') {
-                // 处理字符串内容
-                final_content = content;
-            } else if (!final_content) return this.tm('status.emptyContent');
-
-            // 使用markdown-it处理，默认安全（html: false会禁用HTML标签）
-            return md.render(final_content);
         },
 
         // 显示成功消息

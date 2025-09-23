@@ -12,6 +12,13 @@
     "title": "对话历史",
     "refresh": "刷新"
   },
+  "batch": {
+    "deleteSelected": "删除选中 ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "每页",
+    "showingItems": "显示 {start}-{end} 项，共 {total} 项"
+  },
   "table": {
     "headers": {
       "title": "对话标题",
@@ -61,6 +68,13 @@
       "message": "确定要删除对话 {title} 吗？此操作不可恢复。",
       "cancel": "取消",
       "confirm": "删除"
+    },
+    "batchDelete": {
+      "title": "批量删除确认",
+      "message": "确定要删除选中的 {count} 个对话吗？此操作不可恢复，请谨慎操作！",
+      "andMore": "等 {count} 个",
+      "cancel": "取消",
+      "confirm": "批量删除"
     }
   },
   "messages": {
@@ -72,6 +86,10 @@
     "historyError": "获取对话历史失败",
     "historySaveSuccess": "对话历史保存成功",
     "historySaveError": "对话历史保存失败",
-    "invalidJson": "JSON格式无效"
+    "invalidJson": "JSON格式无效",
+    "noItemSelected": "请先选择要删除的对话",
+    "batchDeleteSuccess": "成功删除 {count} 个对话",
+    "batchDeleteError": "批量删除失败",
+    "batchDeletePartial": "删除完成：成功 {deleted} 个，失败 {failed} 个"
   }
 } 

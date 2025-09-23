@@ -169,15 +169,65 @@ class ConversationRoute(Route):
         """删除对话"""
         try:
             data = await request.get_json()
-            user_id = data.get("user_id")
-            cid = data.get("cid")
 
-            if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").__dict__
-            await self.core_lifecycle.conversation_manager.delete_conversation(
-                unified_msg_origin=user_id, conversation_id=cid
-            )
-            return Response().ok({"message": "对话删除成功"}).__dict__
+            # 检查是否是批量删除
+            if "conversations" in data:
+                # 批量删除
+                conversations = data.get("conversations", [])
+                if not conversations:
+                    return (
+                        Response().error("批量删除时conversations参数不能为空").__dict__
+                    )
+
+                deleted_count = 0
+                failed_items = []
+
+                for conv in conversations:
+                    user_id = conv.get("user_id")
+                    cid = conv.get("cid")
+
+                    if not user_id or not cid:
+                        failed_items.append(
+                            f"user_id:{user_id}, cid:{cid} - 缺少必要参数"
+                        )
+                        continue
+
+                    try:
+                        await self.core_lifecycle.conversation_manager.delete_conversation(
+                            unified_msg_origin=user_id, conversation_id=cid
+                        )
+                        deleted_count += 1
+                    except Exception as e:
+                        failed_items.append(f"user_id:{user_id}, cid:{cid} - {str(e)}")
+
+                message = f"成功删除 {deleted_count} 个对话"
+                if failed_items:
+                    message += f"，失败 {len(failed_items)} 个"
+
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "message": message,
+                            "deleted_count": deleted_count,
+                            "failed_count": len(failed_items),
+                            "failed_items": failed_items,
+                        }
+                    )
+                    .__dict__
+                )
+            else:
+                # 单个删除
+                user_id = data.get("user_id")
+                cid = data.get("cid")
+
+                if not user_id or not cid:
+                    return Response().error("缺少必要参数: user_id 和 cid").__dict__
+
+                await self.core_lifecycle.conversation_manager.delete_conversation(
+                    unified_msg_origin=user_id, conversation_id=cid
+                )
+                return Response().ok({"message": "对话删除成功"}).__dict__
 
         except Exception as e:
             logger.error(f"删除对话失败: {str(e)}\n{traceback.format_exc()}")

@@ -12,6 +12,13 @@
     "title": "Conversation History",
     "refresh": "Refresh"
   },
+  "batch": {
+    "deleteSelected": "Delete Selected ({count})"
+  },
+  "pagination": {
+    "itemsPerPage": "Items per page",
+    "showingItems": "Showing {start}-{end} of {total} items"
+  },
   "table": {
     "headers": {
       "title": "Conversation Title",
@@ -61,6 +68,13 @@
       "message": "Are you sure you want to delete conversation {title}? This action cannot be undone.",
       "cancel": "Cancel",
       "confirm": "Delete"
+    },
+    "batchDelete": {
+      "title": "Batch Delete Confirmation",
+      "message": "Are you sure you want to delete the selected {count} conversations? This action cannot be undone, please proceed with caution!",
+      "andMore": "and {count} more",
+      "cancel": "Cancel",
+      "confirm": "Batch Delete"
     }
   },
   "messages": {
@@ -72,6 +86,10 @@
     "historyError": "Failed to fetch conversation history",
     "historySaveSuccess": "Conversation history saved successfully",
     "historySaveError": "Failed to save conversation history",
-    "invalidJson": "Invalid JSON format"
+    "invalidJson": "Invalid JSON format",
+    "noItemSelected": "Please select conversations to delete first",
+    "batchDeleteSuccess": "Successfully deleted {count} conversations",
+    "batchDeleteError": "Batch delete failed",
+    "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed"
   }
 } 
