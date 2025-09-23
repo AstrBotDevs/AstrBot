@@ -57,7 +57,6 @@ def plugin_manager_pm(tmp_path):
     yield manager
 
 
-
 def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
     assert plugin_manager_pm is not None
     assert plugin_manager_pm.context is not None
@@ -82,9 +81,9 @@ async def test_install_plugin(plugin_manager_pm: PluginManager):
 
     assert plugin_info is not None
     assert os.path.exists(plugin_path)
-    assert any(
-        md.name == "astrbot_plugin_essential" for md in star_registry
-    ), "Plugin 'astrbot_plugin_essential' was not loaded into star_registry."
+    assert any(md.name == "astrbot_plugin_essential" for md in star_registry), (
+        "Plugin 'astrbot_plugin_essential' was not loaded into star_registry."
+    )
 
 
 @pytest.mark.asyncio
@@ -129,13 +128,15 @@ async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
     await plugin_manager_pm.uninstall_plugin("astrbot_plugin_essential")
 
     assert not os.path.exists(plugin_path)
-    assert not any(
-        md.name == "astrbot_plugin_essential" for md in star_registry
-    ), "Plugin 'astrbot_plugin_essential' was not unloaded from star_registry."
+    assert not any(md.name == "astrbot_plugin_essential" for md in star_registry), (
+        "Plugin 'astrbot_plugin_essential' was not unloaded from star_registry."
+    )
     assert not any(
         "astrbot_plugin_essential" in md.handler_module_path
         for md in star_handlers_registry
-    ), "Plugin 'astrbot_plugin_essential' handler was not unloaded from star_handlers_registry."
+    ), (
+        "Plugin 'astrbot_plugin_essential' handler was not unloaded from star_handlers_registry."
+    )
 
 
 @pytest.mark.asyncio

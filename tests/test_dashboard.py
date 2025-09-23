@@ -90,7 +90,9 @@ async def test_plugins(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
 
     # 插件市场
-    response = await test_client.get("/api/plugin/market_list", headers=authenticated_header)
+    response = await test_client.get(
+        "/api/plugin/market_list", headers=authenticated_header
+    )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
