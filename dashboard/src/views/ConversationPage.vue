@@ -10,7 +10,7 @@
                         <v-col cols="12" sm="6" md="4">
                             <v-combobox v-model="platformFilter" :label="tm('filters.platform')"
                                 :items="availablePlatforms" chips multiple clearable variant="solo-filled" flat
-                                density="compact" hide-details>
+                                density="compact" hide-details :disabled="loading">
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" label>
                                         {{ item.title }}
@@ -21,7 +21,8 @@
 
                         <v-col cols="12" sm="6" md="4">
                             <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
-                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat>
+                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat
+                                :disabled="loading">
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" variant="solo-filled" label>
                                         {{ item.title }}
@@ -33,15 +34,21 @@
                         <v-col cols="12" sm="12" md="4">
                             <v-text-field v-model="search" prepend-inner-icon="mdi-magnify"
                                 :label="tm('filters.search')" hide-details density="compact" variant="solo-filled" flat
-                                clearable></v-text-field>
+                                clearable :disabled="loading"></v-text-field>
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
                         :loading="loading" size="small" class="mr-2">
                         {{ tm('history.refresh') }}
                     </v-btn>
-                    <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete"
-                        variant="tonal" @click="confirmBatchDelete" size="small">
+                    <v-btn 
+                        v-if="selectedItems.length > 0" 
+                        color="error" 
+                        prepend-icon="mdi-delete"
+                        variant="tonal" 
+                        @click="confirmBatchDelete" 
+                        :disabled="loading"
+                        size="small">
                         {{ tm('batch.deleteSelected', { count: selectedItems.length }) }}
                     </v-btn>
                 </v-card-title>
@@ -53,7 +60,7 @@
                         :loading="loading" style="font-size: 12px;" density="comfortable" hide-default-footer
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
-                        @update:options="handleTableOptions">
+                        :disabled="loading" @update:options="handleTableOptions">
                         <template v-slot:item.title="{ item }">
                             <div class="d-flex align-center">
                                 <span>{{ item.title || tm('status.noTitle') }}</span>
@@ -87,15 +94,15 @@
                         <template v-slot:item.actions="{ item }">
                             <div class="actions-wrapper">
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="viewConversation(item)">
+                                    @click="viewConversation(item)" :disabled="loading">
                                     <v-icon>mdi-eye</v-icon>
                                 </v-btn>
                                 <v-btn icon variant="plain" size="x-small" class="action-button"
-                                    @click="editConversation(item)">
+                                    @click="editConversation(item)" :disabled="loading">
                                     <v-icon>mdi-pencil</v-icon>
                                 </v-btn>
                                 <v-btn icon color="error" variant="plain" size="x-small" class="action-button"
-                                    @click="confirmDeleteConversation(item)">
+                                    @click="confirmDeleteConversation(item)" :disabled="loading">
                                     <v-icon>mdi-delete</v-icon>
                                 </v-btn>
                             </div>
@@ -117,7 +124,7 @@
                                 <span class="text-caption mr-2">{{ tm('pagination.itemsPerPage') }}:</span>
                                 <v-select v-model="pagination.page_size" :items="pageSizeOptions" variant="outlined"
                                     density="compact" hide-details style="max-width: 100px;"
-                                    @update:model-value="onPageSizeChange"></v-select>
+                                    :disabled="loading" @update:model-value="onPageSizeChange"></v-select>
                             </div>
                             <div class="text-caption ml-4">
                                 {{ tm('pagination.showingItems', {
@@ -269,13 +276,18 @@
                     <!-- 显示前几个要删除的对话 -->
                     <div v-if="selectedItems.length > 0" class="mb-3">
                         <v-chip v-for="(item, index) in selectedItems.slice(0, 5)" :key="`${item.user_id}-${item.cid}`"
-                            size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)">
+                            size="small" class="mr-1 mb-1" closable @click:close="removeFromSelection(item)"
+                            :disabled="loading">
                             {{ item.title || tm('status.noTitle') }}
                         </v-chip>
                         <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
                             {{ tm('dialogs.batchDelete.andMore', { count: selectedItems.length - 5 }) }}
                         </v-chip>
                     </div>
+
+                    <v-alert type="warning" variant="tonal" class="mb-3">
+                        {{ tm('dialogs.batchDelete.warning') }}
+                    </v-alert>
                 </v-card-text>
 
                 <v-divider></v-divider>
