@@ -227,9 +227,11 @@ async def download_dashboard(
         path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
 
     if latest or len(str(version)) != 40:
-        logger.info(f"准备下载 {version} 发行版本的 AstrBot WebUI 文件")
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
+        logger.info(
+            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}"
+        )
         try:
             await download_file(dashboard_release_url, path, show_progress=True)
         except BaseException as _:
@@ -241,24 +243,10 @@ async def download_dashboard(
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
             await download_file(dashboard_release_url, path, show_progress=True)
     else:
-        logger.info(f"准备下载指定版本的 AstrBot WebUI: {version}")
-
-        url = (
-            "https://api.github.com/repos/AstrBotDevs/astrbot-release-harbour/releases"
-        )
+        url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
+        logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    releases = await resp.json()
-                    for release in releases:
-                        if version in release["tag_name"]:
-                            download_url = release["assets"][0]["browser_download_url"]
-                            await download_file(download_url, path, show_progress=True)
-                else:
-                    logger.warning(f"未找到指定的版本的 Dashboard 构建文件: {version}")
-                    return
-
+        await download_file(url, path, show_progress=True)
     with zipfile.ZipFile(path, "r") as z:
         z.extractall(extract_path)
