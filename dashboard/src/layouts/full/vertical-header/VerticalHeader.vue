@@ -342,15 +342,10 @@ commonStore.getStartTime();
     <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1200'"
       :fullscreen="$vuetify.display.xs">
       <template v-slot:activator="{ props }">
-        <v-tooltip>
-          <template v-slot:activator="{ props }">
-            <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="action-btn"
-              color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props" icon>
-              <v-icon>mdi-arrow-up-circle</v-icon>
-            </v-btn>
-          </template>
-          {{ t('core.header.buttons.update') }}
-        </v-tooltip>
+        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="action-btn"
+          color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props" icon>
+          <v-icon>mdi-arrow-up-circle</v-icon>
+        </v-btn>
       </template>
       <v-card>
         <v-card-title class="mobile-card-title">
@@ -473,7 +468,7 @@ commonStore.getStartTime();
               <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
               <div class="mb-4">
                 <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
-                }}</small>
+                  }}</small>
                 <br>
 
               </div>
