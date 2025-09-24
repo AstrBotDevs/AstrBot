@@ -89,8 +89,6 @@
           </v-btn>
         </v-card-title>
 
-        <v-divider></v-divider>
-
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showStatus">
             <v-card-text class="px-4 py-3">
@@ -143,8 +141,6 @@
             <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
         </v-card-title>
-
-        <v-divider></v-divider>
 
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showConsole">

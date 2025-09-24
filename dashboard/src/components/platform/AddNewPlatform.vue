@@ -1,47 +1,182 @@
 <template>
   <v-dialog v-model="showDialog" max-width="900px" min-height="80%">
-    <v-card class="platform-selection-dialog" :title="tm('dialog.addPlatform')">
-      <v-card-text class="pa-4" style="overflow-y: auto;">
-        <v-row style="padding: 0px 8px;">
-          <v-col v-for="(template, name) in platformTemplates"
-            :key="name" cols="12" sm="6" md="6">
-            <v-card variant="outlined" hover class="platform-card" @click="selectTemplate(name)">
-              <div class="platform-card-content">
-                <div class="platform-card-text">
-                  <v-card-title class="platform-card-title">{{ tm('dialog.connectTitle', { name }) }}</v-card-title>
-                  <v-card-text class="text-caption text-medium-emphasis platform-card-description">
-                    {{ getPlatformDescription(template, name) }}
-                  </v-card-text>
-                </div>
-                <div class="platform-card-logo">
-                  <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)" class="platform-logo-img">
-                  <div v-else class="platform-logo-fallback">
-                    {{ name[0].toUpperCase() }}
+    <v-card
+      :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
+      <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
+        <div class="d-flex align-start">
+          <div>
+            <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
+          </div>
+          <div>
+            <h3>
+              选择消息平台类别
+            </h3>
+            <small style="color: grey;">选择你想接入的消息平台，如 QQ、Discord、Telegram 等。</small>
+            <div>
+
+              <div v-if="!updatingMode">
+                <v-select v-model="selectedPlatformType" :items="Object.keys(platformTemplates)" item-title="name"
+                  item-value="name" label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                  style="max-width: 30%; min-width: 300px;">
+
+                  <template v-slot:item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps">
+                      <template v-slot:prepend>
+                        <img :src="getPlatformIcon(platformTemplates[item.raw].type)"
+                          style="width: 32px; height: 32px; object-fit: contain; margin-right: 16px;" />
+                      </template>
+                    </v-list-item>
+                  </template>
+
+                </v-select>
+                <div class="mt-3" v-if="selectedPlatformConfig">
+                  <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                    <v-icon start>mdi-book-open-variant</v-icon>
+                    {{ tm('dialog.viewTutorial') }}
+                  </v-btn>
+                  <div class="mt-2" style="width: 100vh;">
+                    <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
+                      metadataKey="platform" />
                   </div>
                 </div>
               </div>
-            </v-card>
-          </v-col>
-          <v-col
-            v-if="Object.keys(platformTemplates).length === 0"
-            cols="12">
-            <v-alert type="info" variant="tonal">
-              {{ tm('dialog.noTemplates') }}
-            </v-alert>
-          </v-col>
-        </v-row>
+              <div v-else>
+                <v-text-field label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                  style="max-width: 30%; min-width: 300px;" v-model="updatingPlatformConfig.type"
+                  disabled></v-text-field>
+                <div class="mt-3">
+                  <div class="mt-2" style="width: 100vh;">
+                    <AstrBotConfig :iterable="updatingPlatformConfig" :metadata="metadata['platform_group']?.metadata"
+                      metadataKey="platform" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex align-start mt-6">
+          <div>
+            <v-icon icon="mdi-numeric-2-circle" class="mr-3"></v-icon>
+          </div>
+          <div>
+            <h3>
+              配置文件
+            </h3>
+            <small style="color: grey;">实例配置包含了选用的聊天模型、人格、知识库、插件应用范围等配置。AstrBot 会按照列表顺序使用第一个匹配的配置文件。</small>
+
+            <div v-if="!updatingMode">
+              <v-radio-group class="mt-2" v-model="aBConfigRadioVal" hide-details="true">
+                <v-radio value="0">
+                  <template v-slot:label>
+                    <span>使用现有配置文件</span>
+                  </template>
+                </v-radio>
+                <v-select v-if="aBConfigRadioVal === '0'" v-model="selectedAbConfId" :items="configInfoList"
+                  item-title="name" item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
+                  style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
+                </v-select>
+                <v-radio value="1" label="创建新配置文件">
+                </v-radio>
+                <v-text-field v-if="aBConfigRadioVal === '1'" v-model="selectedAbConfId" label="新配置文件名称"
+                  variant="outlined" rounded="md" dense hide-details style="max-width: 30%; min-width: 200px;"
+                  class="ml-10 my-2">
+                </v-text-field>
+              </v-radio-group>
+
+              <small class="ml-2">小提示: 你稍后可以在「配置文件」页编辑配置文件。</small>
+            </div>
+
+
+            <div v-else style="">
+              <v-data-table :headers="configTableHeaders" :items="platformConfigs" item-value="id"
+                no-data-text="该平台暂无关联的配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
+                <template v-slot:item.scope="{ item }">
+                  <v-chip v-for="(umop, index) in item.umop" :key="index"
+                    v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
+                    variant="tonal" rounded="md" class="mr-1 mb-1">
+                    {{ formatUmopScope(umop) }}
+                  </v-chip>
+                </template>
+                <template v-slot:item.name="{ item }">
+                  <span> {{ item.name }} </span>
+                  <v-chip v-if="item.name === 'default'" size="x-small" variant="tonal" rounded="sm"
+                    class="ml-2">兜底配置</v-chip>
+                </template>
+              </v-data-table>
+              <small class="ml-2">Tips: 暂时无法在此更新配置文件，请前往「配置文件」页更新。</small>
+            </div>
+          </div>
+        </div>
+
       </v-card-text>
+
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text @click="closeDialog">{{ tm('dialog.cancel') }}</v-btn>
+        <v-btn :disabled="!selectedPlatformType || !selectedAbConfId" color="primary" v-if="!updatingMode"
+          @click="newPlatform" :loading="loading">{{
+            tm('dialog.save') }}</v-btn>
+        <v-btn :disabled="!selectedAbConfId" color="primary" v-else @click="newPlatform" :loading="loading">{{
+          tm('dialog.save') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- ID冲突确认对话框 -->
+  <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
+    <v-card>
+      <v-card-title class="text-h6 bg-warning d-flex align-center">
+        <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
+        {{ tm('dialog.idConflict.title') }}
+      </v-card-title>
+      <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+        {{ tm('dialog.idConflict.message', { id: conflictId }) }}
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
+        }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 安全警告对话框 -->
+  <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
+    <v-card>
+      <v-card-title>
+        {{ tm('dialog.securityWarning.title') }}
+      </v-card-title>
+      <v-card-text class="py-4">
+        <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
+        <span><a
+            href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7"
+            target="_blank">{{ tm('dialog.securityWarning.learnMore') }}</a></span>
+      </v-card-text>
+      <v-card-actions class="px-4 pb-4">
+        <v-spacer></v-spacer>
+        <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
+          无视警告并继续创建
+        </v-btn>
+        <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
+          重新修改
+        </v-btn>
+      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
 <script>
+import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon, getPlatformDescription } from '@/utils/platformUtils';
+import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 
 export default {
   name: 'AddNewPlatform',
-  emits: ['update:show', 'select-template'],
+  components: { AstrBotConfig },
+  emits: ['update:show', 'show-toast', 'refresh-config', 'edit-platform-config'],
   props: {
     show: {
       type: Boolean,
@@ -50,7 +185,47 @@ export default {
     metadata: {
       type: Object,
       default: () => ({})
+    },
+    config_data: {
+      type: Object,
+      default: () => ({})
+    },
+    updatingMode: {
+      type: Boolean,
+      default: false
+    },
+    updatingPlatformConfig: {
+      type: Object,
+      default: null
     }
+  },
+  data() {
+    return {
+      selectedPlatformType: null,
+      selectedPlatformConfig: null,
+
+      aBConfigRadioVal: '0',
+      selectedAbConfId: 'default',
+      configInfoList: [],
+
+      // 平台配置文件表格
+      platformConfigs: [],
+      configTableHeaders: [
+        { title: '与此实例关联的配置文件 ID', key: 'name', sortable: false },
+        { title: '在此实例下的应用范围 (UMOP)', key: 'scope', sortable: false },
+      ],
+
+      // ID冲突确认对话框
+      showIdConflictDialog: false,
+      conflictId: '',
+      idConflictResolve: null,
+
+      // OneBot Empty Token Warning #2639
+      showOneBotEmptyTokenWarnDialog: false,
+      oneBotEmptyTokenWarningResolve: null,
+
+      loading: false,
+    };
   },
   setup() {
     const { tm } = useModuleI18n('features/platform');
@@ -69,101 +244,324 @@ export default {
       return this.metadata['platform_group']?.metadata?.platform?.config_template || {};
     }
   },
+  watch: {
+    selectedPlatformType(newType) {
+      if (newType && this.platformTemplates[newType]) {
+        this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType]));
+      } else {
+        this.selectedPlatformConfig = null;
+      }
+    },
+    showIdConflictDialog(newValue) {
+      if (!newValue && this.idConflictResolve) {
+        this.idConflictResolve(false);
+        this.idConflictResolve = null;
+      }
+    },
+    showOneBotEmptyTokenWarnDialog(newValue) {
+      if (!newValue && this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(true);
+        this.oneBotEmptyTokenWarningResolve = null;
+      }
+    },
+    // 监听更新模式变化，获取相关配置文件
+    updatingPlatformConfig: {
+      handler(newConfig) {
+        if (this.updatingMode && newConfig && newConfig.id) {
+          this.getPlatformConfigs(newConfig.id);
+        }
+      },
+      immediate: true
+    }
+  },
   methods: {
-    // 从工具函数导入
     getPlatformIcon,
     getPlatformDescription,
+    resetForm() {
+      this.selectedPlatformType = null;
+      this.selectedPlatformConfig = null;
 
-    selectTemplate(name) {
-      this.$emit('select-template', name);
-      this.closeDialog();
+      this.aBConfigRadioVal = '0';
+      this.selectedAbConfId = 'default';
+    },
+    closeDialog() {
+      this.resetForm();
+
+      this.showDialog = false;
+    },
+    async getConfigInfoList() {
+      await axios.get('/api/config/abconfs').then((res) => {
+        this.configInfoList = res.data.data.info_list;
+      })
+    },
+    openTutorial() {
+      const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
+      window.open(tutorialUrl, '_blank');
+    },
+    newPlatform() {
+      this.loading = true;
+      if (this.updatingMode) {
+        if (this.updatingPlatformConfig.type === 'aiocqhttp') {
+          const token = this.updatingPlatformConfig.ws_reverse_token;
+          if (!token || token.trim() === '') {
+            this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
+              if (continueWithWarning) {
+                this.updatePlatform();
+              } else {
+                this.loading = false;
+              }
+            });
+            return;
+          }
+        }
+        this.updatePlatform();
+      } else {
+        this.savePlatform();
+      }
+    },
+    updatePlatform() {
+      let id = this.updatingPlatformConfig.id;
+      if (!id) {
+        this.loading = false;
+        this.showError('更新失败，缺少平台 ID。');
+        return;
+      }
+      axios.post('/api/config/platform/update', {
+        id: id,
+        config: this.updatingPlatformConfig
+      }).then((res) => {
+        this.loading = false;
+        this.showDialog = false;
+        this.resetForm();
+        this.$emit('refresh-config');
+        this.showSuccess(res.data.message || '更新成功');
+      }).catch((err) => {
+        this.loading = false;
+        this.showError(err.response?.data?.message || err.message);
+      });
+      this.updatingMode = false;
+    },
+    async savePlatform() {
+      // 检查 ID 是否已存在
+      const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id);
+      if (existingPlatform) {
+        const confirmed = await this.confirmIdConflict(this.selectedPlatformConfig.id);
+        if (!confirmed) {
+          this.loading = false;
+          return; // 如果用户取消，则中止保存
+        }
+      }
+
+      // 检查 aiocqhttp 适配器的安全设置
+      if (this.selectedPlatformConfig.type === 'aiocqhttp') {
+        const token = this.selectedPlatformConfig.ws_reverse_token;
+        if (!token || token.trim() === '') {
+          const continueWithWarning = await this.showOneBotEmptyTokenWarning();
+          if (!continueWithWarning) {
+            return;
+          }
+        }
+      }
+
+      try {
+        // 先保存平台配置
+        const res = await axios.post('/api/config/platform/new', this.selectedPlatformConfig);
+
+        // 平台保存成功后，处理配置文件
+        await this.handleConfigFile();
+
+        this.loading = false;
+        this.showDialog = false;
+        this.resetForm();
+        this.$emit('refresh-config');
+        this.showSuccess(res.data.message || '平台添加成功，配置文件已更新');
+      } catch (err) {
+        this.loading = false;
+        this.showError(err.response?.data?.message || err.message);
+      }
     },
 
-    closeDialog() {
-      this.showDialog = false;
+    async handleConfigFile() {
+      if (!this.selectedAbConfId) {
+        return;
+      }
+
+      const platformId = this.selectedPlatformConfig.id;
+      // 生成默认的UMOP：平台ID:*:*（表示该平台的所有消息类型和会话）
+      const newUmop = `${platformId}:*:*`;
+
+      if (this.aBConfigRadioVal === '0') {
+        // 使用现有配置文件，更新其UMOP
+        await this.updateExistingConfigUmop(this.selectedAbConfId, newUmop);
+      } else if (this.aBConfigRadioVal === '1') {
+        // 创建新配置文件
+        await this.createNewConfigFile(this.selectedAbConfId, newUmop);
+      }
+    },
+
+    async updateExistingConfigUmop(configId, newUmop) {
+      try {
+        // 先获取现有配置文件信息
+        await this.getConfigInfoList(); // 确保configInfoList是最新的
+        const existingConfig = this.configInfoList.find(conf => conf.id === configId);
+
+        if (!existingConfig) {
+          throw new Error(`配置文件 ID ${configId} 不存在`);
+        }
+
+        // 获取现有的UMOP数组，如果不存在则创建新数组
+        let currentUmop = existingConfig.umop || [];
+
+        // 检查是否已存在相同的UMOP
+        if (!currentUmop.includes(newUmop)) {
+          currentUmop.push(newUmop);
+        }
+
+        // 更新配置文件的UMOP
+        await axios.post('/api/config/abconf/update', {
+          id: configId,
+          umo_parts: currentUmop
+        });
+
+        console.log(`成功更新配置文件 ${configId} 的UMOP`);
+      } catch (err) {
+        console.error('更新配置文件UMOP失败:', err);
+        throw new Error(`更新配置文件失败: ${err.response?.data?.message || err.message}`);
+      }
+    },
+
+    async createNewConfigFile(configName, newUmop) {
+      try {
+        // 创建新的配置文件
+        const createRes = await axios.post('/api/config/abconf/new', {
+          name: configName,
+          umo_parts: [newUmop]
+        });
+
+        console.log(`成功创建新配置文件 ${configName}，ID: ${createRes.data.data.conf_id}`);
+      } catch (err) {
+        console.error('创建新配置文件失败:', err);
+        throw new Error(`创建新配置文件失败: ${err.response?.data?.message || err.message}`);
+      }
+    },
+
+    confirmIdConflict(id) {
+      this.conflictId = id;
+      this.showIdConflictDialog = true;
+      return new Promise((resolve) => {
+        this.idConflictResolve = resolve;
+      });
+    },
+
+    handleIdConflictConfirm(confirmed) {
+      if (this.idConflictResolve) {
+        this.idConflictResolve(confirmed);
+      }
+      this.showIdConflictDialog = false;
+    },
+
+    showOneBotEmptyTokenWarning() {
+      this.showOneBotEmptyTokenWarnDialog = true;
+      return new Promise((resolve) => {
+        this.oneBotEmptyTokenWarningResolve = resolve;
+      });
+    },
+
+    handleOneBotEmptyTokenWarningDismiss(continueWithWarning) {
+      this.showOneBotEmptyTokenWarnDialog = false;
+      if (this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(continueWithWarning);
+        this.oneBotEmptyTokenWarningResolve = null;
+      }
+
+      if (!continueWithWarning) {
+        this.loading = false;
+      }
+    },
+
+    showSuccess(message) {
+      this.$emit('show-toast', { message: message, type: 'success' });
+    },
+
+    showError(message) {
+      this.$emit('show-toast', { message: message, type: 'error' });
+    },
+
+    // 获取该平台适配器使用的所有配置文件
+    getPlatformConfigs(platformId) {
+      if (!platformId) {
+        this.platformConfigs = [];
+        return;
+      }
+
+      axios.get('/api/config/abconfs').then((res) => {
+        const allConfigs = res.data.data.info_list;
+
+        // 过滤出使用该平台的配置文件
+        this.platformConfigs = allConfigs.filter(config => {
+          if (!config.umop || config.umop.length === 0) {
+            return false;
+          }
+
+          // 检查UMOP是否匹配该平台
+          return config.umop.some(umop => {
+            return this.isUmopMatchPlatform(umop, platformId);
+          });
+        });
+      }).catch((err) => {
+        console.error('获取平台配置文件失败:', err);
+        this.platformConfigs = [];
+      });
+    },
+
+    isUmopMatchPlatform(umop, platformId) {
+      if (!umop) return false;
+      const parts = umop.split(':');
+      if (parts.length !== 3) return false;
+      const platform = parts[0];
+      return platform === platformId || platform === '' || platform === '*';
+    },
+
+    // 格式化UMOP显示
+    formatUmopScope(umop) {
+      if (!umop) return '';
+
+      const parts = umop.split(':');
+      if (parts.length !== 3) return umop;
+
+      const [platform, messageType, sessionId] = parts;
+
+      // 格式化各部分
+      // const platformText = platform === '' || platform === '*' ? '全部平台' : platform;
+      const messageTypeText = this.getMessageTypeLabel(messageType === '' || messageType === '*' ? '*' : messageType);
+      const sessionText = sessionId === '' || sessionId === '*' ? '全部会话' : sessionId;
+
+      return `${messageTypeText}:${sessionText}`;
+    },
+
+    // 获取消息类型标签
+    getMessageTypeLabel(messageType) {
+      const typeMap = {
+        '*': '全部消息',
+        '': '全部消息',
+        'GroupMessage': '群组消息',
+        'FriendMessage': '私聊消息'
+      };
+      return typeMap[messageType] || messageType;
+    },
+
+    // 编辑平台配置文件
+    editPlatformConfig(config) {
+      this.$emit('edit-platform-config', config);
+    },
+
+  },
+  mounted() {
+    this.getConfigInfoList();
+    // 如果是更新模式且有平台配置，立即获取相关配置文件
+    if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
+      this.getPlatformConfigs(this.updatingPlatformConfig.id);
     }
   }
 }
 </script>
-
-<style scoped>
-.platform-selection-dialog .v-card-title {
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-}
-
-.platform-card {
-  transition: all 0.3s ease;
-  height: 100%;
-  cursor: pointer;
-  overflow: hidden;
-  position: relative;
-}
-
-.platform-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
-  border-color: var(--v-primary-base);
-}
-
-.platform-card-content {
-  display: flex;
-  align-items: center;
-  height: 100px;
-  padding: 16px;
-  position: relative;
-  z-index: 2;
-}
-
-.platform-card-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.platform-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  padding: 0;
-}
-
-.platform-card-description {
-  padding: 0;
-  margin: 0;
-}
-
-.platform-card-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.platform-logo-img {
-  max-width: 60px;
-  max-height: 60px;
-  opacity: 0.6;
-  object-fit: contain;
-}
-
-.platform-logo-fallback {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--v-primary-base);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  opacity: 0.3;
-}
-</style>

@@ -153,10 +153,10 @@ class AstrBotConfigManager:
     def get_conf_list(self) -> list[ConfInfo]:
         """获取所有配置文件的元数据列表"""
         conf_list = []
-        conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         abconf_mapping = self._get_abconf_data()
         for uuid_, meta in abconf_mapping.items():
             conf_list.append(ConfInfo(**meta, id=uuid_))
+        conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         return conf_list
 
     def create_conf(

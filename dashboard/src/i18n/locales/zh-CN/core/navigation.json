@@ -1,6 +1,6 @@
 {
   "dashboard": "统计",
-  "platforms": "消息平台",
+  "platforms": "平台实例",
   "providers": "服务提供商",
   "persona": "人格设定",
   "toolUse": "MCP",

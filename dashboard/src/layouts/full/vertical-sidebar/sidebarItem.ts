@@ -25,7 +25,7 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.platforms',
-    icon: 'mdi-message-processing',
+    icon: 'mdi-robot',
     to: '/platforms',
   },
   {
