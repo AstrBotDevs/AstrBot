@@ -3,13 +3,12 @@ import asyncio
 import json
 import os
 import base64
-from typing import List, AsyncGenerator, Dict
+from typing import AsyncGenerator, Dict
 from astrbot.core.message.message_event_result import MessageChain
 import astrbot.core.message.components as Comp
 from astrbot.api.provider import Provider
 from astrbot import logger
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
-from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.entities import LLMResponse
 from ..register import register_provider_adapter
 
 
@@ -32,7 +31,15 @@ class ProviderCoze(Provider):
         self.bot_id = provider_config.get("bot_id", "")
         if not self.bot_id:
             raise Exception("Coze Bot ID 不能为空。")
-        self.api_base = provider_config.get("coze_api_base", "https://api.coze.cn")
+        self.api_base: str = provider_config.get("coze_api_base", "https://api.coze.cn")
+
+        if not isinstance(self.api_base, str) or not self.api_base.startswith(
+            ("http://", "https://")
+        ):
+            raise Exception(
+                "Coze API Base URL 格式不正确，必须以 http:// 或 https:// 开头。"
+            )
+
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
@@ -143,7 +150,7 @@ class ProviderCoze(Provider):
         """确保HTTP session存在"""
         if self.session is None:
             connector = aiohttp.TCPConnector(
-                ssl=False if self.api_base.startswith("http://") else None,
+                ssl=False if self.api_base.startswith("http://") else True,
                 limit=100,
                 limit_per_host=30,
                 keepalive_timeout=30,
@@ -238,13 +245,13 @@ class ProviderCoze(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult | List[ToolCallsResult] = None,
-        model: str = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> LLMResponse:
         """文本对话, 内部使用流式接口实现非流式
@@ -293,13 +300,13 @@ class ProviderCoze(Provider):
     async def text_chat_stream(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult | List[ToolCallsResult] = None,
-        model: str = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
+        tool_calls_result=None,
+        model=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话接口"""
