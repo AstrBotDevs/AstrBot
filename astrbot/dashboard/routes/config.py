@@ -5,6 +5,7 @@ from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
 from astrbot.core.config.default import (
+    DEFAULT_CONFIG,
     CONFIG_METADATA_2,
     DEFAULT_VALUE_MAP,
     CONFIG_METADATA_3,
@@ -157,6 +158,7 @@ class ConfigRoute(Route):
             "/config/abconf/delete": ("POST", self.delete_abconf),
             "/config/abconf/update": ("POST", self.update_abconf),
             "/config/get": ("GET", self.get_configs),
+            "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/platform/new": ("POST", self.post_new_platform),
@@ -172,6 +174,14 @@ class ConfigRoute(Route):
         }
         self.register_routes()
 
+    async def get_default_config(self):
+        """获取默认配置文件"""
+        return (
+            Response()
+            .ok({"config": DEFAULT_CONFIG, "metadata": CONFIG_METADATA_3})
+            .__dict__
+        )
+
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
         abconf_list = self.acm.get_conf_list()
@@ -184,9 +194,12 @@ class ConfigRoute(Route):
             return Response().error("缺少配置数据").__dict__
         umo_parts = post_data["umo_parts"]
         name = post_data.get("name", None)
+        config = post_data.get("config", DEFAULT_CONFIG)
 
         try:
-            conf_id = self.acm.create_conf(umo_parts=umo_parts, name=name)
+            conf_id = self.acm.create_conf(
+                umo_parts=umo_parts, name=name, config=config
+            )
             return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__

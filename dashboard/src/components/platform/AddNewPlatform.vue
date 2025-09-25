@@ -1,13 +1,13 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="900px" min-height="80%">
+  <v-dialog v-model="showDialog" max-width="900px" height="95%">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
       <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
-        <div class="d-flex align-start">
+        <div class="d-flex align-start" style="width: 100%;">
           <div>
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
           </div>
-          <div>
+          <div style="flex: 1;">
             <h3>
               选择消息平台类别
             </h3>
@@ -34,7 +34,7 @@
                     <v-icon start>mdi-book-open-variant</v-icon>
                     {{ tm('dialog.viewTutorial') }}
                   </v-btn>
-                  <div class="mt-2" style="width: 100vh;">
+                  <div class="mt-2">
                     <AstrBotConfig :iterable="selectedPlatformConfig" :metadata="metadata['platform_group']?.metadata"
                       metadataKey="platform" />
                   </div>
@@ -45,7 +45,7 @@
                   style="max-width: 30%; min-width: 300px;" v-model="updatingPlatformConfig.type"
                   disabled></v-text-field>
                 <div class="mt-3">
-                  <div class="mt-2" style="width: 100vh;">
+                  <div class="mt-2">
                     <AstrBotConfig :iterable="updatingPlatformConfig" :metadata="metadata['platform_group']?.metadata"
                       metadataKey="platform" />
                   </div>
@@ -60,53 +60,101 @@
           <div>
             <v-icon icon="mdi-numeric-2-circle" class="mr-3"></v-icon>
           </div>
-          <div>
-            <h3>
-              配置文件
-            </h3>
-            <small style="color: grey;">实例配置包含了选用的聊天模型、人格、知识库、插件应用范围等配置。AstrBot 会按照列表顺序使用第一个匹配的配置文件。</small>
+          <div style="flex: 1;">
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <div class="d-flex align-center">
+                  <h3>
+                    配置文件
+                  </h3>
+                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2">可选</v-chip>
+                </div>
+                <small style="color: grey;">实例配置包含了选用的聊天模型、人格、知识库、插件应用范围等配置。</small>
+              </div>
+              <div>
+                <v-btn variant="plain" icon @click="showConfigSection = !showConfigSection" class="mt-2">
+                  <v-icon>{{ showConfigSection ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                </v-btn>
+              </div>
 
-            <div v-if="!updatingMode">
-              <v-radio-group class="mt-2" v-model="aBConfigRadioVal" hide-details="true">
-                <v-radio value="0">
-                  <template v-slot:label>
-                    <span>使用现有配置文件</span>
+            </div>
+
+            <div v-if="showConfigSection">
+              <div v-if="!updatingMode">
+                <v-radio-group class="mt-2" v-model="aBConfigRadioVal" hide-details="true">
+                  <v-radio value="0">
+                    <template v-slot:label>
+                      <span>使用现有配置文件</span>
+                    </template>
+                  </v-radio>
+                  <v-select v-if="aBConfigRadioVal === '0'" v-model="selectedAbConfId" :items="configInfoList"
+                    item-title="name" item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
+                    style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
+                  </v-select>
+                  <v-radio value="1" label="创建新配置文件">
+                  </v-radio>
+                  <div class="d-flex align-center" v-if="aBConfigRadioVal === '1'">
+                    <v-text-field v-model="selectedAbConfId" label="新配置文件名称" variant="outlined" rounded="md" dense
+                      hide-details style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
+                    </v-text-field>
+                  </div>
+
+                </v-radio-group>
+
+                <!-- 现有配置文件预览区域 -->
+                <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
+                  <div v-if="configPreviewLoading" class="d-flex justify-center py-4">
+                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                  </div>
+                  <div v-else-if="selectedConfigData && selectedConfigMetadata" class="config-preview-container">
+                    <h4 class="mb-3">配置文件预览</h4>
+                    <AstrBotCoreConfigWrapper :metadata="selectedConfigMetadata" :config_data="selectedConfigData" readonly="true"/>
+                  </div>
+                  <div v-else class="text-center py-4 text-grey">
+                    <v-icon>mdi-information-outline</v-icon>
+                    <p class="mt-2">无法加载配置文件预览</p>
+                  </div>
+                </div>
+
+
+                <!-- 新配置文件编辑区域 -->
+                <div v-if="aBConfigRadioVal === '1'" class="mt-4">
+                  <div v-if="newConfigLoading" class="d-flex justify-center py-4">
+                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                  </div>
+                  <div v-else-if="newConfigData && newConfigMetadata" class="config-preview-container">
+                    <h4 class="mb-3">配置新配置文件</h4>
+                    <AstrBotCoreConfigWrapper :metadata="newConfigMetadata" :config_data="newConfigData" />
+                  </div>
+                  <div v-else class="text-center py-4 text-grey">
+                    <v-icon>mdi-information-outline</v-icon>
+                    <p class="mt-2">无法加载默认配置模板</p>
+                  </div>
+                </div>
+
+              </div>
+
+              <div v-else>
+                <v-data-table :headers="configTableHeaders" :items="platformConfigs" item-value="id"
+                  no-data-text="该平台暂无关联的配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
+                  <template v-slot:item.scope="{ item }">
+                    <v-chip v-for="(umop, index) in item.umop" :key="index"
+                      v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
+                      variant="tonal" rounded="md" class="mr-1 mb-1">
+                      {{ formatUmopScope(umop) }}
+                    </v-chip>
                   </template>
-                </v-radio>
-                <v-select v-if="aBConfigRadioVal === '0'" v-model="selectedAbConfId" :items="configInfoList"
-                  item-title="name" item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
-                  style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
-                </v-select>
-                <v-radio value="1" label="创建新配置文件">
-                </v-radio>
-                <v-text-field v-if="aBConfigRadioVal === '1'" v-model="selectedAbConfId" label="新配置文件名称"
-                  variant="outlined" rounded="md" dense hide-details style="max-width: 30%; min-width: 200px;"
-                  class="ml-10 my-2">
-                </v-text-field>
-              </v-radio-group>
-
-              <small class="ml-2">小提示: 你稍后可以在「配置文件」页编辑配置文件。</small>
+                  <template v-slot:item.name="{ item }">
+                    <span> {{ item.name }} </span>
+                    <v-chip v-if="item.name === 'default'" size="x-small" variant="tonal" rounded="sm"
+                      class="ml-2">兜底配置</v-chip>
+                  </template>
+                </v-data-table>
+                <small class="ml-2">Tips: 暂时无法在此更新配置文件，请前往「配置文件」页更新。</small>
+              </div>
             </div>
 
 
-            <div v-else style="">
-              <v-data-table :headers="configTableHeaders" :items="platformConfigs" item-value="id"
-                no-data-text="该平台暂无关联的配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
-                <template v-slot:item.scope="{ item }">
-                  <v-chip v-for="(umop, index) in item.umop" :key="index"
-                    v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
-                    variant="tonal" rounded="md" class="mr-1 mb-1">
-                    {{ formatUmopScope(umop) }}
-                  </v-chip>
-                </template>
-                <template v-slot:item.name="{ item }">
-                  <span> {{ item.name }} </span>
-                  <v-chip v-if="item.name === 'default'" size="x-small" variant="tonal" rounded="sm"
-                    class="ml-2">兜底配置</v-chip>
-                </template>
-              </v-data-table>
-              <small class="ml-2">Tips: 暂时无法在此更新配置文件，请前往「配置文件」页更新。</small>
-            </div>
           </div>
         </div>
 
@@ -115,9 +163,8 @@
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn text @click="closeDialog">{{ tm('dialog.cancel') }}</v-btn>
-        <v-btn :disabled="!selectedPlatformType || !selectedAbConfId" color="primary" v-if="!updatingMode"
-          @click="newPlatform" :loading="loading">{{
-            tm('dialog.save') }}</v-btn>
+        <v-btn :disabled="!canSave" color="primary" v-if="!updatingMode" @click="newPlatform" :loading="loading">{{
+          tm('dialog.save') }}</v-btn>
         <v-btn :disabled="!selectedAbConfId" color="primary" v-else @click="newPlatform" :loading="loading">{{
           tm('dialog.save') }}</v-btn>
       </v-card-actions>
@@ -172,10 +219,11 @@ import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 
 export default {
   name: 'AddNewPlatform',
-  components: { AstrBotConfig },
+  components: { AstrBotConfig, AstrBotCoreConfigWrapper },
   emits: ['update:show', 'show-toast', 'refresh-config', 'edit-platform-config'],
   props: {
     show: {
@@ -208,6 +256,16 @@ export default {
       selectedAbConfId: 'default',
       configInfoList: [],
 
+      // 选中的配置文件预览数据
+      selectedConfigData: null,
+      selectedConfigMetadata: null,
+      configPreviewLoading: false,
+
+      // 新配置文件相关数据
+      newConfigData: null,
+      newConfigMetadata: null,
+      newConfigLoading: false,
+
       // 平台配置文件表格
       platformConfigs: [],
       configTableHeaders: [
@@ -225,6 +283,8 @@ export default {
       oneBotEmptyTokenWarningResolve: null,
 
       loading: false,
+
+      showConfigSection: false,
     };
   },
   setup() {
@@ -242,6 +302,25 @@ export default {
     },
     platformTemplates() {
       return this.metadata['platform_group']?.metadata?.platform?.config_template || {};
+    },
+    canSave() {
+      // 基本条件：必须选择平台类型
+      if (!this.selectedPlatformType) {
+        return false;
+      }
+
+      // 如果是使用现有配置文件模式
+      if (this.aBConfigRadioVal === '0') {
+        return !!this.selectedAbConfId;
+      }
+
+      // 如果是创建新配置文件模式
+      if (this.aBConfigRadioVal === '1') {
+        // 需要配置文件名称，且新配置数据已加载
+        return !!(this.selectedAbConfId && this.newConfigData);
+      }
+
+      return false;
     }
   },
   watch: {
@@ -250,6 +329,31 @@ export default {
         this.selectedPlatformConfig = JSON.parse(JSON.stringify(this.platformTemplates[newType]));
       } else {
         this.selectedPlatformConfig = null;
+      }
+    },
+    selectedAbConfId(newConfigId) {
+      // 当选择配置文件改变时，获取配置文件数据用于预览
+      if (!this.updatingMode && this.aBConfigRadioVal === '0' && newConfigId) {
+        this.getConfigForPreview(newConfigId);
+      } else {
+        this.selectedConfigData = null;
+        this.selectedConfigMetadata = null;
+      }
+    },
+    aBConfigRadioVal(newVal) {
+      // 当切换到创建新配置文件时，获取默认配置模板
+      if (newVal === '1') {
+        this.selectedConfigData = null;
+        this.selectedConfigMetadata = null;
+        this.selectedAbConfId = null;
+        this.getDefaultConfigTemplate();
+      } else if (newVal === '0') {
+        // 如果切换回使用现有配置文件但没有选择配置文件，重置为默认
+        this.newConfigData = null;
+        this.newConfigMetadata = null;
+        if (!this.selectedAbConfId) {
+          this.selectedAbConfId = 'default';
+        }
       }
     },
     showIdConflictDialog(newValue) {
@@ -272,6 +376,11 @@ export default {
         }
       },
       immediate: true
+    },
+    showConfigSection(newValue) {
+      if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
+        this.getConfigForPreview(this.selectedAbConfId);
+      }
     }
   },
   methods: {
@@ -283,6 +392,18 @@ export default {
 
       this.aBConfigRadioVal = '0';
       this.selectedAbConfId = 'default';
+
+      // 重置配置预览数据
+      this.selectedConfigData = null;
+      this.selectedConfigMetadata = null;
+      this.configPreviewLoading = false;
+
+      // 重置新配置文件数据
+      this.newConfigData = null;
+      this.newConfigMetadata = null;
+      this.newConfigLoading = false;
+
+      this.showConfigSection = false;
     },
     closeDialog() {
       this.resetForm();
@@ -293,6 +414,47 @@ export default {
       await axios.get('/api/config/abconfs').then((res) => {
         this.configInfoList = res.data.data.info_list;
       })
+    },
+
+    // 获取配置文件数据用于预览
+    async getConfigForPreview(configId) {
+      if (!configId) {
+        this.selectedConfigData = null;
+        this.selectedConfigMetadata = null;
+        return;
+      }
+
+      this.configPreviewLoading = true;
+      try {
+        const response = await axios.get('/api/config/abconf', {
+          params: { id: configId }
+        });
+
+        this.selectedConfigData = response.data.data.config;
+        this.selectedConfigMetadata = response.data.data.metadata;
+      } catch (error) {
+        console.error('获取配置文件预览数据失败:', error);
+        this.selectedConfigData = null;
+        this.selectedConfigMetadata = null;
+      } finally {
+        this.configPreviewLoading = false;
+      }
+    },
+
+    // 获取默认配置模板用于创建新配置文件
+    async getDefaultConfigTemplate() {
+      this.newConfigLoading = true;
+      try {
+        const response = await axios.get('/api/config/default');
+        this.newConfigData = response.data.data.config;
+        this.newConfigMetadata = response.data.data.metadata;
+      } catch (error) {
+        console.error('获取默认配置模板失败:', error);
+        this.newConfigData = null;
+        this.newConfigMetadata = null;
+      } finally {
+        this.newConfigLoading = false;
+      }
     },
     openTutorial() {
       const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
@@ -343,7 +505,7 @@ export default {
     },
     async savePlatform() {
       // 检查 ID 是否已存在
-      const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id );
+      const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id);
       if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
         const confirmed = await this.confirmIdConflict(this.selectedPlatformConfig.id);
         if (!confirmed) {
@@ -432,10 +594,16 @@ export default {
 
     async createNewConfigFile(configName, newUmop) {
       try {
+        // 准备配置数据，如果是创建模式且有新配置数据，使用用户填写的配置
+        const configData = this.aBConfigRadioVal === '1' && this.newConfigData
+          ? this.newConfigData
+          : undefined;
+
         // 创建新的配置文件
         const createRes = await axios.post('/api/config/abconf/new', {
           name: configName,
-          umo_parts: [newUmop]
+          umo_parts: [newUmop],
+          config: configData  // 传入用户配置的数据
         });
 
         console.log(`成功创建新配置文件 ${configName}，ID: ${createRes.data.data.conf_id}`);
@@ -558,10 +726,11 @@ export default {
   },
   mounted() {
     this.getConfigInfoList();
-    // 如果是更新模式且有平台配置，立即获取相关配置文件
+    this.getConfigForPreview(this.selectedAbConfId);
     if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
       this.getPlatformConfigs(this.updatingPlatformConfig.id);
     }
   }
 }
 </script>
+
