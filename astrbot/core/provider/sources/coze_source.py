@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import base64
+import hashlib
 from typing import AsyncGenerator, Dict
 from astrbot.core.message.message_event_result import MessageChain
 import astrbot.core.message.components as Comp
@@ -46,16 +47,81 @@ class ProviderCoze(Provider):
         self.auto_save_history = provider_config.get("auto_save_history", True)
         self.conversation_ids: Dict[str, str] = {}
         self.session = None
+        self.file_id_cache: Dict[str, Dict[str, str]] = {}
 
-    async def _upload_file(self, file_data: bytes, file_name: str = "image.jpg") -> str:
+    def _generate_cache_key(self, data: str, is_base64: bool = False) -> str:
+        """生成统一的缓存键
+
+        Args:
+            data: 图片数据或路径
+            is_base64: 是否是 base64 数据
+
+        Returns:
+            str: 缓存键
+        """
+
+        try:
+            if is_base64 and data.startswith("data:image/"):
+                try:
+                    header, encoded = data.split(",", 1)
+                    image_bytes = base64.b64decode(encoded)
+                    cache_key = hashlib.md5(image_bytes).hexdigest()
+                    return cache_key
+                except Exception:
+                    cache_key = hashlib.md5(encoded.encode("utf-8")).hexdigest()
+                    return cache_key
+            else:
+                if data.startswith(("http://", "https://")):
+                    # URL图片，使用URL作为缓存键
+                    cache_key = hashlib.md5(data.encode("utf-8")).hexdigest()
+                    return cache_key
+                else:
+                    clean_path = (
+                        data.split("_")[0]
+                        if "_" in data and len(data.split("_")) >= 3
+                        else data
+                    )
+
+                    if os.path.exists(clean_path):
+                        with open(clean_path, "rb") as f:
+                            file_content = f.read()
+                        cache_key = hashlib.md5(file_content).hexdigest()
+                        return cache_key
+                    else:
+                        cache_key = hashlib.md5(clean_path.encode("utf-8")).hexdigest()
+                        return cache_key
+
+        except Exception as e:
+            cache_key = hashlib.md5(data.encode("utf-8")).hexdigest()
+            logger.debug(f"[Coze] 异常文件缓存键: {cache_key}, error={e}")
+            return cache_key
+
+    async def _upload_file(
+        self,
+        file_data: bytes,
+        file_name: str = "image.jpg",
+        session_id: str = None,
+        cache_key: str = None,
+    ) -> str:
         """上传文件到 Coze 并返回 file_id
 
         Args:
             file_data (bytes): 文件的二进制数据
             file_name (str): 文件名，包含扩展名(例如 image.jpg)
+            session_id (str): 会话ID，用于缓存
+            cache_key (str): 缓存键
         Returns:
             str: 上传成功后返回的 file_id
         """
+        # 检查缓存
+        if session_id and cache_key:
+            if session_id not in self.file_id_cache:
+                self.file_id_cache[session_id] = {}
+
+            if cache_key in self.file_id_cache[session_id]:
+                file_id = self.file_id_cache[session_id][cache_key]
+                return file_id
+
         session = await self._ensure_session()
         url = f"{self.api_base}/v1/files/upload"
 
@@ -106,7 +172,13 @@ class ProviderCoze(Provider):
                 if result.get("code") != 0:
                     raise Exception(f"文件上传失败: {result.get('msg', '未知错误')}")
 
-                return result["data"]["id"]
+                file_id = result["data"]["id"]
+                # 缓存 file_id
+                if session_id and cache_key:
+                    self.file_id_cache[session_id][cache_key] = file_id
+                    logger.debug(f"[Coze] 图片上传成功并缓存，file_id: {file_id}")
+
+                return file_id
 
         except asyncio.TimeoutError:
             logger.error("文件上传超时")
@@ -115,14 +187,28 @@ class ProviderCoze(Provider):
             logger.error(f"文件上传失败: {str(e)}")
             raise Exception(f"文件上传失败: {str(e)}")
 
-    async def _download_and_upload_image(self, image_url: str) -> str:
+    async def _download_and_upload_image(
+        self, image_url: str, session_id: str = None
+    ) -> str:
         """下载图片并上传到 Coze，返回 file_id
 
         Args:
             image_url (str): 图片的URL
+            session_id (str): 会话ID，用于缓存
         Returns:
             str: 上传成功后返回的 file_id
         """
+        # 计算哈希实现缓存
+        cache_key = self._generate_cache_key(image_url) if session_id else None
+
+        if session_id and cache_key:
+            if session_id not in self.file_id_cache:
+                self.file_id_cache[session_id] = {}
+
+            if cache_key in self.file_id_cache[session_id]:
+                file_id = self.file_id_cache[session_id][cache_key]
+                return file_id
+
         session = await self._ensure_session()
 
         try:
@@ -140,11 +226,136 @@ class ProviderCoze(Provider):
                 else:
                     file_name = "image.jpg"
 
-                return await self._upload_file(image_data, file_name)
+                file_id = await self._upload_file(
+                    image_data, file_name, session_id, cache_key
+                )
+
+                if session_id and cache_key:
+                    self.file_id_cache[session_id][cache_key] = file_id
+
+                return file_id
 
         except Exception as e:
             logger.error(f"处理图片失败 {image_url}: {str(e)}")
             raise Exception(f"处理图片失败: {str(e)}")
+
+    async def _process_context_images(self, content: str, session_id: str) -> str:
+        """处理上下文中的图片内容，将 base64 图片上传并替换为 file_id"""
+
+        try:
+            content_obj = json.loads(content)
+            if isinstance(content_obj, list):
+                processed_content = []
+                if session_id not in self.file_id_cache:
+                    self.file_id_cache[session_id] = {}
+
+                for item in content_obj:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            processed_content.append(item)
+                        elif item.get("type") == "image_url":
+                            # 处理图片逻辑
+                            if "file_id" in item:
+                                # 已经有 file_id
+                                logger.debug(
+                                    f"[Coze] 图片已有file_id: {item['file_id']}"
+                                )
+                                processed_content.append(item)
+                            else:
+                                # 获取图片数据
+                                image_data = ""
+                                if "image_url" in item and isinstance(
+                                    item["image_url"], dict
+                                ):
+                                    image_data = item["image_url"].get("url", "")
+                                elif "data" in item:
+                                    image_data = item.get("data", "")
+                                elif "url" in item:
+                                    image_data = item.get("url", "")
+
+                                if image_data:
+                                    # 计算哈希用于缓存
+                                    if image_data.startswith("data:image/"):
+                                        cache_key = self._generate_cache_key(
+                                            image_data, is_base64=True
+                                        )
+                                    else:
+                                        cache_key = self._generate_cache_key(
+                                            image_data, is_base64=False
+                                        )
+
+                                    # 检查缓存
+                                    if cache_key in self.file_id_cache[session_id]:
+                                        file_id = self.file_id_cache[session_id][
+                                            cache_key
+                                        ]
+                                        processed_content.append(
+                                            {"type": "image", "file_id": file_id}
+                                        )
+                                    else:
+                                        # 上传图片并缓存
+                                        if image_data.startswith("data:image/"):
+                                            # base64 处理
+                                            header, encoded = image_data.split(",", 1)
+                                            image_bytes = base64.b64decode(encoded)
+                                            file_name = "image.jpg"
+                                            if "png" in header:
+                                                file_name = "image.png"
+                                            elif "gif" in header:
+                                                file_name = "image.gif"
+                                            file_id = await self._upload_file(
+                                                image_bytes,
+                                                file_name,
+                                                session_id,
+                                                cache_key,
+                                            )
+                                        elif image_data.startswith(
+                                            ("http://", "https://")
+                                        ):
+                                            # URL 图片
+                                            file_id = (
+                                                await self._download_and_upload_image(
+                                                    image_data, session_id
+                                                )
+                                            )
+                                            # 为URL图片也添加缓存
+                                            self.file_id_cache[session_id][
+                                                cache_key
+                                            ] = file_id
+                                        elif os.path.exists(image_data):
+                                            # 本地文件
+                                            with open(image_data, "rb") as f:
+                                                image_bytes = f.read()
+                                            file_name = os.path.basename(image_data)
+                                            file_id = await self._upload_file(
+                                                image_bytes,
+                                                file_name,
+                                                session_id,
+                                                cache_key,
+                                            )
+                                        else:
+                                            logger.warning(
+                                                f"无法处理的图片格式: {image_data[:50]}..."
+                                            )
+                                            continue
+
+                                        processed_content.append(
+                                            {"type": "image", "file_id": file_id}
+                                        )
+                                else:
+                                    continue
+                    else:
+                        processed_content.append(item)
+
+                result = json.dumps(processed_content, ensure_ascii=False)
+                return result
+            else:
+                return content
+        except json.JSONDecodeError:
+            return content
+        except Exception as e:
+            logger.error(f"处理上下文图片失败: {str(e)}")
+            return content
 
     async def _ensure_session(self):
         """确保HTTP session存在"""
@@ -320,20 +531,61 @@ class ProviderCoze(Provider):
         additional_messages = []
 
         if system_prompt:
-            additional_messages.append(
-                {"role": "system", "content": system_prompt, "content_type": "text"}
-            )
+            if not self.auto_save_history or not conversation_id:
+                additional_messages.append(
+                    {"role": "system", "content": system_prompt, "content_type": "text"}
+                )
 
-        if contexts:
+        if not self.auto_save_history and contexts:
+            # 如果关闭了自动保存历史，传入上下文
             for ctx in contexts:
                 if isinstance(ctx, dict) and "role" in ctx and "content" in ctx:
-                    additional_messages.append(
-                        {
-                            "role": ctx["role"],
-                            "content": ctx["content"],
-                            "content_type": "text",
-                        }
-                    )
+                    content = ctx["content"]
+                    content_type = ctx.get("content_type", "text")
+
+                    # 处理可能包含图片的上下文
+                    if (
+                        content_type == "object_string"
+                        or (isinstance(content, str) and content.startswith("["))
+                        or (
+                            isinstance(content, list)
+                            and any(
+                                isinstance(item, dict)
+                                and item.get("type") == "image_url"
+                                for item in content
+                            )
+                        )
+                    ):
+                        if isinstance(content, list):
+                            content_str = json.dumps(content, ensure_ascii=False)
+                        else:
+                            content_str = content
+
+                        processed_content = await self._process_context_images(
+                            content_str, user_id
+                        )
+                        additional_messages.append(
+                            {
+                                "role": ctx["role"],
+                                "content": processed_content,
+                                "content_type": "object_string",
+                            }
+                        )
+                    else:
+                        # 纯文本
+                        additional_messages.append(
+                            {
+                                "role": ctx["role"],
+                                "content": (
+                                    content
+                                    if isinstance(content, str)
+                                    else json.dumps(content, ensure_ascii=False)
+                                ),
+                                "content_type": "text",
+                            }
+                        )
+                else:
+                    logger.info(f"[Coze] 跳过格式不正确的上下文: {ctx}")
 
         if prompt or image_urls:
             if image_urls:
@@ -346,12 +598,8 @@ class ProviderCoze(Provider):
                     try:
                         if url.startswith(("http://", "https://")):
                             # 网络图片
-                            file_id = await self._download_and_upload_image(url)
-                            object_string_content.append(
-                                {
-                                    "type": "image",
-                                    "file_id": file_id,
-                                }
+                            file_id = await self._download_and_upload_image(
+                                url, user_id
                             )
                         else:
                             # 本地文件或 base64
@@ -364,15 +612,26 @@ class ProviderCoze(Provider):
                                     file_name = "image.png"
                                 elif "gif" in header:
                                     file_name = "image.gif"
-                                file_id = await self._upload_file(image_data, file_name)
+                                cache_key = self._generate_cache_key(
+                                    url, is_base64=True
+                                )
+                                file_id = await self._upload_file(
+                                    image_data, file_name, user_id, cache_key
+                                )
                             else:
                                 # 本地文件
                                 if os.path.exists(url):
                                     with open(url, "rb") as f:
                                         image_data = f.read()
                                     file_name = os.path.basename(url)
+                                    # 用文件路径和修改时间来缓存
+                                    file_stat = os.stat(url)
+                                    cache_key = self._generate_cache_key(
+                                        f"{url}_{file_stat.st_mtime}_{file_stat.st_size}",
+                                        is_base64=False,
+                                    )
                                     file_id = await self._upload_file(
-                                        image_data, file_name
+                                        image_data, file_name, user_id, cache_key
                                     )
                                 else:
                                     logger.warning(f"图片文件不存在: {url}")
@@ -413,9 +672,12 @@ class ProviderCoze(Provider):
             "user_id": user_id,
             "stream": True,
             "auto_save_history": self.auto_save_history,
-            "additional_messages": additional_messages,
         }
 
+        if additional_messages:
+            payload["additional_messages"] = additional_messages
+
+        # 如果有会话 ID 就用
         if conversation_id:
             payload["conversation_id"] = conversation_id
 
@@ -514,6 +776,9 @@ class ProviderCoze(Provider):
         """清空指定会话的上下文"""
         user_id = session_id
         conversation_id = self.conversation_ids.get(user_id)
+
+        if user_id in self.file_id_cache:
+            self.file_id_cache.pop(user_id, None)
 
         if not conversation_id:
             return True

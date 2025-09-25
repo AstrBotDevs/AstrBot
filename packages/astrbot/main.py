@@ -527,12 +527,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
+        if provider and provider.meta().type == "dify" or "coze":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message(
-                    "已重置当前 Dify 会话，新聊天将更换到新的会话。"
+                    "已重置当前 Dify & Coze 会话，新聊天将更换到新的会话。"
                 )
             )
             return
@@ -755,7 +755,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         创建新对话
         """
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
+        if provider and provider.meta().type == "dify" or "coze":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(
@@ -783,7 +783,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
         """创建新群聊对话"""
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
+        if provider and provider.meta().type == "dify" or "coze":
             assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(

@@ -1765,7 +1765,7 @@ CONFIG_METADATA_2 = {
                     "auto_save_history": {
                         "description": "自动保存历史记录",
                         "type": "bool",
-                        "hint": "启用后，API 会自动保存与 Coze 的对话历史记录。",
+                        "hint": "启用后，API 会自动保存与 Coze 的对话历史记录, 此时 AstrBot 的上下文不会生效。如果为禁用, 则使用 AstrBot 管理上下文。",
                     },
                 },
             },
