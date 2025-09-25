@@ -67,9 +67,11 @@
                   <h3>
                     配置文件
                   </h3>
-                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2">可选</v-chip>
+                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2" v-if="!updatingMode">可选</v-chip>
                 </div>
-                <small style="color: grey;">实例配置包含了选用的聊天模型、人格、知识库、插件应用范围等配置。</small>
+                <small style="color: grey;">配置文件包含了聊天模型、人格、知识库、插件范围等配置项。</small>
+                <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。</small>
+                <small style="color: grey;" v-if="updatingMode">配置文件的修改请前往「配置文件」页。</small>
               </div>
               <div>
                 <v-btn variant="plain" icon @click="showConfigSection = !showConfigSection" class="mt-2">
@@ -123,7 +125,7 @@
                     <v-progress-circular indeterminate color="primary"></v-progress-circular>
                   </div>
                   <div v-else-if="newConfigData && newConfigMetadata" class="config-preview-container">
-                    <h4 class="mb-3">配置新配置文件</h4>
+                    <h4 class="mb-3">使用新的配置文件</h4>
                     <AstrBotCoreConfigWrapper :metadata="newConfigMetadata" :config_data="newConfigData" />
                   </div>
                   <div v-else class="text-center py-4 text-grey">
