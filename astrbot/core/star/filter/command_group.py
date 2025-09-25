@@ -116,6 +116,5 @@ class CommandGroupFilter(HandlerFilter):
                 f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree
             )
 
-        # complete_command_names = [name + " " for name in complete_command_names]
-        # return event.message_str.startswith(tuple(complete_command_names))
-        return False
+        complete_command_names = [name + " " for name in complete_command_names]
+        return event.message_str.startswith(tuple(complete_command_names))
