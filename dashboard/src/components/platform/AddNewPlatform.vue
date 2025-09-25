@@ -343,8 +343,8 @@ export default {
     },
     async savePlatform() {
       // 检查 ID 是否已存在
-      const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id);
-      if (existingPlatform) {
+      const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id );
+      if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
         const confirmed = await this.confirmIdConflict(this.selectedPlatformConfig.id);
         if (!confirmed) {
           this.loading = false;
