@@ -528,7 +528,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify" or "coze":
-            assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message(
@@ -756,7 +755,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify" or "coze":
-            assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message("成功，下次聊天将是新对话。")
@@ -784,7 +782,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
         """创建新群聊对话"""
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify" or "coze":
-            assert isinstance(provider, ProviderDify)
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message("成功，下次聊天将是新对话。")
@@ -823,7 +820,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
             if not data["data"]:
                 message.set_result(MessageEventResult().message("未找到任何对话。"))
