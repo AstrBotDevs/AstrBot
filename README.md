@@ -18,7 +18,8 @@
 
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
-<a href="https://astrbot.app/">查看文档</a> ｜
+<a href="https://astrbot.app/">文档</a> ｜
+<a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
