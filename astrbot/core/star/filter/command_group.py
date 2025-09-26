@@ -22,6 +22,8 @@ class CommandGroupFilter(HandlerFilter):
         self.custom_filter_list: List[CustomFilter] = []
         self.parent_group = parent_group
 
+        self._cmpl_cmd_names: list | None = None  # 缓存完整指令名列表
+
     def add_sub_command_filter(
         self, sub_command_filter: Union[CommandFilter, CommandGroupFilter]
     ):
@@ -34,6 +36,9 @@ class CommandGroupFilter(HandlerFilter):
         """遍历父节点获取完整的指令名。
 
         新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。"""
+        if self._cmpl_cmd_names is not None:
+            return self._cmpl_cmd_names
+
         parent_cmd_names = (
             self.parent_group.get_complete_command_names() if self.parent_group else []
         )
@@ -47,6 +52,7 @@ class CommandGroupFilter(HandlerFilter):
         for parent_cmd_name in parent_cmd_names:
             for candidate in candidates:
                 result.append(parent_cmd_name + " " + candidate)
+        self._cmpl_cmd_names = result
         return result
 
     # 以树的形式打印出来
@@ -97,6 +103,12 @@ class CommandGroupFilter(HandlerFilter):
                 return False
         return True
 
+    def startswith(self, message_str: str) -> bool:
+        return message_str.startswith(tuple(self.get_complete_command_names()))
+
+    def equals(self, message_str: str) -> bool:
+        return message_str in self.get_complete_command_names()
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
@@ -105,8 +117,7 @@ class CommandGroupFilter(HandlerFilter):
         if not self.custom_filter_ok(event, cfg):
             return False
 
-        complete_command_names = self.get_complete_command_names()
-        if event.message_str.strip() in complete_command_names:
+        if self.equals(event.message_str.strip()):
             tree = (
                 self.group_name
                 + "\n"
@@ -116,5 +127,4 @@ class CommandGroupFilter(HandlerFilter):
                 f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree
             )
 
-        complete_command_names = [name + " " for name in complete_command_names]
-        return event.message_str.startswith(tuple(complete_command_names))
+        return self.startswith(event.message_str)
