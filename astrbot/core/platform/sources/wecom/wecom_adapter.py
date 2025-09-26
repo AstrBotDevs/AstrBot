@@ -185,6 +185,7 @@ class WecomPlatformAdapter(Platform):
         return PlatformMetadata(
             "wecom",
             "wecom 适配器",
+            id=self.config.get("id", "wecom"),
         )
 
     @override

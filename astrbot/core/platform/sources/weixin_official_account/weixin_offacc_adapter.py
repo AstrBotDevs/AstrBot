@@ -184,6 +184,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         return PlatformMetadata(
             "weixin_official_account",
             "微信公众平台 适配器",
+            id=self.config.get("id","weixin_official_account"),
         )
 
     @override
