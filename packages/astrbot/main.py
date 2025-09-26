@@ -1348,22 +1348,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 logger.error(f"ltm: {e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("alter_cmd")
+    @filter.command("alter_cmd", alias={"alter"})
     async def alter_cmd(self, event: AstrMessageEvent):
-        # token = event.message_str.split(" ")
         token = self.parse_commands(event.message_str)
-        if token.len < 2:
+        if token.len < 3:
             yield event.plain_result(
-                "可设置所有其他指令是否需要管理员权限。\n格式: /alter_cmd <cmd_name> <admin/member>\n 例如: /alter_cmd provider admin 将 provider 设置为管理员指令\n /alter_cmd reset config 打开reset权限配置"
+                "该指令用于设置指令或指令组的权限。\n"
+                "格式: /alter_cmd <cmd_name> <admin/member>\n"
+                "例1: /alter_cmd c1 admin 将 c1 设为管理员指令\n"
+                "例2: /alter_cmd g1 c1 admin 将 g1 指令组的 c1 子指令设为管理员指令\n"
+                "/alter_cmd reset config 打开 reset 权限配置"
             )
             return
 
-        cmd_name = token.get(1)
-        cmd_type = token.get(2)
+        cmd_name = " ".join(token.tokens[1:-1])
+        cmd_type = token.get(-1)
 
-        # ============================
-        #    对reset权限进行特殊处理
-        # ============================
         if cmd_name == "reset" and cmd_type == "config":
             alter_cmd_cfg = await sp.global_get("alter_cmd", {})
             plugin_ = alter_cmd_cfg.get("astrbot", {})
@@ -1413,16 +1413,18 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         # 查找指令
         found_command = None
+        cmd_group = False
         for handler in star_handlers_registry:
             assert isinstance(handler, StarHandlerMetadata)
             for filter_ in handler.event_filters:
                 if isinstance(filter_, CommandFilter):
-                    if filter_.command_name == cmd_name:
+                    if filter_.equals(cmd_name):
                         found_command = handler
                         break
                 elif isinstance(filter_, CommandGroupFilter):
-                    if cmd_name == filter_.group_name:
+                    if filter_.equals(cmd_name):
                         found_command = handler
+                        cmd_group = True
                         break
 
         if not found_command:
@@ -1459,8 +1461,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     else filter.PermissionType.MEMBER
                 ),
             )
-
-        yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
+        cmd_group_str = "指令组" if cmd_group else "指令"
+        yield event.plain_result(
+            f"已将「{cmd_name}」{cmd_group_str} 的权限级别调整为 {cmd_type}。"
+        )
 
     async def update_reset_permission(self, scene_key: str, perm_type: str):
         """更新reset命令在特定场景下的权限设置

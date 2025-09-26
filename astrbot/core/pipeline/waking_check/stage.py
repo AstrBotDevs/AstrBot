@@ -5,6 +5,7 @@ from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
@@ -170,11 +171,15 @@ class WakingCheckStage(Stage):
                 is_wake = True
                 event.is_wake = True
 
-                activated_handlers.append(handler)
-                if "parsed_params" in event.get_extra():
-                    handlers_parsed_params[handler.handler_full_name] = event.get_extra(
-                        "parsed_params"
-                    )
+                is_group_cmd_handler = any(
+                    isinstance(f, CommandGroupFilter) for f in handler.event_filters
+                )
+                if not is_group_cmd_handler:
+                    activated_handlers.append(handler)
+                    if "parsed_params" in event.get_extra(default={}):
+                        handlers_parsed_params[handler.handler_full_name] = (
+                            event.get_extra("parsed_params")
+                        )
 
             event._extras.pop("parsed_params", None)
 

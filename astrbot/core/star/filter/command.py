@@ -32,6 +32,9 @@ class CommandFilter(HandlerFilter):
             self.init_handler_md(handler_md)
         self.custom_filter_list: List[CustomFilter] = []
 
+        # Cache for complete command names list
+        self._cmpl_cmd_names: list | None = None
+
     def print_types(self):
         result = ""
         for k, v in self.handler_params.items():
@@ -136,6 +139,28 @@ class CommandFilter(HandlerFilter):
                     )
         return result
 
+    def get_complete_command_names(self):
+        if self._cmpl_cmd_names is not None:
+            return self._cmpl_cmd_names
+        self._cmpl_cmd_names = [
+            f"{parent} {cmd}" if parent else cmd
+            for cmd in [self.command_name] + list(self.alias)
+            for parent in self.parent_command_names or [""]
+        ]
+        return self._cmpl_cmd_names
+
+    def startswith(self, message_str: str) -> bool:
+        for full_cmd in self.get_complete_command_names():
+            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
+                return True
+        return False
+
+    def equals(self, message_str: str) -> bool:
+        for full_cmd in self.get_complete_command_names():
+            if message_str == full_cmd:
+                return True
+        return False
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
@@ -145,19 +170,7 @@ class CommandFilter(HandlerFilter):
 
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
-        candidates = [self.command_name] + list(self.alias)
-        ok = False
-        for candidate in candidates:
-            for parent_command_name in self.parent_command_names:
-                if parent_command_name:
-                    _full = f"{parent_command_name} {candidate}"
-                else:
-                    _full = candidate
-                if message_str.startswith(f"{_full} ") or message_str == _full:
-                    message_str = message_str[len(_full) :].strip()
-                    ok = True
-                    break
-        if not ok:
+        if not self.startswith(message_str):
             return False
 
         # 分割为列表
