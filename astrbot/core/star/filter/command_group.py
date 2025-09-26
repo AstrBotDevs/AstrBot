@@ -22,7 +22,8 @@ class CommandGroupFilter(HandlerFilter):
         self.custom_filter_list: List[CustomFilter] = []
         self.parent_group = parent_group
 
-        self._cmpl_cmd_names: list | None = None  # 缓存完整指令名列表
+        # Cache for complete command names list
+        self._cmpl_cmd_names: list | None = None
 
     def add_sub_command_filter(
         self, sub_command_filter: Union[CommandFilter, CommandGroupFilter]

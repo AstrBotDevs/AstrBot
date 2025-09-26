@@ -32,6 +32,7 @@ class CommandFilter(HandlerFilter):
             self.init_handler_md(handler_md)
         self.custom_filter_list: List[CustomFilter] = []
 
+        # Cache for complete command names list
         self._cmpl_cmd_names: list | None = None
 
     def print_types(self):
