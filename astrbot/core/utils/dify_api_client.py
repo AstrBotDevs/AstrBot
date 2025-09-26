@@ -1,7 +1,26 @@
+import codecs
 import json
 from astrbot.core import logger
 from aiohttp import ClientSession
 from typing import Dict, List, Any, AsyncGenerator
+
+
+async def _stream_sse(resp) -> AsyncGenerator[dict, None]:
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    buffer = ""
+    async for chunk in resp.content.iter_chunked(8192):
+        buffer += decoder.decode(chunk)
+        while "\n\n" in buffer:
+            block, buffer = buffer.split("\n\n", 1)
+            if block.strip().startswith("data:"):
+                try:
+                    yield json.loads(block[5:])
+                except json.JSONDecodeError:
+                    continue
+    # flush any remaining text
+    buffer += decoder.decode(b"", final=True)
+    if buffer.strip().startswith("data:"):
+        yield json.loads(buffer[5:])
 
 
 class DifyAPIClient:
@@ -33,49 +52,11 @@ class DifyAPIClient:
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                raise Exception(f"chat_messages 请求失败：{resp.status}. {text}")
-
-            buffer = ""
-            byte_buffer = b""
-            while True:
-                # 保持原有的8192字节限制，防止数据过大导致高水位报错
-                chunk = await resp.content.read(8192)
-                if not chunk:
-                    # 处理剩余的字节
-                    if byte_buffer:
-                        buffer += byte_buffer.decode("utf-8", errors='replace')
-                    break
-
-                byte_buffer += chunk
-                try:
-                    # 尝试解码所有字节
-                    decoded_text = byte_buffer.decode("utf-8")
-                    buffer += decoded_text
-                    byte_buffer = b""
-                except UnicodeDecodeError as e:
-                    # 保留不完整的字符字节，解码完整的部分
-                    if e.start > 0:
-                        buffer += byte_buffer[:e.start].decode("utf-8")
-                        byte_buffer = byte_buffer[e.start:]
-                    else:
-                        # 如果错误从开始就发生，保留所有字节等待更多数据
-                        pass
-                
-                blocks = buffer.split("\n\n")
-
-                # 处理完整的数据块
-                for block in blocks[:-1]:
-                    if block.strip() and block.startswith("data:"):
-                        try:
-                            json_str = block[5:]  # 移除 "data:" 前缀
-                            json_obj = json.loads(json_str)
-                            yield json_obj
-                        except json.JSONDecodeError as e:
-                            logger.error(f"JSON解析错误: {str(e)}")
-                            logger.error(f"原始数据块: {json_str}")
-
-                # 保留最后一个可能不完整的块
-                buffer = blocks[-1] if blocks else ""
+                raise Exception(
+                    f"Dify /chat-messages 接口请求失败：{resp.status}. {text}"
+                )
+            async for event in _stream_sse(resp):
+                yield event
 
     async def workflow_run(
         self,
@@ -95,49 +76,11 @@ class DifyAPIClient:
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
-                raise Exception(f"workflow_run 请求失败：{resp.status}. {text}")
-
-            buffer = ""
-            byte_buffer = b""
-            while True:
-                # 保持原有的8192字节限制，防止数据过大导致高水位报错
-                chunk = await resp.content.read(8192)
-                if not chunk:
-                    # 处理剩余的字节
-                    if byte_buffer:
-                        buffer += byte_buffer.decode("utf-8", errors='replace')
-                    break
-
-                byte_buffer += chunk
-                try:
-                    # 尝试解码所有字节
-                    decoded_text = byte_buffer.decode("utf-8")
-                    buffer += decoded_text
-                    byte_buffer = b""
-                except UnicodeDecodeError as e:
-                    # 保留不完整的字符字节，解码完整的部分
-                    if e.start > 0:
-                        buffer += byte_buffer[:e.start].decode("utf-8")
-                        byte_buffer = byte_buffer[e.start:]
-                    else:
-                        # 如果错误从开始就发生，保留所有字节等待更多数据
-                        pass
-                
-                blocks = buffer.split("\n\n")
-
-                # 处理完整的数据块
-                for block in blocks[:-1]:
-                    if block.strip() and block.startswith("data:"):
-                        try:
-                            json_str = block[5:]  # 移除 "data:" 前缀
-                            json_obj = json.loads(json_str)
-                            yield json_obj
-                        except json.JSONDecodeError as e:
-                            logger.error(f"JSON解析错误: {str(e)}")
-                            logger.error(f"原始数据块: {json_str}")
-
-                # 保留最后一个可能不完整的块
-                buffer = blocks[-1] if blocks else ""
+                raise Exception(
+                    f"Dify /workflows/run 接口请求失败：{resp.status}. {text}"
+                )
+            async for event in _stream_sse(resp):
+                yield event
 
     async def file_upload(
         self,
