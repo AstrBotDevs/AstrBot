@@ -1763,9 +1763,9 @@ CONFIG_METADATA_2 = {
                         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn",
                     },
                     "auto_save_history": {
-                        "description": "自动保存历史记录",
+                        "description": "由 Coze 管理对话记录",
                         "type": "bool",
-                        "hint": "启用后，API 会自动保存与 Coze 的对话历史记录, 此时 AstrBot 的上下文不会生效。如果为禁用, 则使用 AstrBot 管理上下文。",
+                        "hint": "启用后，将由 Coze 进行对话历史记录管理, 此时 AstrBot 本地保存的上下文不会生效(仅供浏览), 对 AstrBot 的上下文进行的操作也不会生效。如果为禁用, 则使用 AstrBot 管理上下文。",
                     },
                 },
             },

@@ -552,7 +552,7 @@ class LLMRequestSubStage(Stage):
             elif isinstance(content, str):
                 cleaned_text = "User: " + content.strip()
             else:
-                cleaned_text = "User: [未知内容类型]"
+                return
             logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
             llm_resp = await prov.text_chat(
                 system_prompt="You are expert in summarizing user's query.",
