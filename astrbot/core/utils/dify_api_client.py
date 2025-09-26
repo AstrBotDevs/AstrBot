@@ -36,13 +36,31 @@ class DifyAPIClient:
                 raise Exception(f"chat_messages 请求失败：{resp.status}. {text}")
 
             buffer = ""
+            byte_buffer = b""
             while True:
                 # 保持原有的8192字节限制，防止数据过大导致高水位报错
                 chunk = await resp.content.read(8192)
                 if not chunk:
+                    # 处理剩余的字节
+                    if byte_buffer:
+                        buffer += byte_buffer.decode("utf-8", errors='replace')
                     break
 
-                buffer += chunk.decode("utf-8")
+                byte_buffer += chunk
+                try:
+                    # 尝试解码所有字节
+                    decoded_text = byte_buffer.decode("utf-8")
+                    buffer += decoded_text
+                    byte_buffer = b""
+                except UnicodeDecodeError as e:
+                    # 保留不完整的字符字节，解码完整的部分
+                    if e.start > 0:
+                        buffer += byte_buffer[:e.start].decode("utf-8")
+                        byte_buffer = byte_buffer[e.start:]
+                    else:
+                        # 如果错误从开始就发生，保留所有字节等待更多数据
+                        pass
+                
                 blocks = buffer.split("\n\n")
 
                 # 处理完整的数据块
@@ -80,13 +98,31 @@ class DifyAPIClient:
                 raise Exception(f"workflow_run 请求失败：{resp.status}. {text}")
 
             buffer = ""
+            byte_buffer = b""
             while True:
                 # 保持原有的8192字节限制，防止数据过大导致高水位报错
                 chunk = await resp.content.read(8192)
                 if not chunk:
+                    # 处理剩余的字节
+                    if byte_buffer:
+                        buffer += byte_buffer.decode("utf-8", errors='replace')
                     break
 
-                buffer += chunk.decode("utf-8")
+                byte_buffer += chunk
+                try:
+                    # 尝试解码所有字节
+                    decoded_text = byte_buffer.decode("utf-8")
+                    buffer += decoded_text
+                    byte_buffer = b""
+                except UnicodeDecodeError as e:
+                    # 保留不完整的字符字节，解码完整的部分
+                    if e.start > 0:
+                        buffer += byte_buffer[:e.start].decode("utf-8")
+                        byte_buffer = byte_buffer[e.start:]
+                    else:
+                        # 如果错误从开始就发生，保留所有字节等待更多数据
+                        pass
+                
                 blocks = buffer.split("\n\n")
 
                 # 处理完整的数据块
