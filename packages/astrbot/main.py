@@ -1485,24 +1485,3 @@ UID: {user_id} 此 ID 可用于设置管理员。
     def test_group(self):
         """测试指令组"""
         pass
-
-    @test_group.command("cmd1")
-    async def test_cmd1(self, event: AstrMessageEvent):
-        yield event.plain_result("这是测试指令组的cmd1指令")
-
-    @test_group.command("cmd2")
-    async def test_cmd2(self, event: AstrMessageEvent):
-        yield event.plain_result("这是测试指令组的cmd2指令")
-
-    @test_group.group("subgroup")
-    def test_subgroup(self):
-        """测试子指令组"""
-        pass
-
-    @test_subgroup.command("subcmd1")
-    async def test_subcmd1(self, event: AstrMessageEvent):
-        yield event.plain_result("这是测试子指令组的subcmd1指令")
-
-    @test_subgroup.command("subcmd2")
-    async def test_subcmd2(self, event: AstrMessageEvent):
-        yield event.plain_result("这是测试子指令组的subcmd2指令")
