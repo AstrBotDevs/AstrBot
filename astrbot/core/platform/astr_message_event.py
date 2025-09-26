@@ -4,7 +4,7 @@ import re
 import hashlib
 import uuid
 
-from typing import List, Union, Optional, AsyncGenerator
+from typing import List, Union, Optional, AsyncGenerator, TypeVar, Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -25,6 +25,8 @@ from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
 from .message_session import MessageSession, MessageSesion  # noqa
+
+_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -49,7 +51,7 @@ class AstrMessageEvent(abc.ABC):
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
-        self._extras = {}
+        self._extras: dict[str, Any] = {}
         self.session = MessageSesion(
             platform_name=platform_meta.id,
             message_type=message_obj.type,
@@ -57,7 +59,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
-        self._result: MessageEventResult = None
+        self._result: MessageEventResult | None = None
         """消息事件的结果"""
 
         self._has_send_oper = False
@@ -173,13 +175,15 @@ class AstrMessageEvent(abc.ABC):
         """
         self._extras[key] = value
 
-    def get_extra(self, key=None):
+    def get_extra(
+        self, key: str | None = None, default: _VT = None
+    ) -> dict[str, Any] | _VT:
         """
         获取额外的信息。
         """
         if key is None:
             return self._extras
-        return self._extras.get(key, None)
+        return self._extras.get(key, default)
 
     def clear_extra(self):
         """
