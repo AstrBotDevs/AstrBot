@@ -411,8 +411,13 @@ class ProviderCoze(Provider):
         session = await self._ensure_session()
         url = f"{self.api_base}{endpoint}"
 
+        conversation_id = payload.pop("conversation_id", None)
+        params = {}
+        if conversation_id:
+            params["conversation_id"] = conversation_id
+
         try:
-            async with session.post(url, json=payload) as response:
+            async with session.post(url, json=payload, params=params) as response:
                 if response.status == 401:
                     raise Exception("Coze API 认证失败，请检查 API Key 是否正确")
 
