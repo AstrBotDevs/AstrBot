@@ -9,7 +9,8 @@
                     <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;"
                         v-if="chatboxMode">
                         <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
-                        <span v-if="!sidebarCollapsed" style="font-weight: 1000; font-size: 26px; margin-left: 8px;">AstrBot</span>
+                        <span v-if="!sidebarCollapsed"
+                            style="font-weight: 1000; font-size: 26px; margin-left: 8px;">AstrBot</span>
                     </div>
 
 
@@ -46,7 +47,7 @@
                                         || tm('conversation.newConversation') }}</v-list-item-title>
                                     <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
                                         formatDate(item.updated_at)
-                                        }}</v-list-item-subtitle>
+                                    }}</v-list-item-subtitle>
 
                                     <template v-if="!sidebarCollapsed" v-slot:append>
                                         <div class="conversation-actions">
@@ -118,8 +119,9 @@
                     </div>
                     <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
 
-                    <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark" :isStreaming="isStreaming"
-                        @openImagePreview="openImagePreview" ref="messageList" />
+                    <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
+                        :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
+                        ref="messageList" />
                     <div class="welcome-container fade-in" v-else>
                         <div class="welcome-title">
                             <span>Hello, I'm</span>
@@ -145,9 +147,10 @@
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
                         <div
-                            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; padding: 4px;">
-                            <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown" :disabled="isStreaming"
-                                @click:clear="clearMessage" placeholder="Ask AstrBot..."
+                            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
+                            <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
+                                :disabled="isStreaming || isConvRunning" @click:clear="clearMessage"
+                                placeholder="Ask AstrBot..."
                                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
@@ -155,18 +158,21 @@
                                     <!-- 选择提供商和模型 -->
                                     <ProviderModelSelector ref="providerModelSelector" />
                                 </div>
-                                <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                                <div
+                                    style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
                                     <input type="file" ref="imageInput" @change="handleFileSelect" accept="image/*"
                                         style="display: none" multiple />
+                                    <v-progress-circular v-if="isStreaming || isConvRunning" indeterminate size="16"
+                                        class="mr-1" width="1.5" />
                                     <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
                                         class="add-btn" size="small" />
-                                    <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
-                                        :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
-                                        class="send-btn" size="small" />
                                     <v-btn @click="isRecording ? stopRecording() : startRecording()"
                                         :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
                                         :color="isRecording ? 'error' : 'deep-purple'" class="record-btn"
                                         size="small" />
+                                    <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
+                                        :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
+                                        class="send-btn" size="small" />
                                 </div>
                             </div>
 
@@ -235,6 +241,7 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import 'highlight.js/styles/github.css';
+import { useToast } from '@/utils/toast';
 
 export default {
     name: 'ChatPage',
@@ -301,7 +308,10 @@ export default {
             imagePreviewDialog: false,
             previewImageUrl: '',
 
-            isStreaming: false
+            isStreaming: false,
+            isConvRunning: false, // Track if the current conversation is running
+
+            isToastedRunningInfo: false, // To avoid multiple toasts
         }
     },
 
@@ -379,7 +389,7 @@ export default {
         } else {
             this.sidebarCollapsed = true; // 默认折叠状态
         }
-        
+
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
         this.getConversations();
@@ -662,6 +672,25 @@ export default {
                 // Update the selected conversation in the sidebar
                 this.selectedConversations = [cid[0]];
                 let history = response.data.data.history;
+                this.isConvRunning = response.data.data.is_running || false;
+
+                if (this.isConvRunning) {
+                    if (!this.isToastedRunningInfo) {
+                        useToast().info("该对话正在运行中。", { timeout: 5000 });
+                        this.isToastedRunningInfo = true;
+                    }
+
+                    // 如果对话还在运行，3秒后重新获取消息
+                    setTimeout(() => {
+                        this.getConversationMessages([this.currCid]);
+                    }, 3000);
+                }
+
+                // 滚动到底部
+                this.$nextTick(() => {
+                    this.$refs.messageList.scrollToBottom();
+                });
+
                 for (let i = 0; i < history.length; i++) {
                     let content = history[i].content;
                     if (content.message.startsWith('[IMAGE]')) {
