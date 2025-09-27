@@ -149,12 +149,6 @@ class CommandFilter(HandlerFilter):
         ]
         return self._cmpl_cmd_names
 
-    def startswith(self, message_str: str) -> bool:
-        for full_cmd in self.get_complete_command_names():
-            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
-                return True
-        return False
-
     def equals(self, message_str: str) -> bool:
         for full_cmd in self.get_complete_command_names():
             if message_str == full_cmd:
@@ -170,7 +164,12 @@ class CommandFilter(HandlerFilter):
 
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
-        if not self.startswith(message_str):
+        ok = False
+        for full_cmd in self.get_complete_command_names():
+            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
+                ok = True
+                message_str = message_str[len(full_cmd) :].strip()
+        if not ok:
             return False
 
         # 分割为列表
