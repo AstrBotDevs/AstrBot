@@ -1,15 +1,25 @@
 import uuid
 import json
 import os
+import asyncio
+from contextlib import asynccontextmanager
 from .route import Route, Response, RouteContext
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from quart import request, Response as QuartResponse, g, make_response
 from astrbot.core.db import BaseDatabase
-import asyncio
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.platform.astr_message_event import MessageSession
+
+
+@asynccontextmanager
+async def track_conversation(convs: dict, conv_id: str):
+    convs[conv_id] = True
+    try:
+        yield
+    finally:
+        convs[conv_id] = False
 
 
 class ChatRoute(Route):
@@ -144,63 +154,60 @@ class ChatRoute(Route):
             client_disconnected = False
 
             try:
-                self.running_convs[webchat_conv_id] = True
-                while True:
-                    try:
-                        result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                    except asyncio.TimeoutError:
-                        continue
-                    except asyncio.CancelledError:
-                        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
-                        client_disconnected = True
-                    except Exception as e:
-                        logger.error(f"WebChat stream error: {e}")
+                async with track_conversation(self.running_convs, webchat_conv_id):
+                    while True:
+                        try:
+                            result = await asyncio.wait_for(back_queue.get(), timeout=1)
+                        except asyncio.TimeoutError:
+                            continue
+                        except asyncio.CancelledError:
+                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+                            client_disconnected = True
+                        except Exception as e:
+                            logger.error(f"WebChat stream error: {e}")
 
-                    if not result:
-                        continue
+                        if not result:
+                            continue
 
-                    result_text = result["data"]
-                    type = result.get("type")
-                    streaming = result.get("streaming", False)
+                        result_text = result["data"]
+                        type = result.get("type")
+                        streaming = result.get("streaming", False)
 
-                    try:
-                        if not client_disconnected:
-                            yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
-                    except Exception as e:
-                        if not client_disconnected:
-                            logger.debug(
-                                f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                        try:
+                            if not client_disconnected:
+                                yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
+                        except Exception as e:
+                            if not client_disconnected:
+                                logger.debug(
+                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                )
+                            client_disconnected = True
+
+                        try:
+                            if not client_disconnected:
+                                await asyncio.sleep(0.05)
+                        except asyncio.CancelledError:
+                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+                            client_disconnected = True
+
+                        if type == "end":
+                            break
+                        elif (
+                            (streaming and type == "complete")
+                            or not streaming
+                            or type == "break"
+                        ):
+                            # append bot message
+                            new_his = {"type": "bot", "message": result_text}
+                            await self.platform_history_mgr.insert(
+                                platform_id="webchat",
+                                user_id=webchat_conv_id,
+                                content=new_his,
+                                sender_id="bot",
+                                sender_name="bot",
                             )
-                        client_disconnected = True
-
-                    try:
-                        if not client_disconnected:
-                            await asyncio.sleep(0.05)
-                    except asyncio.CancelledError:
-                        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
-                        client_disconnected = True
-
-                    if type == "end":
-                        break
-                    elif (
-                        (streaming and type == "complete")
-                        or not streaming
-                        or type == "break"
-                    ):
-                        # append bot message
-                        new_his = {"type": "bot", "message": result_text}
-                        await self.platform_history_mgr.insert(
-                            platform_id="webchat",
-                            user_id=webchat_conv_id,
-                            content=new_his,
-                            sender_id="bot",
-                            sender_name="bot",
-                        )
-
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
-            finally:
-                self.running_convs[webchat_conv_id] = False
 
         # Put message to conversation-specific queue
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
