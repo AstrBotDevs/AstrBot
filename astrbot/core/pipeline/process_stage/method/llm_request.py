@@ -536,7 +536,23 @@ class LLMRequestSubStage(Stage):
             latest_pair = messages[-2:]
             if not latest_pair:
                 return
-            cleaned_text = "User: " + latest_pair[0].get("content", "").strip()
+            content = latest_pair[0].get("content", "")
+            if isinstance(content, list):
+                # 多模态
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image":
+                            text_parts.append("[图片]")
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                cleaned_text = "User: " + " ".join(text_parts).strip()
+            elif isinstance(content, str):
+                cleaned_text = "User: " + content.strip()
+            else:
+                return
             logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
             llm_resp = await prov.text_chat(
                 system_prompt="You are expert in summarizing user's query.",

@@ -234,6 +234,8 @@ class ProviderManager:
                     )
                 case "dify":
                     from .sources.dify_source import ProviderDify as ProviderDify
+                case "coze":
+                    from .sources.coze_source import ProviderCoze as ProviderCoze
                 case "dashscope":
                     from .sources.dashscope_source import (
                         ProviderDashscope as ProviderDashscope,

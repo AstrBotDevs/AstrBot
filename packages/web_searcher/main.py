@@ -375,5 +375,3 @@ class Main(star.Star):
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
-
-        print(req.func_tool)
