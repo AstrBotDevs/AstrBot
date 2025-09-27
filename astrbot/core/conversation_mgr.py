@@ -87,14 +87,12 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         """
-        f = False
         if not conversation_id:
             conversation_id = self.session_conversations.get(unified_msg_origin)
-            if conversation_id:
-                f = True
         if conversation_id:
             await self.db.delete_conversation(cid=conversation_id)
-            if f:
+            curr_cid = await self.get_curr_conversation_id(unified_msg_origin)
+            if curr_cid == conversation_id:
                 self.session_conversations.pop(unified_msg_origin, None)
                 await sp.session_remove(unified_msg_origin, "sel_conv_id")
 

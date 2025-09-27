@@ -430,12 +430,13 @@ export default {
 
       // 搜索筛选
       if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
+        const query = this.searchQuery.toLowerCase().trim();
         filtered = filtered.filter(session =>
           session.session_name.toLowerCase().includes(query) ||
           session.platform.toLowerCase().includes(query) ||
           session.persona_name?.toLowerCase().includes(query) ||
-          session.chat_provider_name?.toLowerCase().includes(query)
+          session.chat_provider_name?.toLowerCase().includes(query) ||
+          session.session_id.toLowerCase().includes(query)
         );
       }
 
