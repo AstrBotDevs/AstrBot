@@ -1,5 +1,9 @@
 import os
 import sys
+
+# 将项目根目录添加到 sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pytest
 from unittest import mock
 from main import check_env, check_dashboard_files
@@ -27,29 +31,58 @@ def test_check_env(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files(monkeypatch):
+async def test_check_dashboard_files_not_exists(monkeypatch):
+    """Tests dashboard download when files do not exist."""
     monkeypatch.setattr(os.path, "exists", lambda x: False)
 
-    async def mock_get(*args, **kwargs):
-        class MockResponse:
-            status = 200
+    with mock.patch("main.download_dashboard") as mock_download:
+        await check_dashboard_files()
+        mock_download.assert_called_once()
 
-            async def read(self):
-                return b"content"
 
-        return MockResponse()
+@pytest.mark.asyncio
+async def test_check_dashboard_files_exists_and_version_match(monkeypatch):
+    """Tests that dashboard is not downloaded when it exists and version matches."""
+    # Mock os.path.exists to return True
+    monkeypatch.setattr(os.path, "exists", lambda x: True)
 
-    with mock.patch("aiohttp.ClientSession.get", new=mock_get):
-        with mock.patch("builtins.open", mock.mock_open()) as mock_file:
-            with mock.patch("zipfile.ZipFile.extractall") as mock_extractall:
+    # Mock get_dashboard_version to return the current version
+    with mock.patch("main.get_dashboard_version") as mock_get_version:
+        # We need to import VERSION from main's context
+        from main import VERSION
 
-                async def mock_aenter(_):
-                    await check_dashboard_files()
-                    mock_file.assert_called_once_with("data/dashboard.zip", "wb")
-                    mock_extractall.assert_called_once()
+        mock_get_version.return_value = f"v{VERSION}"
 
-                async def mock_aexit(obj, exc_type, exc, tb):
-                    return
+        with mock.patch("main.download_dashboard") as mock_download:
+            await check_dashboard_files()
+            # Assert that download_dashboard was NOT called
+            mock_download.assert_not_called()
 
-                mock_extractall.__aenter__ = mock_aenter
-                mock_extractall.__aexit__ = mock_aexit
+
+@pytest.mark.asyncio
+async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch):
+    """Tests that a warning is logged when dashboard version mismatches."""
+    monkeypatch.setattr(os.path, "exists", lambda x: True)
+
+    with mock.patch("main.get_dashboard_version") as mock_get_version:
+        mock_get_version.return_value = "v0.0.1"  # A different version
+
+        with mock.patch("main.logger.warning") as mock_logger_warning:
+            await check_dashboard_files()
+            mock_logger_warning.assert_called_once()
+            call_args, _ = mock_logger_warning.call_args
+            assert "不符" in call_args[0]
+
+
+@pytest.mark.asyncio
+async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
+    """Tests that providing a valid webui_dir skips all checks."""
+    valid_dir = "/tmp/my-custom-webui"
+    monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)
+
+    with mock.patch("main.download_dashboard") as mock_download:
+        with mock.patch("main.get_dashboard_version") as mock_get_version:
+            result = await check_dashboard_files(webui_dir=valid_dir)
+            assert result == valid_dir
+            mock_download.assert_not_called()
+            mock_get_version.assert_not_called()
