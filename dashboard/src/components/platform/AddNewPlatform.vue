@@ -31,6 +31,10 @@
           </v-col>
         </v-row>
       </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn text @click="closeDialog">{{ tm('dialog.cancel') }}</v-btn>
+      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
