@@ -291,13 +291,6 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
-        asyncio.create_task(
-            Metric.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            )
-        )
 
 
 class LLMRequestSubStage(Stage):
@@ -523,6 +516,14 @@ class LLMRequestSubStage(Stage):
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
+
+        asyncio.create_task(
+            Metric.upload(
+                llm_tick=1,
+                model_name=agent_runner.provider.get_model(),
+                provider_type=agent_runner.provider.meta().type,
+            )
+        )
 
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
