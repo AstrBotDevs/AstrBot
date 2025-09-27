@@ -7,7 +7,8 @@
     "apply": "Apply Batch Settings",
     "editName": "Edit Session Name",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "delete": "Delete"
   },
   "sessions": {
     "activeSessions": "Active Sessions",
@@ -29,7 +30,8 @@
       "ttsProvider": "TTS Provider",
       "llmStatus": "LLM Status",
       "ttsStatus": "TTS Status",
-      "pluginManagement": "Plugin Management"
+      "pluginManagement": "Plugin Management",
+      "actions": "Actions"
     }
   },
   "status": {
@@ -65,6 +67,10 @@
     "fullSessionId": "Full Session ID",
     "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
   },
+  "deleteConfirm": {
+    "message": "Are you sure you want to delete session {sessionName}?",
+    "warning": "This action will permanently delete all chat history and preference settings for this session (except for data linked via plugins), and this cannot be undone. Continue?"
+  },
   "messages": {
     "refreshSuccess": "Session list refreshed",
     "personaUpdateSuccess": "Persona updated successfully",
@@ -82,6 +88,8 @@
     "pluginStatusSuccess": "Plugin {name} {status}",
     "pluginStatusError": "Failed to update plugin status",
     "nameUpdateSuccess": "Session name updated successfully",
-    "nameUpdateError": "Failed to update session name"
+    "nameUpdateError": "Failed to update session name",
+    "deleteSuccess": "Session deleted successfully",
+    "deleteError": "Failed to delete session"
   }
 }

@@ -601,18 +601,14 @@ export default {
                 }
 
                 if (this.search) {
-                    params.search = this.search;
+                    params.search = this.search.trim();
                 }
 
                 // 添加排除条件
                 params.exclude_ids = 'astrbot';
                 params.exclude_platforms = 'webchat';
 
-                console.log(`正在请求对话列表: /api/conversation/list 参数:`, params);
-
                 const response = await axios.get('/api/conversation/list', { params });
-
-                console.log('收到对话列表响应:', response.data);
 
                 this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
 

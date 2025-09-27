@@ -155,6 +155,11 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def delete_conversations_by_user_id(self, user_id: str) -> None:
+        """Delete all conversations for a specific user."""
+        ...
+
+    @abc.abstractmethod
     async def insert_platform_message_history(
         self,
         platform_id: str,

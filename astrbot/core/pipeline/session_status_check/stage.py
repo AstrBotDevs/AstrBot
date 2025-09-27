@@ -11,7 +11,8 @@ class SessionStatusCheckStage(Stage):
     """检查会话是否整体启用"""
 
     async def initialize(self, ctx: PipelineContext) -> None:
-        pass
+        self.ctx = ctx
+        self.conv_mgr = ctx.plugin_manager.context.conversation_manager
 
     async def process(
         self, event: AstrMessageEvent
@@ -19,4 +20,14 @@ class SessionStatusCheckStage(Stage):
         # 检查会话是否整体启用
         if not SessionServiceManager.is_session_enabled(event.unified_msg_origin):
             logger.debug(f"会话 {event.unified_msg_origin} 已被关闭，已终止事件传播。")
+
+            # workaround for #2309
+            conv_id = await self.conv_mgr.get_curr_conversation_id(
+                event.unified_msg_origin
+            )
+            if not conv_id:
+                await self.conv_mgr.new_conversation(
+                    event.unified_msg_origin, platform_id=event.get_platform_id()
+                )
+
             event.stop_event()

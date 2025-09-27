@@ -7,7 +7,8 @@
     "apply": "应用批量设置",
     "editName": "备注",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "delete": "删除"
   },
   "sessions": {
     "activeSessions": "活跃会话",
@@ -29,7 +30,8 @@
       "ttsProvider": "语音合成模型",
       "llmStatus": "启用 LLM",
       "ttsStatus": "启用 TTS",
-      "pluginManagement": "插件管理"
+      "pluginManagement": "插件管理",
+      "actions": "操作"
     }
   },
   "status": {
@@ -65,6 +67,10 @@
     "fullSessionId": "完整会话ID",
     "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
   },
+  "deleteConfirm": {
+    "message": "确定要删除会话 {sessionName} 吗？",
+    "warning": "此操作将永久删除本次会话的「全部对话记录」与「偏好设置」（插件对会话的关联数据除外），且无法恢复。确认继续？"
+  },
   "messages": {
     "refreshSuccess": "会话列表已刷新",
     "personaUpdateSuccess": "人格更新成功",
@@ -82,6 +88,8 @@
     "pluginStatusSuccess": "插件 {name} {status}",
     "pluginStatusError": "插件状态更新失败",
     "nameUpdateSuccess": "会话名称更新成功",
-    "nameUpdateError": "会话名称更新失败"
+    "nameUpdateError": "会话名称更新失败",
+    "deleteSuccess": "会话删除成功",
+    "deleteError": "会话删除失败"
   }
 }
