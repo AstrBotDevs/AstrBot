@@ -141,6 +141,17 @@
               </v-btn>
             </template>
 
+            <!-- 操作按钮 -->
+            <template v-slot:item.actions="{ item }">
+              <v-btn size="x-small" variant="tonal" color="error" @click="deleteSession(item)"
+                :loading="item.deleting" icon>
+                <v-icon>mdi-delete</v-icon>
+                <v-tooltip activator="parent" location="top">
+                  {{ tm('buttons.delete') }}
+                </v-tooltip>
+              </v-btn>
+            </template>
+
             <!-- 空状态 -->
             <template v-slot:no-data>
               <div class="text-center py-8">
@@ -409,6 +420,7 @@ export default {
         { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, minWidth: '120px' },
+        { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '100px' },
       ]
     },
 
@@ -487,7 +499,8 @@ export default {
           this.sessions = data.sessions.map(session => ({
             ...session,
             updating: false, // 添加更新状态标志
-            loadingPlugins: false // 添加插件加载状态标志
+            loadingPlugins: false, // 添加插件加载状态标志
+            deleting: false // 添加删除状态标志
           }));
           this.availablePersonas = data.available_personas;
           this.availableChatProviders = data.available_chat_providers;
@@ -796,6 +809,38 @@ export default {
       this.snackbarText = message;
       this.snackbarColor = 'error';
       this.snackbar = true;
+    },
+
+    async deleteSession(session) {
+      const confirmMessage = this.tm('deleteConfirm.message', { 
+        sessionName: session.session_name || session.session_id 
+      }) + '\n\n' + this.tm('deleteConfirm.warning');
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      session.deleting = true;
+      try {
+        const response = await axios.post('/api/session/delete', {
+          session_id: session.session_id
+        });
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.data.message || this.tm('messages.deleteSuccess'));
+          // 从列表中移除已删除的会话
+          const index = this.sessions.findIndex(s => s.session_id === session.session_id);
+          if (index > -1) {
+            this.sessions.splice(index, 1);
+          }
+        } else {
+          this.showError(response.data.message || this.tm('messages.deleteError'));
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.deleteError'));
+      }
+
+      session.deleting = false;
     },
   },
 }

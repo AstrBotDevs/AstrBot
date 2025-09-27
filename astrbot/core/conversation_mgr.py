@@ -98,6 +98,16 @@ class ConversationManager:
                 self.session_conversations.pop(unified_msg_origin, None)
                 await sp.session_remove(unified_msg_origin, "sel_conv_id")
 
+    async def delete_conversations_by_user_id(self, unified_msg_origin: str):
+        """删除会话的所有对话
+
+        Args:
+            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+        """
+        await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
+        self.session_conversations.pop(unified_msg_origin, None)
+        await sp.session_remove(unified_msg_origin, "sel_conv_id")
+
     async def get_curr_conversation_id(self, unified_msg_origin: str) -> str | None:
         """获取会话当前的对话 ID
 

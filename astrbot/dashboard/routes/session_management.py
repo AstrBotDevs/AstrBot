@@ -30,6 +30,7 @@ class SessionManagementRoute(Route):
             "/session/update_tts": ("POST", self.update_session_tts),
             "/session/update_name": ("POST", self.update_session_name),
             "/session/update_status": ("POST", self.update_session_status),
+            "/session/delete": ("POST", self.delete_session),
         }
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
@@ -507,3 +508,43 @@ class SessionManagementRoute(Route):
             error_msg = f"更新会话整体状态失败: {str(e)}\n{traceback.format_exc()}"
             logger.error(error_msg)
             return Response().error(f"更新会话整体状态失败: {str(e)}").__dict__
+
+    async def delete_session(self):
+        """删除指定会话及其所有相关数据"""
+        try:
+            data = await request.get_json()
+            session_id = data.get("session_id")
+
+            if not session_id:
+                return Response().error("缺少必要参数: session_id").__dict__
+
+            # 删除会话的所有相关数据
+            conversation_manager = self.core_lifecycle.conversation_manager
+
+            # 1. 删除会话的所有对话
+            try:
+                await conversation_manager.delete_conversations_by_user_id(session_id)
+            except Exception as e:
+                logger.warning(f"删除会话 {session_id} 的对话失败: {str(e)}")
+
+            # 2. 清除会话的偏好设置数据（清空该会话的所有配置）
+            try:
+                await sp.clear_async("umo", session_id)
+            except Exception as e:
+                logger.warning(f"清除会话 {session_id} 的偏好设置失败: {str(e)}")
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": f"会话 {session_id} 及其相关所有对话数据已成功删除",
+                        "session_id": session_id,
+                    }
+                )
+                .__dict__
+            )
+
+        except Exception as e:
+            error_msg = f"删除会话失败: {str(e)}\n{traceback.format_exc()}"
+            logger.error(error_msg)
+            return Response().error(f"删除会话失败: {str(e)}").__dict__

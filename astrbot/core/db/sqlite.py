@@ -249,6 +249,14 @@ class SQLiteDatabase(BaseDatabase):
                     delete(ConversationV2).where(ConversationV2.conversation_id == cid)
                 )
 
+    async def delete_conversations_by_user_id(self, user_id: str) -> None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(ConversationV2).where(ConversationV2.user_id == user_id)
+                )
+
     async def insert_platform_message_history(
         self,
         platform_id,
