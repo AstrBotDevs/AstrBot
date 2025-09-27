@@ -100,13 +100,12 @@ class ProviderCoze(Provider):
     async def _upload_file(
         self,
         file_data: bytes,
-        file_name: str = "image.jpg",
         session_id: str | None = None,
         cache_key: str | None = None,
     ) -> str:
         """上传文件到 Coze 并返回 file_id"""
         # 使用 API 客户端上传文件
-        file_id = await self.api_client.upload_file(file_data, file_name)
+        file_id = await self.api_client.upload_file(file_data)
 
         # 缓存 file_id
         if session_id and cache_key:
@@ -135,16 +134,7 @@ class ProviderCoze(Provider):
         try:
             image_data = await self.api_client.download_image(image_url)
 
-            # 根据内容类型确定文件名
-            file_name = "image.jpg"
-            if image_url.lower().endswith(".png"):
-                file_name = "image.png"
-            elif image_url.lower().endswith(".gif"):
-                file_name = "image.gif"
-
-            file_id = await self._upload_file(
-                image_data, file_name, session_id, cache_key
-            )
+            file_id = await self._upload_file(image_data, session_id, cache_key)
 
             if session_id and cache_key:
                 self.file_id_cache[session_id][cache_key] = file_id
@@ -207,16 +197,10 @@ class ProviderCoze(Provider):
                             # 上传图片并缓存
                             if image_data.startswith("data:image/"):
                                 # base64 处理
-                                header, encoded = image_data.split(",", 1)
+                                _, encoded = image_data.split(",", 1)
                                 image_bytes = base64.b64decode(encoded)
-                                file_name = "image.jpg"
-                                if "png" in header:
-                                    file_name = "image.png"
-                                elif "gif" in header:
-                                    file_name = "image.gif"
                                 file_id = await self._upload_file(
                                     image_bytes,
-                                    file_name,
                                     session_id,
                                     cache_key,
                                 )
@@ -231,10 +215,8 @@ class ProviderCoze(Provider):
                                 # 本地文件
                                 with open(image_data, "rb") as f:
                                     image_bytes = f.read()
-                                file_name = os.path.basename(image_data)
                                 file_id = await self._upload_file(
                                     image_bytes,
-                                    file_name,
                                     session_id,
                                     cache_key,
                                 )
@@ -404,25 +386,19 @@ class ProviderCoze(Provider):
                             # 本地文件或 base64
                             if url.startswith("data:image/"):
                                 # base64
-                                header, encoded = url.split(",", 1)
+                                _, encoded = url.split(",", 1)
                                 image_data = base64.b64decode(encoded)
-                                file_name = "image.jpg"
-                                if "png" in header:
-                                    file_name = "image.png"
-                                elif "gif" in header:
-                                    file_name = "image.gif"
                                 cache_key = self._generate_cache_key(
                                     url, is_base64=True
                                 )
                                 file_id = await self._upload_file(
-                                    image_data, file_name, user_id, cache_key
+                                    image_data, user_id, cache_key
                                 )
                             else:
                                 # 本地文件
                                 if os.path.exists(url):
                                     with open(url, "rb") as f:
                                         image_data = f.read()
-                                    file_name = os.path.basename(url)
                                     # 用文件路径和修改时间来缓存
                                     file_stat = os.stat(url)
                                     cache_key = self._generate_cache_key(
@@ -430,7 +406,7 @@ class ProviderCoze(Provider):
                                         is_base64=False,
                                     )
                                     file_id = await self._upload_file(
-                                        image_data, file_name, user_id, cache_key
+                                        image_data, user_id, cache_key
                                     )
                                 else:
                                     logger.warning(f"图片文件不存在: {url}")

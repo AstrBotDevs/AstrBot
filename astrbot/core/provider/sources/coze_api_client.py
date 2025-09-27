@@ -1,6 +1,7 @@
 import json
 import asyncio
 import aiohttp
+import io
 from typing import Dict, List, Any, AsyncGenerator
 from astrbot.core import logger
 
@@ -38,43 +39,24 @@ class CozeAPIClient:
     async def upload_file(
         self,
         file_data: bytes,
-        file_name: str = "image.jpg",
     ) -> str:
         """上传文件到 Coze 并返回 file_id
 
         Args:
             file_data (bytes): 文件的二进制数据
-            file_name (str): 文件名，包含扩展名(例如 image.jpg)
         Returns:
             str: 上传成功后返回的 file_id
         """
         session = await self._ensure_session()
         url = f"{self.api_base}/v1/files/upload"
 
-        file_ext = file_name.lower().split(".")[-1] if "." in file_name else "jpg"
-        content_type_map = {
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-            "gif": "image/gif",
-            "bmp": "image/bmp",
-            "webp": "image/webp",
-        }
-        content_type = content_type_map.get(file_ext, "image/jpeg")
-
-        form_data = aiohttp.FormData()
-        form_data.add_field(
-            "file", file_data, filename=file_name, content_type=content_type
-        )
-        form_data.add_field("purpose", "assistant")
-
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-
+            file_io = io.BytesIO(file_data)
             async with session.post(
                 url,
-                data=form_data,
-                headers=headers,
+                data={
+                    "file": file_io,
+                },
                 timeout=aiohttp.ClientTimeout(total=60),
             ) as response:
                 if response.status == 401:
@@ -290,3 +272,43 @@ class CozeAPIClient:
         if self.session:
             await self.session.close()
             self.session = None
+
+
+if __name__ == "__main__":
+    import os
+    import asyncio
+
+    async def test_coze_api_client():
+        api_key = os.getenv("COZE_API_KEY", "")
+        bot_id = os.getenv("COZE_BOT_ID", "")
+        client = CozeAPIClient(api_key=api_key)
+
+        try:
+            with open("README.md", "rb") as f:
+                file_data = f.read()
+            file_id = await client.upload_file(file_data)
+            print(f"Uploaded file_id: {file_id}")
+            async for event in client.chat_messages(
+                bot_id=bot_id,
+                user_id="test_user",
+                additional_messages=[
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            [
+                                {"type": "text", "text": "这是什么"},
+                                {"type": "file", "file_id": file_id},
+                            ],
+                            ensure_ascii=False,
+                        ),
+                        "content_type": "object_string",
+                    },
+                ],
+                stream=True,
+            ):
+                print(f"Event: {event}")
+
+        finally:
+            await client.close()
+
+    asyncio.run(test_coze_api_client())
