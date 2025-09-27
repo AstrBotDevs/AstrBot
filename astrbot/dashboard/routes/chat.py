@@ -19,7 +19,7 @@ async def track_conversation(convs: dict, conv_id: str):
     try:
         yield
     finally:
-        convs[conv_id] = False
+        convs.pop(conv_id, None)
 
 
 class ChatRoute(Route):
