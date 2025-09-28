@@ -294,8 +294,8 @@ class BaseDatabase(abc.ABC):
         self,
         page: int = 1,
         page_size: int = 20,
-        search_query: str = "",
-        platform_ids: list[str] | None = None,
+        search_query: str = None,
+        platform: str = None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
         ...
