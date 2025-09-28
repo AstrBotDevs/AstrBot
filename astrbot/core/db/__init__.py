@@ -287,3 +287,15 @@ class BaseDatabase(abc.ABC):
     # async def get_llm_messages(self, cid: str) -> list[LLMMessage]:
     #     """Get all LLM messages for a specific conversation."""
     #     ...
+
+
+    @abc.abstractmethod
+    async def get_session_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search_query: str = "",
+        platform_ids: list[str] | None = None,
+    ) -> tuple[list[dict], int]:
+        """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
+        ...

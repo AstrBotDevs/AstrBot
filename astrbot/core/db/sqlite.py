@@ -257,6 +257,111 @@ class SQLiteDatabase(BaseDatabase):
                     delete(ConversationV2).where(ConversationV2.user_id == user_id)
                 )
 
+    async def get_session_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search_query: str = None,
+        platform: str = None,
+    ) -> tuple[list[dict], int]:
+        """Get paginated session conversations with joined conversation and persona details."""
+        from sqlalchemy import select, func, or_
+        from astrbot.core.db.po import Preference, ConversationV2, Persona
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+
+            base_query = (
+                select(
+                    Preference.scope_id.label("session_id"),
+                    func.json_extract(Preference.value, "$.val").label(
+                        "conversation_id"
+                    ),
+                    ConversationV2.persona_id,
+                    ConversationV2.title,
+                    Persona.persona_id.label("persona_name"),
+                )
+                .select_from(Preference)
+                .outerjoin(
+                    ConversationV2,
+                    func.json_extract(Preference.value, "$.val")
+                    == ConversationV2.conversation_id,
+                )
+                .outerjoin(Persona, ConversationV2.persona_id == Persona.persona_id)
+                .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
+            )
+
+            # 搜索筛选
+            if search_query:
+                search_pattern = f"%{search_query}%"
+                base_query = base_query.where(
+                    or_(
+                        Preference.scope_id.ilike(search_pattern),
+                        ConversationV2.title.ilike(search_pattern),
+                        Persona.persona_id.ilike(search_pattern),
+                    )
+                )
+
+            # 平台筛选
+            if platform:
+                platform_pattern = f"{platform}:%"
+                base_query = base_query.where(Preference.scope_id.like(platform_pattern))
+
+            # 排序
+            base_query = base_query.order_by(Preference.scope_id)
+
+            # 分页结果
+            result_query = base_query.offset(offset).limit(page_size)
+            result = await session.execute(result_query)
+            rows = result.fetchall()
+
+            # 查询总数（应用相同的筛选条件）
+            count_base_query = (
+                select(func.count(Preference.scope_id))
+                .select_from(Preference)
+                .outerjoin(
+                    ConversationV2,
+                    func.json_extract(Preference.value, "$.val")
+                    == ConversationV2.conversation_id,
+                )
+                .outerjoin(Persona, ConversationV2.persona_id == Persona.persona_id)
+                .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
+            )
+
+            # 应用相同的搜索和平台筛选条件到计数查询
+            if search_query:
+                search_pattern = f"%{search_query}%"
+                count_base_query = count_base_query.where(
+                    or_(
+                        Preference.scope_id.ilike(search_pattern),
+                        ConversationV2.title.ilike(search_pattern),
+                        Persona.persona_id.ilike(search_pattern),
+                    )
+                )
+
+            if platform:
+                platform_pattern = f"{platform}:%"
+                count_base_query = count_base_query.where(Preference.scope_id.like(platform_pattern))
+
+            total_result = await session.execute(count_base_query)
+            total = total_result.scalar() or 0
+
+            # 构建列表
+            sessions_data = []
+            for row in rows:
+                sessions_data.append(
+                    {
+                        "session_id": row.session_id,
+                        "conversation_id": row.conversation_id,
+                        "persona_id": row.persona_id,
+                        "title": row.title,
+                        "persona_name": row.persona_name,
+                    }
+                )
+
+            return sessions_data, total
+
     async def insert_platform_message_history(
         self,
         platform_id,
