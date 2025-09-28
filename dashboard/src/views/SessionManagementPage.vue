@@ -4,13 +4,13 @@
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('sessions.activeSessions') }}</span>
-          <v-chip size="small" class="ml-2">{{ sessions.length }} {{ tm('sessions.sessionCount') }}</v-chip>
+          <v-chip size="small" class="ml-2">{{ totalItems }} {{ tm('sessions.sessionCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
             <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
-              hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
+              hide-details clearable variant="solo-filled" flat class="me-4" density="compact" @update:model-value="handleSearchChange"></v-text-field>
             <v-select v-model="filterPlatform" :items="platformOptions" :label="tm('search.platformFilter')"
               hide-details clearable variant="solo-filled" flat class="me-4" style="max-width: 150px;"
-              density="compact"></v-select>
+              density="compact" @update:model-value="handlePlatformChange"></v-select>
           </v-row>
           <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshSessions" :loading="loading"
             size="small">
@@ -22,8 +22,17 @@
 
         <v-card-text class="pa-0">
           <!-- 会话列表 -->
-          <v-data-table :headers="headers" :items="filteredSessions" :loading="loading" :items-per-page="itemsPerPage" density="compact"
-            class="elevation-0" style="font-size: 11px;">
+          <v-data-table-server
+            :headers="headers"
+            :items="sessions"
+            :loading="loading"
+            :items-per-page="itemsPerPage"
+            :page="currentPage"
+            :items-length="totalItems"
+            @update:options="handlePaginationUpdate"
+            density="compact"
+            class="elevation-0"
+            style="font-size: 11px;">
 
             <!-- 会话启停 -->
             <template v-slot:item.session_enabled="{ item }">
@@ -160,7 +169,7 @@
                 <div class="text-body-2 text-grey-500">{{ tm('sessions.noActiveSessionsDesc') }}</div>
               </div>
             </template>
-          </v-data-table>
+          </v-data-table-server>
         </v-card-text>
       </v-card>
 
@@ -357,7 +366,10 @@ export default {
       filterPlatform: null,
 
       // 分页相关
+      currentPage: 1,
       itemsPerPage: 10,
+      totalItems: 0,
+      totalPages: 0,
 
       // 可用选项
       availablePersonas: [],
@@ -424,30 +436,6 @@ export default {
       ]
     },
 
-    // 懒加载过滤会话 - 使用客户端分页
-    filteredSessions() {
-      let filtered = this.sessions;
-
-      // 搜索筛选
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase().trim();
-        filtered = filtered.filter(session =>
-          session.session_name.toLowerCase().includes(query) ||
-          session.platform.toLowerCase().includes(query) ||
-          session.persona_name?.toLowerCase().includes(query) ||
-          session.chat_provider_name?.toLowerCase().includes(query) ||
-          session.session_id.toLowerCase().includes(query)
-        );
-      }
-
-      // 平台筛选
-      if (this.filterPlatform) {
-        filtered = filtered.filter(session => session.platform === this.filterPlatform);
-      }
-
-      return filtered;
-    },
-
     platformOptions() {
       const platforms = [...new Set(this.sessions.map(s => s.platform))];
       return platforms.map(p => ({ title: p, value: p }));
@@ -494,7 +482,20 @@ export default {
     async loadSessions() {
       this.loading = true;
       try {
-        const response = await axios.get('/api/session/list');
+        const params = {
+          page: this.currentPage,
+          page_size: this.itemsPerPage
+        };
+        
+        // 添加搜索和平台筛选参数
+        if (this.searchQuery) {
+          params.search = this.searchQuery;
+        }
+        if (this.filterPlatform) {
+          params.platform = this.filterPlatform;
+        }
+        
+        const response = await axios.get('/api/session/list', { params });
         if (response.data.status === 'ok') {
           const data = response.data.data;
           this.sessions = data.sessions.map(session => ({
@@ -507,6 +508,13 @@ export default {
           this.availableChatProviders = data.available_chat_providers;
           this.availableSttProviders = data.available_stt_providers;
           this.availableTtsProviders = data.available_tts_providers;
+          
+          // 处理分页信息
+          if (data.pagination) {
+            this.totalItems = data.pagination.total;
+            this.totalPages = data.pagination.total_pages;
+            this.currentPage = data.pagination.page;
+          }
         } else {
           this.showError(response.data.message || this.tm('messages.loadSessionsError'));
         }
@@ -679,7 +687,7 @@ export default {
       let totalErrorCount = 0;
       let allErrorSessions = [];
 
-      const sessions = this.filteredSessions;
+      const sessions = this.sessions;
 
       try {
         // 定义批量操作任务
@@ -935,6 +943,25 @@ export default {
       }
 
       session.deleting = false;
+    },
+
+    // 处理分页更新事件
+    handlePaginationUpdate(options) {
+      this.currentPage = options.page;
+      this.itemsPerPage = options.itemsPerPage;
+      this.loadSessions();
+    },
+
+    // 处理搜索变化
+    handleSearchChange() {
+      this.currentPage = 1; // 重置到第一页
+      this.loadSessions();
+    },
+
+    // 处理平台筛选变化
+    handlePlatformChange() {
+      this.currentPage = 1; // 重置到第一页
+      this.loadSessions();
     },
   },
 }

@@ -20,6 +20,7 @@ class SessionManagementRoute(Route):
         core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
+        self.db_helper = db_helper
         self.routes = {
             "/session/list": ("GET", self.list_sessions),
             "/session/update_persona": ("POST", self.update_session_persona),
@@ -39,22 +40,42 @@ class SessionManagementRoute(Route):
     async def list_sessions(self):
         """获取所有会话的列表，包括 persona 和 provider 信息"""
         try:
-            preferences = await sp.session_get(umo=None, key="sel_conv_id", default=[])
-            session_conversations = {}
-            for pref in preferences:
-                session_conversations[pref.scope_id] = pref.value["val"]
+            page = int(request.args.get("page", 1))
+            page_size = int(request.args.get("page_size", 20))
+            search_query = request.args.get("search", "")
+            platform = request.args.get("platform", "")
+
+            # 获取活跃的会话数据（处于对话内的会话）
+            sessions_data, total = await self.db_helper.get_session_conversations(
+                page, page_size, search_query, platform
+            )
+
             provider_manager = self.core_lifecycle.provider_manager
             persona_mgr = self.core_lifecycle.persona_mgr
             personas = persona_mgr.personas_v3
 
             sessions = []
 
-            # 构建会话信息
-            for session_id, conversation_id in session_conversations.items():
+            # 循环补充非数据库信息，如 provider 和 session 状态
+            for data in sessions_data:
+                session_id = data["session_id"]
+                conversation_id = data["conversation_id"]
+                conv_persona_id = data["persona_id"]
+                title = data["title"]
+                persona_name = data["persona_name"]
+
+                # 处理 persona 显示
+                if conv_persona_id == "[%None]":
+                    persona_name = "无人格"
+                else:
+                    default_persona = persona_mgr.selected_default_persona_v3
+                    if default_persona:
+                        persona_name = default_persona["name"]
+
                 session_info = {
                     "session_id": session_id,
                     "conversation_id": conversation_id,
-                    "persona_id": None,
+                    "persona_id": persona_name,
                     "chat_provider_id": None,
                     "stt_provider_id": None,
                     "tts_provider_id": None,
@@ -79,31 +100,10 @@ class SessionManagementRoute(Route):
                     "session_raw_name": session_id.split(":")[2]
                     if session_id.count(":") >= 2
                     else session_id,
+                    "title": title,
                 }
 
-                # 获取对话信息
-                conversation = await self.conv_mgr.get_conversation(
-                    unified_msg_origin=session_id, conversation_id=conversation_id
-                )
-                if conversation:
-                    session_info["persona_id"] = conversation.persona_id
-
-                    # 查找 persona 名称
-                    if conversation.persona_id and conversation.persona_id != "[%None]":
-                        for persona in personas:
-                            if persona["name"] == conversation.persona_id:
-                                session_info["persona_id"] = persona["name"]
-                                break
-                    elif conversation.persona_id == "[%None]":
-                        session_info["persona_id"] = "无人格"
-                    else:
-                        # 使用默认人格
-                        default_persona = persona_mgr.selected_default_persona_v3
-                        if default_persona:
-                            session_info["persona_id"] = default_persona["name"]
-
                 # 获取 provider 信息
-                provider_manager = self.core_lifecycle.provider_manager
                 chat_provider = provider_manager.get_using_provider(
                     provider_type=ProviderType.CHAT_COMPLETION, umo=session_id
                 )
@@ -172,6 +172,14 @@ class SessionManagementRoute(Route):
                 "available_chat_providers": available_chat_providers,
                 "available_stt_providers": available_stt_providers,
                 "available_tts_providers": available_tts_providers,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total,
+                    "total_pages": (total + page_size - 1) // page_size
+                    if page_size > 0
+                    else 0,
+                },
             }
 
             return Response().ok(result).__dict__

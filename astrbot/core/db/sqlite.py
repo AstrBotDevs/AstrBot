@@ -15,10 +15,8 @@ from astrbot.core.db.po import (
     SQLModel,
 )
 
-from sqlalchemy import select, update, delete, text
+from sqlmodel import select, update, delete, text, func, or_, desc, col
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import func
-from sqlalchemy import or_
 
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
@@ -42,10 +40,10 @@ class SQLiteDatabase(BaseDatabase):
 
     async def insert_platform_stats(
         self,
-        platform_id: str,
-        platform_type: str,
-        count: int = 1,
-        timestamp: datetime = None,
+        platform_id,
+        platform_type,
+        count=1,
+        timestamp=None,
     ) -> None:
         """Insert a new platform statistic record."""
         async with self.get_db() as session:
@@ -76,7 +74,9 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             result = await session.execute(
-                select(func.count(PlatformStat.platform_id)).select_from(PlatformStat)
+                select(func.count(col(PlatformStat.platform_id))).select_from(
+                    PlatformStat
+                )
             )
             count = result.scalar_one_or_none()
             return count if count is not None else 0
@@ -96,7 +96,7 @@ class SQLiteDatabase(BaseDatabase):
                 """),
                 {"start_time": start_time},
             )
-            return result.scalars().all()
+            return list(result.scalars().all())
 
     # ====
     # Conversation Management
@@ -112,7 +112,7 @@ class SQLiteDatabase(BaseDatabase):
             if platform_id:
                 query = query.where(ConversationV2.platform_id == platform_id)
             # order by
-            query = query.order_by(ConversationV2.created_at.desc())
+            query = query.order_by(desc(ConversationV2.created_at))
             result = await session.execute(query)
 
             return result.scalars().all()
@@ -130,7 +130,7 @@ class SQLiteDatabase(BaseDatabase):
             offset = (page - 1) * page_size
             result = await session.execute(
                 select(ConversationV2)
-                .order_by(ConversationV2.created_at.desc())
+                .order_by(desc(ConversationV2.created_at))
                 .offset(offset)
                 .limit(page_size)
             )
@@ -151,25 +151,25 @@ class SQLiteDatabase(BaseDatabase):
 
             if platform_ids:
                 base_query = base_query.where(
-                    ConversationV2.platform_id.in_(platform_ids)
+                    col(ConversationV2.platform_id).in_(platform_ids)
                 )
             if search_query:
                 search_query = search_query.encode("unicode_escape").decode("utf-8")
                 base_query = base_query.where(
                     or_(
-                        ConversationV2.title.ilike(f"%{search_query}%"),
-                        ConversationV2.content.ilike(f"%{search_query}%"),
-                        ConversationV2.user_id.ilike(f"%{search_query}%"),
+                        col(ConversationV2.title).ilike(f"%{search_query}%"),
+                        col(ConversationV2.content).ilike(f"%{search_query}%"),
+                        col(ConversationV2.user_id).ilike(f"%{search_query}%"),
                     )
                 )
             if "message_types" in kwargs and len(kwargs["message_types"]) > 0:
                 for msg_type in kwargs["message_types"]:
                     base_query = base_query.where(
-                        ConversationV2.user_id.ilike(f"%:{msg_type}:%")
+                        col(ConversationV2.user_id).ilike(f"%:{msg_type}:%")
                     )
             if "platforms" in kwargs and len(kwargs["platforms"]) > 0:
                 base_query = base_query.where(
-                    ConversationV2.platform_id.in_(kwargs["platforms"])
+                    col(ConversationV2.platform_id).in_(kwargs["platforms"])
                 )
 
             # Get total count matching the filters
@@ -180,7 +180,7 @@ class SQLiteDatabase(BaseDatabase):
             # Get paginated results
             offset = (page - 1) * page_size
             result_query = (
-                base_query.order_by(ConversationV2.created_at.desc())
+                base_query.order_by(desc(ConversationV2.created_at))
                 .offset(offset)
                 .limit(page_size)
             )
@@ -226,7 +226,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 query = update(ConversationV2).where(
-                    ConversationV2.conversation_id == cid
+                    col(ConversationV2.conversation_id) == cid
                 )
                 values = {}
                 if title is not None:
@@ -246,7 +246,9 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(ConversationV2).where(ConversationV2.conversation_id == cid)
+                    delete(ConversationV2).where(
+                        col(ConversationV2.conversation_id) == cid
+                    )
                 )
 
     async def delete_conversations_by_user_id(self, user_id: str) -> None:
@@ -254,8 +256,115 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(ConversationV2).where(ConversationV2.user_id == user_id)
+                    delete(ConversationV2).where(col(ConversationV2.user_id) == user_id)
                 )
+
+    async def get_session_conversations(
+        self,
+        page=1,
+        page_size=20,
+        search_query=None,
+        platform=None,
+    ) -> tuple[list[dict], int]:
+        """Get paginated session conversations with joined conversation and persona details."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+
+            base_query = (
+                select(
+                    col(Preference.scope_id).label("session_id"),
+                    func.json_extract(Preference.value, "$.val").label(
+                        "conversation_id"
+                    ),  # type: ignore
+                    col(ConversationV2.persona_id).label("persona_id"),
+                    col(ConversationV2.title).label("title"),
+                    col(Persona.persona_id).label("persona_name"),
+                )
+                .select_from(Preference)
+                .outerjoin(
+                    ConversationV2,
+                    func.json_extract(Preference.value, "$.val")
+                    == ConversationV2.conversation_id,
+                )
+                .outerjoin(
+                    Persona, col(ConversationV2.persona_id) == Persona.persona_id
+                )
+                .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
+            )
+
+            # 搜索筛选
+            if search_query:
+                search_pattern = f"%{search_query}%"
+                base_query = base_query.where(
+                    or_(
+                        col(Preference.scope_id).ilike(search_pattern),
+                        col(ConversationV2.title).ilike(search_pattern),
+                        col(Persona.persona_id).ilike(search_pattern),
+                    )
+                )
+
+            # 平台筛选
+            if platform:
+                platform_pattern = f"{platform}:%"
+                base_query = base_query.where(
+                    col(Preference.scope_id).like(platform_pattern)
+                )
+
+            # 排序
+            base_query = base_query.order_by(Preference.scope_id)
+
+            # 分页结果
+            result_query = base_query.offset(offset).limit(page_size)
+            result = await session.execute(result_query)
+            rows = result.fetchall()
+
+            # 查询总数（应用相同的筛选条件）
+            count_base_query = (
+                select(func.count(col(Preference.scope_id)))
+                .select_from(Preference)
+                .outerjoin(
+                    ConversationV2,
+                    func.json_extract(Preference.value, "$.val")
+                    == ConversationV2.conversation_id,
+                )
+                .outerjoin(
+                    Persona, col(ConversationV2.persona_id) == Persona.persona_id
+                )
+                .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
+            )
+
+            # 应用相同的搜索和平台筛选条件到计数查询
+            if search_query:
+                search_pattern = f"%{search_query}%"
+                count_base_query = count_base_query.where(
+                    or_(
+                        col(Preference.scope_id).ilike(search_pattern),
+                        col(ConversationV2.title).ilike(search_pattern),
+                        col(Persona.persona_id).ilike(search_pattern),
+                    )
+                )
+
+            if platform:
+                platform_pattern = f"{platform}:%"
+                count_base_query = count_base_query.where(
+                    col(Preference.scope_id).like(platform_pattern)
+                )
+
+            total_result = await session.execute(count_base_query)
+            total = total_result.scalar() or 0
+
+            sessions_data = [
+                {
+                    "session_id": row.session_id,
+                    "conversation_id": row.conversation_id,
+                    "persona_id": row.persona_id,
+                    "title": row.title,
+                    "persona_name": row.persona_name,
+                }
+                for row in rows
+            ]
+            return sessions_data, total
 
     async def insert_platform_message_history(
         self,
@@ -290,9 +399,9 @@ class SQLiteDatabase(BaseDatabase):
                 cutoff_time = now - timedelta(seconds=offset_sec)
                 await session.execute(
                     delete(PlatformMessageHistory).where(
-                        PlatformMessageHistory.platform_id == platform_id,
-                        PlatformMessageHistory.user_id == user_id,
-                        PlatformMessageHistory.created_at < cutoff_time,
+                        col(PlatformMessageHistory.platform_id) == platform_id,
+                        col(PlatformMessageHistory.user_id) == user_id,
+                        col(PlatformMessageHistory.created_at) < cutoff_time,
                     )
                 )
 
@@ -309,7 +418,7 @@ class SQLiteDatabase(BaseDatabase):
                     PlatformMessageHistory.platform_id == platform_id,
                     PlatformMessageHistory.user_id == user_id,
                 )
-                .order_by(PlatformMessageHistory.created_at.desc())
+                .order_by(desc(PlatformMessageHistory.created_at))
             )
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
@@ -331,7 +440,7 @@ class SQLiteDatabase(BaseDatabase):
         """Get an attachment by its ID."""
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(Attachment).where(Attachment.id == attachment_id)
+            query = select(Attachment).where(Attachment.attachment_id == attachment_id)
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
@@ -374,7 +483,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                query = update(Persona).where(Persona.persona_id == persona_id)
+                query = update(Persona).where(col(Persona.persona_id) == persona_id)
                 values = {}
                 if system_prompt is not None:
                     values["system_prompt"] = system_prompt
@@ -394,7 +503,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(Persona).where(Persona.persona_id == persona_id)
+                    delete(Persona).where(col(Persona.persona_id) == persona_id)
                 )
 
     async def insert_preference_or_update(self, scope, scope_id, key, value):
@@ -449,9 +558,9 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(Preference).where(
-                        Preference.scope == scope,
-                        Preference.scope_id == scope_id,
-                        Preference.key == key,
+                        col(Preference.scope) == scope,
+                        col(Preference.scope_id) == scope_id,
+                        col(Preference.key) == key,
                     )
                 )
             await session.commit()
@@ -463,7 +572,8 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(Preference).where(
-                        Preference.scope == scope, Preference.scope_id == scope_id
+                        col(Preference.scope) == scope,
+                        col(Preference.scope_id) == scope_id,
                     )
                 )
             await session.commit()
@@ -490,7 +600,7 @@ class SQLiteDatabase(BaseDatabase):
                         DeprecatedPlatformStat(
                             name=data.platform_id,
                             count=data.count,
-                            timestamp=data.timestamp.timestamp(),
+                            timestamp=int(data.timestamp.timestamp()),
                         )
                     )
                 return deprecated_stats
@@ -548,7 +658,7 @@ class SQLiteDatabase(BaseDatabase):
                         DeprecatedPlatformStat(
                             name=platform_id,
                             count=count,
-                            timestamp=start_time.timestamp(),
+                            timestamp=int(start_time.timestamp()),
                         )
                     )
                 return deprecated_stats
