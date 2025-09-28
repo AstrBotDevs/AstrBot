@@ -1976,26 +1976,28 @@ CONFIG_METADATA_3 = {
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
                     "provider_stt_settings.enable": {
-                        "description": "默认启用语音转文本",
+                        "description": "启用语音转文本",
                         "type": "bool",
+                        "hint": "STT 总开关。",
                     },
                     "provider_stt_settings.provider_id": {
-                        "description": "语音转文本模型",
+                        "description": "默认语音转文本模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
                         "_special": "select_provider_stt",
                         "condition": {
                             "provider_stt_settings.enable": True,
                         },
                     },
                     "provider_tts_settings.enable": {
-                        "description": "默认启用文本转语音",
+                        "description": "启用文本转语音",
                         "type": "bool",
+                        "hint": "TTS 总开关。当关闭时，会话启用 TTS 也不会生效。",
                     },
                     "provider_tts_settings.provider_id": {
-                        "description": "文本转语音模型",
+                        "description": "默认文本转语音模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 单独选择会话的 TTS 模型。",
                         "_special": "select_provider_tts",
                         "condition": {
                             "provider_tts_settings.enable": True,
@@ -2112,7 +2114,7 @@ CONFIG_METADATA_3 = {
                         "description": "额外前缀提示词",
                         "type": "string",
                     },
-                    "provider_settings.dual_output": {
+                    "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
                     },
