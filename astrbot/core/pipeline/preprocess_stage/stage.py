@@ -46,6 +46,9 @@ class PreProcessStage(Stage):
             ctx = self.plugin_manager.context
             stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
+                logger.warning(
+                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型。"
+                )
                 return
             message_chain = event.get_messages()
             for idx, component in enumerate(message_chain):
