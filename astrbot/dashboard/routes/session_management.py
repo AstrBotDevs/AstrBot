@@ -49,7 +49,6 @@ class SessionManagementRoute(Route):
             sessions_data, total = await self.db_helper.get_session_conversations(
                 page, page_size, search_query, platform
             )
-            logger.warning(f"{search_query}  {platform}")
 
             provider_manager = self.core_lifecycle.provider_manager
             persona_mgr = self.core_lifecycle.persona_mgr

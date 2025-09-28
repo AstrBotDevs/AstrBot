@@ -24,7 +24,7 @@
           <!-- 会话列表 -->
           <v-data-table-server
             :headers="headers"
-            :items="filteredSessions"
+            :items="sessions"
             :loading="loading"
             :items-per-page="itemsPerPage"
             :page="currentPage"
@@ -436,11 +436,6 @@ export default {
       ]
     },
 
-    // 现在分页由后端处理，前端直接显示后端返回的数据
-    filteredSessions() {
-      return this.sessions;
-    },
-
     platformOptions() {
       const platforms = [...new Set(this.sessions.map(s => s.platform))];
       return platforms.map(p => ({ title: p, value: p }));
@@ -692,7 +687,7 @@ export default {
       let totalErrorCount = 0;
       let allErrorSessions = [];
 
-      const sessions = this.filteredSessions;
+      const sessions = this.sessions;
 
       try {
         // 定义批量操作任务
