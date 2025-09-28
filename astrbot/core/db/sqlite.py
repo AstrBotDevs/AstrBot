@@ -347,19 +347,16 @@ class SQLiteDatabase(BaseDatabase):
             total_result = await session.execute(count_base_query)
             total = total_result.scalar() or 0
 
-            # 构建列表
-            sessions_data = []
-            for row in rows:
-                sessions_data.append(
-                    {
-                        "session_id": row.session_id,
-                        "conversation_id": row.conversation_id,
-                        "persona_id": row.persona_id,
-                        "title": row.title,
-                        "persona_name": row.persona_name,
-                    }
-                )
-
+            sessions_data = [
+                {
+                    "session_id": row.session_id,
+                    "conversation_id": row.conversation_id,
+                    "persona_id": row.persona_id,
+                    "title": row.title,
+                    "persona_name": row.persona_name,
+                }
+                for row in rows
+            ]
             return sessions_data, total
 
     async def insert_platform_message_history(
