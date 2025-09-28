@@ -45,7 +45,7 @@ class SessionManagementRoute(Route):
             search_query = request.args.get("search", "")
             platform = request.args.get("platform", "")
 
-            # 使用数据库JOIN查询获取分页会话数据
+            # 获取活跃的会话数据（处于对话内的会话）
             sessions_data, total = await self.db_helper.get_session_conversations(
                 page, page_size, search_query, platform
             )
@@ -56,7 +56,7 @@ class SessionManagementRoute(Route):
 
             sessions = []
 
-            # 循环补充非数据库信息，如provider和session状态
+            # 循环补充非数据库信息，如 provider 和 session 状态
             for data in sessions_data:
                 session_id = data["session_id"]
                 conversation_id = data["conversation_id"]
@@ -65,13 +65,7 @@ class SessionManagementRoute(Route):
                 persona_name = data["persona_name"]
 
                 # 处理 persona 显示
-                if conv_persona_id and conv_persona_id != "[%None]":
-                    if not persona_name:
-                        for p in personas:
-                            if p["name"] == conv_persona_id:
-                                persona_name = p["name"]
-                                break
-                elif conv_persona_id == "[%None]":
+                if conv_persona_id == "[%None]":
                     persona_name = "无人格"
                 else:
                     default_persona = persona_mgr.selected_default_persona_v3
