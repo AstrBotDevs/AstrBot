@@ -7,7 +7,7 @@ qq-botpy
 chardet~=5.1.0
 Pillow
 beautifulsoup4
-googlesearch-python
+mi-googlesearch-python
 readability-lxml
 quart
 lxml_html_clean
