@@ -6,7 +6,7 @@ import asyncio
 import base64
 import aiofiles
 from astrbot.core.utils.io import file_to_base64, download_image_by_url
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.tencent_record_helper import audio_to_tencent_silk
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
@@ -294,7 +294,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         temp_dir, f"{uuid.uuid4()}.silk"
                     )
                     try:
-                        duration = await wav_to_tencent_silk(
+                        duration = await audio_to_tencent_silk(
                             record_wav_path, record_tecent_silk_path
                         )
                         if duration > 0:
