@@ -102,7 +102,6 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
     else:
         raise RuntimeError("生成的WAV文件不存在或为空")
 
-
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     """
     将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
@@ -117,7 +116,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("未安装 pilk: pip install pilk") from e
+        raise Exception("pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库") from e
 
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     os.makedirs(temp_dir, exist_ok=True)
@@ -158,3 +157,72 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
             os.remove(wav_path)
         if os.path.exists(silk_path):
             os.remove(silk_path)
+
+async def audio_to_tencent_silk(audio_path: str, output_path: str) -> float:
+    """
+    将 MP3/WAV 文件转为 Tencent Silk 并返回时长（秒）。
+
+    参数:
+    - audio_path: 输入音频文件路径（.mp3 或 .wav）
+    - output_path: 输出的音频路径-> silk
+
+    返回:
+    - duration: 音频时长（秒）
+    """
+    try:
+        import pilk
+    except ImportError as e:
+        raise Exception("pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库") from e
+
+    # 确保输入文件存在
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"音频文件不存在: {audio_path}")
+
+    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # 检查文件扩展名
+    ext = os.path.splitext(audio_path)[1].lower()
+    
+    # 创建临时 WAV 文件
+    temp_wav = tempfile.NamedTemporaryFile(
+        suffix=".wav", delete=False, dir=temp_dir
+    ).name
+
+    wav_path = audio_path  # 默认使用原文件路径
+    
+    # 如果不是 WAV 格式，需要转换
+    if ext != ".wav":
+        try:
+            await convert_to_pcm_wav(audio_path, temp_wav)
+            wav_path = temp_wav
+        except Exception as e:
+            # 如果转换失败，清理临时文件
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+            raise Exception(f"音频格式转换失败: {e}") from e
+
+    try:
+        with wave.open(wav_path, "rb") as wav_file:
+            rate = wav_file.getframerate()
+
+        # 转换为 Silk 格式
+        silk_duration = await asyncio.to_thread(
+            pilk.encode, wav_path, output_path, pcm_rate=rate, tencent=True
+        )
+
+        return silk_duration
+
+    except Exception as e:
+        # 如果转换失败，删除可能已创建的部分输出文件
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        raise Exception(f"Silk 格式转换失败: {e}") from e
+
+    finally:
+        # 清理临时 WAV 文件（如果是新创建的）
+        if wav_path != audio_path and os.path.exists(wav_path):
+            try:
+                os.remove(wav_path)
+            except:
+                pass  # 忽略清理错误
