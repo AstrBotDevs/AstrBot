@@ -18,7 +18,8 @@
 
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
-<a href="https://astrbot.app/">查看文档</a> ｜
+<a href="https://astrbot.app/">文档</a> ｜
+<a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
@@ -110,7 +111,6 @@ uv run main.py
 
 <a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 
-
 ## ⚡ 消息平台支持情况
 
 | 平台    | 支持性 |
@@ -127,6 +127,8 @@ uv run main.py
 | Discord   | ✔    |
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
+| Satori   | ✔    |
+| Misskey   | ✔    |
 
 ## ⚡ 提供商支持情况
 
@@ -172,7 +174,6 @@ pip install pre-commit
 pre-commit install
 ```
 
-
 ## ❤️ Special Thanks
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
@@ -191,7 +192,7 @@ pre-commit install
 - [koishijs/koishi](https://github.com/koishijs/koishi) - 扩展性极强的 Bot 框架
 - [MaiM-with-u/MaiBot](https://github.com/MaiM-with-u/MaiBot) - 注重拟人功能的 ChatBot
 - [langbot-app/LangBot](https://github.com/langbot-app/LangBot) - 功能丰富的 Bot 平台
-- [LroMiose/nekro-agent](https://github.com/KroMiose/nekro-agent) - 注重 Agent 的 ChatBot
+- [KroMiose/nekro-agent](https://github.com/KroMiose/nekro-agent) - 注重 Agent 的 ChatBot
 - [zhenxun-org/zhenxun_bot](https://github.com/zhenxun-org/zhenxun_bot) - 功能完善的 ChatBot
 
 ## ⭐ Star History
@@ -200,14 +201,11 @@ pre-commit install
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 <3
 
 <div align="center">
-    
+
 [![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
 
 </div>
 
-
 </details>
 
-
 _私は、高性能ですから!_
-

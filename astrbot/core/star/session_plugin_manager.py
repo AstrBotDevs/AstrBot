@@ -84,7 +84,10 @@ class SessionPluginManager:
         session_config["disabled_plugins"] = disabled_plugins
         session_plugin_config[session_id] = session_config
         sp.put(
-            "session_plugin_config", session_plugin_config, scope="umo", scope_id=session_id
+            "session_plugin_config",
+            session_plugin_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
@@ -135,6 +138,9 @@ class SessionPluginManager:
             # 跳过保留插件（系统插件）
             if plugin.reserved:
                 filtered_handlers.append(handler)
+                continue
+
+            if plugin.name is None:
                 continue
 
             # 检查插件是否在当前会话中启用

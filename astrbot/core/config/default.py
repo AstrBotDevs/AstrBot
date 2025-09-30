@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.1.1"
+VERSION = "4.2.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -60,6 +60,7 @@ DEFAULT_CONFIG = {
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
+        "group_name_display": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
         "persona_pool": ["*"],
@@ -244,6 +245,16 @@ CONFIG_METADATA_2 = {
                         "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
+                    "Misskey": {
+                        "id": "misskey",
+                        "type": "misskey",
+                        "enable": False,
+                        "misskey_instance_url": "https://misskey.example",
+                        "misskey_token": "",
+                        "misskey_default_visibility": "public",
+                        "misskey_local_only": False,
+                        "misskey_enable_chat": True,
+                    },
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
@@ -261,7 +272,7 @@ CONFIG_METADATA_2 = {
                         "type": "satori",
                         "enable": False,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
-                        "satori_endpoint": "ws://127.0.0.1:5140/satori/v1/events",
+                        "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
                         "satori_auto_reconnect": True,
                         "satori_heartbeat_interval": 10,
@@ -270,34 +281,34 @@ CONFIG_METADATA_2 = {
                 },
                 "items": {
                     "satori_api_base_url": {
-                        "description": "Satori API Base URL",
+                        "description": "Satori API 终结点",
                         "type": "string",
-                        "hint": "The base URL for the Satori API.",
+                        "hint": "Satori API 的基础地址。",
                     },
                     "satori_endpoint": {
-                        "description": "Satori WebSocket Endpoint",
+                        "description": "Satori WebSocket 终结点",
                         "type": "string",
-                        "hint": "The WebSocket endpoint for Satori events.",
+                        "hint": "Satori 事件的 WebSocket 端点。",
                     },
                     "satori_token": {
-                        "description": "Satori Token",
+                        "description": "Satori 令牌",
                         "type": "string",
-                        "hint": "The token used for authenticating with the Satori API.",
+                        "hint": "用于 Satori API 身份验证的令牌。",
                     },
                     "satori_auto_reconnect": {
-                        "description": "Enable Auto Reconnect",
+                        "description": "启用自动重连",
                         "type": "bool",
-                        "hint": "Whether to automatically reconnect the WebSocket on disconnection.",
+                        "hint": "断开连接时是否自动重新连接 WebSocket。",
                     },
                     "satori_heartbeat_interval": {
-                        "description": "Satori Heartbeat Interval",
+                        "description": "Satori 心跳间隔",
                         "type": "int",
-                        "hint": "The interval (in seconds) for sending heartbeat messages.",
+                        "hint": "发送心跳消息的间隔（秒）。",
                     },
                     "satori_reconnect_delay": {
-                        "description": "Satori Reconnect Delay",
+                        "description": "Satori 重连延迟",
                         "type": "int",
-                        "hint": "The delay (in seconds) before attempting to reconnect.",
+                        "hint": "尝试重新连接前的延迟时间（秒）。",
                     },
                     "slack_connection_mode": {
                         "description": "Slack Connection Mode",
@@ -344,6 +355,32 @@ CONFIG_METADATA_2 = {
                         "description": "Bot Token",
                         "type": "string",
                         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。",
+                    },
+                    "misskey_instance_url": {
+                        "description": "Misskey 实例 URL",
+                        "type": "string",
+                        "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址",
+                    },
+                    "misskey_token": {
+                        "description": "Misskey Access Token",
+                        "type": "string",
+                        "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）",
+                    },
+                    "misskey_default_visibility": {
+                        "description": "默认帖子可见性",
+                        "type": "string",
+                        "options": ["public", "home", "followers"],
+                        "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。",
+                    },
+                    "misskey_local_only": {
+                        "description": "仅限本站（不参与联合）",
+                        "type": "bool",
+                        "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例",
+                    },
+                    "misskey_enable_chat": {
+                        "description": "启用聊天消息响应",
+                        "type": "bool",
+                        "hint": "启用后，机器人将会监听和响应私信聊天消息",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
@@ -840,6 +877,18 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                         "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！",
+                    },
+                    "Coze": {
+                        "id": "coze",
+                        "provider": "coze",
+                        "provider_type": "chat_completion",
+                        "type": "coze",
+                        "enable": True,
+                        "coze_api_key": "",
+                        "bot_id": "",
+                        "coze_api_base": "https://api.coze.cn",
+                        "timeout": 60,
+                        "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
@@ -1707,6 +1756,26 @@ CONFIG_METADATA_2 = {
                         "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。",
                         "obvious": True,
                     },
+                    "coze_api_key": {
+                        "description": "Coze API Key",
+                        "type": "string",
+                        "hint": "Coze API 密钥，用于访问 Coze 服务。",
+                    },
+                    "bot_id": {
+                        "description": "Bot ID",
+                        "type": "string",
+                        "hint": "Coze 机器人的 ID，在 Coze 平台上创建机器人后获得。",
+                    },
+                    "coze_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                        "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn",
+                    },
+                    "auto_save_history": {
+                        "description": "由 Coze 管理对话记录",
+                        "type": "bool",
+                        "hint": "启用后，将由 Coze 进行对话历史记录管理, 此时 AstrBot 本地保存的上下文不会生效(仅供浏览), 对 AstrBot 的上下文进行的操作也不会生效。如果为禁用, 则使用 AstrBot 管理上下文。",
+                    },
                 },
             },
             "provider_settings": {
@@ -1731,6 +1800,9 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                     },
                     "identifier": {
+                        "type": "bool",
+                    },
+                    "group_name_display": {
                         "type": "bool",
                     },
                     "datetime_system_prompt": {
@@ -1912,17 +1984,33 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
+                    "provider_stt_settings.enable": {
+                        "description": "启用语音转文本",
+                        "type": "bool",
+                        "hint": "STT 总开关。",
+                    },
                     "provider_stt_settings.provider_id": {
-                        "description": "语音转文本模型",
+                        "description": "默认语音转文本模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
                         "_special": "select_provider_stt",
+                        "condition": {
+                            "provider_stt_settings.enable": True,
+                        },
+                    },
+                    "provider_tts_settings.enable": {
+                        "description": "启用文本转语音",
+                        "type": "bool",
+                        "hint": "TTS 总开关。当关闭时，会话启用 TTS 也不会生效。",
                     },
                     "provider_tts_settings.provider_id": {
-                        "description": "文本转语音模型",
+                        "description": "默认文本转语音模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 单独选择会话的 TTS 模型。",
                         "_special": "select_provider_tts",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
@@ -1992,6 +2080,11 @@ CONFIG_METADATA_3 = {
                         "description": "用户识别",
                         "type": "bool",
                     },
+                    "provider_settings.group_name_display": {
+                        "description": "显示群名称",
+                        "type": "bool",
+                        "hint": "启用后，在支持的平台(aiocqhttp)上会在 prompt 中包含群名称信息。",
+                    },
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
                         "type": "bool",
@@ -2030,7 +2123,7 @@ CONFIG_METADATA_3 = {
                         "description": "额外前缀提示词",
                         "type": "string",
                     },
-                    "provider_settings.dual_output": {
+                    "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
                     },
@@ -2139,41 +2232,41 @@ CONFIG_METADATA_3 = {
                 "description": "内容安全",
                 "type": "object",
                 "items": {
-                    "platform_settings.content_safety.also_use_in_response": {
+                    "content_safety.also_use_in_response": {
                         "description": "同时检查模型的响应内容",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.baidu_aip.enable": {
+                    "content_safety.baidu_aip.enable": {
                         "description": "使用百度内容安全审核",
                         "type": "bool",
                         "hint": "您需要手动安装 baidu-aip 库。",
                     },
-                    "platform_settings.content_safety.baidu_aip.app_id": {
+                    "content_safety.baidu_aip.app_id": {
                         "description": "App ID",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.api_key": {
+                    "content_safety.baidu_aip.api_key": {
                         "description": "API Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.baidu_aip.secret_key": {
+                    "content_safety.baidu_aip.secret_key": {
                         "description": "Secret Key",
                         "type": "string",
                         "condition": {
-                            "platform_settings.content_safety.baidu_aip.enable": True,
+                            "content_safety.baidu_aip.enable": True,
                         },
                     },
-                    "platform_settings.content_safety.internal_keywords.enable": {
+                    "content_safety.internal_keywords.enable": {
                         "description": "关键词检查",
                         "type": "bool",
                     },
-                    "platform_settings.content_safety.internal_keywords.extra_keywords": {
+                    "content_safety.internal_keywords.extra_keywords": {
                         "description": "额外关键词",
                         "type": "list",
                         "items": {"type": "string"},

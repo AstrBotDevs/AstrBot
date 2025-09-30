@@ -182,11 +182,13 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            str(event.sender["user_id"]), event.sender["nickname"]
+            str(event.sender["user_id"]),
+            event.sender.get("card") or event.sender.get("nickname", "N/A"),
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
+            abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
@@ -321,7 +323,9 @@ class AiocqhttpAdapter(Platform):
                                     user_id=int(m["data"]["qq"]),
                                     no_cache=False,
                                 )
-                                nickname = at_info.get("nick", "") or at_info.get("nickname", "")
+                                nickname = at_info.get("nick", "") or at_info.get(
+                                    "nickname", ""
+                                )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(

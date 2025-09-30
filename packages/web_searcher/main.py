@@ -5,7 +5,7 @@ import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import llm_tool, agent, logger, AstrBotConfig
+from astrbot.api import llm_tool, logger, AstrBotConfig
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
@@ -35,7 +35,9 @@ class Main(star.Star):
         if provider_settings:
             tavily_key = provider_settings.get("websearch_tavily_key")
             if isinstance(tavily_key, str):
-                logger.info("检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。")
+                logger.info(
+                    "检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。"
+                )
                 if tavily_key:
                     provider_settings["websearch_tavily_key"] = [tavily_key]
                 else:
@@ -176,7 +178,7 @@ class Main(star.Star):
                 return results
 
     @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str = None) -> str:
+    async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
         event.set_result(
             MessageEventResult().message(
                 "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。"
@@ -208,7 +210,7 @@ class Main(star.Star):
         processed_results = await asyncio.gather(*tasks, return_exceptions=True)
         ret = ""
         for processed_result in processed_results:
-            if isinstance(processed_result, Exception):
+            if isinstance(processed_result, BaseException):
                 logger.error(f"Error processing search result: {processed_result}")
                 continue
             ret += processed_result
@@ -333,7 +335,7 @@ class Main(star.Star):
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self, event: AstrMessageEvent, req: ProviderRequest
-    ) -> str:
+    ):
         """Get the session conversation for the given event."""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})
@@ -344,6 +346,9 @@ class Main(star.Star):
         if isinstance(tool_set, FunctionToolManager):
             req.func_tool = tool_set.get_full_tool_set()
             tool_set = req.func_tool
+
+        if not tool_set:
+            return
 
         if not websearch_enable:
             # pop tools

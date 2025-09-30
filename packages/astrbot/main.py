@@ -310,17 +310,27 @@ class Main(star.Star):
     @filter.command("tts")
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音（会话级别）"""
-        session_id = event.unified_msg_origin
-        current_status = SessionServiceManager.is_tts_enabled_for_session(session_id)
+        umo = event.unified_msg_origin
+        ses_tts = SessionServiceManager.is_tts_enabled_for_session(umo)
+        cfg = self.context.get_config(umo=umo)
+        tts_enable = cfg["provider_tts_settings"]["enable"]
 
         # 切换状态
-        new_status = not current_status
-        SessionServiceManager.set_tts_status_for_session(session_id, new_status)
+        new_status = not ses_tts
+        SessionServiceManager.set_tts_status_for_session(umo, new_status)
 
         status_text = "已开启" if new_status else "已关闭"
-        event.set_result(
-            MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
-        )
+
+        if new_status and not tts_enable:
+            event.set_result(
+                MessageEventResult().message(
+                    f"{status_text}当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。"
+                )
+            )
+        else:
+            event.set_result(
+                MessageEventResult().message(f"{status_text}当前会话的文本转语音。")
+            )
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):
@@ -527,12 +537,11 @@ UID: {user_id} 此 ID 可用于设置管理员。
             return
 
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
+        if provider and provider.meta().type in ["dify", "coze"]:
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message(
-                    "已重置当前 Dify 会话，新聊天将更换到新的会话。"
+                    "已重置当前 Dify / Coze 会话，新聊天将更换到新的会话。"
                 )
             )
             return
@@ -755,8 +764,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
         创建新对话
         """
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
+        if provider and provider.meta().type in ["dify", "coze"]:
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message("成功，下次聊天将是新对话。")
@@ -783,8 +791,7 @@ UID: {user_id} 此 ID 可用于设置管理员。
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
         """创建新群聊对话"""
         provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
+        if provider and provider.meta().type in ["dify", "coze"]:
             await provider.forget(message.unified_msg_origin)
             message.set_result(
                 MessageEventResult().message("成功，下次聊天将是新对话。")
@@ -823,7 +830,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
             if not data["data"]:
                 message.set_result(MessageEventResult().message("未找到任何对话。"))
@@ -1214,6 +1220,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
             user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
             req.prompt = user_info + req.prompt
 
+        if cfg.get("group_name_display") and event.message_obj.group_id:
+            group_name = event.message_obj.group.group_name
+
+            if group_name:
+                req.system_prompt += f"\nGroup name: {group_name}\n"
+
         # 启用附加时间戳
         if cfg.get("datetime_system_prompt"):
             current_time = None
@@ -1230,13 +1242,16 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 )
             req.system_prompt += f"\nCurrent datetime: {current_time}\n"
 
+        img_cap_prov_id = cfg.get("default_image_caption_provider_id")
         if req.conversation:
             # persona inject
-            persona_id = req.conversation.persona_id
+            persona_id = req.conversation.persona_id or cfg.get("default_personality")
             if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                persona_id = self.context.persona_manager.selected_default_persona_v3[
-                    "name"
-                ]
+                default_persona = (
+                    self.context.persona_manager.selected_default_persona_v3
+                )
+                if default_persona:
+                    persona_id = default_persona["name"]
             persona = next(
                 builtins.filter(
                     lambda persona: persona["name"] == persona_id,
@@ -1268,7 +1283,6 @@ UID: {user_id} 此 ID 可用于设置管理员。
             logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
             # image caption
-            img_cap_prov_id = cfg.get("default_image_caption_provider_id")
             if img_cap_prov_id and req.image_urls:
                 img_cap_prompt = cfg.get(
                     "image_caption_prompt", "Please describe the image."
@@ -1305,9 +1319,12 @@ UID: {user_id} 此 ID 可用于设置管理员。
                         break
             if image_seg:
                 try:
-                    if prov := self.context.get_using_provider(
-                        event.unified_msg_origin
-                    ):
+                    prov = None
+                    if img_cap_prov_id:
+                        prov = self.context.get_provider_by_id(img_cap_prov_id)
+                    if prov is None:
+                        prov = self.context.get_using_provider(event.unified_msg_origin)
+                    if prov:
                         llm_resp = await prov.text_chat(
                             prompt="Please describe the image content.",
                             image_urls=[await image_seg.convert_to_file_path()],
@@ -1316,6 +1333,8 @@ UID: {user_id} 此 ID 可用于设置管理员。
                             req.system_prompt += (
                                 f"Image Caption: {llm_resp.completion_text}\n"
                             )
+                    else:
+                        logger.warning("No provider found for image captioning.")
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
@@ -1335,22 +1354,22 @@ UID: {user_id} 此 ID 可用于设置管理员。
                 logger.error(f"ltm: {e}")
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.command("alter_cmd")
+    @filter.command("alter_cmd", alias={"alter"})
     async def alter_cmd(self, event: AstrMessageEvent):
-        # token = event.message_str.split(" ")
         token = self.parse_commands(event.message_str)
-        if token.len < 2:
+        if token.len < 3:
             yield event.plain_result(
-                "可设置所有其他指令是否需要管理员权限。\n格式: /alter_cmd <cmd_name> <admin/member>\n 例如: /alter_cmd provider admin 将 provider 设置为管理员指令\n /alter_cmd reset config 打开reset权限配置"
+                "该指令用于设置指令或指令组的权限。\n"
+                "格式: /alter_cmd <cmd_name> <admin/member>\n"
+                "例1: /alter_cmd c1 admin 将 c1 设为管理员指令\n"
+                "例2: /alter_cmd g1 c1 admin 将 g1 指令组的 c1 子指令设为管理员指令\n"
+                "/alter_cmd reset config 打开 reset 权限配置"
             )
             return
 
-        cmd_name = token.get(1)
-        cmd_type = token.get(2)
+        cmd_name = " ".join(token.tokens[1:-1])
+        cmd_type = token.get(-1)
 
-        # ============================
-        #    对reset权限进行特殊处理
-        # ============================
         if cmd_name == "reset" and cmd_type == "config":
             alter_cmd_cfg = await sp.global_get("alter_cmd", {})
             plugin_ = alter_cmd_cfg.get("astrbot", {})
@@ -1400,16 +1419,18 @@ UID: {user_id} 此 ID 可用于设置管理员。
 
         # 查找指令
         found_command = None
+        cmd_group = False
         for handler in star_handlers_registry:
             assert isinstance(handler, StarHandlerMetadata)
             for filter_ in handler.event_filters:
                 if isinstance(filter_, CommandFilter):
-                    if filter_.command_name == cmd_name:
+                    if filter_.equals(cmd_name):
                         found_command = handler
                         break
                 elif isinstance(filter_, CommandGroupFilter):
-                    if cmd_name == filter_.group_name:
+                    if filter_.equals(cmd_name):
                         found_command = handler
+                        cmd_group = True
                         break
 
         if not found_command:
@@ -1446,8 +1467,10 @@ UID: {user_id} 此 ID 可用于设置管理员。
                     else filter.PermissionType.MEMBER
                 ),
             )
-
-        yield event.plain_result(f"已将 {cmd_name} 设置为 {cmd_type} 指令")
+        cmd_group_str = "指令组" if cmd_group else "指令"
+        yield event.plain_result(
+            f"已将「{cmd_name}」{cmd_group_str} 的权限级别调整为 {cmd_type}。"
+        )
 
     async def update_reset_permission(self, scene_key: str, perm_type: str):
         """更新reset命令在特定场景下的权限设置

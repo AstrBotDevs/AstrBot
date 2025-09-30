@@ -7,6 +7,7 @@ from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 from ..star_handler import StarHandlerMetadata
 
+
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
@@ -30,6 +31,9 @@ class CommandFilter(HandlerFilter):
         if handler_md:
             self.init_handler_md(handler_md)
         self.custom_filter_list: List[CustomFilter] = []
+
+        # Cache for complete command names list
+        self._cmpl_cmd_names: list | None = None
 
     def print_types(self):
         result = ""
@@ -135,6 +139,22 @@ class CommandFilter(HandlerFilter):
                     )
         return result
 
+    def get_complete_command_names(self):
+        if self._cmpl_cmd_names is not None:
+            return self._cmpl_cmd_names
+        self._cmpl_cmd_names = [
+            f"{parent} {cmd}" if parent else cmd
+            for cmd in [self.command_name] + list(self.alias)
+            for parent in self.parent_command_names or [""]
+        ]
+        return self._cmpl_cmd_names
+
+    def equals(self, message_str: str) -> bool:
+        for full_cmd in self.get_complete_command_names():
+            if message_str == full_cmd:
+                return True
+        return False
+
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
             return False
@@ -144,25 +164,11 @@ class CommandFilter(HandlerFilter):
 
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
-        candidates = [self.command_name] + list(self.alias)
         ok = False
-        for candidate in candidates:
-            for parent_command_name in self.parent_command_names:
-                if parent_command_name:
-                    _full = f"{parent_command_name} {candidate}"
-                else:
-                    _full = candidate
-                if message_str == _full:
-                    # 完全等于命令名 → 没参数
-                    message_str = ""
-                    ok = True
-                    break
-                elif message_str.startswith(_full):
-                    # 命令名后面无论是空格还是直接连参数都可以
-                    message_str = message_str[len(_full):].lstrip()
-                    ok = True
-                    break
-
+        for full_cmd in self.get_complete_command_names():
+            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
+                ok = True
+                message_str = message_str[len(full_cmd) :].strip()
         if not ok:
             return False
 

@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.1.1"
+version = "4.2.1"
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,7 @@ dependencies = [
     "faiss-cpu==1.10.0",
     "filelock>=3.18.0",
     "google-genai>=1.14.0",
-    "googlesearch-python>=1.3.0",
+    "mi-googlesearch-python==1.3.0.post1",
     "lark-oapi>=1.4.15",
     "lxml-html-clean>=0.4.2",
     "mcp>=1.8.0",
@@ -49,6 +49,8 @@ dependencies = [
     "watchfiles>=1.0.5",
     "websockets>=15.0.1",
     "wechatpy>=1.8.18",
+    "audioop-lts ; python_full_version >= '3.13'",
+    "click>=8.2.1",
 ]
 
 [project.scripts]

@@ -155,11 +155,16 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def delete_conversations_by_user_id(self, user_id: str) -> None:
+        """Delete all conversations for a specific user."""
+        ...
+
+    @abc.abstractmethod
     async def insert_platform_message_history(
         self,
         platform_id: str,
         user_id: str,
-        content: list[dict],
+        content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
     ) -> None:
@@ -282,3 +287,14 @@ class BaseDatabase(abc.ABC):
     # async def get_llm_messages(self, cid: str) -> list[LLMMessage]:
     #     """Get all LLM messages for a specific conversation."""
     #     ...
+
+    @abc.abstractmethod
+    async def get_session_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        search_query: str | None = None,
+        platform: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
+        ...
