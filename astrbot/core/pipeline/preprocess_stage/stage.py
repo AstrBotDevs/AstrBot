@@ -27,12 +27,15 @@ class PreProcessStage(Stage):
         supported = {"telegram", "lark"}
         platform = event.get_platform_name()
         cfg = (
-            ((self.config.get("platform_specific", {}) or {}).get(platform) or {})
-            .get("pre_ack_emoji")
-            or {}
-        )
+            (self.config.get("platform_specific", {}) or {}).get(platform) or {}
+        ).get("pre_ack_emoji") or {}
         emojis = cfg.get("emojis") or []
-        if cfg.get("enable") and platform in supported and emojis and event.is_at_or_wake_command:
+        if (
+            cfg.get("enable")
+            and platform in supported
+            and emojis
+            and event.is_at_or_wake_command
+        ):
             try:
                 await event.react(random.choice(emojis))
             except Exception as e:

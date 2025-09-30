@@ -113,11 +113,7 @@ class LarkMessageEvent(AstrMessageEvent):
             .message_id(self.message_obj.message_id)
             .request_body(
                 CreateMessageReactionRequestBody.builder()
-                .reaction_type(
-                    Emoji.builder()
-                    .emoji_type(emoji)
-                    .build()
-                )
+                .reaction_type(Emoji.builder().emoji_type(emoji).build())
                 .build()
             )
             .build()
