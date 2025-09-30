@@ -102,6 +102,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
     else:
         raise RuntimeError("生成的WAV文件不存在或为空")
 
+
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     """
     将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
@@ -116,7 +117,9 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库") from e
+        raise Exception(
+            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库"
+        ) from e
 
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     os.makedirs(temp_dir, exist_ok=True)
@@ -158,6 +161,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
         if os.path.exists(silk_path):
             os.remove(silk_path)
 
+
 async def audio_to_tencent_silk(audio_path: str, output_path: str) -> float:
     """
     将 MP3/WAV 文件转为 Tencent Silk 并返回时长（秒）。
@@ -172,7 +176,9 @@ async def audio_to_tencent_silk(audio_path: str, output_path: str) -> float:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库") from e
+        raise Exception(
+            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库"
+        ) from e
 
     # 确保输入文件存在
     if not os.path.exists(audio_path):
