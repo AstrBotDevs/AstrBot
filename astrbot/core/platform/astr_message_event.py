@@ -416,6 +416,16 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
+    async def react(self, emoji: str):
+        """
+        对消息添加表情回应。
+
+        默认实现为发送一条包含该表情的消息。
+        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
+        如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+        """
+        await self.send(MessageChain([Plain(emoji)]))
+
     async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 

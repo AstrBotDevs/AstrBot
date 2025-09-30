@@ -1,5 +1,6 @@
 import traceback
 import asyncio
+import random
 from typing import Union, AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
@@ -22,6 +23,26 @@ class PreProcessStage(Stage):
         self, event: AstrMessageEvent
     ) -> Union[None, AsyncGenerator[None, None]]:
         """在处理事件之前的预处理"""
+        # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
+        supported = {"telegram", "lark"}
+        platform = event.get_platform_name()
+        cfg = (
+            self.config.get("platform_specific", {})
+            .get(platform, {})
+            .get("pre_ack_emoji", {})
+        ) or {}
+        emojis = cfg.get("emojis") or []
+        if (
+            cfg.get("enable", False)
+            and platform in supported
+            and emojis
+            and event.is_at_or_wake_command
+        ):
+            try:
+                await event.react(random.choice(emojis))
+            except Exception as e:
+                logger.warning(f"{platform} 预回应表情发送失败: {e}")
+
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
             # 支持 Record，Image 消息段的路径映射。
