@@ -183,14 +183,14 @@ async def audio_to_tencent_silk(audio_path: str, output_path: str) -> float:
 
     # 检查文件扩展名
     ext = os.path.splitext(audio_path)[1].lower()
-    
+
     # 创建临时 WAV 文件
     temp_wav = tempfile.NamedTemporaryFile(
         suffix=".wav", delete=False, dir=temp_dir
     ).name
 
     wav_path = audio_path  # 默认使用原文件路径
-    
+
     # 如果不是 WAV 格式，需要转换
     if ext != ".wav":
         try:
@@ -224,5 +224,5 @@ async def audio_to_tencent_silk(audio_path: str, output_path: str) -> float:
         if wav_path != audio_path and os.path.exists(wav_path):
             try:
                 os.remove(wav_path)
-            except:
+            except Exception:
                 pass  # 忽略清理错误
