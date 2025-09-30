@@ -271,11 +271,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         image_base64 = None  # only one img supported
         image_file_path = None
         record_file_path = None
-        
+
         for element in message.chain:
             if isinstance(element, Plain):
                 plain_text += element.text
-                
+
             elif isinstance(element, Image) and not image_base64:
                 if element.file and element.file.startswith("file:///"):
                     image_base64 = file_to_base64(element.file[8:])
@@ -290,13 +290,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # 确保去掉 base64 前缀
                 if image_base64 and image_base64.startswith("base64://"):
                     image_base64 = image_base64[9:]
-                    
+
             elif isinstance(element, Record):
                 if element.file:
                     record_wav_path = await element.convert_to_file_path()  # wav 路径
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     os.makedirs(temp_dir, exist_ok=True)  # 确保目录存在
-                    
+
                     record_tencent_silk_path = os.path.join(
                         temp_dir, f"{uuid.uuid4()}.silk"
                     )
@@ -312,8 +312,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
-                        
+
             else:
                 logger.debug(f"qq_official 忽略 {element.type}")
-                
+
         return plain_text, image_base64, image_file_path, record_file_path
