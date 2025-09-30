@@ -271,40 +271,49 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         image_base64 = None  # only one img supported
         image_file_path = None
         record_file_path = None
-        for i in message.chain:
-            if isinstance(i, Plain):
-                plain_text += i.text
-            elif isinstance(i, Image) and not image_base64:
-                if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
-                    image_file_path = i.file[8:]
-                elif i.file and i.file.startswith("http"):
-                    image_file_path = await download_image_by_url(i.file)
+        
+        for element in message.chain:
+            if isinstance(element, Plain):
+                plain_text += element.text
+                
+            elif isinstance(element, Image) and not image_base64:
+                if element.file and element.file.startswith("file:///"):
+                    image_base64 = file_to_base64(element.file[8:])
+                    image_file_path = element.file[8:]
+                elif element.file and element.file.startswith("http"):
+                    image_file_path = await download_image_by_url(element.file)
                     image_base64 = file_to_base64(image_file_path)
-                elif i.file and i.file.startswith("base64://"):
-                    image_base64 = i.file
+                elif element.file and element.file.startswith("base64://"):
+                    image_base64 = element.file[9:]  # 直接去掉前缀
                 else:
-                    image_base64 = file_to_base64(i.file)
-                image_base64 = image_base64.removeprefix("base64://")
-            elif isinstance(i, Record):
-                if i.file:
-                    record_wav_path = await i.convert_to_file_path()  # wav 路径
+                    image_base64 = file_to_base64(element.file)
+                # 确保去掉 base64 前缀
+                if image_base64 and image_base64.startswith("base64://"):
+                    image_base64 = image_base64[9:]
+                    
+            elif isinstance(element, Record):
+                if element.file:
+                    record_wav_path = await element.convert_to_file_path()  # wav 路径
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    record_tecent_silk_path = os.path.join(
+                    os.makedirs(temp_dir, exist_ok=True)  # 确保目录存在
+                    
+                    record_tencent_silk_path = os.path.join(
                         temp_dir, f"{uuid.uuid4()}.silk"
                     )
                     try:
                         duration = await audio_to_tencent_silk(
-                            record_wav_path, record_tecent_silk_path
+                            record_wav_path, record_tencent_silk_path
                         )
                         if duration > 0:
-                            record_file_path = record_tecent_silk_path
+                            record_file_path = record_tencent_silk_path
                         else:
                             record_file_path = None
                             logger.error("转换音频格式时出错：音频时长不大于0")
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
+                        
             else:
-                logger.debug(f"qq_official 忽略 {i.type}")
+                logger.debug(f"qq_official 忽略 {element.type}")
+                
         return plain_text, image_base64, image_file_path, record_file_path
