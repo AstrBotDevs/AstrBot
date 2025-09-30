@@ -27,11 +27,13 @@ class PreProcessStage(Stage):
         supported = {"telegram", "lark"}
         platform = event.get_platform_name()
         cfg = (
-            (self.config.get("platform_specific", {}) or {}).get(platform) or {}
-        ).get("pre_ack_emoji") or {}
+            self.config.get("platform_specific", {})
+            .get(platform, {})
+            .get("pre_ack_emoji", {})
+        ) or {}
         emojis = cfg.get("emojis") or []
         if (
-            cfg.get("enable")
+            cfg.get("enable", False)
             and platform in supported
             and emojis
             and event.is_at_or_wake_command
@@ -39,7 +41,8 @@ class PreProcessStage(Stage):
             try:
                 await event.react(random.choice(emojis))
             except Exception as e:
-                logger.warning(f"预回应表情发送失败: {e}")
+                logger.warning(f"{platform} 预回应表情发送失败: {e}")
+
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
             # 支持 Record，Image 消息段的路径映射。
