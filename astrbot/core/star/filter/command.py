@@ -111,7 +111,9 @@ class CommandFilter(HandlerFilter):
             # 没有 GreedyStr 的情况
             if i >= len(params):
                 if (
-                    isinstance(param_type_or_default_val, (Type, types.UnionType))
+                    isinstance(
+                        param_type_or_default_val, (Type, types.UnionType, typing.Union)
+                    )
                     or param_type_or_default_val is inspect.Parameter.empty
                 ):
                     # 是类型
