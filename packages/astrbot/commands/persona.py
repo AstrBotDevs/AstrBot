@@ -30,7 +30,7 @@ class PersonaCommands:
                     )
                 )
                 return
-            if not conv.persona_id and not conv.persona_id == "[%None]":
+            if not conv.persona_id and conv.persona_id != "[%None]":
                 curr_persona_name = default_persona["name"]
             else:
                 curr_persona_name = conv.persona_id
