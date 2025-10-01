@@ -215,6 +215,8 @@ class TelegramPlatformAdapter(Platform):
         """
         message = AstrBotMessage()
         message.session_id = str(update.message.chat.id)
+        
+
         # 获得是群聊还是私聊
         if update.message.chat.type == ChatType.PRIVATE:
             message.type = MessageType.FRIEND_MESSAGE
@@ -225,7 +227,6 @@ class TelegramPlatformAdapter(Platform):
                 # Topic Group
                 message.group_id += "#" + str(update.message.message_thread_id)
                 message.session_id = message.group_id
-
         message.message_id = str(update.message.message_id)
         message.sender = MessageMember(
             str(update.message.from_user.id), update.message.from_user.username
@@ -263,6 +264,9 @@ class TelegramPlatformAdapter(Platform):
         if update.message.text:
             # 处理文本消息
             plain_text = update.message.text
+            if (message.type == MessageType.GROUP_MESSAGE and update.message.reply_to_message and update.message.reply_to_message.from_user.id == context.bot.id):
+                plain_text2 = f"/@{context.bot.username} " + plain_text
+                plain_text = plain_text2
 
             # 群聊场景命令特殊处理
             if plain_text.startswith("/"):
