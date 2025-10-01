@@ -1,4 +1,5 @@
 """会话ID命令"""
+
 import astrbot.api.star as star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
@@ -8,7 +9,6 @@ class SIDCommand:
 
     def __init__(self, context: star.Context):
         self.context = context
-
 
     async def sid(self, event: AstrMessageEvent):
         """获取会话 ID 和 管理员 ID"""

@@ -1,13 +1,14 @@
 """文本转图片命令"""
+
 import astrbot.api.star as star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
 class T2ICommand:
     """文本转图片命令类"""
+
     def __init__(self, context: star.Context):
         self.context = context
-
 
     async def t2i(self, event: AstrMessageEvent):
         """开关文本转图片"""

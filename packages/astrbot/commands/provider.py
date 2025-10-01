@@ -10,7 +10,10 @@ class ProviderCommands:
         self.context = context
 
     async def provider(
-        self, event: AstrMessageEvent, idx: Union[str, int, None] = None, idx2: Union[int, None] = None
+        self,
+        event: AstrMessageEvent,
+        idx: Union[str, int, None] = None,
+        idx2: Union[int, None] = None,
     ):
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
