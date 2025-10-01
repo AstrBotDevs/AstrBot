@@ -195,5 +195,7 @@ class ProviderCommands:
                     new_key = keys_data[index - 1]
                     prov.set_key(new_key)
                 except BaseException as e:
-                    message.set_result(MessageEventResult().message(f"切换 Key 未知错误: {str(e)}"))
+                    message.set_result(
+                        MessageEventResult().message(f"切换 Key 未知错误: {str(e)}")
+                    )
                 message.set_result(MessageEventResult().message("切换 Key 成功。"))
