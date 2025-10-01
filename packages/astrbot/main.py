@@ -103,24 +103,24 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("off")
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = None):
+    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = ""):
         """禁用插件"""
         await self.plugin_c.plugin_off(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("on")
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = None):
+    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = ""):
         """启用插件"""
         await self.plugin_c.plugin_on(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("get")
-    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = None):
+    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = ""):
         """安装插件"""
         await self.plugin_c.plugin_get(event, plugin_repo)
 
     @plugin.command("help")
-    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = None):
+    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = ""):
         """获取插件帮助"""
         await self.plugin_c.plugin_help(event, plugin_name)
 
@@ -141,7 +141,7 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str = None):
+    async def op(self, event: AstrMessageEvent, admin_id: str = ""):
         """授权管理员。op <admin_id>"""
         await self.admin_c.op(event, admin_id)
 
@@ -153,7 +153,7 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
-    async def wl(self, event: AstrMessageEvent, sid: str = None):
+    async def wl(self, event: AstrMessageEvent, sid: str = ""):
         """添加白名单。wl <sid>"""
         await self.admin_c.wl(event, sid)
 
@@ -166,7 +166,10 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("provider")
     async def provider(
-        self, event: AstrMessageEvent, idx: Union[str, int] = None, idx2: int = None
+        self,
+        event: AstrMessageEvent,
+        idx: str | int | None = None,
+        idx2: int | None = None,
     ):
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
@@ -179,7 +182,7 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
-        self, message: AstrMessageEvent, idx_or_name: Union[int, str] = None
+        self, message: AstrMessageEvent, idx_or_name: Union[int, str, None] = None
     ):
         """查看或者切换模型"""
         await self.provider_c.model_ls(message, idx_or_name)
@@ -208,7 +211,7 @@ class Main(star.Star):
         await self.conversation_c.groupnew_conv(message, sid)
 
     @filter.command("switch")
-    async def switch_conv(self, message: AstrMessageEvent, index: int = None):
+    async def switch_conv(self, message: AstrMessageEvent, index: int | None = None):
         """通过 /ls 前面的序号切换对话"""
         await self.conversation_c.switch_conv(message, index)
 
@@ -224,7 +227,7 @@ class Main(star.Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
-    async def key(self, message: AstrMessageEvent, index: int = None):
+    async def key(self, message: AstrMessageEvent, index: int | None = None):
         """查看或者切换 Key"""
         await self.provider_c.key(message, index)
 
@@ -306,6 +309,10 @@ class Main(star.Star):
 
                     prompt = event.message_str
 
+                    if not conv:
+                        logger.error("未找到对话，无法主动回复")
+                        return
+
                     yield event.request_llm(
                         prompt=prompt,
                         func_tool_manager=self.context.get_llm_tool_manager(),
@@ -315,10 +322,6 @@ class Main(star.Star):
                 except BaseException as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"主动回复失败: {e}")
-
-    @filter.on_decorating_result()
-    async def decorate_result(self, event: AstrMessageEvent):
-        logger.debug("Decorating result for event: %s", event)
 
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):

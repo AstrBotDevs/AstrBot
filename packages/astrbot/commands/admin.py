@@ -10,7 +10,7 @@ class AdminCommands:
 
     async def op(self, event: AstrMessageEvent, admin_id: str = ""):
         """授权管理员。op <admin_id>"""
-        if admin_id == "":
+        if not admin_id:
             event.set_result(
                 MessageEventResult().message(
                     "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"
@@ -23,7 +23,7 @@ class AdminCommands:
 
     async def deop(self, event: AstrMessageEvent, admin_id: str = ""):
         """取消授权管理员。deop <admin_id>"""
-        if admin_id == "":
+        if not admin_id:
             event.set_result(
                 MessageEventResult().message(
                     "使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。"
@@ -41,7 +41,7 @@ class AdminCommands:
 
     async def wl(self, event: AstrMessageEvent, sid: str = ""):
         """添加白名单。wl <sid>"""
-        if sid == "":
+        if not sid:
             event.set_result(
                 MessageEventResult().message(
                     "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
@@ -55,7 +55,7 @@ class AdminCommands:
 
     async def dwl(self, event: AstrMessageEvent, sid: str = ""):
         """删除白名单。dwl <sid>"""
-        if sid == "":
+        if not sid:
             event.set_result(
                 MessageEventResult().message(
                     "使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。"
