@@ -1,7 +1,4 @@
-import datetime
-import builtins
 import traceback
-import zoneinfo
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent
@@ -9,8 +6,7 @@ from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from .long_term_memory import LongTermMemory
 from astrbot.core import logger
-from astrbot.api.message_components import Plain, Image, Reply
-from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.api.message_components import Plain, Image
 from typing import Union
 
 from .commands import (
@@ -28,18 +24,12 @@ from .commands import (
     TTSCommand,
     SIDCommand,
 )
+from .process_llm_request import ProcessLLMRequest
 
 
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        cfg = context.get_config()
-        self.timezone = cfg.get("timezone")
-        if not self.timezone:
-            # 系统默认时区
-            self.timezone = None
-        else:
-            logger.info(f"Timezone set to: {self.timezone}")
         self.ltm = None
         try:
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
@@ -59,6 +49,7 @@ class Main(star.Star):
         self.t2i_c = T2ICommand(self.context)
         self.tts_c = TTSCommand(self.context)
         self.sid_c = SIDCommand(self.context)
+        self.proc_llm_req = ProcessLLMRequest(self.context)
 
     def ltm_enabled(self, event: AstrMessageEvent):
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
@@ -332,140 +323,7 @@ class Main(star.Star):
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
-        cfg = self.context.get_config(umo=event.unified_msg_origin)["provider_settings"]
-        if prefix := cfg.get("prompt_prefix"):
-            req.prompt = prefix + req.prompt
-
-        # 解析引用内容
-        quote = None
-        for comp in event.message_obj.message:
-            if isinstance(comp, Reply):
-                quote = comp
-                break
-
-        if cfg.get("identifier"):
-            user_id = event.message_obj.sender.user_id
-            user_nickname = event.message_obj.sender.nickname
-            user_info = f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n"
-            req.prompt = user_info + req.prompt
-
-        if cfg.get("group_name_display") and event.message_obj.group_id:
-            group_name = event.message_obj.group.group_name
-
-            if group_name:
-                req.system_prompt += f"\nGroup name: {group_name}\n"
-
-        # 启用附加时间戳
-        if cfg.get("datetime_system_prompt"):
-            current_time = None
-            if self.timezone:
-                # 启用时区
-                try:
-                    now = datetime.datetime.now(zoneinfo.ZoneInfo(self.timezone))
-                    current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
-                except Exception as e:
-                    logger.error(f"时区设置错误: {e}, 使用本地时区")
-            if not current_time:
-                current_time = (
-                    datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
-                )
-            req.system_prompt += f"\nCurrent datetime: {current_time}\n"
-
-        img_cap_prov_id = cfg.get("default_image_caption_provider_id")
-        if req.conversation:
-            # persona inject
-            persona_id = req.conversation.persona_id or cfg.get("default_personality")
-            if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                default_persona = (
-                    self.context.persona_manager.selected_default_persona_v3
-                )
-                if default_persona:
-                    persona_id = default_persona["name"]
-            persona = next(
-                builtins.filter(
-                    lambda persona: persona["name"] == persona_id,
-                    self.context.persona_manager.personas_v3,
-                ),
-                None,
-            )
-            if persona:
-                if prompt := persona["prompt"]:
-                    req.system_prompt += prompt
-                if begin_dialogs := persona["_begin_dialogs_processed"]:
-                    req.contexts[:0] = begin_dialogs
-
-            # tools select
-            tmgr = self.context.get_llm_tool_manager()
-            if (persona and persona.get("tools") is None) or not persona:
-                # select all
-                toolset = tmgr.get_full_tool_set()
-                for tool in toolset:
-                    if not tool.active:
-                        toolset.remove_tool(tool.name)
-            else:
-                toolset = ToolSet()
-                for tool_name in persona["tools"]:
-                    tool = tmgr.get_func(tool_name)
-                    if tool and tool.active:
-                        toolset.add_tool(tool)
-            req.func_tool = toolset
-            logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
-
-            # image caption
-            if img_cap_prov_id and req.image_urls:
-                img_cap_prompt = cfg.get(
-                    "image_caption_prompt", "Please describe the image."
-                )
-                try:
-                    if prov := self.context.get_provider_by_id(img_cap_prov_id):
-                        logger.debug(
-                            f"Processing image caption with provider: {img_cap_prov_id}"
-                        )
-                        llm_resp = await prov.text_chat(
-                            prompt=img_cap_prompt,
-                            image_urls=req.image_urls,
-                        )
-                        if llm_resp.completion_text:
-                            req.prompt = f"(Image Caption: {llm_resp.completion_text})\n\n{req.prompt}"
-                        req.image_urls = []
-                except Exception as e:
-                    logger.error(f"处理图片描述失败: {e}")
-
-        if quote:
-            sender_info = ""
-            if quote.sender_nickname:
-                sender_info = f"(Sent by {quote.sender_nickname})"
-            message_str = quote.message_str or "[Empty Text]"
-            req.system_prompt += (
-                f"\nUser is quoting a message{sender_info}.\n"
-                f"Here are the information of the quoted message: Text Content: {message_str}.\n"
-            )
-            image_seg = None
-            if quote.chain:
-                for comp in quote.chain:
-                    if isinstance(comp, Image):
-                        image_seg = comp
-                        break
-            if image_seg:
-                try:
-                    prov = None
-                    if img_cap_prov_id:
-                        prov = self.context.get_provider_by_id(img_cap_prov_id)
-                    if prov is None:
-                        prov = self.context.get_using_provider(event.unified_msg_origin)
-                    if prov:
-                        llm_resp = await prov.text_chat(
-                            prompt="Please describe the image content.",
-                            image_urls=[await image_seg.convert_to_file_path()],
-                        )
-                        if llm_resp.completion_text:
-                            req.system_prompt += (
-                                f"Image Caption: {llm_resp.completion_text}\n"
-                            )
-                    else:
-                        logger.warning("No provider found for image captioning.")
-                except BaseException as e:
-                    logger.error(f"处理引用图片失败: {e}")
+        await self.proc_llm_req.process_llm_request(event, req)
 
         if self.ltm and self.ltm_enabled(event):
             try:
