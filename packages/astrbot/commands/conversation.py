@@ -148,7 +148,7 @@ class ConversationCommands:
 
         ret = (
             f"当前对话历史记录："
-            f"{history if history else '无历史记录'}\n\n"
+            f"{history or '无历史记录'}\n\n"
             f"第 {page} 页 | 共 {total_pages} 页\n"
             f"*输入 /history 2 跳转到第 2 页"
         )
