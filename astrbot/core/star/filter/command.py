@@ -52,7 +52,7 @@ class CommandFilter(HandlerFilter):
     def print_types(self):
         result = ""
         for k, v in self.handler_params.items():
-            if isinstance(v, Type):
+            if isinstance(v, type):
                 result += f"{k}({v.__name__}),"
             elif isinstance(v, (types.UnionType, typing.Union)):
                 result += f"{k}({v}),"
