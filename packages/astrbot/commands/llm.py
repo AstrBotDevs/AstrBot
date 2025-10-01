@@ -9,7 +9,8 @@ class LLMCommands:
     async def llm(self, event: AstrMessageEvent):
         """开启/关闭 LLM"""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        if enable := cfg["provider_settings"]["enable"]:
+        enable = cfg["provider_settings"].get("enable", True)
+        if enable:
             cfg["provider_settings"]["enable"] = False
             status = "关闭"
         else:
