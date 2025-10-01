@@ -54,7 +54,7 @@ class CommandFilter(HandlerFilter):
         for k, v in self.handler_params.items():
             if isinstance(v, type):
                 result += f"{k}({v.__name__}),"
-            elif isinstance(v, (types.UnionType, typing.Union)):
+            elif isinstance(v, types.UnionType) or typing.get_origin(v) is typing.Union:
                 result += f"{k}({v}),"
             else:
                 result += f"{k}({type(v).__name__})={v},"
