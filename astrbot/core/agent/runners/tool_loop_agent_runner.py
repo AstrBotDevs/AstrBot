@@ -151,11 +151,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             tool_call_result_blocks = []
-            for tool_call_name in llm_resp.tools_call_name:
+            for tool_call_name, tool_call_id in zip(
+                llm_resp.tools_call_name, llm_resp.tools_call_ids
+            ):
                 yield AgentResponse(
                     type="tool_call",
                     data=AgentResponseData(
-                        chain=MessageChain().message(f"🔨 调用工具: {tool_call_name}")
+                        chain=MessageChain().message(f"🔨 正在使用工具: {tool_call_name} ({tool_call_id})")
                     ),
                 )
             async for result in self._handle_function_tools(self.req, llm_resp):

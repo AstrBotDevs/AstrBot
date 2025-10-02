@@ -1,5 +1,7 @@
 import os
+import uuid
 from shipyard import ShipyardClient, SessionShip, Spec
+from astrbot.api import logger
 
 
 class SandboxClient:
@@ -23,12 +25,14 @@ class SandboxClient:
 
     async def get_ship(self, session_id: str) -> SessionShip:
         if session_id not in self.session_ship:
+            uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
             ship = await self.client.create_ship(
                 ttl=3600,
-                spec=Spec(cpus=0.5, memory="256m"),
-                max_session_num=2,
-                session_id=session_id,
+                spec=Spec(cpus=1.0, memory="512m"),
+                max_session_num=3,
+                session_id=uuid_str,
             )
+            logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
             self.session_ship[session_id] = ship
         return self.session_ship[session_id]
 
