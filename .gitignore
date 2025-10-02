@@ -31,3 +31,5 @@ packages/python_interpreter/workplace
 .idea
 pytest.ini
 .astrbot
+
+uv.lock
