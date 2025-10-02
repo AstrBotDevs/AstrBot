@@ -183,9 +183,13 @@ class ResultDecorateStage(Stage):
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
-                and tts_provider
                 and SessionServiceManager.should_process_tts_request(event)
             ):
+                if not tts_provider:
+                    logger.warning(
+                        f"会话 {event.unified_msg_origin} 未配置文本转语音模型。"
+                    )
+                    return
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:

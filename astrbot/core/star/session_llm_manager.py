@@ -52,10 +52,6 @@ class SessionServiceManager:
             "session_service_config", session_config, scope="umo", scope_id=session_id
         )
 
-        logger.info(
-            f"会话 {session_id} 的LLM状态已更新为: {'启用' if enabled else '禁用'}"
-        )
-
     @staticmethod
     def should_process_llm_request(event: AstrMessageEvent) -> bool:
         """检查是否应该处理LLM请求

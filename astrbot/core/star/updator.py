@@ -32,6 +32,9 @@ class PluginUpdator(RepoZipUpdator):
         if not repo_url:
             raise Exception(f"插件 {plugin.name} 没有指定仓库地址。")
 
+        if not plugin.root_dir_name:
+            raise Exception(f"插件 {plugin.name} 的根目录名未指定。")
+
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
 
         logger.info(f"正在更新插件，路径: {plugin_path}，仓库地址: {repo_url}")
