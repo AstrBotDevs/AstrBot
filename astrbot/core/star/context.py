@@ -11,7 +11,7 @@ from astrbot.core.provider.provider import (
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.provider.func_tool_manager import FunctionToolManager, FunctionTool
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.manager import ProviderManager
@@ -254,6 +254,11 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         return False
+
+    def add_llm_tool(self, *tools: FunctionTool) -> None:
+        """添加一个 LLM 工具。"""
+        for tool in tools:
+            self.provider_manager.llm_tools.func_list.append(tool)
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。

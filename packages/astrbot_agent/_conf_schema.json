@@ -1,0 +1,10 @@
+{
+    "endpoint": {
+        "description": "The endpoint URL of the Shipyard server.",
+        "type": "string"
+    },
+    "access_token": {
+        "description": "The access token for authenticating with the Shipyard server.",
+        "type": "string"
+    }
+}

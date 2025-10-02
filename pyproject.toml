@@ -51,6 +51,7 @@ dependencies = [
     "wechatpy>=1.8.18",
     "audioop-lts ; python_full_version >= '3.13'",
     "click>=8.2.1",
+    "shipyard-python-sdk>=0.1.0",
 ]
 
 [project.scripts]

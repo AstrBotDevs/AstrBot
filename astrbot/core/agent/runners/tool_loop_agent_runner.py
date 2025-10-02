@@ -213,62 +213,48 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 async for resp in executor:
                     if isinstance(resp, CallToolResult):
                         res = resp
-                        if isinstance(res.content[0], TextContent):
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content=res.content[0].text,
-                                )
-                            )
-                            yield MessageChain().message(res.content[0].text)
-                        elif isinstance(res.content[0], ImageContent):
-                            tool_call_result_blocks.append(
-                                ToolCallMessageSegment(
-                                    role="tool",
-                                    tool_call_id=func_tool_id,
-                                    content="返回了图片(已直接发送给用户)",
-                                )
-                            )
-                            yield MessageChain(type="tool_direct_result").base64_image(
-                                res.content[0].data
-                            )
-                        elif isinstance(res.content[0], EmbeddedResource):
-                            resource = res.content[0].resource
-                            if isinstance(resource, TextResourceContents):
-                                tool_call_result_blocks.append(
-                                    ToolCallMessageSegment(
-                                        role="tool",
-                                        tool_call_id=func_tool_id,
-                                        content=resource.text,
-                                    )
-                                )
-                                yield MessageChain().message(resource.text)
-                            elif (
-                                isinstance(resource, BlobResourceContents)
-                                and resource.mimeType
-                                and resource.mimeType.startswith("image/")
-                            ):
-                                tool_call_result_blocks.append(
-                                    ToolCallMessageSegment(
-                                        role="tool",
-                                        tool_call_id=func_tool_id,
-                                        content="返回了图片(已直接发送给用户)",
-                                    )
-                                )
+                        content = res.content
+
+                        aggr_text_content = ""
+
+                        for cont in content:
+                            if isinstance(cont, TextContent):
+                                aggr_text_content += cont.text
+                                yield MessageChain().message(cont.text)
+                            elif isinstance(cont, ImageContent):
+                                aggr_text_content += "\n返回了图片(已直接发送给用户)\n"
                                 yield MessageChain(
                                     type="tool_direct_result"
-                                ).base64_image(resource.blob)
-                            else:
-                                tool_call_result_blocks.append(
-                                    ToolCallMessageSegment(
-                                        role="tool",
-                                        tool_call_id=func_tool_id,
-                                        content="返回的数据类型不受支持",
+                                ).base64_image(cont.data)
+                            elif isinstance(cont, EmbeddedResource):
+                                resource = cont.resource
+                                if isinstance(resource, TextResourceContents):
+                                    aggr_text_content += resource.text
+                                    yield MessageChain().message(resource.text)
+                                elif (
+                                    isinstance(resource, BlobResourceContents)
+                                    and resource.mimeType
+                                    and resource.mimeType.startswith("image/")
+                                ):
+                                    aggr_text_content += (
+                                        "\n返回了图片(已直接发送给用户)\n"
                                     )
-                                )
-                                yield MessageChain().message("返回的数据类型不受支持。")
+                                    yield MessageChain(
+                                        type="tool_direct_result"
+                                    ).base64_image(resource.blob)
+                                else:
+                                    aggr_text_content += "\n返回的数据类型不受支持。\n"
+                                    yield MessageChain().message(
+                                        "返回的数据类型不受支持。"
+                                    )
 
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content=aggr_text_content,
+                            )
+                        )
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop。
