@@ -114,7 +114,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="grey" variant="text" @click="handleIdConflictConfirm(false)">{{ tm('dialog.idConflict.confirm')
-            }}</v-btn>
+          }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -241,7 +241,15 @@ export default {
 
   methods: {
     // 从工具函数导入
-    getPlatformIcon,
+    getPlatformIcon(platform_id) {
+      // 首先检查是否有来自插件的 logo_token
+      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
+      if (template && template.logo_token) {
+          // 通过文件服务访问插件提供的 logo
+        return `/api/file/${template.logo_token}`;
+      }
+      return getPlatformIcon(platform_id);
+    },
 
     openTutorial() {
       const tutorialUrl = getTutorialLink(this.newSelectedPlatformConfig.type);
