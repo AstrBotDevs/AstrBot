@@ -601,11 +601,11 @@ export default {
         checkPlugin() {
             axios.get('/api/plugin/get?name=astrbot_plugin_knowledge_base')
                 .then(response => {
-                    if (response.data.status !== 'ok') {
+                    if (response.data.status !== 'ok' || response.data.data.length === 0) {
                         this.showSnackbar(this.tm('messages.pluginNotAvailable'), 'error');
                         return
                     }
-                    if (!response.data.data.activated) {
+                    if (!response.data.data[0].activated) {
                         this.showSnackbar(this.tm('messages.pluginNotActivated'), 'error');
                         return
                     }
