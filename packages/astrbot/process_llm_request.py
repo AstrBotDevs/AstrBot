@@ -106,7 +106,11 @@ class ProcessLLMRequest:
 
         # prompt prefix
         if prefix := cfg.get("prompt_prefix"):
-            req.prompt = prefix + req.prompt
+            # 支持 {{prompt}} 作为用户输入的占位符
+            if "{{prompt}}" in prefix:
+                req.prompt = prefix.replace("{{prompt}}", req.prompt)
+            else:
+                req.prompt = prefix + req.prompt
 
         # user identifier
         if cfg.get("identifier"):

@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "datetime_system_prompt": True,
         "default_personality": "default",
         "persona_pool": ["*"],
-        "prompt_prefix": "",
+        "prompt_prefix": "{{prompt}}",
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -2118,10 +2118,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
+                        "hint": "例子: 如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
                     },
                     "provider_settings.prompt_prefix": {
-                        "description": "额外前缀提示词",
+                        "description": "用户提示词",
                         "type": "string",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
