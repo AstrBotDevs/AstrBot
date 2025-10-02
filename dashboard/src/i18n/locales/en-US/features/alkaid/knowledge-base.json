@@ -101,6 +101,7 @@
   },
   "messages": {
     "pluginNotAvailable": "Plugin not installed or unavailable",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base plugin not activated, please activate it in the plugin management page and restart AstrBot",
     "checkPluginFailed": "Failed to check plugin",
     "installFailed": "Installation failed",
     "installPluginFailed": "Failed to install plugin",

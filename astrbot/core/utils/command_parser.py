@@ -6,7 +6,7 @@ class CommandTokens:
         self.tokens = []
         self.len = 0
 
-    def get(self, idx: int):
+    def get(self, idx: int) -> str | None:
         if idx >= self.len:
             return None
         return self.tokens[idx].strip()

@@ -205,7 +205,6 @@ def register_command_group(
             new_group = CommandGroupFilter(command_group_name, alias)
 
     def decorator(obj):
-        # 根指令组
         if new_group:
             handler_md = get_handler_or_create(
                 obj, EventType.AdapterMessageEvent, **kwargs
@@ -213,6 +212,7 @@ def register_command_group(
             handler_md.event_filters.append(new_group)
 
             return RegisteringCommandable(new_group)
+        raise ValueError("注册指令组失败。")
 
     return decorator
 
@@ -220,9 +220,11 @@ def register_command_group(
 class RegisteringCommandable:
     """用于指令组级联注册"""
 
-    group: CommandGroupFilter = register_command_group
-    command: CommandFilter = register_command
-    custom_filter = register_custom_filter
+    group: Callable[..., Callable[..., "RegisteringCommandable"]] = (
+        register_command_group
+    )
+    command: Callable[..., Callable[..., None]] = register_command
+    custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
 
     def __init__(self, parent_group: CommandGroupFilter):
         self.parent_group = parent_group

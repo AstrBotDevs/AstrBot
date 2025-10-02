@@ -601,8 +601,13 @@ export default {
         checkPlugin() {
             axios.get('/api/plugin/get?name=astrbot_plugin_knowledge_base')
                 .then(response => {
-                    if (response.data.status !== 'ok') {
+                    if (response.data.status !== 'ok' || response.data.data.length === 0) {
                         this.showSnackbar(this.tm('messages.pluginNotAvailable'), 'error');
+                        return
+                    }
+                    if (!response.data.data[0].activated) {
+                        this.showSnackbar(this.tm('messages.pluginNotActivated'), 'error');
+                        return
                     }
                     if (response.data.data.length > 0) {
                         this.installed = true;
@@ -708,6 +713,10 @@ export default {
         getKBCollections() {
             axios.get('/api/plug/alkaid/kb/collections')
                 .then(response => {
+                    if (response.data.status !== 'ok') {
+                        this.showSnackbar(response.data.message || this.tm('messages.getKnowledgeBaseListFailed'), 'error');
+                        return;
+                    }
                     this.kbCollections = response.data.data;
                 })
                 .catch(error => {

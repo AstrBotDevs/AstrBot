@@ -16,6 +16,7 @@ from telegram.ext import ExtBot
 from astrbot.core.utils.io import download_file
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from telegram import ReactionTypeEmoji, ReactionTypeCustomEmoji
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -134,6 +135,39 @@ class TelegramPlatformEvent(AstrMessageEvent):
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
+
+    async def react(self, emoji: str | None, big: bool = False):
+        """
+        给原消息添加 Telegram 反应：
+        - 普通 emoji：传入 '👍'、'😂' 等
+        - 自定义表情：传入其 custom_emoji_id（纯数字字符串）
+        - 取消本机器人的反应：传入 None 或空字符串
+        """
+        try:
+            # 解析 chat_id（去掉超级群的 "#<thread_id>" 片段）
+            if self.get_message_type() == MessageType.GROUP_MESSAGE:
+                chat_id = (self.message_obj.group_id or "").split("#")[0]
+            else:
+                chat_id = self.get_sender_id()
+
+            message_id = int(self.message_obj.message_id)
+
+            # 组装 reaction 参数（必须是 ReactionType 的列表）
+            if not emoji:  # 清空本 bot 的反应
+                reaction_param = []  # 空列表表示移除本 bot 的反应
+            elif emoji.isdigit():  # 自定义表情：传 custom_emoji_id
+                reaction_param = [ReactionTypeCustomEmoji(emoji)]
+            else:  # 普通 emoji
+                reaction_param = [ReactionTypeEmoji(emoji)]
+
+            await self.client.set_message_reaction(
+                chat_id=chat_id,
+                message_id=message_id,
+                reaction=reaction_param,  # 注意是列表
+                is_big=big,  # 可选：大动画
+            )
+        except Exception as e:
+            logger.error(f"[Telegram] 添加反应失败: {e}")
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None

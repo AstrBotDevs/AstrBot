@@ -101,6 +101,7 @@
   },
   "messages": {
     "pluginNotAvailable": "插件未安装或不可用",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base 插件未启用，请前往插件管理页面启用，然后重启 AstrBot。",
     "checkPluginFailed": "检查插件失败",
     "installFailed": "安装失败",
     "installPluginFailed": "安装插件失败",

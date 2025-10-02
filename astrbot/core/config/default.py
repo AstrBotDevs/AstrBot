@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.2.1"
+VERSION = "4.3.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "datetime_system_prompt": True,
         "default_personality": "default",
         "persona_pool": ["*"],
-        "prompt_prefix": "",
+        "prompt_prefix": "{{prompt}}",
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -116,6 +116,15 @@ DEFAULT_CONFIG = {
         "port": 6185,
     },
     "platform": [],
+    "platform_specific": {
+        # 平台特异配置：按平台分类，平台下按功能分组
+        "lark": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+        },
+        "telegram": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+        },
+    },
     "wake_prefix": ["/"],
     "log_level": "INFO",
     "pip_install_arg": "",
@@ -2109,10 +2118,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
+                        "hint": "例子: 如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
                     },
                     "provider_settings.prompt_prefix": {
-                        "description": "额外前缀提示词",
+                        "description": "用户提示词",
                         "type": "string",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
@@ -2294,6 +2305,32 @@ CONFIG_METADATA_3 = {
                     "platform_settings.no_permission_reply": {
                         "description": "用户权限不足时是否回复",
                         "type": "bool",
+                    },
+                    "platform_specific.lark.pre_ack_emoji.enable": {
+                        "description": "[飞书] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.lark.pre_ack_emoji.emojis": {
+                        "description": "表情列表（飞书表情枚举名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "表情枚举名参考：https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce",
+                        "condition": {
+                            "platform_specific.lark.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.telegram.pre_ack_emoji.enable": {
+                        "description": "[Telegram] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.telegram.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
+                        "condition": {
+                            "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
                     },
                 },
             },
