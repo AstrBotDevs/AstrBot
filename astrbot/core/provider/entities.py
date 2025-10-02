@@ -4,9 +4,11 @@ import json
 from astrbot.core.utils.io import download_image_by_url
 from astrbot import logger
 from dataclasses import dataclass, field
-from typing import List, Dict, Type
-from .func_tool_manager import FuncCall
+from typing import List, Dict, Type, Any
+from astrbot.core.agent.tool import ToolSet
 from openai.types.chat.chat_completion import ChatCompletion
+from google.genai.types import GenerateContentResponse
+from anthropic.types import Message
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
 )
@@ -20,6 +22,7 @@ class ProviderType(enum.Enum):
     SPEECH_TO_TEXT = "speech_to_text"
     TEXT_TO_SPEECH = "text_to_speech"
     EMBEDDING = "embedding"
+    RERANK = "rerank"
 
 
 @dataclass
@@ -29,11 +32,11 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: Type = None
+    cls_type: Type | None = None
 
-    default_config_tmpl: dict = None
+    default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
-    provider_display_name: str = None
+    provider_display_name: str | None = None
     """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
 
 
@@ -57,18 +60,21 @@ class ToolCallMessageSegment:
 class AssistantMessageSegment:
     """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
 
-    content: str = None
+    content: str | None = None
     tool_calls: List[ChatCompletionMessageToolCall | Dict] = field(default_factory=list)
     role: str = "assistant"
 
     def to_dict(self):
-        ret = {
+        ret: dict[str, str | list[dict]] = {
             "role": self.role,
         }
         if self.content:
             ret["content"] = self.content
         if self.tool_calls:
-            ret["tool_calls"] = self.tool_calls
+            tool_calls_dict = [
+                tc if isinstance(tc, dict) else tc.to_dict() for tc in self.tool_calls
+            ]
+            ret["tool_calls"] = tool_calls_dict
         return ret
 
 
@@ -97,7 +103,7 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
-    func_tool: FuncCall | None = None
+    func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
     """上下文。格式与 openai 的上下文格式一致：
@@ -114,7 +120,14 @@ class ProviderRequest:
     """模型名称，为 None 时使用提供商的默认模型"""
 
     def __repr__(self):
-        return f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, image_urls={self.image_urls}, func_tool={self.func_tool}, contexts={self._print_friendly_context()}, system_prompt={self.system_prompt.strip()}, tool_calls_result={self.tool_calls_result})"
+        return (
+            f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, "
+            f"image_count={len(self.image_urls or [])}, "
+            f"func_tool={self.func_tool}, "
+            f"contexts={self._print_friendly_context()}, "
+            f"system_prompt={self.system_prompt}, "
+            f"conversation_id={self.conversation.cid if self.conversation else 'N/A'}, "
+        )
 
     def __str__(self):
         return self.__repr__()
@@ -204,17 +217,17 @@ class ProviderRequest:
 class LLMResponse:
     role: str
     """角色, assistant, tool, err"""
-    result_chain: MessageChain = None
+    result_chain: MessageChain | None = None
     """返回的消息链"""
-    tools_call_args: List[Dict[str, any]] = field(default_factory=list)
+    tools_call_args: List[Dict[str, Any]] = field(default_factory=list)
     """工具调用参数"""
     tools_call_name: List[str] = field(default_factory=list)
     """工具调用名称"""
     tools_call_ids: List[str] = field(default_factory=list)
     """工具调用 ID"""
 
-    raw_completion: ChatCompletion = None
-    _new_record: Dict[str, any] = None
+    raw_completion: ChatCompletion | GenerateContentResponse | Message | None = None
+    _new_record: Dict[str, Any] | None = None
 
     _completion_text: str = ""
 
@@ -225,12 +238,12 @@ class LLMResponse:
         self,
         role: str,
         completion_text: str = "",
-        result_chain: MessageChain = None,
-        tools_call_args: List[Dict[str, any]] = None,
-        tools_call_name: List[str] = None,
-        tools_call_ids: List[str] = None,
-        raw_completion: ChatCompletion = None,
-        _new_record: Dict[str, any] = None,
+        result_chain: MessageChain | None = None,
+        tools_call_args: List[Dict[str, Any]] | None = None,
+        tools_call_name: List[str] | None = None,
+        tools_call_ids: List[str] | None = None,
+        raw_completion: ChatCompletion | None = None,
+        _new_record: Dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):
         """初始化 LLMResponse
@@ -293,3 +306,11 @@ class LLMResponse:
                 }
             )
         return ret
+
+
+@dataclass
+class RerankResult:
+    index: int
+    """在候选列表中的索引位置"""
+    relevance_score: float
+    """相关性分数"""

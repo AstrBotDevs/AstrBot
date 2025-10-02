@@ -3,9 +3,10 @@ import asyncio
 import re
 import hashlib
 import uuid
-from dataclasses import dataclass
-from typing import List, Union, Optional, AsyncGenerator
 
+from typing import List, Union, Optional, AsyncGenerator, TypeVar, Any
+
+from astrbot import logger
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     Plain,
@@ -23,21 +24,9 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
+from .message_session import MessageSession, MessageSesion  # noqa
 
-
-@dataclass
-class MessageSesion:
-    platform_name: str
-    message_type: MessageType
-    session_id: str
-
-    def __str__(self):
-        return f"{self.platform_name}:{self.message_type.value}:{self.session_id}"
-
-    @staticmethod
-    def from_str(session_str: str):
-        platform_name, message_type, session_id = session_str.split(":")
-        return MessageSesion(platform_name, MessageType(message_type), session_id)
+_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -62,15 +51,15 @@ class AstrMessageEvent(abc.ABC):
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
-        self._extras = {}
+        self._extras: dict[str, Any] = {}
         self.session = MessageSesion(
-            platform_name=platform_meta.name,
+            platform_name=platform_meta.id,
             message_type=message_obj.type,
             session_id=session_id,
         )
         self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
-        self._result: MessageEventResult = None
+        self._result: MessageEventResult | None = None
         """消息事件的结果"""
 
         self._has_send_oper = False
@@ -78,13 +67,23 @@ class AstrMessageEvent(abc.ABC):
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
 
+        self.plugins_name: list[str] | None = None
+        """该事件启用的插件名称列表。None 表示所有插件都启用。空列表表示没有启用任何插件。"""
+
         # back_compability
         self.platform = platform_meta
 
     def get_platform_name(self):
+        """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
+
+        NOTE: 用户可能会同时运行多个相同类型的平台适配器。"""
         return self.platform_meta.name
 
     def get_platform_id(self):
+        """获取这个事件所属的平台的 ID。
+
+        NOTE: 用户可能会同时运行多个相同类型的平台适配器，但能确定的是 ID 是唯一的。
+        """
         return self.platform_meta.id
 
     def get_message_str(self) -> str:
@@ -176,18 +175,21 @@ class AstrMessageEvent(abc.ABC):
         """
         self._extras[key] = value
 
-    def get_extra(self, key=None):
+    def get_extra(
+        self, key: str | None = None, default: _VT = None
+    ) -> dict[str, Any] | _VT:
         """
         获取额外的信息。
         """
         if key is None:
             return self._extras
-        return self._extras.get(key, None)
+        return self._extras.get(key, default)
 
     def clear_extra(self):
         """
         清除额外的信息。
         """
+        logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
     def is_private_chat(self) -> bool:
@@ -227,7 +229,7 @@ class AstrMessageEvent(abc.ABC):
     ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
-        Fallback仅支持 aiocqhttp, gewechat。
+        Fallback仅支持 aiocqhttp。
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
@@ -414,12 +416,21 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
+    async def react(self, emoji: str):
+        """
+        对消息添加表情回应。
+
+        默认实现为发送一条包含该表情的消息。
+        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
+        如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+        """
+        await self.send(MessageChain([Plain(emoji)]))
+
     async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:
 
-        - gewechat
         - aiocqhttp(OneBotv11)
         """
         ...

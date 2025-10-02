@@ -1,0 +1,95 @@
+{
+  "title": "会话管理",
+  "subtitle": "管理活跃会话和配置",
+  "buttons": {
+    "refresh": "刷新",
+    "edit": "编辑",
+    "apply": "应用批量设置",
+    "editName": "备注",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除"
+  },
+  "sessions": {
+    "activeSessions": "活跃会话",
+    "sessionCount": "个会话",
+    "noActiveSessions": "暂无活跃会话",
+    "noActiveSessionsDesc": "当有用户与机器人交互时，会话将会显示在这里"
+  },
+  "search": {
+    "placeholder": "搜索会话...",
+    "platformFilter": "平台筛选"
+  },
+  "table": {
+    "headers": {
+      "sessionStatus": "会话状态",
+      "sessionInfo": "ID (UMO)",
+      "persona": "人格",
+      "chatProvider": "聊天模型",
+      "sttProvider": "语音识别模型",
+      "ttsProvider": "语音合成模型",
+      "llmStatus": "启用 LLM",
+      "ttsStatus": "启用 TTS",
+      "pluginManagement": "插件管理",
+      "actions": "操作"
+    }
+  },
+  "status": {
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "persona": {
+    "none": "无人格"
+  },
+  "batchOperations": {
+    "title": "批量操作",
+    "setPersona": "批量设置人格",
+    "setChatProvider": "批量设置 Chat Provider",
+    "setSttProvider": "批量设置 STT Provider",
+    "setTtsProvider": "批量设置 TTS Provider",
+    "setLlmStatus": "批量设置 LLM 状态",
+    "setTtsStatus": "批量设置 TTS 状态",
+    "noSttProvider": "暂无可用 STT Provider",
+    "noTtsProvider": "暂无可用 TTS Provider"
+  },
+  "pluginManagement": {
+    "title": "插件管理",
+    "noPlugins": "暂无可用插件",
+    "noPluginsDesc": "目前没有激活的插件",
+    "loading": "加载插件列表中...",
+    "author": "作者"
+  },
+  "nameEditor": {
+    "title": "编辑会话名称",
+    "customName": "自定义名称",
+    "placeholder": "输入自定义会话名称（留空则使用原始名称）",
+    "originalName": "原始名称",
+    "fullSessionId": "完整会话ID",
+    "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
+  },
+  "deleteConfirm": {
+    "message": "确定要删除会话 {sessionName} 吗？",
+    "warning": "此操作将永久删除本次会话的「全部对话记录」与「偏好设置」（插件对会话的关联数据除外），且无法恢复。确认继续？"
+  },
+  "messages": {
+    "refreshSuccess": "会话列表已刷新",
+    "personaUpdateSuccess": "人格更新成功",
+    "personaUpdateError": "人格更新失败",
+    "providerUpdateSuccess": "Provider 更新成功",
+    "providerUpdateError": "Provider 更新失败",
+    "sessionStatusSuccess": "会话 {status}",
+    "llmStatusSuccess": "LLM {status}",
+    "ttsStatusSuccess": "TTS {status}",
+    "statusUpdateError": "状态更新失败",
+    "loadSessionsError": "加载会话列表失败",
+    "batchUpdateSuccess": "成功批量更新 {count} 项设置",
+    "batchUpdatePartial": "批量更新完成，{success} 项成功，{error} 项失败",
+    "loadPluginsError": "加载插件列表失败",
+    "pluginStatusSuccess": "插件 {name} {status}",
+    "pluginStatusError": "插件状态更新失败",
+    "nameUpdateSuccess": "会话名称更新成功",
+    "nameUpdateError": "会话名称更新失败",
+    "deleteSuccess": "会话删除成功",
+    "deleteError": "会话删除失败"
+  }
+}

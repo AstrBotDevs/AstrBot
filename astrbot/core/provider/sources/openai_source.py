@@ -99,6 +99,17 @@ class ProviderOpenAIOfficial(Provider):
         for key in to_del:
             del payloads[key]
 
+        # 读取并合并 custom_extra_body 配置
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
+        model = payloads.get("model", "").lower()
+
+        # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
+        if model == "deepseek-reasoner" and "tools" in payloads:
+            del payloads["tools"]
+
         completion = await self.client.chat.completions.create(
             **payloads, stream=False, extra_body=extra_body
         )
@@ -129,6 +140,12 @@ class ProviderOpenAIOfficial(Provider):
 
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
+
+        # 读取并合并 custom_extra_body 配置
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
         to_del = []
         for key in payloads.keys():
             if key not in self.default_params:
@@ -176,7 +193,7 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 
-        if choice.message.content:
+        if choice.message.content is not None:
             # text completion
             completion_text = str(choice.message.content).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
@@ -187,6 +204,9 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             tool_call_ids = []
             for tool_call in choice.message.tool_calls:
+                if isinstance(tool_call, str):
+                    # workaround for #1359
+                    tool_call = json.loads(tool_call)
                 for tool in tools.func_list:
                     if tool.name == tool_call.function.name:
                         # workaround for #1454
@@ -207,7 +227,7 @@ class ProviderOpenAIOfficial(Provider):
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。"
             )
 
-        if not llm_response.completion_text and not llm_response.tools_call_args:
+        if llm_response.completion_text is None and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 

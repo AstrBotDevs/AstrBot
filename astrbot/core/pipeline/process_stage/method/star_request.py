@@ -2,7 +2,7 @@
 本地 Agent 模式的 AstrBot 插件调用 Stage
 """
 
-from ...context import PipelineContext
+from ...context import PipelineContext, call_handler
 from ..stage import Stage
 from typing import Dict, Any, List, AsyncGenerator, Union
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -33,24 +33,16 @@ class StarRequestSubStage(Stage):
             handlers_parsed_params = {}
 
         for handler in activated_handlers:
-            # 检查处理器是否在当前平台兼容
-            if (
-                hasattr(handler, "platform_compatible")
-                and handler.platform_compatible is False
-            ):
-                logger.debug(
-                    f"处理器 {handler.handler_name} 在当前平台不兼容，跳过执行"
+            params = handlers_parsed_params.get(handler.handler_full_name, {})
+            md = star_map.get(handler.handler_module_path)
+            if not md:
+                logger.warning(
+                    f"Cannot find plugin for given handler module path: {handler.handler_module_path}"
                 )
                 continue
-
-            params = handlers_parsed_params.get(handler.handler_full_name, {})
+            logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
             try:
-                if handler.handler_module_path not in star_map:
-                    continue
-                logger.debug(
-                    f"plugin -> {star_map.get(handler.handler_module_path).name} - {handler.handler_name}"
-                )
-                wrapper = self.ctx.call_handler(event, handler.handler, **params)
+                wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
                 event.clear_result()  # 清除上一个 handler 的结果
@@ -59,7 +51,7 @@ class StarRequestSubStage(Stage):
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
 
                 if event.is_at_or_wake_command:
-                    ret = f":(\n\n在调用插件 {star_map.get(handler.handler_module_path).name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
+                    ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
                     event.set_result(MessageEventResult().message(ret))
                     yield
                     event.clear_result()

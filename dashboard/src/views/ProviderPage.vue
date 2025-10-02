@@ -12,9 +12,6 @@
           </p>
         </div>
         <div>
-          <v-btn color="success" prepend-icon="mdi-cog" variant="tonal" class="me-2" @click="showSettingsDialog = true" rounded="xl" size="x-large">
-            {{ tm('providers.settings') }}
-          </v-btn>
           <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true" rounded="xl" size="x-large">
             {{ tm('providers.addProvider') }}
           </v-btn>
@@ -44,6 +41,10 @@
             <v-icon start>mdi-code-json</v-icon>
             {{ tm('providers.tabs.embedding') }}
           </v-tab>
+          <v-tab value="rerank" class="font-weight-medium px-3">
+            <v-icon start>mdi-compare-vertical</v-icon>
+            {{ tm('providers.tabs.rerank') }}
+          </v-tab>
         </v-tabs>
 
         <v-row v-if="filteredProviders.length === 0">
@@ -55,13 +56,16 @@
 
         <v-row v-else>
           <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card 
-              :item="provider" 
-              title-field="id" 
+            <item-card
+              :item="provider"
+              title-field="id"
               enabled-field="enable"
               @toggle-enabled="providerStatusChange"
-              @delete="deleteProvider" 
-              @edit="configExistingProvider">
+              :bglogo="getProviderIcon(provider.provider)"
+              @delete="deleteProvider"
+              @edit="configExistingProvider"
+              @copy="copyProvider"
+              :show-copy-button="true">
               <template v-slot:details="{ item }">
               </template>
             </item-card>
@@ -93,7 +97,7 @@
               <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
                 {{ tm('availability.noData') }}
               </v-alert>
-              
+
               <v-container v-else class="pa-0">
                 <v-row>
                   <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
@@ -111,7 +115,7 @@
                         ></v-progress-circular>
 
                         <span class="font-weight-bold">{{ status.id }}</span>
-                        
+
                         <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
                           {{ getStatusText(status.status) }}
                         </v-chip>
@@ -151,87 +155,21 @@
     </v-container>
 
     <!-- 添加提供商对话框 -->
-    <v-dialog v-model="showAddProviderDialog" max-width="1100px" min-height="95%">
-      <v-card class="provider-selection-dialog">
-        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
-          <span>{{ tm('dialogs.addProvider.title') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="showAddProviderDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4" style="overflow-y: auto;">
-          <v-tabs v-model="activeProviderTab" grow slider-color="primary" bg-color="background">
-            <v-tab value="chat_completion" class="font-weight-medium px-3">
-              <v-icon start>mdi-message-text</v-icon>
-              {{ tm('dialogs.addProvider.tabs.basic') }}
-            </v-tab>
-            <v-tab value="speech_to_text" class="font-weight-medium px-3">
-              <v-icon start>mdi-microphone-message</v-icon>
-              {{ tm('dialogs.addProvider.tabs.speechToText') }}
-            </v-tab>
-            <v-tab value="text_to_speech" class="font-weight-medium px-3">
-              <v-icon start>mdi-volume-high</v-icon>
-              {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
-            </v-tab>
-            <v-tab value="embedding" class="font-weight-medium px-3">
-              <v-icon start>mdi-code-json</v-icon>
-              {{ tm('dialogs.addProvider.tabs.embedding') }}
-            </v-tab>
-          </v-tabs>
-
-          <v-window v-model="activeProviderTab" class="mt-4">
-            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech', 'embedding']"
-                          :key="tabType"
-                          :value="tabType">
-              <v-row class="mt-1">
-                <v-col v-for="(template, name) in getTemplatesByType(tabType)"
-                      :key="name"
-                      cols="12" sm="6" md="4">
-                  <v-card variant="outlined" hover class="provider-card" @click="selectProviderTemplate(name)">
-                    <div class="provider-card-content">
-                      <div class="provider-card-text">
-                        <v-card-title class="provider-card-title">接入 {{ name }}</v-card-title>
-                        <v-card-text class="text-caption text-medium-emphasis provider-card-description">
-                          {{ getProviderDescription(template, name) }}
-                        </v-card-text>
-                      </div>
-                      <div class="provider-card-logo">
-                        <img :src="getProviderIcon(name)" v-if="getProviderIcon(name)" class="provider-logo-img">
-                        <div v-else class="provider-logo-fallback">
-                          {{ name[0].toUpperCase() }}
-                        </div>
-                      </div>
-                    </div>
-                  </v-card>
-                </v-col>
-                <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
-                  <v-alert type="info" variant="tonal">
-                    {{ tm('dialogs.addProvider.noTemplates', { type: getTabTypeName(tabType) }) }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-            </v-window-item>
-          </v-window>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+    <AddNewProvider 
+      v-model:show="showAddProviderDialog"
+      :metadata="metadata"
+      @select-template="selectProviderTemplate"
+    />
 
     <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') }} {{ newSelectedProviderName }} {{ tm('dialogs.config.provider') }}</span>
-        </v-card-title>
-
+      <v-card :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') +  ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
         <v-card-text class="py-4">
           <AstrBotConfig
             :iterable="newSelectedProviderConfig"
             :metadata="metadata['provider_group']?.metadata"
             metadataKey="provider"
+            :is-editing="updatingMode"
           />
         </v-card-text>
 
@@ -244,49 +182,6 @@
           </v-btn>
           <v-btn color="primary" @click="newProvider" :loading="loading">
             {{ tm('dialogs.config.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 设置对话框 -->
-    <v-dialog v-model="showSettingsDialog" max-width="600px">
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-          <v-icon color="white" class="me-2">mdi-cog</v-icon>
-          <span>{{ tm('dialogs.settings.title') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="showSettingsDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4">
-          <v-list>
-            <v-list-item>
-              <v-switch
-                style="padding: 12px;"
-                v-model="sessionSeparationEnabled"
-                color="primary"
-                :loading="sessionSettingLoading"
-                @change="updateSessionSeparation"
-                hide-details
-              >
-                <template v-slot:label>
-                  <div>
-                    <div class="text-subtitle-1">{{ tm('dialogs.settings.sessionSeparation.title') }}</div>
-                    <div class="text-caption text-medium-emphasis">{{ tm('dialogs.settings.sessionSeparation.description') }}</div>
-                  </div>
-                </template>
-              </v-switch>
-            </v-list-item>
-          </v-list>
-        </v-card-text>
-
-        <v-card-actions class="pa-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="showSettingsDialog = false">
-            {{ tm('dialogs.settings.close') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -343,7 +238,9 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import AddNewProvider from '@/components/provider/AddNewProvider.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { getProviderIcon } from '@/utils/providerUtils';
 
 export default {
   name: 'ProviderPage',
@@ -351,7 +248,8 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCard
+    ItemCard,
+    AddNewProvider
   },
   setup() {
     const { tm } = useModuleI18n('features/provider');
@@ -363,11 +261,6 @@ export default {
       fetched: false,
       metadata: {},
       showProviderCfg: false,
-
-      // 设置对话框相关
-      showSettingsDialog: false,
-      sessionSeparationEnabled: false,
-      sessionSettingLoading: false,
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
@@ -389,17 +282,16 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
-      
+
       // 显示状态部分
       showStatus: false,
-      
+
       // 供应商状态相关
       providerStatuses: [],
       loadingStatus: false,
 
       // 新增提供商对话框相关
       showAddProviderDialog: false,
-      activeProviderTab: 'chat_completion',
 
       // 添加提供商类型分类
       activeProviderTypeTab: 'all',
@@ -411,6 +303,7 @@ export default {
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
         "dify": "chat_completion",
+        "coze": "chat_completion",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",
@@ -456,17 +349,16 @@ export default {
           'chat_completion': this.tm('providers.tabs.chatCompletion'),
           'speech_to_text': this.tm('providers.tabs.speechToText'),
           'text_to_speech': this.tm('providers.tabs.textToSpeech'),
-          'embedding': this.tm('providers.tabs.embedding')
+          'embedding': this.tm('providers.tabs.embedding'),
+          'rerank': this.tm('providers.tabs.rerank')
         },
         success: {
           update: this.tm('messages.success.update'),
           add: this.tm('messages.success.add'),
           delete: this.tm('messages.success.delete'),
           statusUpdate: this.tm('messages.success.statusUpdate'),
-          sessionSeparation: this.tm('messages.success.sessionSeparation')
         },
         error: {
-          sessionSeparation: this.tm('messages.error.sessionSeparation'),
           fetchStatus: this.tm('messages.error.fetchStatus')
         },
         confirm: {
@@ -479,7 +371,7 @@ export default {
         }
       };
     },
-    
+
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
       if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
@@ -491,7 +383,7 @@ export default {
         if (provider.provider_type) {
           return provider.provider_type === this.activeProviderTypeTab;
         }
-        
+
         // 否则使用映射关系
         const mappedType = this.oldVersionProviderTypeMapping[provider.type];
         return mappedType === this.activeProviderTypeTab;
@@ -501,7 +393,6 @@ export default {
 
   mounted() {
     this.getConfig();
-    this.getSessionSeparationStatus();
   },
 
   methods: {
@@ -515,6 +406,9 @@ export default {
       });
     },
 
+    // 从工具函数导入
+    getProviderIcon,
+
     // 获取空列表文本
     getEmptyText() {
       if (this.activeProviderTypeTab === 'all') {
@@ -524,64 +418,9 @@ export default {
       }
     },
 
-    // 按提供商类型获取模板列表
-    getTemplatesByType(type) {
-      const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
-      const filtered = {};
-
-      for (const [name, template] of Object.entries(templates)) {
-        if (template.provider_type === type) {
-          filtered[name] = template;
-        }
-      }
-
-      return filtered;
-    },
-
-    // 获取提供商类型对应的图标
-    getProviderIcon(type) {
-      const icons = {
-        'OpenAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
-        'Azure OpenAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
-        'Whisper': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
-        'xAI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/xai.svg',
-        'Anthropic': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/anthropic.svg',
-        'Ollama': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ollama.svg',
-        'Gemini': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/gemini-color.svg',
-        'Gemini(OpenAI兼容)': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/gemini-color.svg',
-        'DeepSeek': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/deepseek.svg',
-        '智谱 AI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/zhipu.svg',
-        '硅基流动': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/siliconcloud.svg',
-        'Kimi': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/kimi.svg',
-        'PPIO派欧云': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ppio.svg',
-        'Dify': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/dify-color.svg',
-        '阿里云百炼': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/alibabacloud-color.svg',
-        'FastGPT': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fastgpt-color.svg',
-        'LM Studio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/lmstudio.svg',
-        'FishAudio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fishaudio.svg',
-        'Azure': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/azure.svg',
-        'MiniMax': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/minimax.svg',
-        '302.AI': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302-color.svg',
-      };
-      for (const key in icons) {
-        if (type.startsWith(key)) {
-          return icons[key];
-        }
-      }
-      return ''
-    },
-
     // 获取Tab类型的中文名称
     getTabTypeName(tabType) {
       return this.messages.tabTypes[tabType] || tabType;
-    },
-
-    // 获取提供商简介
-    getProviderDescription(template, name) {
-      if (name == 'OpenAI') {
-        return this.tm('providers.description.openai', { type: template.type });
-      }
-      return this.tm('providers.description.default', { type: template.type });
     },
 
     // 选择提供商模板
@@ -592,12 +431,6 @@ export default {
       this.newSelectedProviderConfig = JSON.parse(JSON.stringify(
         this.metadata['provider_group']?.metadata?.provider?.config_template[name] || {}
       ));
-      this.showAddProviderDialog = false;
-    },
-
-    // 废弃旧方法，保留为兼容
-    addFromDefaultConfigTmpl(index) {
-      this.selectProviderTemplate(index[0]);
     },
 
     configExistingProvider(provider) {
@@ -632,15 +465,22 @@ export default {
         for (let key in reference) {
           if (typeof reference[key] === 'object' && reference[key] !== null) {
             if (!(key in target)) {
-              target[key] = Array.isArray(reference[key]) ? [] : {};
+              // 如果target中没有这个key
+              if (Array.isArray(reference[key])) {
+                // 复制
+                target[key] = [...reference[key]]
+              } else {
+                target[key] = {};
+              }
             }
-            mergeConfigWithOrder(
-              target[key],
-              source && source[key] ? source[key] : {},
-              reference[key]
-            );
+            if (!Array.isArray(reference[key])) {
+              mergeConfigWithOrder(
+                target[key],
+                source && source[key] ? source[key] : {},
+                reference[key]
+              );
+            }
           } else if (!(key in target)) {
-            // 只有当target中不存在该键时才从reference复制
             target[key] = reference[key];
           }
         }
@@ -701,6 +541,40 @@ export default {
       }
     },
 
+    async copyProvider(providerToCopy) {
+      console.log('copyProvider triggered for:', providerToCopy);
+      // 1. 创建深拷贝
+      const newProviderConfig = JSON.parse(JSON.stringify(providerToCopy));
+
+      // 2. 生成唯一的 ID
+      const generateUniqueId = (baseId) => {
+        let newId = `${baseId}_copy`;
+        let counter = 1;
+        const existingIds = this.config_data.provider.map(p => p.id);
+        while (existingIds.includes(newId)) {
+          newId = `${baseId}_copy_${counter}`;
+          counter++;
+        }
+        return newId;
+      };
+      newProviderConfig.id = generateUniqueId(providerToCopy.id);
+
+      // 3. 设置为禁用状态，等待用户手动开启
+      newProviderConfig.enable = false;
+
+      this.loading = true;
+      try {
+        // 4. 调用后端接口创建
+        const res = await axios.post('/api/config/provider/new', newProviderConfig);
+        this.showSuccess(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`);
+        this.getConfig(); // 5. 刷新列表
+      } catch (err) {
+        this.showError(err.response?.data?.message || err.message);
+      } finally {
+        this.loading = false;
+      }
+    },
+
     deleteProvider(provider) {
       if (confirm(this.tm('messages.confirm.delete', { id: provider.id }))) {
         axios.post('/api/config/provider/delete', { id: provider.id }).then((res) => {
@@ -727,32 +601,6 @@ export default {
       });
     },
 
-    // 获取会话隔离配置状态
-    getSessionSeparationStatus() {
-      axios.get('/api/config/provider/get_session_seperate').then((res) => {
-        if (res.data && res.data.status === 'ok') {
-          this.sessionSeparationEnabled = res.data.data.enable;
-        }
-      }).catch((err) => {
-        this.showError(err.response?.data?.message || this.messages.error.sessionSeparation);
-      });
-    },
-
-    // 更新会话隔离配置
-    updateSessionSeparation() {
-      this.sessionSettingLoading = true;
-      axios.post('/api/config/provider/set_session_seperate', {
-        enable: this.sessionSeparationEnabled
-      }).then((res) => {
-        this.showSuccess(res.data.message || this.messages.success.sessionSeparation);
-        this.sessionSettingLoading = false;
-      }).catch((err) => {
-        this.sessionSeparationEnabled = !this.sessionSeparationEnabled; // 发生错误时回滚状态
-        this.showError(err.response?.data?.message || err.message);
-        this.sessionSettingLoading = false;
-      });
-    },
-
     showSuccess(message) {
       this.save_message = message;
       this.save_message_success = "success";
@@ -764,14 +612,14 @@ export default {
       this.save_message_success = "error";
       this.save_message_snack = true;
     },
-    
+
     // 获取供应商状态
     async fetchProviderStatus() {
       if (this.loadingStatus) return;
 
       this.loadingStatus = true;
       this.showStatus = true; // 自动展开状态部分
-      
+
       // 1. 立即初始化UI为pending状态
       this.providerStatuses = this.config_data.provider.map(p => ({
         id: p.id,
@@ -782,6 +630,19 @@ export default {
 
       // 2. 为每个provider创建一个并发的测试请求
       const promises = this.config_data.provider.map(p => {
+        if (!p.enable) {
+          const index = this.providerStatuses.findIndex(s => s.id === p.id);
+          if (index !== -1) {
+            const disabledStatus = {
+              ...this.providerStatuses[index],
+              status: 'unavailable',
+              error: '该提供商未被用户启用'
+            };
+            this.providerStatuses.splice(index, 1, disabledStatus);
+          }
+          return Promise.resolve();
+        }
+
         return axios.get(`/api/config/provider/check_one?id=${p.id}`)
           .then(res => {
             if (res.data && res.data.status === 'ok') {
@@ -875,86 +736,8 @@ export default {
   padding-top: 8px;
 }
 
-.provider-card {
-  transition: all 0.3s ease;
-  height: 100%;
-  cursor: pointer;
-  overflow: hidden;
-  position: relative;
-}
-
-.provider-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
-  border-color: var(--v-primary-base);
-}
-
-.provider-card-content {
-  display: flex;
-  align-items: center;
-  height: 100px;
-  padding: 16px;
-  position: relative;
-  z-index: 2;
-}
-
-.provider-card-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.provider-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  padding: 0;
-}
-
-.provider-card-description {
-  padding: 0;
-  margin: 0;
-}
-
-.provider-card-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.provider-logo-img {
-  width: 60px;
-  height: 60px;
-  opacity: 0.6;
-  object-fit: contain;
-}
-
-.provider-logo-fallback {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--v-primary-base);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  opacity: 0.3;
-}
-
-.v-tabs {
-  border-radius: 8px;
-}
-
-.v-window {
-  border-radius: 4px;
+.status-card {
+  height: 120px;
+  overflow-y: auto;
 }
 </style>

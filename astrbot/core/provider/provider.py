@@ -1,20 +1,16 @@
 import abc
 from typing import List
-from typing import TypedDict, AsyncGenerator
-from astrbot.core.provider.func_tool_manager import FuncCall
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from typing import AsyncGenerator
+from astrbot.core.agent.tool import ToolSet
+from astrbot.core.provider.entities import (
+    LLMResponse,
+    ToolCallsResult,
+    ProviderType,
+    RerankResult,
+)
+from astrbot.core.provider.register import provider_cls_map
+from astrbot.core.db.po import Personality
 from dataclasses import dataclass
-
-
-class Personality(TypedDict):
-    prompt: str = ""
-    name: str = ""
-    begin_dialogs: List[str] = []
-    mood_imitation_dialogs: List[str] = []
-
-    # cache
-    _begin_dialogs_processed: List[dict] = []
-    _mood_imitation_dialogs_processed: str = ""
 
 
 @dataclass
@@ -22,6 +18,7 @@ class ProviderMeta:
     id: str
     model: str
     type: str
+    provider_type: ProviderType
 
 
 class AbstractProvider(abc.ABC):
@@ -40,10 +37,14 @@ class AbstractProvider(abc.ABC):
 
     def meta(self) -> ProviderMeta:
         """获取 Provider 的元数据"""
+        provider_type_name = self.provider_config["type"]
+        meta_data = provider_cls_map.get(provider_type_name)
+        provider_type = meta_data.provider_type if meta_data else None
         return ProviderMeta(
             id=self.provider_config["id"],
             model=self.get_model(),
-            type=self.provider_config["type"],
+            type=provider_type_name,
+            provider_type=provider_type,
         )
 
 
@@ -74,7 +75,7 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_models(self) -> List[str]:
+    async def get_models(self) -> List[str]:
         """获得支持的模型列表"""
         raise NotImplementedError()
 
@@ -84,7 +85,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: FuncCall = None,
+        func_tool: ToolSet = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
@@ -113,7 +114,7 @@ class Provider(AbstractProvider):
         prompt: str,
         session_id: str = None,
         image_urls: list[str] = None,
-        func_tool: FuncCall = None,
+        func_tool: ToolSet = None,
         contexts: list = None,
         system_prompt: str = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
@@ -199,4 +200,18 @@ class EmbeddingProvider(AbstractProvider):
     @abc.abstractmethod
     def get_dim(self) -> int:
         """获取向量的维度"""
+        ...
+
+
+class RerankProvider(AbstractProvider):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        super().__init__(provider_config)
+        self.provider_config = provider_config
+        self.provider_settings = provider_settings
+
+    @abc.abstractmethod
+    async def rerank(
+        self, query: str, documents: list[str], top_n: int | None = None
+    ) -> list[RerankResult]:
+        """获取查询和文档的重排序分数"""
         ...

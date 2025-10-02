@@ -1,10 +1,5 @@
 <template>
   <div class="dashboard-container">
-    <div class="dashboard-header">
-      <h1 class="dashboard-title">{{ t('title') }}</h1>
-      <div class="dashboard-subtitle">{{ t('subtitle') }}</div>
-    </div>
-    
     <v-slide-y-transition>
       <v-row v-if="noticeTitle && noticeContent" class="notice-row">
         <v-alert
@@ -166,29 +161,10 @@ export default {
   background-color: var(--v-theme-background);
   min-height: calc(100vh - 64px);
   border-radius: 10px;
-  
-}
-
-.dashboard-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.dashboard-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--v-theme-primaryText);
-  margin-bottom: 4px;
-}
-
-.dashboard-subtitle {
-  font-size: 14px;
-  color: var(--v-theme-secondaryText);
 }
 
 .notice-row {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .dashboard-alert {

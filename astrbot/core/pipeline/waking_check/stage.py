@@ -1,13 +1,17 @@
-from ..stage import Stage, register_stage
-from ..context import PipelineContext
+from typing import AsyncGenerator, Union
+
 from astrbot import logger
-from typing import Union, AsyncGenerator
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult, MessageChain
 from astrbot.core.message.components import At, AtAll, Reply
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
-from astrbot.core.star.star import star_map
+from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.session_plugin_manager import SessionPluginManager
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -109,8 +113,17 @@ class WakingCheckStage(Stage):
         activated_handlers = []
         handlers_parsed_params = {}  # 注册了指令的 handler
 
+        # 将 plugins_name 设置到 event 中
+        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        if enabled_plugins_name == ["*"]:
+            # 如果是 *，则表示所有插件都启用
+            event.plugins_name = None
+        else:
+            event.plugins_name = enabled_plugins_name
+        logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
+
         for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent
+            EventType.AdapterMessageEvent, plugins_name=event.plugins_name
         ):
             # filter 需满足 AND 逻辑关系
             passed = True
@@ -158,13 +171,22 @@ class WakingCheckStage(Stage):
                 is_wake = True
                 event.is_wake = True
 
-                activated_handlers.append(handler)
-                if "parsed_params" in event.get_extra():
-                    handlers_parsed_params[handler.handler_full_name] = event.get_extra(
-                        "parsed_params"
-                    )
+                is_group_cmd_handler = any(
+                    isinstance(f, CommandGroupFilter) for f in handler.event_filters
+                )
+                if not is_group_cmd_handler:
+                    activated_handlers.append(handler)
+                    if "parsed_params" in event.get_extra(default={}):
+                        handlers_parsed_params[handler.handler_full_name] = (
+                            event.get_extra("parsed_params")
+                        )
 
             event._extras.pop("parsed_params", None)
+
+        # 根据会话配置过滤插件处理器
+        activated_handlers = SessionPluginManager.filter_handlers_by_session(
+            event, activated_handlers
+        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

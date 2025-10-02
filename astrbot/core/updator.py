@@ -56,9 +56,7 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
                 if os.name == "nt":
-                    args = [
-                        f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]
-                    ]
+                    args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
                 else:
                     args = sys.argv[1:]
                 os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
@@ -68,9 +66,13 @@ class AstrBotUpdator(RepoZipUpdator):
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e
 
-    async def check_update(self, url: str, current_version: str) -> ReleaseInfo:
+    async def check_update(
+        self, url: str, current_version: str, consider_prerelease: bool = True
+    ) -> ReleaseInfo:
         """检查更新"""
-        return await super().check_update(self.ASTRBOT_RELEASE_API, VERSION)
+        return await super().check_update(
+            self.ASTRBOT_RELEASE_API, VERSION, consider_prerelease
+        )
 
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
@@ -89,7 +91,6 @@ class AstrBotUpdator(RepoZipUpdator):
             file_url = update_data[0]["zipball_url"]
         elif str(version).startswith("v"):
             # 更新到指定版本
-            logger.info(f"正在更新到指定版本: {version}")
             for data in update_data:
                 if data["tag_name"] == version:
                     file_url = data["zipball_url"]
@@ -98,8 +99,8 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            logger.info(f"正在尝试更新到指定 commit: {version}")
-            file_url = "https://github.com/Soulter/AstrBot/archive/" + version + ".zip"
+            file_url = f"https://github.com/Soulter/AstrBot/archive/{version}.zip"
+        logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
         if proxy:
             proxy = proxy.removesuffix("/")
@@ -107,6 +108,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
         try:
             await download_file(file_url, "temp.zip")
+            logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e

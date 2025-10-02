@@ -38,6 +38,7 @@ export class I18nLoader {
       { name: 'features/chat', path: 'features/chat.json' },
       { name: 'features/extension', path: 'features/extension.json' },
       { name: 'features/conversation', path: 'features/conversation.json' },
+      { name: 'features/session-management', path: 'features/session-management.json' },
       { name: 'features/tooluse', path: 'features/tool-use.json' },
       { name: 'features/provider', path: 'features/provider.json' },
       { name: 'features/platform', path: 'features/platform.json' },
@@ -51,6 +52,8 @@ export class I18nLoader {
       { name: 'features/alkaid/index', path: 'features/alkaid/index.json' },
       { name: 'features/alkaid/knowledge-base', path: 'features/alkaid/knowledge-base.json' },
       { name: 'features/alkaid/memory', path: 'features/alkaid/memory.json' },
+      { name: 'features/persona', path: 'features/persona.json' },
+      { name: 'features/migration', path: 'features/migration.json' },
       
       // 消息模块
       { name: 'messages/errors', path: 'messages/errors.json' },

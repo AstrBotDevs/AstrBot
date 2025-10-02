@@ -1,0 +1,123 @@
+import asyncio
+import re
+from typing import AsyncGenerator
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.platform import PlatformMetadata, AstrBotMessage
+from astrbot.api.message_components import Plain
+
+from .misskey_utils import (
+    serialize_message_chain,
+    resolve_visibility_from_raw_message,
+    is_valid_user_session_id,
+    is_valid_room_session_id,
+    add_at_mention_if_needed,
+    extract_user_id_from_session_id,
+    extract_room_id_from_session_id,
+)
+
+
+class MisskeyPlatformEvent(AstrMessageEvent):
+    def __init__(
+        self,
+        message_str: str,
+        message_obj: AstrBotMessage,
+        platform_meta: PlatformMetadata,
+        session_id: str,
+        client,
+    ):
+        super().__init__(message_str, message_obj, platform_meta, session_id)
+        self.client = client
+
+    def _is_system_command(self, message_str: str) -> bool:
+        """检测是否为系统指令"""
+        if not message_str or not message_str.strip():
+            return False
+
+        system_prefixes = ["/", "!", "#", ".", "^"]
+        message_trimmed = message_str.strip()
+
+        return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
+
+    async def send(self, message: MessageChain):
+        content, has_at = serialize_message_chain(message.chain)
+
+        if not content:
+            logger.debug("[MisskeyEvent] 内容为空，跳过发送")
+            return
+
+        try:
+            original_message_id = getattr(self.message_obj, "message_id", None)
+            raw_message = getattr(self.message_obj, "raw_message", {})
+
+            if raw_message and not has_at:
+                user_data = raw_message.get("user", {})
+                user_info = {
+                    "username": user_data.get("username", ""),
+                    "nickname": user_data.get("name", user_data.get("username", "")),
+                }
+                content = add_at_mention_if_needed(content, user_info, has_at)
+
+            # 根据会话类型选择发送方式
+            if hasattr(self.client, "send_message") and is_valid_user_session_id(
+                self.session_id
+            ):
+                user_id = extract_user_id_from_session_id(self.session_id)
+                await self.client.send_message(user_id, content)
+            elif hasattr(self.client, "send_room_message") and is_valid_room_session_id(
+                self.session_id
+            ):
+                room_id = extract_room_id_from_session_id(self.session_id)
+                await self.client.send_room_message(room_id, content)
+            elif original_message_id and hasattr(self.client, "create_note"):
+                visibility, visible_user_ids = resolve_visibility_from_raw_message(
+                    raw_message
+                )
+                await self.client.create_note(
+                    content,
+                    reply_id=original_message_id,
+                    visibility=visibility,
+                    visible_user_ids=visible_user_ids,
+                )
+            elif hasattr(self.client, "create_note"):
+                logger.debug("[MisskeyEvent] 创建新帖子")
+                await self.client.create_note(content)
+
+            await super().send(message)
+
+        except Exception as e:
+            logger.error(f"[MisskeyEvent] 发送失败: {e}")
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
+        if not use_fallback:
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if not buffer:
+                return
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
+        buffer = ""
+        pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
+
+        async for chain in generator:
+            if isinstance(chain, MessageChain):
+                for comp in chain.chain:
+                    if isinstance(comp, Plain):
+                        buffer += comp.text
+                        if any(p in buffer for p in "。？！~…"):
+                            buffer = await self.process_buffer(buffer, pattern)
+                    else:
+                        await self.send(MessageChain(chain=[comp]))
+                        await asyncio.sleep(1.5)  # 限速
+
+        if buffer.strip():
+            await self.send(MessageChain([Plain(buffer)]))
+        return await super().send_streaming(generator, use_fallback)

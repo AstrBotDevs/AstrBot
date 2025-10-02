@@ -3,11 +3,12 @@ import time
 import traceback
 from typing import AsyncGenerator, Union
 
-from astrbot.core import html_renderer, logger, file_token_service
+from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -35,6 +36,7 @@ class ResultDecorateStage(Stage):
             self.t2i_word_threshold = 150
         self.t2i_strategy = ctx.astrbot_config["t2i_strategy"]
         self.t2i_use_network = self.t2i_strategy == "remote"
+        self.t2i_active_template = ctx.astrbot_config["t2i_active_template"]
 
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
             "forward_threshold"
@@ -63,9 +65,10 @@ class ResultDecorateStage(Stage):
         ]
         self.content_safe_check_stage = None
         if self.content_safe_check_reply:
-            for stage in registered_stages:
-                if stage.__class__.__name__ == "ContentSafetyCheckStage":
-                    self.content_safe_check_stage = stage
+            for stage_cls in registered_stages:
+                if stage_cls.__name__ == "ContentSafetyCheckStage":
+                    self.content_safe_check_stage = stage_cls()
+                    await self.content_safe_check_stage.initialize(ctx)
 
     async def process(
         self, event: AstrMessageEvent
@@ -97,7 +100,7 @@ class ResultDecorateStage(Stage):
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnDecoratingResultEvent, platform_id=event.get_platform_id()
+            EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name
         )
         for handler in handlers:
             try:
@@ -176,11 +179,17 @@ class ResultDecorateStage(Stage):
             tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin
             )
+
             if (
                 self.ctx.astrbot_config["provider_tts_settings"]["enable"]
                 and result.is_llm_result()
-                and tts_provider
+                and SessionServiceManager.should_process_tts_request(event)
             ):
+                if not tts_provider:
+                    logger.warning(
+                        f"会话 {event.unified_msg_origin} 未配置文本转语音模型。"
+                    )
+                    return
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
@@ -243,7 +252,10 @@ class ResultDecorateStage(Stage):
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(
-                            plain_str, return_url=True, use_network=self.t2i_use_network
+                            plain_str,
+                            return_url=True,
+                            use_network=self.t2i_use_network,
+                            template_name=self.t2i_active_template,
                         )
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")

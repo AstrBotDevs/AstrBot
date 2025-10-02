@@ -22,7 +22,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             timeout=int(provider_config.get("timeout", 20)),
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
-        self.dimension = provider_config.get("embedding_dimensions", 1536)
+        self.dimension = provider_config.get("embedding_dimensions", 1024)
 
     async def get_embedding(self, text: str) -> list[float]:
         """

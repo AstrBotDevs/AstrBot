@@ -1,19 +1,24 @@
-import logging
-import jwt
 import asyncio
+import logging
 import os
 import socket
+
+import jwt
 import psutil
-from astrbot.core.config.default import VERSION
-from quart import Quart, request, jsonify, g
+from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from .routes import *
-from .routes.route import RouteContext, Response
+
 from astrbot.core import logger
+from astrbot.core.config.default import VERSION
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.io import get_local_ip_addresses
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import get_local_ip_addresses
+
+from .routes import *
+from .routes.route import Response, RouteContext
+from .routes.session_management import SessionManagementRoute
+from .routes.t2i import T2iRoute
 
 APP: Quart = None
 
@@ -24,10 +29,19 @@ class AstrBotDashboard:
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase,
         shutdown_event: asyncio.Event,
+        webui_dir: str | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
-        self.data_path = os.path.abspath(os.path.join(get_astrbot_data_path(), "dist"))
+
+        # 参数指定webui目录
+        if webui_dir and os.path.exists(webui_dir):
+            self.data_path = os.path.abspath(webui_dir)
+        else:
+            self.data_path = os.path.abspath(
+                os.path.join(get_astrbot_data_path(), "dist")
+            )
+
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa
         self.app.config["MAX_CONTENT_LENGTH"] = (
@@ -53,6 +67,11 @@ class AstrBotDashboard:
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
+        self.session_management_route = SessionManagementRoute(
+            self.context, db, core_lifecycle
+        )
+        self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
+        self.t2i_route = T2iRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

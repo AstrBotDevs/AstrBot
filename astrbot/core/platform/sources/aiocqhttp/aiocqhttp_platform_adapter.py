@@ -182,11 +182,13 @@ class AiocqhttpAdapter(Platform):
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
-            str(event.sender["user_id"]), event.sender["nickname"]
+            str(event.sender["user_id"]),
+            event.sender.get("card") or event.sender.get("nickname", "N/A"),
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
+            abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
@@ -272,8 +274,14 @@ class AiocqhttpAdapter(Platform):
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
+                            new_event = Event.from_payload(reply_event_data)
+                            if not new_event:
+                                logger.error(
+                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}"
+                                )
+                                continue
                             abm_reply = await self._convert_handle_message_event(
-                                Event.from_payload(reply_event_data), get_reply=False
+                                new_event, get_reply=False
                             )
 
                             reply_seg = Reply(
@@ -302,13 +310,22 @@ class AiocqhttpAdapter(Platform):
                             continue
 
                         at_info = await self.bot.call_action(
-                            action="get_stranger_info",
+                            action="get_group_member_info",
+                            group_id=event.group_id,
                             user_id=int(m["data"]["qq"]),
+                            no_cache=False,
                         )
                         if at_info:
-                            nickname = at_info.get("nick", "") or at_info.get(
-                                "nickname", ""
-                            )
+                            nickname = at_info.get("card", "")
+                            if nickname == "":
+                                at_info = await self.bot.call_action(
+                                    action="get_stranger_info",
+                                    user_id=int(m["data"]["qq"]),
+                                    no_cache=False,
+                                )
+                                nickname = at_info.get("nick", "") or at_info.get(
+                                    "nickname", ""
+                                )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
                             abm.message.append(

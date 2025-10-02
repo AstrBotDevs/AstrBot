@@ -10,7 +10,8 @@
             {{ tm('subtitle') }}
           </p>
         </div>
-        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true" rounded="xl" size="x-large">
+        <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddPlatformDialog = true"
+          rounded="xl" size="x-large">
           {{ tm('addAdapter') }}
         </v-btn>
       </v-row>
@@ -25,14 +26,9 @@
 
         <v-row v-else>
           <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card 
-              :item="platform" 
-              title-field="id" 
-              enabled-field="enable"
-              :bglogo="getPlatformIcon(platform.type || platform.id)"
-              @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" 
-              @edit="editPlatform">
+            <item-card :item="platform" title-field="id" enabled-field="enable"
+              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
+              @delete="deletePlatform" @edit="editPlatform">
             </item-card>
           </v-col>
         </v-row>
@@ -61,59 +57,13 @@
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
-    <v-dialog v-model="showAddPlatformDialog" max-width="900px" min-height="80%">
-      <v-card class="platform-selection-dialog">
-        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
-          <span>{{ tm('dialog.addPlatform') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="showAddPlatformDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4" style="overflow-y: auto;">
-          <v-row class="mt-1">
-            <v-col v-for="(template, name) in metadata['platform_group']?.metadata?.platform?.config_template || {}"
-              :key="name" cols="12" sm="6" md="6">
-              <v-card variant="outlined" hover class="platform-card" @click="selectPlatformTemplate(name)">
-                <div class="platform-card-content">
-                  <div class="platform-card-text">
-                    <v-card-title class="platform-card-title">{{ tm('dialog.connectTitle', { name }) }}</v-card-title>
-                    <v-card-text class="text-caption text-medium-emphasis platform-card-description">
-                      {{ getPlatformDescription(template, name) }}
-                    </v-card-text>
-                  </div>
-                  <div class="platform-card-logo">
-                    <img :src="getPlatformIcon(template.type)" v-if="getPlatformIcon(template.type)" class="platform-logo-img">
-                    <div v-else class="platform-logo-fallback">
-                      {{ name[0].toUpperCase() }}
-                    </div>
-                  </div>
-                </div>
-              </v-card>
-            </v-col>
-            <v-col
-              v-if="Object.keys(metadata['platform_group']?.metadata?.platform?.config_template || {}).length === 0"
-              cols="12">
-              <v-alert type="info" variant="tonal">
-                {{ tm('dialog.noTemplates') }}
-              </v-alert>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata"
+      @select-template="selectPlatformTemplate" />
 
     <!-- 配置对话框 -->
     <v-dialog v-model="showPlatformCfg" persistent width="900px" max-width="90%">
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? tm('dialog.edit') : tm('dialog.add') }} {{ newSelectedPlatformName }} {{
-            tm('dialog.adapter') }}</span>
-        </v-card-title>
-
+      <v-card
+        :title="updatingMode ? tm('dialog.edit') : tm('dialog.add') + ` ${newSelectedPlatformName} ` + tm('dialog.adapter')">
         <v-card-text class="py-4">
           <v-row>
             <v-col cols="12">
@@ -151,8 +101,6 @@
       {{ save_message }}
     </v-snackbar>
 
-    <WaitingForRestart ref="wfr"></WaitingForRestart>
-
     <!-- ID冲突确认对话框 -->
     <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
       <v-card>
@@ -170,6 +118,30 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- 安全警告对话框 -->
+    <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
+      <v-card>
+        <v-card-title>
+          {{ tm('dialog.securityWarning.title') }}
+        </v-card-title>
+        <v-card-text class="py-4">
+          <p>{{ tm('dialog.securityWarning.aiocqhttpTokenMissing') }}</p>
+          <span><a
+              href="https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html#%E9%99%84%E5%BD%95-%E5%A2%9E%E5%BC%BA%E8%BF%9E%E6%8E%A5%E5%AE%89%E5%85%A8%E6%80%A7"
+              target="_blank">{{ tm('dialog.securityWarning.learnMore') }}</a></span>
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
+            无视警告并继续创建
+          </v-btn>
+          <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
+            重新修改
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -179,8 +151,10 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
 
 export default {
   name: 'PlatformPage',
@@ -188,7 +162,8 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCard
+    ItemCard,
+    AddNewPlatform
   },
   setup() {
     const { t } = useI18n();
@@ -236,16 +211,26 @@ export default {
       conflictId: '',
       idConflictResolve: null,
 
+      // OneBot Empty Token Warning #2639
+      showOneBotEmptyTokenWarnDialog: false,
+      oneBotEmptyTokenWarningResolve: null,
+
       store: useCommonStore()
     }
   },
 
   watch: {
     showIdConflictDialog(newValue) {
-      // 当对话框关闭时，如果 Promise 还在等待，则拒绝它以防止内存泄漏
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);
         this.idConflictResolve = null;
+      }
+    },
+
+    showOneBotEmptyTokenWarnDialog(newValue) {
+      if (!newValue && this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(true);
+        this.oneBotEmptyTokenWarningResolve = null;
       }
     }
   },
@@ -255,70 +240,20 @@ export default {
   },
 
   methods: {
-    openTutorial() {
-      const tutorialUrl = this.getTutorialLink(this.newSelectedPlatformConfig.type);
-      window.open(tutorialUrl, '_blank');
-    },
-
-    getPlatformIcon(name) {
+    // 从工具函数导入
+    getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
-      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[name];
+      const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
-        // 通过文件服务访问插件提供的 logo
+          // 通过文件服务访问插件提供的 logo
         return `/api/file/${template.logo_token}`;
       }
-      
-      // 原有的硬编码图标逻辑
-      if (name === 'aiocqhttp' || name === 'qq_official' || name === 'qq_official_webhook') {
-        return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-      } else if (name === 'wecom') {
-        return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-      } else if (name === 'gewechat' || name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
-        return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
-      } else if (name === 'lark') {
-        return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
-      } else if (name === 'dingtalk') {
-        return new URL('@/assets/images/platform_logos/dingtalk.svg', import.meta.url).href
-      } else if (name === 'telegram') {
-        return new URL('@/assets/images/platform_logos/telegram.svg', import.meta.url).href
-      } else if (name === 'discord') {
-        return new URL('@/assets/images/platform_logos/discord.svg', import.meta.url).href
-      } else if (name === 'slack') {
-        return new URL('@/assets/images/platform_logos/slack.svg', import.meta.url).href
-      } else if (name === 'kook') {
-        return new URL('@/assets/images/platform_logos/kook.png', import.meta.url).href
-      } else if (name === 'vocechat') {
-        return new URL('@/assets/images/platform_logos/vocechat.png', import.meta.url).href
-      }
+      return getPlatformIcon(platform_id);
     },
 
-    getTutorialLink(platform_type) {
-      let tutorial_map = {
-        "qq_official_webhook": "https://astrbot.app/deploy/platform/qqofficial/webhook.html",
-        "qq_official": "https://astrbot.app/deploy/platform/qqofficial/websockets.html",
-        "aiocqhttp": "https://astrbot.app/deploy/platform/aiocqhttp/napcat.html",
-        "wecom": "https://astrbot.app/deploy/platform/wecom.html",
-        "gewechat": "https://astrbot.app/deploy/platform/wechat/gewechat.html",
-        "lark": "https://astrbot.app/deploy/platform/lark.html",
-        "telegram": "https://astrbot.app/deploy/platform/telegram.html",
-        "dingtalk": "https://astrbot.app/deploy/platform/dingtalk.html",
-        "wechatpadpro": "https://astrbot.app/deploy/platform/wechat/wechatpadpro.html",
-        "weixin_official_account": "https://astrbot.app/deploy/platform/weixin-official-account.html",
-        "discord": "https://astrbot.app/deploy/platform/discord.html",
-        "slack": "https://astrbot.app/deploy/platform/slack.html",
-        "kook": "https://astrbot.app/deploy/platform/kook.html",
-        "vocechat": "https://astrbot.app/deploy/platform/vocechat.html",
-      }
-      return tutorial_map[platform_type] || "https://docs.astrbot.app";
-    },
-
-    getPlatformDescription(template, name) {
-      // special judge for community platforms
-      if (name.includes('vocechat')) {
-        return "由 @HikariFroya 提供。";
-      } else if (name.includes('kook')) {
-        return "由 @wuyan1003 提供。"
-      }
+    openTutorial() {
+      const tutorialUrl = getTutorialLink(this.newSelectedPlatformConfig.type);
+      window.open(tutorialUrl, '_blank');
     },
 
     getConfig() {
@@ -331,7 +266,7 @@ export default {
       });
     },
 
-    // 添加一个新方法来选择平台模板
+    // 选择平台模板
     selectPlatformTemplate(name) {
       this.newSelectedPlatformName = name;
       this.showPlatformCfg = true;
@@ -339,7 +274,6 @@ export default {
       this.newSelectedPlatformConfig = JSON.parse(JSON.stringify(
         this.metadata['platform_group']?.metadata?.platform?.config_template[name] || {}
       ));
-      this.showAddPlatformDialog = false;
     },
 
     addFromDefaultConfigTmpl(index) {
@@ -361,23 +295,37 @@ export default {
     newPlatform() {
       this.loading = true;
       if (this.updatingMode) {
-        axios.post('/api/config/platform/update', {
-          id: this.newSelectedPlatformName,
-          config: this.newSelectedPlatformConfig
-        }).then((res) => {
-          this.loading = false;
-          this.showPlatformCfg = false;
-          this.getConfig();
-          this.$refs.wfr.check();
-          this.showSuccess(res.data.message || this.messages.updateSuccess);
-        }).catch((err) => {
-          this.loading = false;
-          this.showError(err.response?.data?.message || err.message);
-        });
-        this.updatingMode = false;
+        if (this.newSelectedPlatformConfig.type === 'aiocqhttp') {
+          const token = this.newSelectedPlatformConfig.ws_reverse_token;
+          if (!token || token.trim() === '') {
+            this.showOneBotEmptyTokenWarning().then((continueWithWarning) => {
+              if (continueWithWarning) {
+                this.updatePlatform();
+              }
+            });
+            return;
+          }
+        }
+        this.updatePlatform();
       } else {
         this.savePlatform();
       }
+    },
+
+    updatePlatform() {
+      axios.post('/api/config/platform/update', {
+        id: this.newSelectedPlatformName,
+        config: this.newSelectedPlatformConfig
+      }).then((res) => {
+        this.loading = false;
+        this.showPlatformCfg = false;
+        this.getConfig();
+        this.showSuccess(res.data.message || this.messages.updateSuccess);
+      }).catch((err) => {
+        this.loading = false;
+        this.showError(err.response?.data?.message || err.message);
+      });
+      this.updatingMode = false;
     },
 
     async savePlatform() {
@@ -388,6 +336,17 @@ export default {
         if (!confirmed) {
           this.loading = false;
           return; // 如果用户取消，则中止保存
+        }
+      }
+
+      // 检查 aiocqhttp 适配器的安全设置
+      if (this.newSelectedPlatformConfig.type === 'aiocqhttp') {
+        const token = this.newSelectedPlatformConfig.ws_reverse_token;
+        if (!token || token.trim() === '') {
+          const continueWithWarning = await this.showOneBotEmptyTokenWarning();
+          if (!continueWithWarning) {
+            return;
+          }
         }
       }
 
@@ -418,11 +377,29 @@ export default {
       this.showIdConflictDialog = false;
     },
 
+    showOneBotEmptyTokenWarning() {
+      this.showOneBotEmptyTokenWarnDialog = true;
+      return new Promise((resolve) => {
+        this.oneBotEmptyTokenWarningResolve = resolve;
+      });
+    },
+
+    handleOneBotEmptyTokenWarningDismiss(continueWithWarning) {
+      this.showOneBotEmptyTokenWarnDialog = false;
+      if (this.oneBotEmptyTokenWarningResolve) {
+        this.oneBotEmptyTokenWarningResolve(continueWithWarning);
+        this.oneBotEmptyTokenWarningResolve = null;
+      }
+
+      if (!continueWithWarning) {
+        this.loading = false;
+      }
+    },
+
     deletePlatform(platform) {
       if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
         axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
           this.getConfig();
-          this.$refs.wfr.check();
           this.showSuccess(res.data.message || this.messages.deleteSuccess);
         }).catch((err) => {
           this.showError(err.response?.data?.message || err.message);
@@ -438,7 +415,6 @@ export default {
         config: platform
       }).then((res) => {
         this.getConfig();
-        this.$refs.wfr.check();
         this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
         platform.enable = !platform.enable; // 发生错误时回滚状态
@@ -465,85 +441,5 @@ export default {
 .platform-page {
   padding: 20px;
   padding-top: 8px;
-}
-
-.platform-selection-dialog .v-card-title {
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-}
-
-.platform-card {
-  transition: all 0.3s ease;
-  height: 100%;
-  cursor: pointer;
-  overflow: hidden;
-  position: relative;
-}
-
-.platform-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
-  border-color: var(--v-primary-base);
-}
-
-.platform-card-content {
-  display: flex;
-  align-items: center;
-  height: 100px;
-  padding: 16px;
-  position: relative;
-  z-index: 2;
-}
-
-.platform-card-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.platform-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  padding: 0;
-}
-
-.platform-card-description {
-  padding: 0;
-  margin: 0;
-}
-
-.platform-card-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.platform-logo-img {
-  max-width: 60px;
-  max-height: 60px;
-  opacity: 0.6;
-  object-fit: contain;
-}
-
-.platform-logo-fallback {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--v-primary-base);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  opacity: 0.3;
 }
 </style>

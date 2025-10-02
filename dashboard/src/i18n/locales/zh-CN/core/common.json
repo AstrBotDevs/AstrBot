@@ -73,6 +73,7 @@
     "disabled": "已禁用",
     "delete": "删除",
     "edit": "编辑",
+    "copy": "复制",
     "noData": "暂无数据"
   }
-} 
+}

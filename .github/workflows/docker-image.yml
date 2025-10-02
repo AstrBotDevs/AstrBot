@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Pull The Codes
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Must be 0 so we can fetch tags
 
@@ -26,6 +26,33 @@ jobs:
       - name: Checkout to latest tag (only on manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
+
+      - name: Check if version is pre-release
+        id: check-prerelease
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            version="${{ steps.get-latest-tag.outputs.latest_tag }}"
+          else
+            version="${{ github.ref_name }}"
+          fi
+          if [[ "$version" == *"beta"* ]] || [[ "$version" == *"alpha"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Version $version is a pre-release, will not push latest tag"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Version $version is a stable release, will push latest tag"
+          fi
+
+      - name: Build Dashboard
+        run: |
+          cd dashboard
+          npm install
+          npm run build
+          mkdir -p dist/assets
+          echo $(git rev-parse HEAD) > dist/assets/version
+          cd ..
+          mkdir -p data
+          cp -r dashboard/dist data/
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v3
@@ -53,9 +80,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:latest
+            ${{ steps.check-prerelease.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest', secrets.DOCKER_HUB_USERNAME) || '' }}
             ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
-            ghcr.io/soulter/astrbot:latest
+            ${{ steps.check-prerelease.outputs.is_prerelease == 'false' && 'ghcr.io/soulter/astrbot:latest' || '' }}
             ghcr.io/soulter/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
 
       - name: Post build notifications

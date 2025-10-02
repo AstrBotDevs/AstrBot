@@ -11,6 +11,7 @@ import zhCNHeader from './locales/zh-CN/core/header.json';
 import zhCNChat from './locales/zh-CN/features/chat.json';
 import zhCNExtension from './locales/zh-CN/features/extension.json';
 import zhCNConversation from './locales/zh-CN/features/conversation.json';
+import zhCNSessionManagement from './locales/zh-CN/features/session-management.json';
 import zhCNToolUse from './locales/zh-CN/features/tool-use.json';
 import zhCNProvider from './locales/zh-CN/features/provider.json';
 import zhCNPlatform from './locales/zh-CN/features/platform.json';
@@ -24,6 +25,8 @@ import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
 import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
+import zhCNPersona from './locales/zh-CN/features/persona.json';
+import zhCNMigration from './locales/zh-CN/features/migration.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -39,6 +42,7 @@ import enUSHeader from './locales/en-US/core/header.json';
 import enUSChat from './locales/en-US/features/chat.json';
 import enUSExtension from './locales/en-US/features/extension.json';
 import enUSConversation from './locales/en-US/features/conversation.json';
+import enUSSessionManagement from './locales/en-US/features/session-management.json';
 import enUSToolUse from './locales/en-US/features/tool-use.json';
 import enUSProvider from './locales/en-US/features/provider.json';
 import enUSPlatform from './locales/en-US/features/platform.json';
@@ -52,6 +56,8 @@ import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
 import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
+import enUSPersona from './locales/en-US/features/persona.json';
+import enUSMigration from './locales/en-US/features/migration.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -71,6 +77,7 @@ export const translations = {
       chat: zhCNChat,
       extension: zhCNExtension,
       conversation: zhCNConversation,
+      'session-management': zhCNSessionManagement,
       tooluse: zhCNToolUse,
       provider: zhCNProvider,
       platform: zhCNPlatform,
@@ -85,7 +92,9 @@ export const translations = {
         index: zhCNAlkaidIndex,
         'knowledge-base': zhCNAlkaidKnowledgeBase,
         memory: zhCNAlkaidMemory
-      }
+      },
+      persona: zhCNPersona,
+      migration: zhCNMigration
     },
     messages: {
       errors: zhCNErrors,
@@ -105,6 +114,7 @@ export const translations = {
       chat: enUSChat,
       extension: enUSExtension,
       conversation: enUSConversation,
+      'session-management': enUSSessionManagement,
       tooluse: enUSToolUse,
       provider: enUSProvider,
       platform: enUSPlatform,
@@ -119,7 +129,9 @@ export const translations = {
         index: enUSAlkaidIndex,
         'knowledge-base': enUSAlkaidKnowledgeBase,
         memory: enUSAlkaidMemory
-      }
+      },
+      persona: enUSPersona,
+      migration: enUSMigration
     },
     messages: {
       errors: enUSErrors,
