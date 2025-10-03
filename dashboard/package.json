@@ -27,6 +27,7 @@
     "lodash": "4.17.21",
     "marked": "^15.0.7",
     "markdown-it": "^14.1.0",
+    "pinyin-pro": "^3.26.0",
     "pinia": "2.1.6",
     "remixicon": "3.5.0",
     "vee-validate": "4.11.3",

@@ -5,6 +5,7 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
+import { pinyin } from 'pinyin-pro';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
@@ -64,6 +65,32 @@ const showPluginFullName = ref(false);
 const marketSearch = ref("");
 const filterKeys = ['name', 'desc', 'author'];
 const refreshingMarket = ref(false);
+
+// 插件市场拼音搜索
+const normalizeStr = (s) => (s ?? '').toString().toLowerCase().trim();
+const toPinyinText = (s) => pinyin(s ?? '', { toneType: 'none' }).toLowerCase().replace(/\s+/g, '');
+const toInitials = (s) => pinyin(s ?? '', { pattern: 'first', toneType: 'none' }).toLowerCase().replace(/\s+/g, '');
+const marketCustomFilter = (value, query, item) => {
+  const q = normalizeStr(query);
+  if (!q) return true;
+
+  const candidates = new Set();
+  if (value != null) candidates.add(String(value));
+  if (item?.name) candidates.add(String(item.name));
+  if (item?.trimmedName) candidates.add(String(item.trimmedName));
+  if (item?.desc) candidates.add(String(item.desc));
+  if (item?.author) candidates.add(String(item.author));
+
+  for (const v of candidates) {
+    const nv = normalizeStr(v);
+    if (nv.includes(q)) return true;
+    const pv = toPinyinText(v);
+    if (pv.includes(q)) return true;
+    const iv = toInitials(v);
+    if (iv.includes(q)) return true;
+  }
+  return false;
+};
 
 const plugin_handler_info_headers = computed(() => [
   { title: tm('table.headers.eventType'), key: 'event_type_h' },
@@ -772,7 +799,7 @@ onMounted(async () => {
 
               <v-col cols="12" md="12" style="padding: 0px;">
                 <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
-                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
+                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys" :custom-filter="marketCustomFilter">
                   <template v-slot:item.name="{ item }">
                     <div class="d-flex align-center"
                       style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
