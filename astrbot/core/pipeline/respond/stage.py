@@ -190,6 +190,16 @@ class RespondStage(Stage):
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
 
+            # 将 Plain 为空的消息段移除
+            result.chain = [
+                comp
+                for comp in result.chain
+                if not (
+                    isinstance(comp, Comp.Plain)
+                    and (not comp.text or not comp.text.strip())
+                )
+            ]
+
             # 发送消息链
             # Record 需要强制单独发送
             need_separately = {ComponentType.Record}
