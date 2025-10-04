@@ -41,7 +41,7 @@ class Main(star.Star):
         self.tool_c = ToolCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
-        self.conversation_c = ConversationCommands(self.context)
+        self.conversation_c = ConversationCommands(self.context, self.ltm)
         self.provider_c = ProviderCommands(self.context)
         self.persona_c = PersonaCommands(self.context)
         self.alter_cmd_c = AlterCmdCommands(self.context)

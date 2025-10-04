@@ -6,6 +6,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.provider.sources.coze_source import ProviderCoze
 from astrbot.api import sp, logger
+from ..long_term_memory import LongTermMemory
 from typing import Union
 from enum import Enum
 
@@ -36,7 +37,7 @@ class RstScene(Enum):
 
 
 class ConversationCommands:
-    def __init__(self, context: star.Context, ltm=None):
+    def __init__(self, context: star.Context, ltm: LongTermMemory | None = None):
         self.context = context
         self.ltm = ltm
 
