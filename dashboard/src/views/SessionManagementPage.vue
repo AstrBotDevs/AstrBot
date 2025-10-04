@@ -345,6 +345,7 @@
 
 <script>
 import axios from 'axios'
+import { debounce } from 'lodash'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 export default {
@@ -953,10 +954,10 @@ export default {
     },
 
     // 处理搜索变化
-    handleSearchChange() {
+    handleSearchChange: debounce(function() {
       this.currentPage = 1; // 重置到第一页
       this.loadSessions();
-    },
+    }, 300),
 
     // 处理平台筛选变化
     handlePlatformChange() {
