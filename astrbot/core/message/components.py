@@ -813,7 +813,8 @@ class File(BaseMessageComponent):
         """下载文件"""
         download_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(download_dir, exist_ok=True)
-        file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+        fname = self.name if self.name else uuid.uuid4().hex
+        file_path = os.path.join(download_dir, fname)
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 

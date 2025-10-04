@@ -232,7 +232,9 @@ class AiocqhttpAdapter(Platform):
                     if m["data"].get("url") and m["data"].get("url").startswith("http"):
                         # Lagrange
                         logger.info("guessing lagrange")
-                        file_name = m["data"].get("file_name", "file")
+                        file_name = m["data"].get(
+                            "file_name", m["data"].get("file", "file")
+                        )
                         abm.message.append(File(name=file_name, url=m["data"]["url"]))
                     else:
                         try:
