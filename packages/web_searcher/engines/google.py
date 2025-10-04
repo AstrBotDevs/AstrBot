@@ -1,5 +1,5 @@
 import os
-from googlesearch import search
+from googlesearch.asearch import asearch
 
 from . import SearchEngine, SearchResult
 
@@ -14,14 +14,14 @@ class Google(SearchEngine):
     async def search(self, query: str, num_results: int) -> List[SearchResult]:
         results = []
         try:
-            ls = search(
+            ls = asearch(
                 query,
                 advanced=True,
                 num_results=num_results,
                 timeout=3,
                 proxy=self.proxy,
             )
-            for i in ls:
+            async for i in ls:
                 results.append(
                     SearchResult(title=i.title, url=i.url, snippet=i.description)
                 )
