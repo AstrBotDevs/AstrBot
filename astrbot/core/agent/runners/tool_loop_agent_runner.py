@@ -198,6 +198,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 func_tool = req.func_tool.get_func(func_tool_name)
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
+                if not func_tool:
+                    logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
+                    tool_call_result_blocks.append(
+                        ToolCallMessageSegment(
+                            role="tool",
+                            tool_call_id=func_tool_id,
+                            content=f"error: 未找到工具 {func_tool_name}",
+                        )
+                    )
+                    continue
+
                 try:
                     await self.agent_hooks.on_tool_start(
                         self.run_context, func_tool, func_tool_args
@@ -210,9 +221,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     run_context=self.run_context,
                     **func_tool_args,
                 )
-                async for resp in executor:
+
+                _final_resp: CallToolResult | None = None
+                async for resp in executor:  # type: ignore
                     if isinstance(resp, CallToolResult):
                         res = resp
+                        _final_resp = resp
                         if isinstance(res.content[0], TextContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
@@ -279,13 +293,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     chain=res.chain, type="tool_direct_result"
                                 )
                     else:
+                        # 不应该出现其他类型
                         logger.warning(
                             f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
                         )
 
                 try:
                     await self.agent_hooks.on_tool_end(
-                        self.run_context, func_tool, func_tool_args, None
+                        self.run_context, func_tool, func_tool_args, _final_resp
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
