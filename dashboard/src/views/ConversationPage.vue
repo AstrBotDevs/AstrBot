@@ -10,7 +10,7 @@
                         <v-col cols="12" sm="6" md="4">
                             <v-combobox v-model="platformFilter" :label="tm('filters.platform')"
                                 :items="availablePlatforms" chips multiple clearable variant="solo-filled" flat
-                                density="compact" hide-details :disabled="loading">
+                                density="compact" hide-details>
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" label>
                                         {{ item.title }}
@@ -21,8 +21,7 @@
 
                         <v-col cols="12" sm="6" md="4">
                             <v-select v-model="messageTypeFilter" :label="tm('filters.type')" :items="messageTypeItems"
-                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat
-                                :disabled="loading">
+                                chips multiple clearable variant="solo-filled" density="compact" hide-details flat>
                                 <template v-slot:selection="{ item }">
                                     <v-chip size="small" variant="solo-filled" label>
                                         {{ item.title }}
@@ -34,7 +33,7 @@
                         <v-col cols="12" sm="12" md="4">
                             <v-text-field v-model="search" prepend-inner-icon="mdi-magnify"
                                 :label="tm('filters.search')" hide-details density="compact" variant="solo-filled" flat
-                                clearable :disabled="loading"></v-text-field>
+                                clearable></v-text-field>
                         </v-col>
                     </v-row>
                     <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchConversations"
@@ -77,6 +76,10 @@
                             <v-chip size="small" label>
                                 {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
                             </v-chip>
+                        </template>
+
+                        <template v-slot:item.cid="{ item }">
+                            <span class="text-truncate">{{ item.cid || tm('status.unknown') }}</span>
                         </template>
 
                         <template v-slot:item.sessionId="{ item }">
@@ -313,6 +316,7 @@
 
 <script>
 import axios from 'axios';
+import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
@@ -417,8 +421,7 @@ export default {
     },
 
     created() {
-        // 创建一个防抖函数，避免频繁请求
-        this.debouncedApplyFilters = this.debounce(() => {
+        this.debouncedApplyFilters = debounce(() => {
             // 重置到第一页
             this.pagination.page = 1;
             this.fetchConversations();
@@ -430,13 +433,14 @@ export default {
         tableHeaders() {
             return [
                 { title: this.tm('table.headers.title'), key: 'title', sortable: true },
+                { title: '会话 ID', key: 'cid', sortable: true, width: '100px' },
                 {
                     title: this.tm('table.headers.sessionId'),
                     align: 'center',
                     children: [
                         { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
                         { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
-                        { title: '会话 ID', key: 'sessionId', sortable: true, width: '100px' },
+                        { title: '用户 ID', key: 'sessionId', sortable: true, width: '100px' },
                     ],
                 },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },
@@ -526,19 +530,6 @@ export default {
             });
         },
 
-        // 添加防抖函数
-        debounce(func, wait) {
-            let timeout;
-            return function () {
-                const context = this;
-                const args = arguments;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                    func.apply(context, args);
-                }, wait);
-            };
-        },
-
         // 处理表格选项变更（页面大小等）
         handleTableOptions(options) {
             // 处理页面大小变更
@@ -579,83 +570,93 @@ export default {
         },
 
         // 获取对话列表
-        async fetchConversations() {
-            this.loading = true;
-            try {
-                // 准备请求参数，包含分页和筛选条件
-                const params = {
-                    page: this.pagination.page,
-                    page_size: this.pagination.page_size
-                };
+        fetchConversations: (() => {
+            let controller = new AbortController();
 
-                // 添加筛选条件 - 处理combobox的混合数据格式
-                if (this.platformFilter.length > 0) {
-                    const platforms = this.platformFilter.map(item =>
-                        typeof item === 'object' ? item.value : item
-                    );
-                    params.platforms = platforms.join(',');
-                }
+            return async function () {
+                // 新请求前停止之前的请求
+                controller?.abort()
+                controller = new AbortController();
 
-                if (this.messageTypeFilter.length > 0) {
-                    params.message_types = this.messageTypeFilter.join(',');
-                }
+                this.loading = true;
+                try {
+                    // 准备请求参数，包含分页和筛选条件
+                    const params = {
+                        page: this.pagination.page,
+                        page_size: this.pagination.page_size
+                    };
 
-                if (this.search) {
-                    params.search = this.search.trim();
-                }
-
-                // 添加排除条件
-                params.exclude_ids = 'astrbot';
-                params.exclude_platforms = 'webchat';
-
-                const response = await axios.get('/api/conversation/list', { params });
-
-                this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
-
-                if (response.data.status === "ok") {
-                    const data = response.data.data;
-
-                    if (!data || !data.conversations) {
-                        console.error('API 返回数据格式不符合预期:', data);
-                        this.showErrorMessage(this.tm('messages.fetchError'));
-                        return;
+                    // 添加筛选条件 - 处理combobox的混合数据格式
+                    if (this.platformFilter.length > 0) {
+                        const platforms = this.platformFilter.map(item =>
+                            typeof item === 'object' ? item.value : item
+                        );
+                        params.platforms = platforms.join(',');
                     }
 
-                    // 处理会话数据，解析sessionId
-                    this.conversations = (data.conversations || []).map(conv => {
-                        // 为每个会话添加会话信息
-                        conv.sessionInfo = this.parseSessionId(conv.user_id);
-                        return conv;
+                    if (this.messageTypeFilter.length > 0) {
+                        params.message_types = this.messageTypeFilter.join(',');
+                    }
+
+                    if (this.search) {
+                        params.search = this.search.trim();
+                    }
+
+                    // 添加排除条件
+                    params.exclude_ids = 'astrbot';
+                    params.exclude_platforms = 'webchat';
+
+                    const response = await axios.get('/api/conversation/list', {
+                        signal: controller.signal,
+                        params
                     });
 
-                    // 更新分页信息
-                    if (data.pagination) {
-                        this.pagination = {
-                            page: data.pagination.page || 1,
-                            page_size: data.pagination.page_size || 20,
-                            total: data.pagination.total || 0,
-                            total_pages: data.pagination.total_pages || 1
-                        };
+                    this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
+
+                    if (response.data.status === "ok") {
+                        const data = response.data.data;
+
+                        if (!data || !data.conversations) {
+                            console.error('API 返回数据格式不符合预期:', data);
+                            this.showErrorMessage(this.tm('messages.fetchError'));
+                            return;
+                        }
+
+                        // 处理会话数据，解析sessionId
+                        this.conversations = (data.conversations || []).map(conv => {
+                            // 为每个会话添加会话信息
+                            conv.sessionInfo = this.parseSessionId(conv.user_id);
+                            return conv;
+                        });
+
+                        // 更新分页信息
+                        if (data.pagination) {
+                            this.pagination = {
+                                page: data.pagination.page || 1,
+                                page_size: data.pagination.page_size || 20,
+                                total: data.pagination.total || 0,
+                                total_pages: data.pagination.total_pages || 1
+                            };
+                        } else {
+                            console.warn('API 响应中没有分页信息');
+                        }
                     } else {
-                        console.warn('API 响应中没有分页信息');
+                        this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
                     }
-                } else {
-                    this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
-                }
-            } catch (error) {
-                console.error('获取对话列表出错:', error);
-                if (error.response) {
-                    console.error('错误响应数据:', error.response.data);
-                    console.error('错误状态码:', error.response.status);
-                }
-                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
-            } finally {
-                // this.loading = false;
-                setTimeout(() => {
+                } catch (error) {
+                    if (axios.isCancel(error)) return;
+                    
+                    console.error('获取对话列表出错:', error);
+                    if (error.response) {
+                        console.error('错误响应数据:', error.response.data);
+                        console.error('错误状态码:', error.response.status);
+                    }
+                    this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.fetchError'));
+                } finally {
                     this.loading = false;
-                }, 200);
+                }
             }
-        },
+        })(),
 
         // 查看对话详情
         async viewConversation(item) {
@@ -991,6 +992,14 @@ export default {
     max-height: 90vh;
     display: flex;
     flex-direction: column;
+}
+
+.text-truncate {
+    display: inline-block;
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* 动画 */
