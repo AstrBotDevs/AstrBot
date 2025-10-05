@@ -9,6 +9,8 @@ from astrbot.core.config.default import VERSION
 from astrbot.core import DEMO_MODE
 from astrbot.core.db.migration.helper import do_migration_v4, check_migration_needed_v4
 
+CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+
 
 class UpdateRoute(Route):
     def __init__(
@@ -29,8 +31,6 @@ class UpdateRoute(Route):
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-
-    CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
 
     async def do_migration(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
