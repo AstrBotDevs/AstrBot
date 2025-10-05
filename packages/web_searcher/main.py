@@ -46,7 +46,11 @@ class Main(star.Star):
 
         self.bing_search = Bing()
         self.sogo_search = Sogo()
-        self.google = Google()
+        self.google = None
+        try:
+            self.google = Google()
+        except Exception as e:
+            logger.error(f"google search init error: {e}, disable google search")
 
     async def _tidy_text(self, text: str) -> str:
         """清理文本，去除空格、换行符等"""
@@ -89,10 +93,11 @@ class Main(star.Star):
         self, query, num_results: int = 5
     ) -> list[SearchResult]:
         results = []
-        try:
-            results = await self.google.search(query, num_results)
-        except Exception as e:
-            logger.error(f"google search error: {e}, try the next one...")
+        if self.google:
+            try:
+                results = await self.google.search(query, num_results)
+            except Exception as e:
+                logger.error(f"google search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search google failed")
             try:
