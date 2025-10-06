@@ -179,22 +179,13 @@
                         </div>
 
                         <!-- 附件预览区 -->
-                        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
-                            <div v-for="(img, index) in stagedImagesUrl" :key="index" class="image-preview">
-                                <img :src="img" class="preview-image" />
-                                <v-btn @click="removeImage(index)" class="remove-attachment-btn" icon="mdi-close"
-                                    size="small" color="error" variant="text" />
-                            </div>
-
-                            <div v-if="stagedAudioUrl" class="audio-preview">
-                                <v-chip color="deep-purple-lighten-4" class="audio-chip">
-                                    <v-icon start icon="mdi-microphone" size="small"></v-icon>
-                                    {{ tm('voice.recording') }}
-                                </v-chip>
-                                <v-btn @click="removeAudio" class="remove-attachment-btn" icon="mdi-close" size="small"
-                                    color="error" variant="text" />
-                            </div>
-                        </div>
+                        <AttachmentsPreview
+                            :images="stagedImagesUrl"
+                            :audio="stagedAudioUrl"
+                            :recordingText="tm('voice.recording')"
+                            @remove:image="removeImage"
+                            @remove:audio="removeAudio"
+                        />
                     </div>
                 </div>
 
@@ -202,33 +193,19 @@
         </v-card-text>
     </v-card>
     <!-- 编辑对话标题对话框 -->
-    <v-dialog v-model="editTitleDialog" max-width="400">
-        <v-card>
-            <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
-            <v-card-text>
-                <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined"
-                    hide-details class="mt-2" @keyup.enter="saveTitle" autofocus />
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
+    <EditTitleDialog
+        v-model="editTitleDialog"
+        :title="editingTitle"
+        :i18n="{ titleText: tm('actions.editTitle'), placeholder: tm('conversation.newConversation'), cancelText: t('core.common.cancel'), saveText: t('core.common.save') }"
+        @save="saveTitle"
+    />
 
     <!-- 图片预览对话框 -->
-    <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
-        <v-card class="image-preview-card" elevation="8">
-            <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span>{{ t('core.common.imagePreview') }}</span>
-                <v-btn icon="mdi-close" variant="text" @click="imagePreviewDialog = false" />
-            </v-card-title>
-            <v-card-text class="text-center pa-4">
-                <img :src="previewImageUrl" class="preview-image-large" />
-            </v-card-text>
-        </v-card>
-    </v-dialog>
+    <ImagePreviewDialog
+        v-model="imagePreviewDialog"
+        :title="t('core.common.imagePreview')"
+        :imageUrl="previewImageUrl"
+    />
 </template>
 
 <script>
@@ -242,13 +219,33 @@ import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import 'highlight.js/styles/github.css';
 import { useToast } from '@/utils/toast';
+// new components and service
+import EditTitleDialog from '@/components/chat/EditTitleDialog.vue';
+import ImagePreviewDialog from '@/components/chat/ImagePreviewDialog.vue';
+import {
+  listConversations,
+  getConversation as apiGetConversation,
+  newConversation as apiNewConversation,
+  deleteConversation as apiDeleteConversation,
+  renameConversation as apiRenameConversation,
+  postImage as apiPostImage,
+  postFile as apiPostFile,
+  getFile as apiGetFile,
+  sendMessageStream
+} from '@/services/chat.api';
+import AttachmentsPreview from '@/components/chat/AttachmentsPreview.vue';
+import { createMediaCache } from '@/composables/chat/useMediaCache';
 
 export default {
     name: 'ChatPage',
     components: {
         LanguageSwitcher,
         ProviderModelSelector,
-        MessageList
+        MessageList,
+        // register new components
+        EditTitleDialog,
+        ImagePreviewDialog,
+        AttachmentsPreview
     },
     props: {
         chatboxMode: {
@@ -267,6 +264,7 @@ export default {
         };
     },
     data() {
+        const mediaCache = createMediaCache(apiGetFile);
         return {
             prompt: '',
             messages: [],
@@ -289,7 +287,7 @@ export default {
             ctrlKeyTimer: null,
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
 
-            mediaCache: {}, // Add a cache to store media blobs
+            mediaCacheInst: mediaCache,
 
             // 添加对话标题编辑相关变量
             editTitleDialog: false,
@@ -480,12 +478,8 @@ export default {
             if (!this.editingCid) return;
 
             const trimmedTitle = this.editingTitle.trim();
-            axios.post('/api/chat/rename_conversation', {
-                conversation_id: this.editingCid,
-                title: trimmedTitle
-            })
-                .then(response => {
-                    // 更新本地对话列表中的标题
+            apiRenameConversation(this.editingCid, trimmedTitle)
+                .then(() => {
                     const conversation = this.conversations.find(c => c.cid === this.editingCid);
                     if (conversation) {
                         conversation.title = trimmedTitle;
@@ -498,19 +492,9 @@ export default {
         },
 
         async getMediaFile(filename) {
-            if (this.mediaCache[filename]) {
-                return this.mediaCache[filename];
-            }
-
+            // Prefer composable cache
             try {
-                const response = await axios.get('/api/chat/get_file', {
-                    params: { filename },
-                    responseType: 'blob'
-                });
-
-                const blobUrl = URL.createObjectURL(response.data);
-                this.mediaCache[filename] = blobUrl;
-                return blobUrl;
+                return await this.mediaCacheInst.getMediaUrl(filename);
             } catch (error) {
                 console.error('Error fetching media file:', error);
                 return '';
@@ -547,17 +531,9 @@ export default {
 
                 this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
 
-                const formData = new FormData();
-                formData.append('file', audioBlob);
-
                 try {
-                    const response = await axios.post('/api/chat/post_file', formData, {
-                        headers: {
-                            'Content-Type': 'multipart/form-data'
-                        }
-                    });
-
-                    const audio = response.data.data.filename;
+                    const res = await apiPostFile(audioBlob);
+                    const audio = res.filename;
                     console.log('Audio uploaded:', audio);
 
                     this.stagedAudioUrl = audio; // Store just the filename
@@ -568,17 +544,9 @@ export default {
         },
 
         async processAndUploadImage(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-
             try {
-                const response = await axios.post('/api/chat/post_image', formData, {
-                    headers: {
-                        'Content-Type': 'multipart/form-data'
-                    }
-                });
-
-                const img = response.data.data.filename;
+                const res = await apiPostImage(file);
+                const img = res.filename;
                 this.stagedImagesName.push(img); // Store just the filename
                 this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
 
@@ -628,10 +596,9 @@ export default {
             event.target.value = '';
         },
         getConversations() {
-            axios.get('/api/chat/conversations').then(response => {
-                this.conversations = response.data.data;
+            listConversations().then(data => {
+                this.conversations = data;
 
-                // If there's a pending conversation ID from the route
                 if (this.pendingCid) {
                     const conversation = this.conversations.find(c => c.cid === this.pendingCid);
                     if (conversation) {
@@ -639,7 +606,6 @@ export default {
                         this.pendingCid = null;
                     }
                 } else {
-                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
                     if (!this.currCid && this.conversations.length > 0) {
                         const firstConversation = this.conversations[0];
                         this.selectedConversations = [firstConversation.cid];
@@ -647,7 +613,7 @@ export default {
                     }
                 }
             }).catch(err => {
-                if (err.response.status === 401) {
+                if (err?.response?.status === 401) {
                     this.$router.push('/auth/login?redirect=/chatbox');
                 }
                 console.error(err);
@@ -657,7 +623,6 @@ export default {
             if (!cid[0])
                 return;
 
-            // Update the URL to reflect the selected conversation
             if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
                 if (this.$route.path.startsWith('/chatbox')) {
                     this.$router.push(`/chatbox/${cid[0]}`);
@@ -667,12 +632,11 @@ export default {
                 return
             }
 
-            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
+            apiGetConversation(cid[0]).then(async data => {
                 this.currCid = cid[0];
-                // Update the selected conversation in the sidebar
                 this.selectedConversations = [cid[0]];
-                let history = response.data.data.history;
-                this.isConvRunning = response.data.data.is_running || false;
+                let history = data.history;
+                this.isConvRunning = data.is_running || false;
 
                 if (this.isConvRunning) {
                     if (!this.isToastedRunningInfo) {
@@ -680,13 +644,11 @@ export default {
                         this.isToastedRunningInfo = true;
                     }
 
-                    // 如果对话还在运行，3秒后重新获取消息
                     setTimeout(() => {
                         this.getConversationMessages([this.currCid]);
                     }, 3000);
                 }
 
-                // 滚动到底部
                 this.$nextTick(() => {
                     this.$refs.messageList.scrollToBottom();
                 });
@@ -700,14 +662,14 @@ export default {
                             content.embedded_images = [];
                         }
                         content.embedded_images.push(imageUrl);
-                        content.message = ''; // 清空message，避免显示标记文本
+                        content.message = '';
                     }
 
                     if (content.message.startsWith('[RECORD]')) {
                         let audio = content.message.replace('[RECORD]', '');
                         const audioUrl = await this.getMediaFile(audio);
                         content.embedded_audio = audioUrl;
-                        content.message = ''; // 清空message，避免显示标记文本
+                        content.message = '';
                     }
 
                     if (content.image_url && content.image_url.length > 0) {
@@ -726,10 +688,9 @@ export default {
             });
         },
         async newConversation() {
-            return axios.get('/api/chat/new_conversation').then(response => {
-                const cid = response.data.data.conversation_id;
+            return apiNewConversation().then(data => {
+                const cid = data.conversation_id;
                 this.currCid = cid;
-                // Update the URL to reflect the new conversation
                 if (this.$route.path.startsWith('/chatbox')) {
                     this.$router.push(`/chatbox/${cid}`);
                 } else {
@@ -771,7 +732,7 @@ export default {
         },
 
         deleteConversation(cid) {
-            axios.get('/api/chat/delete_conversation?conversation_id=' + cid).then(response => {
+            apiDeleteConversation(cid).then(() => {
                 this.getConversations();
                 this.currCid = '';
                 this.selectedConversations = []; // 清除选中状态
@@ -850,25 +811,14 @@ export default {
             const selectedModelName = selection?.modelName || '';
 
             try {
-                const response = await fetch('/api/chat/send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + localStorage.getItem('token')
-                    },
-                    body: JSON.stringify({
-                        message: promptToSend,
-                        conversation_id: this.currCid,
-                        image_url: imageNamesToSend,
-                        audio_url: audioNameToSend ? [audioNameToSend] : [],
-                        selected_provider: selectedProviderId,
-                        selected_model: selectedModelName
-                    })
+                const response = await sendMessageStream({
+                    message: promptToSend,
+                    conversation_id: this.currCid,
+                    image_url: imageNamesToSend,
+                    audio_url: audioNameToSend ? [audioNameToSend] : [],
+                    selected_provider: selectedProviderId,
+                    selected_model: selectedModelName
                 });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -1017,12 +967,7 @@ export default {
         },
 
         cleanupMediaCache() {
-            Object.values(this.mediaCache).forEach(url => {
-                if (url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
-            this.mediaCache = {};
+            if (this.mediaCacheInst) this.mediaCacheInst.cleanup();
         },
     },
 }
