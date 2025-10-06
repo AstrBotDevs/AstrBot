@@ -113,14 +113,11 @@
 
 <script>
 import { router } from '@/router';
-import axios from 'axios';
 import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import MessageList from '@/components/chat/MessageList.vue';
-import 'highlight.js/styles/github.css';
 import { useToast } from '@/utils/toast';
 // new components and service
 import EditTitleDialog from '@/components/chat/EditTitleDialog.vue';
@@ -131,12 +128,9 @@ import {
   newConversation as apiNewConversation,
   deleteConversation as apiDeleteConversation,
   renameConversation as apiRenameConversation,
-  postImage as apiPostImage,
-  postFile as apiPostFile,
   getFile as apiGetFile,
   sendMessageStream
 } from '@/services/chat.api';
-import AttachmentsPreview from '@/components/chat/AttachmentsPreview.vue';
 import { createMediaCache } from '@/composables/chat/useMediaCache';
 import InputArea from '@/components/chat/InputArea.vue';
 import { useChatStream } from '@/composables/chat/useChatStream';
@@ -148,12 +142,10 @@ export default {
     name: 'ChatPage',
     components: {
         LanguageSwitcher,
-        ProviderModelSelector,
         MessageList,
         // register new components
         EditTitleDialog,
         ImagePreviewDialog,
-        AttachmentsPreview,
         InputArea,
         SidebarPanel
     },
@@ -310,57 +302,24 @@ export default {
             this.imagePreviewDialog = true;
         },
 
-        async processAndUploadImage(file) {
-            try {
-                const res = await apiPostImage(file);
-                const img = res.filename;
-                this.stagedImagesName.push(img); // Store just the filename
-                this.stagedImagesUrl.push(URL.createObjectURL(file)); // Create a blob URL for immediate display
-
-            } catch (err) {
-                console.error('Error uploading image:', err);
+        // --- 小型内部助手：推送/更新 Bot 消息（用于流式回调） ---
+        pushBotImage(imageUrl) {
+            const bot_resp = { type: 'bot', message: '', embedded_images: [imageUrl] };
+            this.messages.push({ content: bot_resp });
+        },
+        pushBotAudio(audioUrl) {
+            const bot_resp = { type: 'bot', message: '', embedded_audio: audioUrl };
+            this.messages.push({ content: bot_resp });
+        },
+        startBotText(text) {
+            const obj = { type: 'bot', message: ref(text) };
+            this.messages.push({ content: obj });
+            return obj;
+        },
+        appendBotText(msgObj, text) {
+            if (msgObj && msgObj.message && typeof msgObj.message.value === 'string') {
+                msgObj.message.value += text;
             }
-        },
-
-        async handlePaste(event) {
-            console.log('Pasting image...');
-            const items = event.clipboardData.items;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
-                    const file = items[i].getAsFile();
-                    this.processAndUploadImage(file);
-                }
-            }
-        },
-
-        removeImage(index) {
-            // Revoke the blob URL to prevent memory leaks
-            const urlToRevoke = this.stagedImagesUrl[index];
-            if (urlToRevoke && urlToRevoke.startsWith('blob:')) {
-                URL.revokeObjectURL(urlToRevoke);
-            }
-
-            this.stagedImagesName.splice(index, 1);
-            this.stagedImagesUrl.splice(index, 1);
-        },
-
-        clearMessage() {
-            this.prompt = '';
-        },
-
-        triggerImageInput() {
-            this.$refs.imageInput.click();
-        },
-
-        handleFileSelect(event) {
-            const files = event.target.files;
-            if (files) {
-                for (const file of files) {
-                    this.processAndUploadImage(file);
-                }
-            }
-            // Reset the input value to allow selecting the same file again
-            event.target.value = '';
         },
         getConversations() {
             listConversations().then(data => {
@@ -416,9 +375,7 @@ export default {
                     }, 3000);
                 }
 
-                this.$nextTick(() => {
-                    this.$refs.messageList.scrollToBottom();
-                });
+                // 注意：MessageList 受 messages.length 控制渲染，需在赋值后再滚动
 
                 for (let i = 0; i < history.length; i++) {
                     let content = history[i].content;
@@ -450,6 +407,12 @@ export default {
                     }
                 }
                 this.messages = history;
+                this.$nextTick(() => {
+                    const ml = this.$refs.messageList;
+                    if (ml && typeof ml.scrollToBottom === 'function') {
+                        ml.scrollToBottom();
+                    }
+                });
             }).catch(err => {
                 console.error(err);
             });
@@ -579,21 +542,10 @@ export default {
                 this.isStreaming = true;
                 let message_obj = null;
                 await this.runStream(response.body, {
-                    onImage: async (imageUrl) => {
-                        const bot_resp = { type: 'bot', message: '', embedded_images: [imageUrl] };
-                        this.messages.push({ content: bot_resp });
-                    },
-                    onAudio: async (audioUrl) => {
-                        const bot_resp = { type: 'bot', message: '', embedded_audio: audioUrl };
-                        this.messages.push({ content: bot_resp });
-                    },
-                    onTextStart: (text) => {
-                        message_obj = { type: 'bot', message: this.ref(text) };
-                        this.messages.push({ content: message_obj });
-                    },
-                    onTextAppend: (text) => {
-                        if (message_obj) message_obj.message.value += text;
-                    },
+                    onImage: async (imageUrl) => this.pushBotImage(imageUrl),
+                    onAudio: async (audioUrl) => this.pushBotAudio(audioUrl),
+                    onTextStart: (text) => { message_obj = this.startBotText(text); },
+                    onTextAppend: (text) => this.appendBotText(message_obj, text),
                     onUpdateTitle: (cid, title) => {
                         const conversation = this.conversations.find((c) => c.cid === cid);
                         if (conversation) conversation.title = title;
