@@ -775,7 +775,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                         "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
+                        "modalities": ["text", "tool_use"],
                     },
                     "302.AI": {
                         "id": "302ai",
