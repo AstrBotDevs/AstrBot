@@ -142,6 +142,7 @@ import InputArea from '@/components/chat/InputArea.vue';
 import { useChatStream } from '@/composables/chat/useChatStream';
 import SidebarPanel from '@/components/chat/SidebarPanel.vue';
 import { useChatRouteSync } from '@/composables/chat/useChatRouteSync';
+import { formatTimestampSeconds } from '@/composables/chat/useDateFormat';
 
 export default {
     name: 'ChatPage',
@@ -182,20 +183,12 @@ export default {
             selectedConversations: [], // 用于控制左侧列表的选中状态
             currCid: '',
             stagedImagesName: [], // 用于存储图片文件名的数组
-            stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
 
             inputFieldLabel: '',
 
-            isRecording: false,
-            audioChunks: [],
+            // 录音逻辑已迁移至 InputArea
             stagedAudioUrl: "",
-            mediaRecorder: null,
-
-            // Ctrl键长按相关变量
-            ctrlKeyDown: false,
-            ctrlKeyTimer: null,
-            ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
 
             mediaCacheInst: mediaCache,
             runStream,
@@ -303,7 +296,6 @@ export default {
         },
 
         async getMediaFile(filename) {
-            // Prefer composable cache
             try {
                 return await this.mediaCacheInst.getMediaUrl(filename);
             } catch (error) {
@@ -311,25 +303,12 @@ export default {
                 return '';
             }
         },
-
-        removeAudio() {
-            this.stagedAudioUrl = null;
-        },
+        // 输入相关热键、录音、粘贴与选择均已迁移至 InputArea 组件
 
         openImagePreview(imageUrl) {
             this.previewImageUrl = imageUrl;
             this.imagePreviewDialog = true;
         },
-
-        async startRecording() {
-            // 录音控制已由 InputArea 处理，这里不再直接开启录音
-            this.isRecording = true;
-         },
-
-         async stopRecording() {
-            // 录音结束亦交由 InputArea 处理
-            this.isRecording = false;
-         },
 
         async processAndUploadImage(file) {
             try {
@@ -504,19 +483,8 @@ export default {
         },
 
         formatDate(timestamp) {
-            const date = new Date(timestamp * 1000); // 假设时间戳是以秒为单位
-            const options = {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            };
-            // 使用当前语言环境的locale
             const locale = this.t('core.common.locale') || 'zh-CN';
-            return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
+            return formatTimestampSeconds(timestamp, locale);
         },
 
         deleteConversation(cid) {
@@ -557,7 +525,6 @@ export default {
             // 立即清空输入和附件预览
             this.prompt = '';
             this.stagedImagesName = [];
-            this.stagedImagesUrl = [];
             this.stagedAudioUrl = "";
 
             // Create a message object with actual URLs for display
@@ -647,40 +614,6 @@ export default {
                 this.loadingChat = false;
             } finally {
                 this.isStreaming = false;
-            }
-        },
-
-        handleInputKeyDown(e) {
-            if (e.ctrlKey && e.keyCode === 66) { // Ctrl+B组合键
-                e.preventDefault(); // 防止默认行为
-
-                // 防止重复触发
-                if (this.ctrlKeyDown) return;
-
-                this.ctrlKeyDown = true;
-
-                // 设置定时器识别长按
-                this.ctrlKeyTimer = setTimeout(() => {
-                    if (this.ctrlKeyDown && !this.isRecording) {
-                        this.startRecording();
-                    }
-                }, this.ctrlKeyLongPressThreshold);
-            }
-        },
-        handleInputKeyUp(e) {
-            if (e.keyCode === 66) { // B键释放
-                this.ctrlKeyDown = false;
-
-                // 清除定时器
-                if (this.ctrlKeyTimer) {
-                    clearTimeout(this.ctrlKeyTimer);
-                    this.ctrlKeyTimer = null;
-                }
-
-                // 如果正在录音，停止录音
-                if (this.isRecording) {
-                    this.stopRecording();
-                }
             }
         },
 

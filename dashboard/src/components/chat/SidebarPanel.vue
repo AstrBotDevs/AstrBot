@@ -67,6 +67,7 @@ import { ref, watch, onUnmounted } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useSidebarState } from '@/composables/chat/useSidebarState';
+import { formatTimestampSeconds } from '@/composables/chat/useDateFormat';
 
 export default {
   name: 'SidebarPanel',
@@ -103,20 +104,19 @@ export default {
       emit('update:selected', val);
     }
 
-    function formatDate(timestamp) {
-      if (!timestamp) return '';
-      const date = new Date(timestamp * 1000);
+    onUnmounted(() => dispose());
+
+    function formatDate(ts) {
+      // Sidebar 简化显示：当天仅显示时/分，否则显示月/日 时:分
+      if (!ts) return '';
+      const date = new Date(ts * 1000);
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-      let options = { hour: '2-digit', minute: '2-digit' };
       if (date.getTime() < todayStart) {
-        options = { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        return new Intl.DateTimeFormat(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
       }
-      return new Intl.DateTimeFormat(undefined, options).format(date);
+      return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
     }
-
-    onUnmounted(() => dispose());
 
     return {
       t, tm, isDark,
