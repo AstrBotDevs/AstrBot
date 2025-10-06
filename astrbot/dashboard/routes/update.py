@@ -9,6 +9,8 @@ from astrbot.core.config.default import VERSION
 from astrbot.core import DEMO_MODE
 from astrbot.core.db.migration.helper import do_migration_v4, check_migration_needed_v4
 
+CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+
 
 class UpdateRoute(Route):
     def __init__(
@@ -113,17 +115,19 @@ class UpdateRoute(Route):
 
             if reboot:
                 await self.core_lifecycle.restart()
-                return (
+                ret = (
                     Response()
                     .ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。")
                     .__dict__
                 )
+                return ret, 200, CLEAR_SITE_DATA_HEADERS
             else:
-                return (
+                ret = (
                     Response()
                     .ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。")
                     .__dict__
                 )
+                return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
@@ -135,9 +139,8 @@ class UpdateRoute(Route):
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}。")
                 return Response().error(f"下载管理面板文件失败: {e}").__dict__
-            return (
-                Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__
-            )
+            ret = Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__
+            return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
             logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
