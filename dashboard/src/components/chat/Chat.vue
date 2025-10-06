@@ -199,6 +199,7 @@ import {
 import AttachmentsPreview from '@/components/chat/AttachmentsPreview.vue';
 import { createMediaCache } from '@/composables/chat/useMediaCache';
 import InputArea from '@/components/chat/InputArea.vue';
+import { useChatStream } from '@/composables/chat/useChatStream';
 
 export default {
     name: 'ChatPage',
@@ -230,6 +231,7 @@ export default {
     },
     data() {
         const mediaCache = createMediaCache(apiGetFile);
+        const { runStream } = useChatStream(mediaCache.getMediaUrl);
         return {
             prompt: '',
             messages: [],
@@ -253,6 +255,7 @@ export default {
             ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
 
             mediaCacheInst: mediaCache,
+            runStream,
 
             // 添加对话标题编辑相关变量
             editTitleDialog: false,
@@ -750,103 +753,32 @@ export default {
                     selected_model: selectedModelName
                 });
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let in_streaming = false;
+                this.isStreaming = true;
                 let message_obj = null;
-
-                this.isStreaming = true
-
-                while (true) {
-                    try {
-                        const { done, value } = await reader.read();
-                        if (done) {
-                            console.log('SSE stream completed');
-                            break;
-                        }
-
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n\n');
-
-                        for (let i = 0; i < lines.length; i++) {
-                            let line = lines[i].trim();
-
-                            if (!line) {
-                                continue;
-                            }
-
-                            // Parse SSE data
-                            let chunk_json;
-                            try {
-                                chunk_json = JSON.parse(line.replace('data: ', ''));
-                            } catch (parseError) {
-                                console.warn('JSON解析失败:', line, parseError);
-                                continue;
-                            }
-
-                            // 检查解析后的数据是否有效
-                            if (!chunk_json || typeof chunk_json !== 'object' || !chunk_json.hasOwnProperty('type')) {
-                                console.warn('无效的数据对象:', chunk_json);
-                                continue;
-                            }
-
-                            if (chunk_json.type === 'error') {
-                                console.error('Error received:', chunk_json.data);
-                                continue;
-                            }
-
-                            if (chunk_json.type === 'image') {
-                                let img = chunk_json.data.replace('[IMAGE]', '');
-                                const imageUrl = await this.getMediaFile(img);
-                                let bot_resp = {
-                                    type: 'bot',
-                                    message: '',
-                                    embedded_images: [imageUrl]
-                                }
-                                this.messages.push({
-                                    "content": bot_resp
-                                });
-                            } else if (chunk_json.type === 'record') {
-                                let audio = chunk_json.data.replace('[RECORD]', '');
-                                const audioUrl = await this.getMediaFile(audio);
-                                let bot_resp = {
-                                    type: 'bot',
-                                    message: '',
-                                    embedded_audio: audioUrl
-                                }
-                                this.messages.push({
-                                    "content": bot_resp
-                                });
-                            } else if (chunk_json.type === 'plain') {
-                                if (!in_streaming) {
-                                    message_obj = {
-                                        type: 'bot',
-                                        message: this.ref(chunk_json.data),
-                                    }
-                                    this.messages.push({
-                                        "content": message_obj
-                                    });
-                                    in_streaming = true;
-                                } else {
-                                    message_obj.message.value += chunk_json.data;
-                                }
-                            } else if (chunk_json.type === 'update_title') {
-                                // 更新对话标题
-                                const conversation = this.conversations.find(c => c.cid === chunk_json.cid);
-                                if (conversation) {
-                                    conversation.title = chunk_json.data;
-                                }
-                            }
-                            if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
-                                // break means a segment end
-                                in_streaming = false;
-                            }
-                        }
-                    } catch (readError) {
-                        console.error('SSE读取错误:', readError);
-                        break;
-                    }
-                }
+                await this.runStream(response.body, {
+                    onImage: async (imageUrl) => {
+                        const bot_resp = { type: 'bot', message: '', embedded_images: [imageUrl] };
+                        this.messages.push({ content: bot_resp });
+                    },
+                    onAudio: async (audioUrl) => {
+                        const bot_resp = { type: 'bot', message: '', embedded_audio: audioUrl };
+                        this.messages.push({ content: bot_resp });
+                    },
+                    onTextStart: (text) => {
+                        message_obj = { type: 'bot', message: this.ref(text) };
+                        this.messages.push({ content: message_obj });
+                    },
+                    onTextAppend: (text) => {
+                        if (message_obj) message_obj.message.value += text;
+                    },
+                    onUpdateTitle: (cid, title) => {
+                        const conversation = this.conversations.find((c) => c.cid === cid);
+                        if (conversation) conversation.title = title;
+                    },
+                    onError: (err) => {
+                        console.error('SSE读取错误:', err);
+                    },
+                });
 
                 // Input and attachments are already cleared
                 this.loadingChat = false;
