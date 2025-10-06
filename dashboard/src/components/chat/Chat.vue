@@ -2,77 +2,17 @@
     <v-card class="chat-page-card">
         <v-card-text class="chat-page-container">
             <div class="chat-layout">
-                <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
-                    :style="{ 'background-color': isDark ? sidebarCollapsed ? '#1e1e1e' : '#2d2d2d' : sidebarCollapsed ? '#ffffff' : '#f5f5f5' }"
-                    @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
-
-                    <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;"
-                        v-if="chatboxMode">
-                        <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
-                        <span v-if="!sidebarCollapsed"
-                            style="font-weight: 1000; font-size: 26px; margin-left: 8px;">AstrBot</span>
-                    </div>
-
-
-                    <div class="sidebar-collapse-btn-container">
-                        <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text"
-                            color="deep-purple">
-                            <v-icon>{{ (sidebarCollapsed || (!sidebarCollapsed && sidebarHoverExpanded)) ?
-                                'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
-                        </v-btn>
-                    </div>
-
-                    <div style="padding: 16px; padding-top: 8px;">
-                        <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus"
-                            style="background-color: transparent !important; border-radius: 4px;">{{
-                                tm('actions.newChat') }}</v-btn>
-                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
-                            elevation="0"></v-btn>
-                    </div>
-                    <div v-if="!sidebarCollapsed">
-                        <v-divider class="mx-4"></v-divider>
-                    </div>
-
-
-                    <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
-                        v-if="!sidebarCollapsed">
-                        <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
-                            <v-list density="compact" nav class="conversation-list"
-                                style="background-color: transparent;" v-model:selected="selectedConversations"
-                                @update:selected="getConversationMessages">
-                                <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    rounded="lg" class="conversation-item" active-color="secondary">
-                                    <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
-                                        || tm('conversation.newConversation') }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
-                                        formatDate(item.updated_at)
-                                    }}</v-list-item-subtitle>
-
-                                    <template v-if="!sidebarCollapsed" v-slot:append>
-                                        <div class="conversation-actions">
-                                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                                                class="edit-title-btn"
-                                                @click.stop="showEditTitleDialog(item.cid, item.title)" />
-                                            <v-btn icon="mdi-delete" size="x-small" variant="text"
-                                                class="delete-conversation-btn" color="error"
-                                                @click.stop="deleteConversation(item.cid)" />
-                                        </div>
-                                    </template>
-                                </v-list-item>
-                            </v-list>
-                        </v-card>
-
-                        <v-fade-transition>
-                            <div class="no-conversations" v-if="conversations.length === 0">
-                                <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
-                                <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
-                                    {{ tm('conversation.noHistory') }}</div>
-                            </div>
-                        </v-fade-transition>
-                    </div>
-
-                </div>
+                <SidebarPanel
+                  :chatboxMode="chatboxMode"
+                  :conversations="conversations"
+                  :selected="selectedConversations"
+                  :currCid="currCid"
+                  :isDark="isDark"
+                  @update:selected="getConversationMessages"
+                  @new="newC"
+                  @edit-title="(p) => showEditTitleDialog(p.cid, p.title)"
+                  @delete="deleteConversation"
+                />
 
                 <!-- 右侧聊天内容区域 -->
                 <div class="chat-content-panel">
@@ -200,6 +140,7 @@ import AttachmentsPreview from '@/components/chat/AttachmentsPreview.vue';
 import { createMediaCache } from '@/composables/chat/useMediaCache';
 import InputArea from '@/components/chat/InputArea.vue';
 import { useChatStream } from '@/composables/chat/useChatStream';
+import SidebarPanel from '@/components/chat/SidebarPanel.vue';
 
 export default {
     name: 'ChatPage',
@@ -211,7 +152,8 @@ export default {
         EditTitleDialog,
         ImagePreviewDialog,
         AttachmentsPreview,
-        InputArea
+        InputArea,
+        SidebarPanel
     },
     props: {
         chatboxMode: {
@@ -262,12 +204,6 @@ export default {
             editingTitle: '',
             editingCid: '',
 
-            // 侧边栏折叠状态
-            sidebarCollapsed: true,
-            sidebarHovered: false,
-            sidebarHoverTimer: null,
-            sidebarHoverExpanded: false,
-            sidebarHoverDelay: 100, // 悬停延迟，单位毫秒            
             pendingCid: null, // Store pending conversation ID for route handling
 
             // 图片预览相关变量
@@ -348,14 +284,6 @@ export default {
 
     mounted() {
         // Theme is now handled globally by the customizer store.
-        // 从 localStorage 读取侧边栏折叠状态，默认为 true（折叠）
-        const savedCollapsedState = localStorage.getItem('sidebarCollapsed');
-        if (savedCollapsedState !== null) {
-            this.sidebarCollapsed = JSON.parse(savedCollapsedState);
-        } else {
-            this.sidebarCollapsed = true; // 默认折叠状态
-        }
-
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
         this.getConversations();
@@ -380,46 +308,7 @@ export default {
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
             customizer.SET_UI_THEME(newTheme);
         },
-        // 切换侧边栏折叠状态
-        toggleSidebar() {
-            if (this.sidebarHoverExpanded) {
-                this.sidebarHoverExpanded = false;
-                return
-            }
-            this.sidebarCollapsed = !this.sidebarCollapsed;
-            // 保存折叠状态到 localStorage
-            localStorage.setItem('sidebarCollapsed', JSON.stringify(this.sidebarCollapsed));
-        },
-
-        // 侧边栏鼠标悬停处理
-        handleSidebarMouseEnter() {
-            if (!this.sidebarCollapsed) return;
-
-            this.sidebarHovered = true;
-
-            // 设置延迟定时器
-            this.sidebarHoverTimer = setTimeout(() => {
-                if (this.sidebarHovered) {
-                    this.sidebarHoverExpanded = true;
-                    this.sidebarCollapsed = false;
-                }
-            }, this.sidebarHoverDelay);
-        },
-
-        handleSidebarMouseLeave() {
-            this.sidebarHovered = false;
-
-            // 清除定时器
-            if (this.sidebarHoverTimer) {
-                clearTimeout(this.sidebarHoverTimer);
-                this.sidebarHoverTimer = null;
-            }
-
-            if (this.sidebarHoverExpanded) {
-                this.sidebarCollapsed = true;
-            }
-            this.sidebarHoverExpanded = false;
-        },
+        // 侧边栏相关逻辑已迁移至 SidebarPanel 组件
 
         // 显示编辑对话标题对话框
         showEditTitleDialog(cid, title) {
