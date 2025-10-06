@@ -145,48 +145,11 @@
                     </div>
 
                     <!-- 输入区域 -->
-                    <div class="input-area fade-in">
-                        <div
-                            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
-                            <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
-                                :disabled="isStreaming || isConvRunning" @click:clear="clearMessage"
-                                placeholder="Ask AstrBot..."
-                                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
-                                <div style="display: flex; justify-content: flex-start; margin-top: 4px;">
-                                    <!-- 选择提供商和模型 -->
-                                    <ProviderModelSelector ref="providerModelSelector" />
-                                </div>
-                                <div
-                                    style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
-                                    <input type="file" ref="imageInput" @change="handleFileSelect" accept="image/*"
-                                        style="display: none" multiple />
-                                    <v-progress-circular v-if="isStreaming || isConvRunning" indeterminate size="16"
-                                        class="mr-1" width="1.5" />
-                                    <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
-                                        class="add-btn" size="small" />
-                                    <v-btn @click="isRecording ? stopRecording() : startRecording()"
-                                        :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                                        :color="isRecording ? 'error' : 'deep-purple'" class="record-btn"
-                                        size="small" />
-                                    <v-btn @click="sendMessage" icon="mdi-send" variant="text" color="deep-purple"
-                                        :disabled="!prompt && stagedImagesName.length === 0 && !stagedAudioUrl"
-                                        class="send-btn" size="small" />
-                                </div>
-                            </div>
+                    <InputArea
+                        :disabled="isStreaming || isConvRunning"
+                        @send="onInputSend"
+                    />
 
-                        </div>
-
-                        <!-- 附件预览区 -->
-                        <AttachmentsPreview
-                            :images="stagedImagesUrl"
-                            :audio="stagedAudioUrl"
-                            :recordingText="tm('voice.recording')"
-                            @remove:image="removeImage"
-                            @remove:audio="removeAudio"
-                        />
-                    </div>
                 </div>
 
             </div>
@@ -235,6 +198,7 @@ import {
 } from '@/services/chat.api';
 import AttachmentsPreview from '@/components/chat/AttachmentsPreview.vue';
 import { createMediaCache } from '@/composables/chat/useMediaCache';
+import InputArea from '@/components/chat/InputArea.vue';
 
 export default {
     name: 'ChatPage',
@@ -245,7 +209,8 @@ export default {
         // register new components
         EditTitleDialog,
         ImagePreviewDialog,
-        AttachmentsPreview
+        AttachmentsPreview,
+        InputArea
     },
     props: {
         chatboxMode: {
@@ -391,25 +356,12 @@ export default {
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
         this.getConversations();
-        let inputField = document.getElementById('input-field');
-        inputField.addEventListener('paste', this.handlePaste);
-        inputField.addEventListener('keydown', function (e) {
-            if (e.keyCode == 13 && !e.shiftKey) {
-                e.preventDefault();
-                // 检查是否有内容可发送
-                if (this.canSendMessage()) {
-                    this.sendMessage();
-                }
-            }
-        }.bind(this));
-
-        // 添加keyup事件监听
-        document.addEventListener('keyup', this.handleInputKeyUp);
+        // 输入与粘贴、快捷键逻辑交由 InputArea 组件内部处理
     },
 
     beforeUnmount() {
         // 移除keyup事件监听
-        document.removeEventListener('keyup', this.handleInputKeyUp);
+        // 相关输入监听均已迁移到 InputArea 组件内，这里无需移除
 
         // 清除悬停定时器
         if (this.sidebarHoverTimer) {
@@ -511,37 +463,14 @@ export default {
         },
 
         async startRecording() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.mediaRecorder = new MediaRecorder(stream);
-            this.mediaRecorder.ondataavailable = (event) => {
-                this.audioChunks.push(event.data);
-            };
-            this.mediaRecorder.start();
+            // 录音控制已由 InputArea 处理，这里不再直接开启录音
             this.isRecording = true;
-            this.inputFieldLabel = this.tm('input.recordingPrompt');
-        },
+         },
 
-        async stopRecording() {
+         async stopRecording() {
+            // 录音结束亦交由 InputArea 处理
             this.isRecording = false;
-            this.inputFieldLabel = this.tm('input.chatPrompt');
-            this.mediaRecorder.stop();
-            this.mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-                this.audioChunks = [];
-
-                this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
-
-                try {
-                    const res = await apiPostFile(audioBlob);
-                    const audio = res.filename;
-                    console.log('Audio uploaded:', audio);
-
-                    this.stagedAudioUrl = audio; // Store just the filename
-                } catch (err) {
-                    console.error('Error uploading audio:', err);
-                }
-            };
-        },
+         },
 
         async processAndUploadImage(file) {
             try {
@@ -806,9 +735,10 @@ export default {
             this.loadingChat = true
 
             // 从ProviderModelSelector组件获取当前选择
-            const selection = this.$refs.providerModelSelector?.getCurrentSelection();
+            const selection = this._tempSelection || {};
             const selectedProviderId = selection?.providerId || '';
             const selectedModelName = selection?.modelName || '';
+            this._tempSelection = null;
 
             try {
                 const response = await sendMessageStream({
@@ -964,6 +894,19 @@ export default {
                     this.stopRecording();
                 }
             }
+        },
+
+        // 输入组件回传的发送事件处理
+        onInputSend({ text, imageNames, audioName, selection }) {
+            // 覆盖本组件的 prompt/staged 状态，以兼容后续 sendMessage 逻辑
+            this.prompt = text;
+            this.stagedImagesName = imageNames || [];
+            this.stagedAudioUrl = audioName || '';
+
+            // 将 Provider/Model 选择暂存到一个临时字段，供 sendMessage 使用
+            this._tempSelection = selection || { providerId: '', modelName: '' };
+
+            this.sendMessage();
         },
 
         cleanupMediaCache() {
