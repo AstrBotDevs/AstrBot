@@ -17,72 +17,22 @@
                 <!-- 右侧聊天内容区域 -->
                 <div class="chat-content-panel">
 
-                    <div class="conversation-header fade-in">
-                        <div v-if="currCid && getCurrentConversation">
-                            <h3
-                                style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                {{ getCurrentConversation.title || tm('conversation.newConversation') }}</h3>
-                            <span style="font-size: 12px;">{{ formatDate(getCurrentConversation.updated_at) }}</span>
-                        </div>
-                        <div class="conversation-header-actions">
-                            <!-- router 推送到 /chatbox -->
-                            <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props"
-                                        @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
-                                        class="fullscreen-icon">mdi-fullscreen</v-icon>
-                                </template>
-                            </v-tooltip>
-                            <!-- 语言切换按钮 -->
-                            <v-tooltip :text="t('core.common.language')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <LanguageSwitcher variant="chatbox" />
-                                </template>
-                            </v-tooltip>
-                            <!-- 主题切换按钮 -->
-                            <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
-                                        size="small" rounded="sm" style="margin-right: 8px;" variant="text">
-                                        <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
-                                    </v-btn>
-                                </template>
-                            </v-tooltip>
-                            <!-- router 推送到 /chat -->
-                            <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
-                                        class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
-                                </template>
-                            </v-tooltip>
-                        </div>
-                    </div>
+                    <ConversationHeader
+                      :chatboxMode="chatboxMode"
+                      :currCid="currCid"
+                      :isDark="isDark"
+                      :title="getCurrentConversation?.title"
+                      :updatedAt="getCurrentConversation?.updated_at"
+                      @toggle-theme="toggleTheme"
+                      @fullscreen="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
+                      @exit-fullscreen="router.push(currCid ? `/chat/${currCid}` : '/chat')"
+                    />
                     <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
 
                     <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
                         :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
                         ref="messageList" />
-                    <div class="welcome-container fade-in" v-else>
-                        <div class="welcome-title">
-                            <span>Hello, I'm</span>
-                            <span class="bot-name">AstrBot ⭐</span>
-                        </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.type') }}</span>
-                            <code>help</code>
-                            <span>{{ tm('shortcuts.help') }} 😊</span>
-                        </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.longPress') }}</span>
-                            <code>Ctrl + B</code>
-                            <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
-                        </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.press') }}</span>
-                            <code>Ctrl + V</code>
-                            <span>{{ tm('shortcuts.pasteImage') }} 🏞️</span>
-                        </div>
-                    </div>
+                    <WelcomePanel v-else />
 
                     <!-- 输入区域 -->
                     <InputArea
@@ -116,12 +66,13 @@ import { router } from '@/router';
 import { ref } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import { useToast } from '@/utils/toast';
 // new components and service
 import EditTitleDialog from '@/components/chat/EditTitleDialog.vue';
 import ImagePreviewDialog from '@/components/chat/ImagePreviewDialog.vue';
+import ConversationHeader from '@/components/chat/ConversationHeader.vue';
+import WelcomePanel from '@/components/chat/WelcomePanel.vue';
 import {
   listConversations,
   getConversation as apiGetConversation,
@@ -141,13 +92,14 @@ import { formatTimestampSeconds } from '@/composables/chat/useDateFormat';
 export default {
     name: 'ChatPage',
     components: {
-        LanguageSwitcher,
         MessageList,
         // register new components
         EditTitleDialog,
         ImagePreviewDialog,
         InputArea,
-        SidebarPanel
+        SidebarPanel,
+        ConversationHeader,
+        WelcomePanel,
     },
     props: {
         chatboxMode: {
@@ -600,349 +552,4 @@ export default {
 }
 </script>
 
-<style>
-/* 基础动画 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.05);
-    }
-
-    100% {
-        transform: scale(1);
-    }
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(20px);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-/* 添加淡入动画 */
-@keyframes fadeInContent {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
-/* 欢迎页样式 */
-.welcome-container {
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-}
-
-.welcome-title {
-    font-size: 28px;
-    margin-bottom: 16px;
-}
-
-.bot-name {
-    font-weight: 700;
-    margin-left: 8px;
-    color: var(--v-theme-secondary);
-}
-
-.welcome-hint {
-    margin-top: 8px;
-    color: rgb(var(--v-theme-secondaryText));
-    font-size: 14px;
-}
-
-.welcome-hint code {
-    background-color: rgb(var(--v-theme-codeBg));
-    padding: 2px 6px;
-    margin: 0 4px;
-    border-radius: 4px;
-    font-family: 'Fira Code', monospace;
-    font-size: 13px;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
-}
-
-.chat-page-card {
-    width: 100%;
-    height: 100%;
-    max-height: 100%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-    overflow: hidden;
-}
-
-.chat-page-container {
-    width: 100%;
-    height: 100%;
-    max-height: 100%;
-    padding: 0;
-    overflow: hidden;
-}
-
-.chat-layout {
-    height: 100%;
-    max-height: 100%;
-    display: flex;
-    overflow: hidden;
-}
-
-.sidebar-panel {
-    max-width: 270px;
-    min-width: 240px;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    border-right: 1px solid rgba(0, 0, 0, 0.05);
-    height: 100%;
-    max-height: 100%;
-    position: relative;
-    transition: all 0.3s ease;
-    overflow: hidden;
-}
-
-/* 侧边栏折叠状态 */
-.sidebar-collapsed {
-    max-width: 75px;
-    min-width: 75px;
-    transition: all 0.3s ease;
-}
-
-/* 当悬停展开时 */
-.sidebar-collapsed.sidebar-hovered {
-    max-width: 270px;
-    min-width: 240px;
-    transition: all 0.3s ease;
-}
-
-/* 侧边栏折叠按钮 */
-.sidebar-collapse-btn-container {
-    margin: 16px;
-    margin-bottom: 0px;
-    z-index: 10;
-}
-
-.sidebar-collapse-btn {
-    opacity: 0.6;
-    max-height: none;
-    overflow-y: visible;
-    padding: 0;
-}
-
-.conversation-item {
-    margin-bottom: 4px;
-    border-radius: 8px !important;
-    transition: all 0.2s ease;
-    height: auto !important;
-    min-height: 56px;
-    padding: 8px 16px !important;
-    position: relative;
-}
-
-.conversation-item:hover {
-    background-color: rgba(103, 58, 183, 0.05);
-}
-
-.conversation-item:hover .conversation-actions {
-    opacity: 1;
-    visibility: visible;
-}
-
-.conversation-actions {
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.2s ease;
-}
-
-.edit-title-btn,
-.delete-conversation-btn {
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
-}
-
-.edit-title-btn:hover,
-.delete-conversation-btn:hover {
-    opacity: 1;
-}
-
-.conversation-title {
-    font-weight: 500;
-    font-size: 14px;
-    line-height: 1.3;
-    margin-bottom: 2px;
-    transition: opacity 0.25s ease;
-}
-
-.timestamp {
-    font-size: 11px;
-    color: var(--v-theme-secondaryText);
-    line-height: 1;
-    transition: opacity 0.25s ease;
-}
-
-.sidebar-section-title {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--v-theme-secondaryText);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 12px;
-    padding-left: 4px;
-    transition: opacity 0.25s ease;
-    white-space: nowrap;
-}
-
-.status-chips {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 8px;
-    margin-bottom: 8px;
-    transition: opacity 0.25s ease;
-}
-
-.status-chips .v-chip {
-    flex: 1 1 0;
-    justify-content: center;
-    opacity: 0.7;
-}
-
-.status-chip {
-    font-size: 12px;
-    height: 24px !important;
-}
-
-.no-conversations {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 150px;
-    opacity: 0.6;
-    gap: 12px;
-}
-
-.no-conversations-text {
-    font-size: 14px;
-    color: var(--v-theme-secondaryText);
-    transition: opacity 0.25s ease;
-}
-
-.chat-content-panel {
-    height: 100%;
-    max-height: 100%;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-/* 输入区域样式 */
-.input-area {
-    padding: 16px;
-    background-color: var(--v-theme-surface);
-    position: relative;
-    border-top: 1px solid var(--v-theme-border);
-    flex-shrink: 0;
-    /* 防止输入区域被压缩 */
-}
-
-/* 附件预览区 */
-.attachments-preview {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    max-width: 900px;
-    margin: 8px auto 0;
-    flex-wrap: wrap;
-}
-
-.image-preview,
-.audio-preview {
-    position: relative;
-    display: inline-flex;
-}
-
-.preview-image {
-    width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.audio-chip {
-    height: 36px;
-    border-radius: 18px;
-}
-
-.remove-attachment-btn {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    opacity: 0.8;
-    transition: opacity 0.2s;
-}
-
-.remove-attachment-btn:hover {
-    opacity: 1;
-}
-
-/* 动画类 */
-.fade-in {
-    animation: fadeIn 0.3s ease-in-out;
-}
-
-/* 对话框标题样式 */
-.dialog-title {
-    font-size: 18px;
-    font-weight: 500;
-    padding-bottom: 8px;
-}
-
-/* 对话标题和时间样式 */
-.conversation-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    padding-left: 16px;
-    border-bottom: 1px solid var(--v-theme-border);
-    width: 100%;
-    padding-right: 32px;
-    flex-shrink: 0;
-}
-</style>
+<style src="./ChatPage.css"></style>
