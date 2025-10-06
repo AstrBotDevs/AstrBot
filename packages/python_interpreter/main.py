@@ -205,13 +205,14 @@ class Main(star.Star):
             return
         for comp in event.message_obj.message:
             if isinstance(comp, File):
-                if comp.file.startswith("http"):
+                file_path = await comp.get_file()
+                if file_path.startswith("http"):
                     name = comp.name if comp.name else uuid.uuid4().hex[:8]
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     path = os.path.join(temp_dir, name)
-                    await download_file(comp.file, path)
+                    await download_file(file_path, path)
                 else:
-                    path = comp.file
+                    path = file_path
                 self.user_file_msg_buffer[event.get_session_id()].append(path)
                 logger.debug(f"User {uid} uploaded file: {path}")
                 yield event.plain_result(f"代码执行器: 文件已经上传: {path}")
