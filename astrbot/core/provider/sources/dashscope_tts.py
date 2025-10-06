@@ -1,11 +1,10 @@
 import asyncio
 import base64
+import logging
 import os
 import uuid
 from typing import Optional, Tuple
-from urllib.error import URLError
-from urllib.request import urlopen
-
+import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
@@ -69,16 +68,17 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             "model": model,
             "text": text,
             "api_key": self.chosen_api_key,
+            "voice": self.voice or "Cherry",
         }
-        if self.voice:
-            kwargs["voice"] = self.voice
+        if not self.voice:
+            logging.warning("No voice specified for Qwen TTS model, using default 'Cherry'.")
         return MultiModalConversation.call(**kwargs)
 
     async def _synthesize_with_qwen_tts(self, model: str, text: str) -> Tuple[Optional[bytes], str]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
 
-        audio_bytes = self._extract_audio_from_response(response)
+        audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
             error_details = self._format_dashscope_error(response)
             raise RuntimeError(
@@ -87,7 +87,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         ext = ".wav"
         return audio_bytes, ext
 
-    def _extract_audio_from_response(self, response) -> Optional[bytes]:
+    async def _extract_audio_from_response(self, response) -> Optional[bytes]:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:
@@ -98,21 +98,24 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             try:
                 return base64.b64decode(data_b64)
             except (ValueError, TypeError):
+                logging.error("Failed to decode base64 audio data.")
                 return None
 
         url = getattr(audio_obj, "url", None)
         if url:
-            return self._download_audio_from_url(url)
+            return await self._download_audio_from_url(url)
         return None
 
-    def _download_audio_from_url(self, url: str) -> Optional[bytes]:
+    async def _download_audio_from_url(self, url: str) -> Optional[bytes]:
         if not url:
             return None
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
-            with urlopen(url, timeout=timeout) as response:
-                return response.read()
-        except (URLError, TimeoutError, OSError):
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                    return await response.read()
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
+            logging.error(f"Failed to download audio from URL {url}: {e}")
             return None
 
     async def _synthesize_with_cosyvoice(self, model: str, text: str) -> Tuple[Optional[bytes], str]:
