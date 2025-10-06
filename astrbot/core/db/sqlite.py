@@ -34,9 +34,9 @@ class SQLiteDatabase(BaseDatabase):
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=50000"))
+            await conn.execute(text("PRAGMA cache_size=20000"))
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=268435456"))
+            await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 
