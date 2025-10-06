@@ -141,6 +141,7 @@ import { createMediaCache } from '@/composables/chat/useMediaCache';
 import InputArea from '@/components/chat/InputArea.vue';
 import { useChatStream } from '@/composables/chat/useChatStream';
 import SidebarPanel from '@/components/chat/SidebarPanel.vue';
+import { useChatRouteSync } from '@/composables/chat/useChatRouteSync';
 
 export default {
     name: 'ChatPage',
@@ -229,55 +230,26 @@ export default {
     },
 
     watch: {
-        // Watch for route changes to handle direct navigation to /chat/<cid>
         '$route': {
             immediate: true,
-            handler(to, from) {
-                console.log('Route changed:', to.path, 'from:', from?.path);
-                if (from &&
-                    ((from.path.startsWith('/chat') && to.path.startsWith('/chatbox')) ||
-                        (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
-                }
-
-                // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
-                if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
-                    const pathCid = to.path.split('/')[2];
-                    console.log('Path CID:', pathCid);
-                    if (pathCid && pathCid !== this.currCid) {
-                        // If conversations are already loaded
-                        if (this.conversations.length > 0) {
-                            const conversation = this.conversations.find(c => c.cid === pathCid);
-                            if (conversation) {
-                                this.getConversationMessages([pathCid]);
-                            }
-                        } else {
-                            // Store the cid to be used after conversations are loaded
-                            this.pendingCid = pathCid;
-                        }
-                    }
-                }
+            handler(to) {
+                const { onRouteChange } = useChatRouteSync();
+                onRouteChange(to, this.currCid, this.conversations, {
+                    setPendingCid: (cid) => { this.pendingCid = cid; },
+                    getConversationMessages: (cid) => this.getConversationMessages([cid]),
+                });
             }
         },
-
-        // Watch for conversations loaded to handle pending cid
         conversations: {
             handler(newConversations) {
-                if (this.pendingCid && newConversations.length > 0) {
-                    const conversation = newConversations.find(c => c.cid === this.pendingCid);
-                    if (conversation) {
-                        // 先设置选中状态，然后加载对话消息
-                        this.selectedConversations = [this.pendingCid];
-                        this.getConversationMessages([this.pendingCid]);
-                        this.pendingCid = null;
-                    }
-                } else {
-                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
-                    if (!this.currCid && newConversations.length > 0) {
-                        const firstConversation = newConversations[0];
-                        this.selectedConversations = [firstConversation.cid];
-                        this.getConversationMessages([firstConversation.cid]);
-                    }
-                }
+                const { onConversationsChange } = useChatRouteSync();
+                onConversationsChange(newConversations, this.currCid, this.pendingCid, {
+                    selectAndOpen: (cid) => {
+                        this.selectedConversations = [cid];
+                        this.getConversationMessages([cid]);
+                    },
+                    clearPending: () => { this.pendingCid = null; },
+                });
             }
         }
     },
@@ -293,11 +265,6 @@ export default {
     beforeUnmount() {
         // 移除keyup事件监听
         // 相关输入监听均已迁移到 InputArea 组件内，这里无需移除
-
-        // 清除悬停定时器
-        if (this.sidebarHoverTimer) {
-            clearTimeout(this.sidebarHoverTimer);
-        }
 
         // Cleanup blob URLs
         this.cleanupMediaCache();
