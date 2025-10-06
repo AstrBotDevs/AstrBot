@@ -177,8 +177,6 @@ export default {
             stagedImagesName: [], // 用于存储图片文件名的数组
             loadingChat: false,
 
-            inputFieldLabel: '',
-
             // 录音逻辑已迁移至 InputArea
             stagedAudioUrl: "",
 
@@ -200,6 +198,9 @@ export default {
             isConvRunning: false, // Track if the current conversation is running
 
             isToastedRunningInfo: false, // To avoid multiple toasts
+
+            // 临时缓存 Provider/Model 选择
+            _tempSelection: null,
         }
     },
 
@@ -241,8 +242,6 @@ export default {
 
     mounted() {
         // Theme is now handled globally by the customizer store.
-        // 设置输入框标签
-        this.inputFieldLabel = this.tm('input.chatPrompt');
         this.getConversations();
         // 输入与粘贴、快捷键逻辑交由 InputArea 组件内部处理
     },
@@ -255,6 +254,78 @@ export default {
         this.cleanupMediaCache();
     },
     methods: {
+        // --- 通用小助手 ---
+        scrollToBottomSafe() {
+            this.$nextTick(() => {
+                const ml = this.$refs.messageList;
+                if (ml && typeof ml.scrollToBottom === 'function') {
+                    ml.scrollToBottom();
+                }
+            });
+        },
+        async normalizeHistory(history) {
+            for (let i = 0; i < history.length; i++) {
+                const content = history[i].content || {};
+                if (typeof content.message === 'string' && content.message.startsWith('[IMAGE]')) {
+                    const img = content.message.replace('[IMAGE]', '');
+                    const imageUrl = await this.getMediaFile(img);
+                    if (!content.embedded_images) content.embedded_images = [];
+                    content.embedded_images.push(imageUrl);
+                    content.message = '';
+                }
+                if (typeof content.message === 'string' && content.message.startsWith('[RECORD]')) {
+                    const audio = content.message.replace('[RECORD]', '');
+                    const audioUrl = await this.getMediaFile(audio);
+                    content.embedded_audio = audioUrl;
+                    content.message = '';
+                }
+                if (Array.isArray(content.image_url) && content.image_url.length > 0) {
+                    for (let j = 0; j < content.image_url.length; j++) {
+                        content.image_url[j] = await this.getMediaFile(content.image_url[j]);
+                    }
+                }
+                if (content.audio_url) {
+                    content.audio_url = await this.getMediaFile(content.audio_url);
+                }
+            }
+            return history;
+        },
+        ensureCorrectRoute(cid) {
+            const wantChat = `/chat/${cid}`;
+            const wantChatbox = `/chatbox/${cid}`;
+            if (this.$route.path === wantChat || this.$route.path === wantChatbox) return true;
+            if (this.$route.path.startsWith('/chatbox')) this.$router.push(wantChatbox);
+            else this.$router.push(wantChat);
+            return false;
+        },
+        async resolveImageNamesToUrls(names) {
+            const imagePromises = (names || []).map((name) => {
+                if (!name) return Promise.resolve('');
+                if (!String(name).startsWith('blob:')) return this.getMediaFile(name);
+                return Promise.resolve(name);
+            });
+            return Promise.all(imagePromises);
+        },
+        async resolveAudioNameToUrl(name) {
+            if (!name) return null;
+            if (!String(name).startsWith('blob:')) return this.getMediaFile(name);
+            return name;
+        },
+        async createUserMessage(promptToSend, imageNamesToSend, audioNameToSend) {
+            const userMessage = {
+                type: 'user',
+                message: promptToSend,
+                image_url: [],
+                audio_url: null,
+            };
+            if (imageNamesToSend?.length) {
+                userMessage.image_url = await this.resolveImageNamesToUrls(imageNamesToSend);
+            }
+            if (audioNameToSend) {
+                userMessage.audio_url = await this.resolveAudioNameToUrl(audioNameToSend);
+            }
+            return userMessage;
+        },
         toggleTheme() {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
@@ -349,14 +420,7 @@ export default {
             if (!cid[0])
                 return;
 
-            if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
-                if (this.$route.path.startsWith('/chatbox')) {
-                    this.$router.push(`/chatbox/${cid[0]}`);
-                } else {
-                    this.$router.push(`/chat/${cid[0]}`);
-                }
-                return
-            }
+            if (!this.ensureCorrectRoute(cid[0])) return;
 
             apiGetConversation(cid[0]).then(async data => {
                 this.currCid = cid[0];
@@ -375,44 +439,11 @@ export default {
                     }, 3000);
                 }
 
-                // 注意：MessageList 受 messages.length 控制渲染，需在赋值后再滚动
-
-                for (let i = 0; i < history.length; i++) {
-                    let content = history[i].content;
-                    if (content.message.startsWith('[IMAGE]')) {
-                        let img = content.message.replace('[IMAGE]', '');
-                        const imageUrl = await this.getMediaFile(img);
-                        if (!content.embedded_images) {
-                            content.embedded_images = [];
-                        }
-                        content.embedded_images.push(imageUrl);
-                        content.message = '';
-                    }
-
-                    if (content.message.startsWith('[RECORD]')) {
-                        let audio = content.message.replace('[RECORD]', '');
-                        const audioUrl = await this.getMediaFile(audio);
-                        content.embedded_audio = audioUrl;
-                        content.message = '';
-                    }
-
-                    if (content.image_url && content.image_url.length > 0) {
-                        for (let j = 0; j < content.image_url.length; j++) {
-                            content.image_url[j] = await this.getMediaFile(content.image_url[j]);
-                        }
-                    }
-
-                    if (content.audio_url) {
-                        content.audio_url = await this.getMediaFile(content.audio_url);
-                    }
-                }
+                // 标准化并解析历史消息的媒体 URL
+                await this.normalizeHistory(history);
                 this.messages = history;
-                this.$nextTick(() => {
-                    const ml = this.$refs.messageList;
-                    if (ml && typeof ml.scrollToBottom === 'function') {
-                        ml.scrollToBottom();
-                    }
-                });
+                // MessageList 受 messages 控制渲染，赋值后再滚动
+                this.scrollToBottomSafe();
             }).catch(err => {
                 console.error(err);
             });
@@ -490,37 +521,17 @@ export default {
             this.stagedImagesName = [];
             this.stagedAudioUrl = "";
 
-            // Create a message object with actual URLs for display
-            const userMessage = {
-                type: 'user',
-                message: promptToSend,
-                image_url: [],
-                audio_url: null
-            };
-
-            // Convert image filenames to blob URLs for display
-            if (imageNamesToSend.length > 0) {
-                const imagePromises = imageNamesToSend.map(name => {
-                    if (!name.startsWith('blob:')) {
-                        return this.getMediaFile(name);
-                    }
-                    return Promise.resolve(name);
-                });
-                userMessage.image_url = await Promise.all(imagePromises);
-            }
-
-            // Convert audio filename to blob URL for display
-            if (audioNameToSend) {
-                if (!audioNameToSend.startsWith('blob:')) {
-                    userMessage.audio_url = await this.getMediaFile(audioNameToSend);
-                } else {
-                    userMessage.audio_url = audioNameToSend;
-                }
-            }
+            // 构造展示用的用户消息（解析媒体 URL）
+            const userMessage = await this.createUserMessage(
+                promptToSend,
+                imageNamesToSend,
+                audioNameToSend,
+            );
 
             this.messages.push({
                 "content": userMessage,
             });
+            this.scrollToBottomSafe();
             this.loadingChat = true
 
             // 从ProviderModelSelector组件获取当前选择
