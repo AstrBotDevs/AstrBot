@@ -16,11 +16,13 @@ import astrbot.api.message_components as Comp
 
 from .misskey_api import MisskeyAPI, APIError
 import mimetypes
+import os
 
 try:
     import magic  # type: ignore
 except Exception:
     magic = None
+
 from .misskey_event import MisskeyPlatformEvent
 from .misskey_utils import (
     serialize_message_chain,
@@ -37,7 +39,10 @@ from .misskey_utils import (
     cache_room_info,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-import os
+
+# Constants
+MAX_FILE_UPLOAD_COUNT = 16
+DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
 @register_platform_adapter("misskey", "Misskey 平台适配器")
@@ -56,7 +61,6 @@ class MisskeyPlatformAdapter(Platform):
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
-        # whether to enable file upload to Misskey (drive/files/create)
         self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
         self.upload_folder = self.config.get("misskey_upload_folder")
 
@@ -108,6 +112,104 @@ class MisskeyPlatformAdapter(Platform):
 
         await self._start_websocket_connection()
 
+    def _register_event_handlers(self, streaming):
+        """注册事件处理器"""
+        streaming.add_message_handler("notification", self._handle_notification)
+        streaming.add_message_handler("main:notification", self._handle_notification)
+
+        if self.enable_chat:
+            streaming.add_message_handler("newChatMessage", self._handle_chat_message)
+            streaming.add_message_handler(
+                "messaging:newChatMessage", self._handle_chat_message
+            )
+            streaming.add_message_handler("_debug", self._debug_handler)
+
+    async def _send_text_only_message(
+        self, session_id: str, text: str, session, message_chain
+    ):
+        """发送纯文本消息（无文件上传）"""
+        if not self.api:
+            return await super().send_by_session(session, message_chain)
+
+        if session_id and is_valid_user_session_id(session_id):
+            from .misskey_utils import extract_user_id_from_session_id
+
+            user_id = extract_user_id_from_session_id(session_id)
+            payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
+            await self.api.send_message(payload)
+        elif session_id and is_valid_room_session_id(session_id):
+            from .misskey_utils import extract_room_id_from_session_id
+
+            room_id = extract_room_id_from_session_id(session_id)
+            payload = {"toRoomId": room_id, "text": text}
+            await self.api.send_room_message(payload)
+
+        return await super().send_by_session(session, message_chain)
+
+    def _detect_mime_and_ext(self, path: str) -> Optional[str]:
+        """检测文件MIME类型并返回对应扩展名"""
+        try:
+            if magic:
+                m = magic.Magic(mime=True)
+                mime = m.from_file(path)
+            else:
+                mime, _ = mimetypes.guess_type(path)
+        except Exception:
+            mime = None
+
+        if not mime:
+            return None
+
+        mapping = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "text/plain": ".txt",
+            "application/pdf": ".pdf",
+        }
+        return mapping.get(mime, mimetypes.guess_extension(mime) or None)
+
+    def _process_poll_data(
+        self, message: AstrBotMessage, poll: Dict[str, Any], message_parts: List[str]
+    ):
+        """处理投票数据，将其添加到消息中"""
+        try:
+            if not isinstance(message.raw_message, dict):
+                message.raw_message = {}
+            message.raw_message["poll"] = poll
+            setattr(message, "poll", poll)
+        except Exception:
+            pass
+
+        poll_text = format_poll(poll)
+        if poll_text:
+            message.message.append(Comp.Plain(poll_text))
+            message_parts.append(poll_text)
+
+    def _extract_additional_fields(self, session, message_chain) -> Dict[str, Any]:
+        """从会话和消息链中提取额外字段"""
+        fields = {"cw": None, "poll": None, "renote_id": None, "channel_id": None}
+
+        for comp in message_chain.chain:
+            if hasattr(comp, "cw") and getattr(comp, "cw", None):
+                fields["cw"] = getattr(comp, "cw")
+                break
+
+        if hasattr(session, "extra_data") and isinstance(
+            getattr(session, "extra_data", None), dict
+        ):
+            extra_data = getattr(session, "extra_data")
+            fields.update(
+                {
+                    "poll": extra_data.get("poll"),
+                    "renote_id": extra_data.get("renote_id"),
+                    "channel_id": extra_data.get("channel_id"),
+                }
+            )
+
+        return fields
+
     async def _start_websocket_connection(self):
         backoff_delay = 1.0
         max_backoff = 300.0
@@ -122,32 +224,20 @@ class MisskeyPlatformAdapter(Platform):
                     break
 
                 streaming = self.api.get_streaming_client()
-                # register handlers for both plain event types and channel-prefixed variants
-                streaming.add_message_handler("notification", self._handle_notification)
-                streaming.add_message_handler(
-                    "main:notification", self._handle_notification
-                )
-                if self.enable_chat:
-                    streaming.add_message_handler(
-                        "newChatMessage", self._handle_chat_message
-                    )
-                    streaming.add_message_handler(
-                        "messaging:newChatMessage", self._handle_chat_message
-                    )
-                    streaming.add_message_handler("_debug", self._debug_handler)
+                self._register_event_handlers(streaming)
 
                 if await streaming.connect():
                     logger.info(
                         f"[Misskey] WebSocket 已连接 (尝试 #{connection_attempts})"
                     )
-                    connection_attempts = 0  # 重置计数器
+                    connection_attempts = 0
                     await streaming.subscribe_channel("main")
                     if self.enable_chat:
                         await streaming.subscribe_channel("messaging")
                         await streaming.subscribe_channel("messagingIndex")
                         logger.info("[Misskey] 聊天频道已订阅")
 
-                    backoff_delay = 1.0  # 重置延迟
+                    backoff_delay = 1.0
                     await streaming.listen()
                 else:
                     logger.error(
@@ -274,55 +364,24 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
-            # handle file uploads concurrently with a semaphore limit
             file_ids: List[str] = []
             fallback_urls: List[str] = []
 
             if not self.enable_file_upload:
                 logger.debug("[Misskey] 文件上传已在配置中禁用，跳过上传流程")
-                # skip to sending text-only payloads
-                if session_id and is_valid_user_session_id(session_id):
-                    from .misskey_utils import extract_user_id_from_session_id
+                return await self._send_text_only_message(
+                    session_id, text, session, message_chain
+                )
 
-                    user_id = extract_user_id_from_session_id(session_id)
-                    payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
-                    await self.api.send_message(payload)
-                    return await super().send_by_session(session, message_chain)
-                elif session_id and is_valid_room_session_id(session_id):
-                    from .misskey_utils import extract_room_id_from_session_id
-
-                    room_id = extract_room_id_from_session_id(session_id)
-                    payload = {"toRoomId": room_id, "text": text}
-                    await self.api.send_room_message(payload)
-                    return await super().send_by_session(session, message_chain)
-            upload_concurrency = int(self.config.get("misskey_upload_concurrency", 3))
+            upload_concurrency = int(
+                self.config.get(
+                    "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY
+                )
+            )
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> Optional[object]:
                 upload_path = None
-
-                def _detect_mime_and_ext(path: str) -> Optional[str]:
-                    # Try python-magic first (from buffer), fallback to mimetypes
-                    try:
-                        if magic:
-                            m = magic.Magic(mime=True)
-                            mime = m.from_file(path)
-                        else:
-                            mime, _ = mimetypes.guess_type(path)
-                    except Exception:
-                        mime = None
-                    if not mime:
-                        return None
-                    # map common mime to ext
-                    mapping = {
-                        "image/jpeg": ".jpg",
-                        "image/jpg": ".jpg",
-                        "image/png": ".png",
-                        "image/gif": ".gif",
-                        "text/plain": ".txt",
-                        "application/pdf": ".pdf",
-                    }
-                    return mapping.get(mime, mimetypes.guess_extension(mime) or None)
 
                 try:
                     if hasattr(comp, "convert_to_file_path"):
@@ -339,7 +398,6 @@ class MisskeyPlatformAdapter(Platform):
                     if not upload_path:
                         return None
 
-                    # upload under semaphore
                     async with sem:
                         if not self.api:
                             return None
@@ -358,7 +416,6 @@ class MisskeyPlatformAdapter(Platform):
                             return str(fid) if fid else None
                         except Exception as e:
                             logger.error(f"[Misskey] 文件上传失败: {e}")
-                            # If it's an unallowed file type, try detecting mime and retry with a suitable extension
                             tried_names = []
                             try:
                                 msg = str(e).lower()
@@ -372,14 +429,11 @@ class MisskeyPlatformAdapter(Platform):
                                 ):
                                     base_name = os.path.basename(upload_path)
                                     name_root, ext = os.path.splitext(base_name)
-                                    # try detect mime -> extension
-                                    try_ext = _detect_mime_and_ext(upload_path)
+                                    try_ext = self._detect_mime_and_ext(upload_path)
                                     candidates = []
                                     if try_ext:
                                         candidates.append(try_ext)
-                                    # fall back to a small set
                                     candidates.extend([".jpg", ".png", ".txt", ".bin"])
-                                    # if ext is non-empty and short, include it first
                                     if ext and len(ext) <= 5 and ext not in candidates:
                                         candidates.insert(0, ext)
                                     for c in candidates:
@@ -408,7 +462,6 @@ class MisskeyPlatformAdapter(Platform):
                             except Exception:
                                 pass
 
-                            # fallback: try register_to_file_service or get_file(allow_return_url=True)
                             try:
                                 if hasattr(comp, "register_to_file_service"):
                                     try:
@@ -430,7 +483,6 @@ class MisskeyPlatformAdapter(Platform):
                                 pass
                             return None
                 finally:
-                    # cleanup temporary file if it was created under data/temp
                     try:
                         if upload_path:
                             data_temp = os.path.join(get_astrbot_data_path(), "temp")
@@ -447,10 +499,21 @@ class MisskeyPlatformAdapter(Platform):
                     except Exception:
                         pass
 
-            upload_tasks = [_upload_comp(comp) for comp in message_chain.chain]
-            fallback_urls: List[str] = []
+            file_components = [
+                comp
+                for comp in message_chain.chain
+                if hasattr(comp, "convert_to_file_path") or hasattr(comp, "get_file")
+            ]
+            if len(file_components) > MAX_FILE_UPLOAD_COUNT:
+                logger.warning(
+                    f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT})，只上传前{MAX_FILE_UPLOAD_COUNT}个文件"
+                )
+                file_components = file_components[:MAX_FILE_UPLOAD_COUNT]
+
+            upload_tasks = [_upload_comp(comp) for comp in file_components]
+
             try:
-                results = await asyncio.gather(*upload_tasks)
+                results = await asyncio.gather(*upload_tasks) if upload_tasks else []
                 for r in results:
                     if not r:
                         continue
@@ -459,17 +522,16 @@ class MisskeyPlatformAdapter(Platform):
                         if url:
                             fallback_urls.append(str(url))
                     else:
-                        # ensure we only append string file ids
                         try:
                             fid_str = str(r)
+                            if fid_str:
+                                file_ids.append(fid_str)
                         except Exception:
-                            fid_str = None
-                        if fid_str:
-                            file_ids.append(fid_str)
+                            pass
             except Exception:
                 logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
 
-            if session_id and is_valid_user_session_id(session_id):
+            if session_id and is_valid_room_session_id(session_id):
                 from .misskey_utils import extract_room_id_from_session_id
 
                 room_id = extract_room_id_from_session_id(session_id)
@@ -488,35 +550,7 @@ class MisskeyPlatformAdapter(Platform):
                     default_visibility=self.default_visibility,
                 )
 
-                # Extract additional fields from message chain or session context
-                cw = None
-                poll = None
-                renote_id = None
-                channel_id = None
-
-                # Try to extract CW from message components (safe attribute check)
-                for comp in message_chain.chain:
-                    if hasattr(comp, "cw") and getattr(comp, "cw", None):
-                        cw = getattr(comp, "cw")
-                        break
-
-                # Try to extract poll from session data (safe attribute check)
-                if hasattr(session, "extra_data") and isinstance(
-                    getattr(session, "extra_data", None), dict
-                ):
-                    extra_data = getattr(session, "extra_data")
-                    poll = extra_data.get("poll")
-                    renote_id = extra_data.get("renote_id")
-                    channel_id = extra_data.get("channel_id")
-
-                # Limit file_ids to 16 (Misskey server limit)
-                if file_ids and len(file_ids) > 16:
-                    logger.warning(
-                        f"[Misskey] 文件数量超过限制 ({len(file_ids)} > 16)，只上传前16个文件"
-                    )
-                    file_ids = file_ids[:16]
-
-                # Add fallback URLs to text if we have them
+                fields = self._extract_additional_fields(session, message_chain)
                 if fallback_urls:
                     appended = "\n" + "\n".join(fallback_urls)
                     text = (text or "") + appended
@@ -527,10 +561,10 @@ class MisskeyPlatformAdapter(Platform):
                     visible_user_ids=visible_user_ids,
                     file_ids=file_ids if file_ids else None,
                     local_only=self.local_only,
-                    cw=cw,
-                    poll=poll,
-                    renote_id=renote_id,
-                    channel_id=channel_id,
+                    cw=fields["cw"],
+                    poll=fields["poll"],
+                    renote_id=fields["renote_id"],
+                    channel_id=fields["channel_id"],
                 )
 
         except Exception as e:
@@ -565,40 +599,19 @@ class MisskeyPlatformAdapter(Platform):
         file_parts = process_files(message, files)
         message_parts.extend(file_parts)
 
-        # poll 支持：将 poll 结构保存在 message.raw_message / message.poll 中，并将格式化文本追加到消息链
-        poll = raw_data.get("poll")
-        if not poll and isinstance(raw_data.get("note"), dict):
-            poll = raw_data["note"].get("poll")
+        poll = raw_data.get("poll") or (
+            raw_data.get("note", {}).get("poll")
+            if isinstance(raw_data.get("note"), dict)
+            else None
+        )
         if poll and isinstance(poll, dict):
-            # 保证 raw_message 是一个可写字典
-            try:
-                if not isinstance(message.raw_message, dict):
-                    message.raw_message = {}
-                message.raw_message["poll"] = poll
-            except Exception:
-                # 忽略设置失败，确保 raw_message 最少为 dict
-                try:
-                    message.raw_message = {}
-                    message.raw_message["poll"] = poll
-                except Exception:
-                    pass
-            # 方便插件直接读取，使用 setattr 以兼容不同 message 类型
-            try:
-                setattr(message, "poll", poll)
-            except Exception:
-                pass
-
-            poll_text = format_poll(poll)
-            if poll_text:
-                message.message.append(Comp.Plain(poll_text))
-                message_parts.append(poll_text)
+            self._process_poll_data(message, poll, message_parts)
 
         message.message_str = (
             " ".join(part for part in message_parts if part.strip())
             if message_parts
             else ""
         )
-        return message
         return message
 
     async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:

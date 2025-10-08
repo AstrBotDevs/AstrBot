@@ -277,8 +277,6 @@ def create_base_message(
 
     return message
 
-    return message
-
 
 def process_at_mention(
     message: AstrBotMessage, raw_text: str, bot_username: str, client_self_id: str

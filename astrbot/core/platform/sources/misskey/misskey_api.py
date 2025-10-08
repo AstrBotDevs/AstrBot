@@ -56,9 +56,7 @@ class StreamingClient:
         self.websocket: Optional[Any] = None
         self.is_connected = False
         self.message_handlers: Dict[str, Callable] = {}
-        # map channel_id -> channel_type
         self.channels: Dict[str, str] = {}
-        # desired channel types to keep subscribed across reconnects
         self.desired_channels: Dict[str, Optional[Dict]] = {}
         self._running = False
         self._last_pong = None
@@ -77,10 +75,8 @@ class StreamingClient:
             self._running = True
 
             logger.info("[Misskey WebSocket] 已连接")
-            # If we had desired channels from a previous session, resubscribe them
             if self.desired_channels:
                 try:
-                    # make a copy to avoid mutation during iteration
                     desired = list(self.desired_channels.items())
                     for channel_type, params in desired:
                         try:
@@ -90,7 +86,6 @@ class StreamingClient:
                                 f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}"
                             )
                 except Exception:
-                    # never fail the connect flow for resubscribe problems
                     pass
             return True
 
@@ -134,18 +129,14 @@ class StreamingClient:
         message = {"type": "disconnect", "body": {"id": channel_id}}
         await self.websocket.send(json.dumps(message))
         channel_type = self.channels.get(channel_id)
-        # remove the channel mapping
         if channel_id in self.channels:
             del self.channels[channel_id]
-        # if no more subscriptions of this type exist, drop the desired channel entry
         if channel_type and channel_type not in self.channels.values():
             self.desired_channels.pop(channel_type, None)
 
     def add_message_handler(
         self, event_type: str, handler: Callable[[Dict], Awaitable[None]]
     ):
-        # register both the raw event type and the channel-prefixed variant
-        # e.g. 'main:notification' and 'notification' -> both map to handler
         self.message_handlers[event_type] = handler
 
     async def listen(self):
@@ -200,7 +191,6 @@ class StreamingClient:
         message_type = data.get("type")
         body = data.get("body", {})
 
-        # concise summary for INFO, full payload is logged at DEBUG
         try:
             body = data.get("body") or {}
             channel_summary = None
@@ -234,7 +224,6 @@ class StreamingClient:
         except Exception:
             logger.info(f"[Misskey WebSocket] 收到消息类型: {message_type}")
 
-        # full payload only in DEBUG
         logger.debug(
             f"[Misskey WebSocket] 收到完整消息: {json.dumps(data, indent=2, ensure_ascii=False)}"
         )
@@ -289,7 +278,6 @@ def retry_async(max_retries: int = 3, retryable_exceptions: tuple = (())):
                     return await func(*args, **kwargs)
                 except retryable_exceptions as e:
                     last_exc = e
-                    # exponential backoff with jitter
                     backoff = min(2 ** (attempt - 1), 30)
                     jitter = random.uniform(0, 1)
                     await asyncio.sleep(backoff + jitter)
@@ -414,7 +402,6 @@ class MisskeyAPI:
         visible_user_ids: Optional[List[str]] = None,
         file_ids: Optional[List[str]] = None,
         local_only: bool = False,
-        # Additional optional Misskey create fields
         cw: Optional[str] = None,
         poll: Optional[Dict[str, Any]] = None,
         renote_id: Optional[str] = None,
@@ -428,7 +415,6 @@ class MisskeyAPI:
         """Create a note (wrapper for notes/create). All additional fields are optional and passed through to the API."""
         data: Dict[str, Any] = {}
 
-        # only include text if provided (server allows null in some flows)
         if text is not None:
             data["text"] = text
 
@@ -441,7 +427,6 @@ class MisskeyAPI:
         if visible_user_ids and visibility == "specified":
             data["visibleUserIds"] = visible_user_ids
 
-        # support both fileIds and mediaIds (server accepts either)
         if file_ids:
             data["fileIds"] = file_ids
         if media_ids:
