@@ -1,7 +1,7 @@
 import asyncio
 import random
 import json
-from typing import Dict, Any, Optional, Awaitable
+from typing import Dict, Any, Optional, Awaitable, List
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -30,6 +30,8 @@ from .misskey_utils import (
     cache_user_info,
     cache_room_info,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+import os
 
 
 @register_platform_adapter("misskey", "Misskey 平台适配器")
@@ -257,16 +259,84 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
+            # handle file uploads concurrently with a semaphore limit
+            file_ids: List[str] = []
+            upload_concurrency = int(self.config.get("misskey_upload_concurrency", 3))
+            sem = asyncio.Semaphore(upload_concurrency)
+
+            async def _upload_comp(comp) -> Optional[str]:
+                upload_path = None
+                tmp_created = False
+                try:
+                    if hasattr(comp, "convert_to_file_path"):
+                        try:
+                            upload_path = await comp.convert_to_file_path()
+                        except Exception:
+                            pass
+                    if not upload_path and hasattr(comp, "get_file"):
+                        try:
+                            upload_path = await comp.get_file()
+                        except Exception:
+                            pass
+
+                    if not upload_path:
+                        return None
+
+                    # upload under semaphore
+                    async with sem:
+                        if not self.api:
+                            return None
+                        try:
+                            upload_result = await self.api.upload_file(upload_path, getattr(comp, "name", None) or getattr(comp, "file", None))
+                            fid = None
+                            if isinstance(upload_result, dict):
+                                fid = upload_result.get("id") or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
+                            # cleanup temporary file if it was created under data/temp
+                            try:
+                                data_temp = os.path.join(get_astrbot_data_path(), "temp")
+                                # normalize paths
+                                if upload_path.startswith(data_temp):
+                                    try:
+                                        os.remove(upload_path)
+                                        logger.debug(f"[Misskey] 已清理临时文件: {upload_path}")
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                            return str(fid) if fid else None
+                        except Exception as e:
+                            logger.error(f"[Misskey] 文件上传失败: {e}")
+                            return None
+                finally:
+                    # nothing to do here for now
+                    pass
+
+            upload_tasks = [ _upload_comp(comp) for comp in message_chain.chain ]
+            try:
+                results = await asyncio.gather(*upload_tasks)
+                for r in results:
+                    if r:
+                        file_ids.append(r)
+            except Exception:
+                logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
+
             if session_id and is_valid_user_session_id(session_id):
                 from .misskey_utils import extract_user_id_from_session_id
 
                 user_id = extract_user_id_from_session_id(session_id)
-                await self.api.send_message(user_id, text)
+                # if file_ids exist and API supports chat attachments, pass them
+                payload = {"toUserId": user_id, "text": text}
+                if file_ids:
+                    payload["fileIds"] = file_ids
+                await self.api.send_message(payload)
             elif session_id and is_valid_room_session_id(session_id):
                 from .misskey_utils import extract_room_id_from_session_id
 
                 room_id = extract_room_id_from_session_id(session_id)
-                await self.api.send_room_message(room_id, text)
+                payload = {"toRoomId": room_id, "text": text}
+                if file_ids:
+                    payload["fileIds"] = file_ids
+                await self.api.send_room_message(payload)
             else:
                 visibility, visible_user_ids = resolve_message_visibility(
                     user_id=session_id,
@@ -279,6 +349,7 @@ class MisskeyPlatformAdapter(Platform):
                     text,
                     visibility=visibility,
                     visible_user_ids=visible_user_ids,
+                    file_ids=file_ids if file_ids else None,
                     local_only=self.local_only,
                 )
 

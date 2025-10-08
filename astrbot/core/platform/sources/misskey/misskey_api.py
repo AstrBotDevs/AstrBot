@@ -406,6 +406,7 @@ class MisskeyAPI:
         visibility: str = "public",
         reply_id: Optional[str] = None,
         visible_user_ids: Optional[List[str]] = None,
+        file_ids: Optional[List[str]] = None,
         local_only: bool = False,
     ) -> Dict[str, Any]:
         """创建新贴文"""
@@ -418,30 +419,75 @@ class MisskeyAPI:
             data["replyId"] = reply_id
         if visible_user_ids and visibility == "specified":
             data["visibleUserIds"] = visible_user_ids
+        if file_ids:
+            data["fileIds"] = file_ids
 
         result = await self._make_request("notes/create", data)
         note_id = result.get("createdNote", {}).get("id", "unknown")
         logger.debug(f"发帖成功，note_id: {note_id}")
         return result
 
+    async def upload_file(self, file_path: str, name: Optional[str] = None) -> Dict[str, Any]:
+        if not file_path:
+            raise APIError("No file path provided for upload")
+
+        url = f"{self.instance_url}/api/drive/files/create"
+        form = aiohttp.FormData()
+        form.add_field("i", self.access_token)
+
+        try:
+            with open(file_path, "rb") as f:
+                filename = name or file_path.split("/")[-1]
+                form.add_field("file", f, filename=filename)
+                async with self.session.post(url, data=form) as resp:
+                    result = await self._process_response(resp, "drive/files/create")
+                    logger.debug(f"上传文件到 Misskey 成功: {filename}")
+                    # try to extract an id in a few common places for caller convenience
+                    fid = None
+                    if isinstance(result, dict):
+                        fid = (
+                            result.get("createdFile", {}).get("id")
+                            or result.get("id")
+                            or (result.get("file") or {}).get("id")
+                        )
+                    return {"id": fid, "raw": result}
+        except FileNotFoundError as e:
+            logger.error(f"上传文件失败，本地文件未找到: {file_path}")
+            raise APIError(f"File not found: {file_path}") from e
+        except aiohttp.ClientError as e:
+            logger.error(f"上传文件 HTTP 错误: {e}")
+            raise APIConnectionError(f"Upload failed: {e}") from e
+
     async def get_current_user(self) -> Dict[str, Any]:
         """获取当前用户信息"""
         return await self._make_request("i", {})
 
-    async def send_message(self, user_id: str, text: str) -> Dict[str, Any]:
-        """发送聊天消息"""
-        result = await self._make_request(
-            "chat/messages/create-to-user", {"toUserId": user_id, "text": text}
-        )
+    async def send_message(self, user_id_or_payload: Any, text: Optional[str] = None) -> Dict[str, Any]:
+        """发送聊天消息。
+
+        Accepts either (user_id: str, text: str) or a single dict payload prepared by caller.
+        """
+        if isinstance(user_id_or_payload, dict):
+            data = user_id_or_payload
+        else:
+            data = {"toUserId": user_id_or_payload, "text": text}
+
+        result = await self._make_request("chat/messages/create-to-user", data)
         message_id = result.get("id", "unknown")
         logger.debug(f"聊天发送成功，message_id: {message_id}")
         return result
 
-    async def send_room_message(self, room_id: str, text: str) -> Dict[str, Any]:
-        """发送房间消息"""
-        result = await self._make_request(
-            "chat/messages/create-to-room", {"toRoomId": room_id, "text": text}
-        )
+    async def send_room_message(self, room_id_or_payload: Any, text: Optional[str] = None) -> Dict[str, Any]:
+        """发送房间消息。
+
+        Accepts either (room_id: str, text: str) or a single dict payload.
+        """
+        if isinstance(room_id_or_payload, dict):
+            data = room_id_or_payload
+        else:
+            data = {"toRoomId": room_id_or_payload, "text": text}
+
+        result = await self._make_request("chat/messages/create-to-room", data)
         message_id = result.get("id", "unknown")
         logger.debug(f"房间消息发送成功，message_id: {message_id}")
         return result
