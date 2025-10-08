@@ -157,8 +157,43 @@ class StreamingClient:
         message_type = data.get("type")
         body = data.get("body", {})
 
+        # 简洁摘要（在 INFO 级别下可见），完整 JSON 仍保留在 DEBUG 级别
+        try:
+            body = data.get("body") or {}
+            channel_summary = None
+            if isinstance(body, dict):
+                # 尝试提取 note/类型/用户/是否含文件/是否隐藏等关键信息
+                inner = body.get("body") if isinstance(body.get("body"), dict) else body
+                note = None
+                if isinstance(inner, dict) and isinstance(inner.get("note"), dict):
+                    note = inner.get("note")
+                text = None
+                has_files = False
+                is_hidden = False
+                note_id = None
+                user = None
+                if note:
+                    text = note.get("text")
+                    note_id = note.get("id")
+                    files = note.get("files") or []
+                    has_files = bool(files)
+                    is_hidden = bool(note.get("isHidden"))
+                    user = note.get("user", {})
+                channel_summary = (
+                    f"[Misskey WebSocket] 收到消息类型: {message_type} | "
+                    f"note_id={note_id} | user={user.get('username') if user else None} | "
+                    f"text={'[no-text]' if not text else text[:80]} | files={has_files} | hidden={is_hidden}"
+                )
+            else:
+                channel_summary = f"[Misskey WebSocket] 收到消息类型: {message_type}"
+
+            logger.info(channel_summary)
+        except Exception:
+            logger.info(f"[Misskey WebSocket] 收到消息类型: {message_type}")
+
+        # 仅在 DEBUG 级别打印完整 JSON
         logger.debug(
-            f"[Misskey WebSocket] 收到消息类型: {message_type}\n数据: {json.dumps(data, indent=2, ensure_ascii=False)}"
+            f"[Misskey WebSocket] 收到完整消息: {json.dumps(data, indent=2, ensure_ascii=False)}"
         )
 
         if message_type == "channel":

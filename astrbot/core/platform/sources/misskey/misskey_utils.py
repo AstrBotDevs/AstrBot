@@ -197,6 +197,25 @@ def process_files(
     return file_parts
 
 
+def format_poll(poll: Dict[str, Any]) -> str:
+    """将 Misskey 的 poll 对象格式化为可读字符串。"""
+    if not poll or not isinstance(poll, dict):
+        return ""
+    parts = []
+    multiple = poll.get("multiple", False)
+    choices = poll.get("choices", [])
+    parts.append("[投票]")
+    parts.append("允许多选" if multiple else "单选")
+    text_choices = []
+    for idx, c in enumerate(choices, start=1):
+        text = c.get("text", "")
+        votes = c.get("votes", 0)
+        text_choices.append(f"({idx}) {text} [{votes}票]")
+    if text_choices:
+        parts.append("选项: "+ ", ".join(text_choices))
+    return " ".join(parts)
+
+
 def extract_sender_info(
     raw_data: Dict[str, Any], is_chat: bool = False
 ) -> Dict[str, Any]:
@@ -248,13 +267,15 @@ def create_base_message(
     else:
         session_prefix = "note"
         session_id = f"{session_prefix}%{sender_info['sender_id']}"
-        message.type = MessageType.FRIEND_MESSAGE
+        message.type = MessageType.OTHER_MESSAGE
 
     message.session_id = (
         session_id if sender_info["sender_id"] else f"{session_prefix}%unknown"
     )
     message.message_id = str(raw_data.get("id", ""))
     message.self_id = client_self_id
+
+    return message
 
     return message
 

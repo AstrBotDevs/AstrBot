@@ -25,6 +25,7 @@ from .misskey_utils import (
     extract_sender_info,
     create_base_message,
     process_at_mention,
+        format_poll,
     cache_user_info,
     cache_room_info,
 )
@@ -309,11 +310,36 @@ class MisskeyPlatformAdapter(Platform):
         file_parts = process_files(message, files)
         message_parts.extend(file_parts)
 
+        # poll 支持：将 poll 结构保存在 message.raw_message / message.poll 中，并将格式化文本追加到消息链
+        poll = raw_data.get("poll")
+        if not poll and isinstance(raw_data.get("note"), dict):
+            poll = raw_data["note"].get("poll")
+        if poll and isinstance(poll, dict):
+            try:
+                # 保证 raw_message 是可写字典
+                if not isinstance(message.raw_message, dict):
+                    message.raw_message = dict(message.raw_message or {})
+                message.raw_message["poll"] = poll
+            except Exception:
+                # 忽略设置失败
+                pass
+            # 方便插件直接读取
+            try:
+                message.poll = poll
+            except Exception:
+                setattr(message, "poll", poll)
+
+            poll_text = format_poll(poll)
+            if poll_text:
+                message.message.append(Comp.Plain(poll_text))
+                message_parts.append(poll_text)
+
         message.message_str = (
             " ".join(part for part in message_parts if part.strip())
             if message_parts
             else ""
         )
+        return message
         return message
 
     async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
