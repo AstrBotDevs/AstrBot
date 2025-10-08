@@ -1,4 +1,6 @@
 import json
+import random
+import asyncio
 from typing import Any, Optional, Dict, List, Callable, Awaitable
 import uuid
 
@@ -54,7 +56,10 @@ class StreamingClient:
         self.websocket: Optional[Any] = None
         self.is_connected = False
         self.message_handlers: Dict[str, Callable] = {}
+        # map channel_id -> channel_type
         self.channels: Dict[str, str] = {}
+        # desired channel types to keep subscribed across reconnects
+        self.desired_channels: Dict[str, Optional[Dict]] = {}
         self._running = False
         self._last_pong = None
 
@@ -72,6 +77,19 @@ class StreamingClient:
             self._running = True
 
             logger.info("[Misskey WebSocket] 已连接")
+            # If we had desired channels from a previous session, resubscribe them
+            if self.desired_channels:
+                try:
+                    # make a copy to avoid mutation during iteration
+                    desired = list(self.desired_channels.items())
+                    for channel_type, params in desired:
+                        try:
+                            await self.subscribe_channel(channel_type, params)
+                        except Exception as e:
+                            logger.warning(f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}")
+                except Exception:
+                    # never fail the connect flow for resubscribe problems
+                    pass
             return True
 
         except Exception as e:
@@ -104,21 +122,24 @@ class StreamingClient:
         return channel_id
 
     async def unsubscribe_channel(self, channel_id: str):
-        if (
-            not self.is_connected
-            or not self.websocket
-            or channel_id not in self.channels
-        ):
+        if not self.is_connected or not self.websocket or channel_id not in self.channels:
             return
 
         message = {"type": "disconnect", "body": {"id": channel_id}}
-
         await self.websocket.send(json.dumps(message))
-        del self.channels[channel_id]
+        channel_type = self.channels.get(channel_id)
+        # remove the channel mapping
+        if channel_id in self.channels:
+            del self.channels[channel_id]
+        # if no more subscriptions of this type exist, drop the desired channel entry
+        if channel_type and channel_type not in self.channels.values():
+            self.desired_channels.pop(channel_type, None)
 
     def add_message_handler(
         self, event_type: str, handler: Callable[[Dict], Awaitable[None]]
     ):
+        # register both the raw event type and the channel-prefixed variant
+        # e.g. 'main:notification' and 'notification' -> both map to handler
         self.message_handlers[event_type] = handler
 
     async def listen(self):
@@ -141,28 +162,43 @@ class StreamingClient:
         except websockets.exceptions.ConnectionClosedError as e:
             logger.warning(f"[Misskey WebSocket] 连接意外关闭: {e}")
             self.is_connected = False
+            try:
+                await self.disconnect()
+            except Exception:
+                pass
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(
                 f"[Misskey WebSocket] 连接已关闭 (代码: {e.code}, 原因: {e.reason})"
             )
             self.is_connected = False
+            try:
+                await self.disconnect()
+            except Exception:
+                pass
         except websockets.exceptions.InvalidHandshake as e:
             logger.error(f"[Misskey WebSocket] 握手失败: {e}")
             self.is_connected = False
+            try:
+                await self.disconnect()
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"[Misskey WebSocket] 监听消息失败: {e}")
             self.is_connected = False
+            try:
+                await self.disconnect()
+            except Exception:
+                pass
 
     async def _handle_message(self, data: Dict[str, Any]):
         message_type = data.get("type")
         body = data.get("body", {})
 
-        # 简洁摘要（在 INFO 级别下可见），完整 JSON 仍保留在 DEBUG 级别
+        # concise summary for INFO, full payload is logged at DEBUG
         try:
             body = data.get("body") or {}
             channel_summary = None
             if isinstance(body, dict):
-                # 尝试提取 note/类型/用户/是否含文件/是否隐藏等关键信息
                 inner = body.get("body") if isinstance(body.get("body"), dict) else body
                 note = None
                 if isinstance(inner, dict) and isinstance(inner.get("note"), dict):
@@ -179,6 +215,7 @@ class StreamingClient:
                     has_files = bool(files)
                     is_hidden = bool(note.get("isHidden"))
                     user = note.get("user", {})
+
                 channel_summary = (
                     f"[Misskey WebSocket] 收到消息类型: {message_type} | "
                     f"note_id={note_id} | user={user.get('username') if user else None} | "
@@ -191,7 +228,7 @@ class StreamingClient:
         except Exception:
             logger.info(f"[Misskey WebSocket] 收到消息类型: {message_type}")
 
-        # 仅在 DEBUG 级别打印完整 JSON
+        # full payload only in DEBUG
         logger.debug(
             f"[Misskey WebSocket] 收到完整消息: {json.dumps(data, indent=2, ensure_ascii=False)}"
         )
@@ -237,15 +274,19 @@ class StreamingClient:
                 await self.message_handlers["_debug"](data)
 
 
-def retry_async(max_retries: int = 3, retryable_exceptions: tuple = ()):
+def retry_async(max_retries: int = 3, retryable_exceptions: tuple = (())):
     def decorator(func):
         async def wrapper(*args, **kwargs):
             last_exc = None
-            for _ in range(max_retries):
+            for attempt in range(1, max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
                 except retryable_exceptions as e:
                     last_exc = e
+                    # exponential backoff with jitter
+                    backoff = min(2 ** (attempt - 1), 30)
+                    jitter = random.uniform(0, 1)
+                    await asyncio.sleep(backoff + jitter)
                     continue
             if last_exc:
                 raise last_exc

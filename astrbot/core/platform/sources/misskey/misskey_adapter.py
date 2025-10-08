@@ -1,4 +1,5 @@
 import asyncio
+import random
 import json
 from typing import Dict, Any, Optional, Awaitable
 
@@ -110,11 +111,12 @@ class MisskeyPlatformAdapter(Platform):
                     break
 
                 streaming = self.api.get_streaming_client()
+                # register handlers for both plain event types and channel-prefixed variants
                 streaming.add_message_handler("notification", self._handle_notification)
+                streaming.add_message_handler("main:notification", self._handle_notification)
                 if self.enable_chat:
-                    streaming.add_message_handler(
-                        "newChatMessage", self._handle_chat_message
-                    )
+                    streaming.add_message_handler("newChatMessage", self._handle_chat_message)
+                    streaming.add_message_handler("messaging:newChatMessage", self._handle_chat_message)
                     streaming.add_message_handler("_debug", self._debug_handler)
 
                 if await streaming.connect():
@@ -141,10 +143,12 @@ class MisskeyPlatformAdapter(Platform):
                 )
 
             if self._running:
+                jitter = random.uniform(0, 1.0)
+                sleep_time = backoff_delay + jitter
                 logger.info(
-                    f"[Misskey] {backoff_delay:.1f}秒后重连 (下次尝试 #{connection_attempts + 1})"
+                    f"[Misskey] {sleep_time:.1f}秒后重连 (下次尝试 #{connection_attempts + 1})"
                 )
-                await asyncio.sleep(backoff_delay)
+                await asyncio.sleep(sleep_time)
                 backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
 
     async def _handle_notification(self, data: Dict[str, Any]):
