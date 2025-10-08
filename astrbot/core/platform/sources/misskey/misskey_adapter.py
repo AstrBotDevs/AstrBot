@@ -14,7 +14,12 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSession
 import astrbot.api.message_components as Comp
 
-from .misskey_api import MisskeyAPI
+from .misskey_api import MisskeyAPI, APIError
+import mimetypes
+try:
+    import magic  # type: ignore
+except Exception:
+    magic = None
 from .misskey_event import MisskeyPlatformEvent
 from .misskey_utils import (
     serialize_message_chain,
@@ -264,9 +269,30 @@ class MisskeyPlatformAdapter(Platform):
             upload_concurrency = int(self.config.get("misskey_upload_concurrency", 3))
             sem = asyncio.Semaphore(upload_concurrency)
 
-            async def _upload_comp(comp) -> Optional[str]:
+            async def _upload_comp(comp) -> Optional[object]:
                 upload_path = None
-                tmp_created = False
+                def _detect_mime_and_ext(path: str) -> Optional[str]:
+                    # Try python-magic first (from buffer), fallback to mimetypes
+                    try:
+                        if magic:
+                            m = magic.Magic(mime=True)
+                            mime = m.from_file(path)
+                        else:
+                            mime, _ = mimetypes.guess_type(path)
+                    except Exception:
+                        mime = None
+                    if not mime:
+                        return None
+                    # map common mime to ext
+                    mapping = {
+                        "image/jpeg": ".jpg",
+                        "image/jpg": ".jpg",
+                        "image/png": ".png",
+                        "image/gif": ".gif",
+                        "text/plain": ".txt",
+                        "application/pdf": ".pdf",
+                    }
+                    return mapping.get(mime, mimetypes.guess_extension(mime) or None)
                 try:
                     if hasattr(comp, "convert_to_file_path"):
                         try:
@@ -287,35 +313,101 @@ class MisskeyPlatformAdapter(Platform):
                         if not self.api:
                             return None
                         try:
-                            upload_result = await self.api.upload_file(upload_path, getattr(comp, "name", None) or getattr(comp, "file", None))
+                            upload_result = await self.api.upload_file(
+                                upload_path, getattr(comp, "name", None) or getattr(comp, "file", None)
+                            )
                             fid = None
                             if isinstance(upload_result, dict):
-                                fid = upload_result.get("id") or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
-                            # cleanup temporary file if it was created under data/temp
+                                fid = (
+                                    upload_result.get("id")
+                                    or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
+                                )
+                            return str(fid) if fid else None
+                        except Exception as e:
+                            logger.error(f"[Misskey] 文件上传失败: {e}")
+                            # If it's an unallowed file type, try detecting mime and retry with a suitable extension
+                            tried_names = []
                             try:
-                                data_temp = os.path.join(get_astrbot_data_path(), "temp")
-                                # normalize paths
-                                if upload_path.startswith(data_temp):
+                                msg = str(e).lower()
+                                if "unallowed" in msg or "unallowed_file_type" in msg or (
+                                    isinstance(e, APIError) and "unallowed" in str(e).lower()
+                                ):
+                                    base_name = os.path.basename(upload_path)
+                                    name_root, ext = os.path.splitext(base_name)
+                                    # try detect mime -> extension
+                                    try_ext = _detect_mime_and_ext(upload_path)
+                                    candidates = []
+                                    if try_ext:
+                                        candidates.append(try_ext)
+                                    # fall back to a small set
+                                    candidates.extend([".jpg", ".png", ".txt", ".bin"])
+                                    # if ext is non-empty and short, include it first
+                                    if ext and len(ext) <= 5 and ext not in candidates:
+                                        candidates.insert(0, ext)
+                                    for c in candidates:
+                                        try_name = name_root + c
+                                        if try_name in tried_names:
+                                            continue
+                                        tried_names.append(try_name)
+                                        try:
+                                            upload_result = await self.api.upload_file(upload_path, try_name)
+                                            fid = None
+                                            if isinstance(upload_result, dict):
+                                                fid = (
+                                                    upload_result.get("id")
+                                                    or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
+                                                )
+                                            if fid:
+                                                logger.debug(f"[Misskey] 通过重试上传成功，使用文件名: {try_name}")
+                                                return str(fid)
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+
+                            # fallback: try register_to_file_service or get_file(allow_return_url=True)
+                            try:
+                                if hasattr(comp, "register_to_file_service"):
                                     try:
-                                        os.remove(upload_path)
-                                        logger.debug(f"[Misskey] 已清理临时文件: {upload_path}")
+                                        url = await comp.register_to_file_service()
+                                        if url:
+                                            return {"fallback_url": url}
+                                    except Exception:
+                                        pass
+                                if hasattr(comp, "get_file"):
+                                    try:
+                                        url_or_path = await comp.get_file(True)
+                                        if url_or_path and str(url_or_path).startswith("http"):
+                                            return {"fallback_url": url_or_path}
                                     except Exception:
                                         pass
                             except Exception:
                                 pass
-                            return str(fid) if fid else None
-                        except Exception as e:
-                            logger.error(f"[Misskey] 文件上传失败: {e}")
                             return None
                 finally:
-                    # nothing to do here for now
-                    pass
+                    # cleanup temporary file if it was created under data/temp
+                    try:
+                        if upload_path:
+                            data_temp = os.path.join(get_astrbot_data_path(), "temp")
+                            if upload_path.startswith(data_temp) and os.path.exists(upload_path):
+                                try:
+                                    os.remove(upload_path)
+                                    logger.debug(f"[Misskey] 已清理临时文件: {upload_path}")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
 
             upload_tasks = [ _upload_comp(comp) for comp in message_chain.chain ]
+            fallback_urls: List[str] = []
             try:
                 results = await asyncio.gather(*upload_tasks)
                 for r in results:
-                    if r:
+                    if not r:
+                        continue
+                    if isinstance(r, dict) and r.get("fallback_url"):
+                        fallback_urls.append(r.get("fallback_url"))
+                    else:
                         file_ids.append(r)
             except Exception:
                 logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
@@ -324,7 +416,11 @@ class MisskeyPlatformAdapter(Platform):
                 from .misskey_utils import extract_user_id_from_session_id
 
                 user_id = extract_user_id_from_session_id(session_id)
-                # if file_ids exist and API supports chat attachments, pass them
+                # if some uploads fell back to external URLs, append them to the text
+                if fallback_urls:
+                    appended = "\n" + "\n".join(fallback_urls)
+                    text = (text or "") + appended
+
                 payload = {"toUserId": user_id, "text": text}
                 if file_ids:
                     payload["fileIds"] = file_ids
@@ -333,6 +429,9 @@ class MisskeyPlatformAdapter(Platform):
                 from .misskey_utils import extract_room_id_from_session_id
 
                 room_id = extract_room_id_from_session_id(session_id)
+                if fallback_urls:
+                    appended = "\n" + "\n".join(fallback_urls)
+                    text = (text or "") + appended
                 payload = {"toRoomId": room_id, "text": text}
                 if file_ids:
                     payload["fileIds"] = file_ids
