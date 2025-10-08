@@ -55,6 +55,8 @@ class MisskeyPlatformAdapter(Platform):
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
+        # whether to enable file upload to Misskey (drive/files/create)
+        self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
 
         self.unique_session = platform_settings["unique_session"]
 
@@ -266,6 +268,25 @@ class MisskeyPlatformAdapter(Platform):
 
             # handle file uploads concurrently with a semaphore limit
             file_ids: List[str] = []
+            fallback_urls: List[str] = []
+
+            if not self.enable_file_upload:
+                logger.debug("[Misskey] 文件上传已在配置中禁用，跳过上传流程")
+                # skip to sending text-only payloads
+                if session_id and is_valid_user_session_id(session_id):
+                    from .misskey_utils import extract_user_id_from_session_id
+
+                    user_id = extract_user_id_from_session_id(session_id)
+                    payload = {"toUserId": user_id, "text": text}
+                    await self.api.send_message(payload)
+                    return await super().send_by_session(session, message_chain)
+                elif session_id and is_valid_room_session_id(session_id):
+                    from .misskey_utils import extract_room_id_from_session_id
+
+                    room_id = extract_room_id_from_session_id(session_id)
+                    payload = {"toRoomId": room_id, "text": text}
+                    await self.api.send_room_message(payload)
+                    return await super().send_by_session(session, message_chain)
             upload_concurrency = int(self.config.get("misskey_upload_concurrency", 3))
             sem = asyncio.Semaphore(upload_concurrency)
 

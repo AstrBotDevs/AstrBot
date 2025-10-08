@@ -254,6 +254,8 @@ CONFIG_METADATA_2 = {
                         "misskey_default_visibility": "public",
                         "misskey_local_only": False,
                         "misskey_enable_chat": True,
+                        "misskey_enable_file_upload": True,
+                        "misskey_upload_concurrency": 3,
                     },
                     "Slack": {
                         "id": "slack",
@@ -381,6 +383,16 @@ CONFIG_METADATA_2 = {
                         "description": "启用聊天消息响应",
                         "type": "bool",
                         "hint": "启用后，机器人将会监听和响应私信聊天消息",
+                    },
+                    "misskey_enable_file_upload": {
+                        "description": "启用文件上传到 Misskey",
+                        "type": "bool",
+                        "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey 并在消息中附加 media(fileIds)。",
+                    },
+                    "misskey_upload_concurrency": {
+                        "description": "并发上传限制",
+                        "type": "int",
+                        "hint": "同时进行的文件上传任务上限（整数，默认 3）。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
