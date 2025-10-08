@@ -212,7 +212,7 @@ def format_poll(poll: Dict[str, Any]) -> str:
         votes = c.get("votes", 0)
         text_choices.append(f"({idx}) {text} [{votes}票]")
     if text_choices:
-        parts.append("选项: "+ ", ".join(text_choices))
+        parts.append("选项: " + ", ".join(text_choices))
     return " ".join(parts)
 
 

@@ -86,7 +86,9 @@ class StreamingClient:
                         try:
                             await self.subscribe_channel(channel_type, params)
                         except Exception as e:
-                            logger.warning(f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}")
+                            logger.warning(
+                                f"[Misskey WebSocket] 重新订阅 {channel_type} 失败: {e}"
+                            )
                 except Exception:
                     # never fail the connect flow for resubscribe problems
                     pass
@@ -122,7 +124,11 @@ class StreamingClient:
         return channel_id
 
     async def unsubscribe_channel(self, channel_id: str):
-        if not self.is_connected or not self.websocket or channel_id not in self.channels:
+        if (
+            not self.is_connected
+            or not self.websocket
+            or channel_id not in self.channels
+        ):
             return
 
         message = {"type": "disconnect", "body": {"id": channel_id}}
@@ -402,32 +408,78 @@ class MisskeyAPI:
 
     async def create_note(
         self,
-        text: str,
+        text: Optional[str] = None,
         visibility: str = "public",
         reply_id: Optional[str] = None,
         visible_user_ids: Optional[List[str]] = None,
         file_ids: Optional[List[str]] = None,
         local_only: bool = False,
+        # Additional optional Misskey create fields
+        cw: Optional[str] = None,
+        poll: Optional[Dict[str, Any]] = None,
+        renote_id: Optional[str] = None,
+        channel_id: Optional[str] = None,
+        reaction_acceptance: Optional[str] = None,
+        no_extract_mentions: Optional[bool] = None,
+        no_extract_hashtags: Optional[bool] = None,
+        no_extract_emojis: Optional[bool] = None,
+        media_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """创建新贴文"""
-        data: Dict[str, Any] = {
-            "text": text,
-            "visibility": visibility,
-            "localOnly": local_only,
-        }
+        """Create a note (wrapper for notes/create). All additional fields are optional and passed through to the API."""
+        data: Dict[str, Any] = {}
+
+        # only include text if provided (server allows null in some flows)
+        if text is not None:
+            data["text"] = text
+
+        data["visibility"] = visibility
+        data["localOnly"] = local_only
+
         if reply_id:
             data["replyId"] = reply_id
+
         if visible_user_ids and visibility == "specified":
             data["visibleUserIds"] = visible_user_ids
+
+        # support both fileIds and mediaIds (server accepts either)
         if file_ids:
             data["fileIds"] = file_ids
+        if media_ids:
+            data["mediaIds"] = media_ids
+
+        if cw is not None:
+            data["cw"] = cw
+        if poll is not None:
+            data["poll"] = poll
+        if renote_id is not None:
+            data["renoteId"] = renote_id
+        if channel_id is not None:
+            data["channelId"] = channel_id
+        if reaction_acceptance is not None:
+            data["reactionAcceptance"] = reaction_acceptance
+        if no_extract_mentions is not None:
+            data["noExtractMentions"] = bool(no_extract_mentions)
+        if no_extract_hashtags is not None:
+            data["noExtractHashtags"] = bool(no_extract_hashtags)
+        if no_extract_emojis is not None:
+            data["noExtractEmojis"] = bool(no_extract_emojis)
 
         result = await self._make_request("notes/create", data)
-        note_id = result.get("createdNote", {}).get("id", "unknown")
+        note_id = (
+            result.get("createdNote", {}).get("id", "unknown")
+            if isinstance(result, dict)
+            else "unknown"
+        )
         logger.debug(f"发帖成功，note_id: {note_id}")
         return result
 
-    async def upload_file(self, file_path: str, name: Optional[str] = None, folder_id: Optional[str] = None) -> Dict[str, Any]:
+    async def upload_file(
+        self,
+        file_path: str,
+        name: Optional[str] = None,
+        folder_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Upload a file to Misskey drive/files/create and return a dict containing id and raw result."""
         if not file_path:
             raise APIError("No file path provided for upload")
 
@@ -439,17 +491,15 @@ class MisskeyAPI:
             with open(file_path, "rb") as f:
                 filename = name or file_path.split("/")[-1]
                 form.add_field("file", f, filename=filename)
-                # If a folder id was provided, include it so the file is placed into that folder
                 if folder_id:
                     form.add_field("folderId", str(folder_id))
                 async with self.session.post(url, data=form) as resp:
                     result = await self._process_response(resp, "drive/files/create")
                     logger.debug(f"上传文件到 Misskey 成功: {filename}")
-                    # try to extract an id in a few common places for caller convenience
                     fid = None
                     if isinstance(result, dict):
                         fid = (
-                            result.get("createdFile", {}).get("id")
+                            (result.get("createdFile") or {}).get("id")
                             or result.get("id")
                             or (result.get("file") or {}).get("id")
                         )
@@ -465,7 +515,9 @@ class MisskeyAPI:
         """获取当前用户信息"""
         return await self._make_request("i", {})
 
-    async def send_message(self, user_id_or_payload: Any, text: Optional[str] = None) -> Dict[str, Any]:
+    async def send_message(
+        self, user_id_or_payload: Any, text: Optional[str] = None
+    ) -> Dict[str, Any]:
         """发送聊天消息。
 
         Accepts either (user_id: str, text: str) or a single dict payload prepared by caller.
@@ -480,7 +532,9 @@ class MisskeyAPI:
         logger.debug(f"聊天发送成功，message_id: {message_id}")
         return result
 
-    async def send_room_message(self, room_id_or_payload: Any, text: Optional[str] = None) -> Dict[str, Any]:
+    async def send_room_message(
+        self, room_id_or_payload: Any, text: Optional[str] = None
+    ) -> Dict[str, Any]:
         """发送房间消息。
 
         Accepts either (room_id: str, text: str) or a single dict payload.

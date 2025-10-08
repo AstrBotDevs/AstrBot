@@ -16,6 +16,7 @@ import astrbot.api.message_components as Comp
 
 from .misskey_api import MisskeyAPI, APIError
 import mimetypes
+
 try:
     import magic  # type: ignore
 except Exception:
@@ -31,7 +32,7 @@ from .misskey_utils import (
     extract_sender_info,
     create_base_message,
     process_at_mention,
-        format_poll,
+    format_poll,
     cache_user_info,
     cache_room_info,
 )
@@ -123,10 +124,16 @@ class MisskeyPlatformAdapter(Platform):
                 streaming = self.api.get_streaming_client()
                 # register handlers for both plain event types and channel-prefixed variants
                 streaming.add_message_handler("notification", self._handle_notification)
-                streaming.add_message_handler("main:notification", self._handle_notification)
+                streaming.add_message_handler(
+                    "main:notification", self._handle_notification
+                )
                 if self.enable_chat:
-                    streaming.add_message_handler("newChatMessage", self._handle_chat_message)
-                    streaming.add_message_handler("messaging:newChatMessage", self._handle_chat_message)
+                    streaming.add_message_handler(
+                        "newChatMessage", self._handle_chat_message
+                    )
+                    streaming.add_message_handler(
+                        "messaging:newChatMessage", self._handle_chat_message
+                    )
                     streaming.add_message_handler("_debug", self._debug_handler)
 
                 if await streaming.connect():
@@ -293,6 +300,7 @@ class MisskeyPlatformAdapter(Platform):
 
             async def _upload_comp(comp) -> Optional[object]:
                 upload_path = None
+
                 def _detect_mime_and_ext(path: str) -> Optional[str]:
                     # Try python-magic first (from buffer), fallback to mimetypes
                     try:
@@ -315,6 +323,7 @@ class MisskeyPlatformAdapter(Platform):
                         "application/pdf": ".pdf",
                     }
                     return mapping.get(mime, mimetypes.guess_extension(mime) or None)
+
                 try:
                     if hasattr(comp, "convert_to_file_path"):
                         try:
@@ -337,15 +346,15 @@ class MisskeyPlatformAdapter(Platform):
                         try:
                             upload_result = await self.api.upload_file(
                                 upload_path,
-                                getattr(comp, "name", None) or getattr(comp, "file", None),
+                                getattr(comp, "name", None)
+                                or getattr(comp, "file", None),
                                 folder_id=self.upload_folder,
                             )
                             fid = None
                             if isinstance(upload_result, dict):
-                                fid = (
-                                    upload_result.get("id")
-                                    or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
-                                )
+                                fid = upload_result.get("id") or (
+                                    upload_result.get("raw") or {}
+                                ).get("createdFile", {}).get("id")
                             return str(fid) if fid else None
                         except Exception as e:
                             logger.error(f"[Misskey] 文件上传失败: {e}")
@@ -353,8 +362,13 @@ class MisskeyPlatformAdapter(Platform):
                             tried_names = []
                             try:
                                 msg = str(e).lower()
-                                if "unallowed" in msg or "unallowed_file_type" in msg or (
-                                    isinstance(e, APIError) and "unallowed" in str(e).lower()
+                                if (
+                                    "unallowed" in msg
+                                    or "unallowed_file_type" in msg
+                                    or (
+                                        isinstance(e, APIError)
+                                        and "unallowed" in str(e).lower()
+                                    )
                                 ):
                                     base_name = os.path.basename(upload_path)
                                     name_root, ext = os.path.splitext(base_name)
@@ -374,15 +388,20 @@ class MisskeyPlatformAdapter(Platform):
                                             continue
                                         tried_names.append(try_name)
                                         try:
-                                            upload_result = await self.api.upload_file(upload_path, try_name, folder_id=self.upload_folder)
+                                            upload_result = await self.api.upload_file(
+                                                upload_path,
+                                                try_name,
+                                                folder_id=self.upload_folder,
+                                            )
                                             fid = None
                                             if isinstance(upload_result, dict):
-                                                fid = (
-                                                    upload_result.get("id")
-                                                    or (upload_result.get("raw") or {}).get("createdFile", {}).get("id")
-                                                )
+                                                fid = upload_result.get("id") or (
+                                                    upload_result.get("raw") or {}
+                                                ).get("createdFile", {}).get("id")
                                             if fid:
-                                                logger.debug(f"[Misskey] 通过重试上传成功，使用文件名: {try_name}")
+                                                logger.debug(
+                                                    f"[Misskey] 通过重试上传成功，使用文件名: {try_name}"
+                                                )
                                                 return str(fid)
                                         except Exception:
                                             pass
@@ -401,7 +420,9 @@ class MisskeyPlatformAdapter(Platform):
                                 if hasattr(comp, "get_file"):
                                     try:
                                         url_or_path = await comp.get_file(True)
-                                        if url_or_path and str(url_or_path).startswith("http"):
+                                        if url_or_path and str(url_or_path).startswith(
+                                            "http"
+                                        ):
                                             return {"fallback_url": url_or_path}
                                     except Exception:
                                         pass
@@ -413,16 +434,20 @@ class MisskeyPlatformAdapter(Platform):
                     try:
                         if upload_path:
                             data_temp = os.path.join(get_astrbot_data_path(), "temp")
-                            if upload_path.startswith(data_temp) and os.path.exists(upload_path):
+                            if upload_path.startswith(data_temp) and os.path.exists(
+                                upload_path
+                            ):
                                 try:
                                     os.remove(upload_path)
-                                    logger.debug(f"[Misskey] 已清理临时文件: {upload_path}")
+                                    logger.debug(
+                                        f"[Misskey] 已清理临时文件: {upload_path}"
+                                    )
                                 except Exception:
                                     pass
                     except Exception:
                         pass
 
-            upload_tasks = [ _upload_comp(comp) for comp in message_chain.chain ]
+            upload_tasks = [_upload_comp(comp) for comp in message_chain.chain]
             fallback_urls: List[str] = []
             try:
                 results = await asyncio.gather(*upload_tasks)
@@ -463,12 +488,49 @@ class MisskeyPlatformAdapter(Platform):
                     default_visibility=self.default_visibility,
                 )
 
+                # Extract additional fields from message chain or session context
+                cw = None
+                poll = None
+                renote_id = None
+                channel_id = None
+
+                # Try to extract CW from message components (safe attribute check)
+                for comp in message_chain.chain:
+                    if hasattr(comp, "cw") and getattr(comp, "cw", None):
+                        cw = getattr(comp, "cw")
+                        break
+
+                # Try to extract poll from session data (safe attribute check)
+                if hasattr(session, "extra_data") and isinstance(
+                    getattr(session, "extra_data", None), dict
+                ):
+                    extra_data = getattr(session, "extra_data")
+                    poll = extra_data.get("poll")
+                    renote_id = extra_data.get("renote_id")
+                    channel_id = extra_data.get("channel_id")
+
+                # Limit file_ids to 16 (Misskey server limit)
+                if file_ids and len(file_ids) > 16:
+                    logger.warning(
+                        f"[Misskey] 文件数量超过限制 ({len(file_ids)} > 16)，只上传前16个文件"
+                    )
+                    file_ids = file_ids[:16]
+
+                # Add fallback URLs to text if we have them
+                if fallback_urls:
+                    appended = "\n" + "\n".join(fallback_urls)
+                    text = (text or "") + appended
+
                 await self.api.create_note(
-                    text,
+                    text=text,
                     visibility=visibility,
                     visible_user_ids=visible_user_ids,
                     file_ids=file_ids if file_ids else None,
                     local_only=self.local_only,
+                    cw=cw,
+                    poll=poll,
+                    renote_id=renote_id,
+                    channel_id=channel_id,
                 )
 
         except Exception as e:
