@@ -256,6 +256,7 @@ CONFIG_METADATA_2 = {
                         "misskey_enable_chat": True,
                         "misskey_enable_file_upload": True,
                         "misskey_upload_concurrency": 3,
+                        "misskey_upload_folder": "",
                     },
                     "Slack": {
                         "id": "slack",
@@ -393,6 +394,11 @@ CONFIG_METADATA_2 = {
                         "description": "并发上传限制",
                         "type": "int",
                         "hint": "同时进行的文件上传任务上限（整数，默认 3）。",
+                    },
+                    "misskey_upload_folder": {
+                        "description": "上传到网盘的目标文件夹 ID",
+                        "type": "string",
+                        "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内以避免账号网盘根目录混乱。留空则使用默认位置。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",

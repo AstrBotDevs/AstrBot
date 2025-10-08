@@ -57,6 +57,7 @@ class MisskeyPlatformAdapter(Platform):
         self.enable_chat = self.config.get("misskey_enable_chat", True)
         # whether to enable file upload to Misskey (drive/files/create)
         self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
+        self.upload_folder = self.config.get("misskey_upload_folder")
 
         self.unique_session = platform_settings["unique_session"]
 
@@ -277,7 +278,7 @@ class MisskeyPlatformAdapter(Platform):
                     from .misskey_utils import extract_user_id_from_session_id
 
                     user_id = extract_user_id_from_session_id(session_id)
-                    payload = {"toUserId": user_id, "text": text}
+                    payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
                     await self.api.send_message(payload)
                     return await super().send_by_session(session, message_chain)
                 elif session_id and is_valid_room_session_id(session_id):
@@ -335,7 +336,9 @@ class MisskeyPlatformAdapter(Platform):
                             return None
                         try:
                             upload_result = await self.api.upload_file(
-                                upload_path, getattr(comp, "name", None) or getattr(comp, "file", None)
+                                upload_path,
+                                getattr(comp, "name", None) or getattr(comp, "file", None),
+                                folder_id=self.upload_folder,
                             )
                             fid = None
                             if isinstance(upload_result, dict):
@@ -371,7 +374,7 @@ class MisskeyPlatformAdapter(Platform):
                                             continue
                                         tried_names.append(try_name)
                                         try:
-                                            upload_result = await self.api.upload_file(upload_path, try_name)
+                                            upload_result = await self.api.upload_file(upload_path, try_name, folder_id=self.upload_folder)
                                             fid = None
                                             if isinstance(upload_result, dict):
                                                 fid = (
@@ -427,33 +430,28 @@ class MisskeyPlatformAdapter(Platform):
                     if not r:
                         continue
                     if isinstance(r, dict) and r.get("fallback_url"):
-                        fallback_urls.append(r.get("fallback_url"))
+                        url = r.get("fallback_url")
+                        if url:
+                            fallback_urls.append(str(url))
                     else:
-                        file_ids.append(r)
+                        # ensure we only append string file ids
+                        try:
+                            fid_str = str(r)
+                        except Exception:
+                            fid_str = None
+                        if fid_str:
+                            file_ids.append(fid_str)
             except Exception:
                 logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
 
             if session_id and is_valid_user_session_id(session_id):
-                from .misskey_utils import extract_user_id_from_session_id
-
-                user_id = extract_user_id_from_session_id(session_id)
-                # if some uploads fell back to external URLs, append them to the text
-                if fallback_urls:
-                    appended = "\n" + "\n".join(fallback_urls)
-                    text = (text or "") + appended
-
-                payload = {"toUserId": user_id, "text": text}
-                if file_ids:
-                    payload["fileIds"] = file_ids
-                await self.api.send_message(payload)
-            elif session_id and is_valid_room_session_id(session_id):
                 from .misskey_utils import extract_room_id_from_session_id
 
                 room_id = extract_room_id_from_session_id(session_id)
                 if fallback_urls:
                     appended = "\n" + "\n".join(fallback_urls)
                     text = (text or "") + appended
-                payload = {"toRoomId": room_id, "text": text}
+                payload: Dict[str, Any] = {"toRoomId": room_id, "text": text}
                 if file_ids:
                     payload["fileIds"] = file_ids
                 await self.api.send_room_message(payload)
@@ -510,19 +508,23 @@ class MisskeyPlatformAdapter(Platform):
         if not poll and isinstance(raw_data.get("note"), dict):
             poll = raw_data["note"].get("poll")
         if poll and isinstance(poll, dict):
+            # 保证 raw_message 是一个可写字典
             try:
-                # 保证 raw_message 是可写字典
                 if not isinstance(message.raw_message, dict):
-                    message.raw_message = dict(message.raw_message or {})
+                    message.raw_message = {}
                 message.raw_message["poll"] = poll
             except Exception:
-                # 忽略设置失败
-                pass
-            # 方便插件直接读取
+                # 忽略设置失败，确保 raw_message 最少为 dict
+                try:
+                    message.raw_message = {}
+                    message.raw_message["poll"] = poll
+                except Exception:
+                    pass
+            # 方便插件直接读取，使用 setattr 以兼容不同 message 类型
             try:
-                message.poll = poll
-            except Exception:
                 setattr(message, "poll", poll)
+            except Exception:
+                pass
 
             poll_text = format_poll(poll)
             if poll_text:

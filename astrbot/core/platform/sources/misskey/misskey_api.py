@@ -427,7 +427,7 @@ class MisskeyAPI:
         logger.debug(f"发帖成功，note_id: {note_id}")
         return result
 
-    async def upload_file(self, file_path: str, name: Optional[str] = None) -> Dict[str, Any]:
+    async def upload_file(self, file_path: str, name: Optional[str] = None, folder_id: Optional[str] = None) -> Dict[str, Any]:
         if not file_path:
             raise APIError("No file path provided for upload")
 
@@ -439,6 +439,9 @@ class MisskeyAPI:
             with open(file_path, "rb") as f:
                 filename = name or file_path.split("/")[-1]
                 form.add_field("file", f, filename=filename)
+                # If a folder id was provided, include it so the file is placed into that folder
+                if folder_id:
+                    form.add_field("folderId", str(folder_id))
                 async with self.session.post(url, data=form) as resp:
                     result = await self._process_response(resp, "drive/files/create")
                     logger.debug(f"上传文件到 Misskey 成功: {filename}")
