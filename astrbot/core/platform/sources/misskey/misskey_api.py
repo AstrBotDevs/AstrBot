@@ -201,7 +201,11 @@ class StreamingClient:
                     return f"[Misskey WebSocket] 收到消息类型: {message_type}"
 
                 inner = body.get("body") if isinstance(body.get("body"), dict) else body
-                note = inner.get("note") if isinstance(inner, dict) and isinstance(inner.get("note"), dict) else None
+                note = (
+                    inner.get("note")
+                    if isinstance(inner, dict) and isinstance(inner.get("note"), dict)
+                    else None
+                )
 
                 text = note.get("text") if note else None
                 note_id = note.get("id") if note else None
@@ -347,7 +351,9 @@ class MisskeyAPI:
         self.allow_insecure_downloads = allow_insecure_downloads
         self.download_timeout = download_timeout
         self.chunk_size = chunk_size
-        self.max_download_bytes = int(max_download_bytes) if max_download_bytes is not None else None
+        self.max_download_bytes = (
+            int(max_download_bytes) if max_download_bytes is not None else None
+        )
 
     async def __aenter__(self):
         return self
@@ -555,6 +561,7 @@ class MisskeyAPI:
         try:
             # Read file bytes using thread executor to avoid adding new dependencies
             loop = asyncio.get_running_loop()
+
             def _read_file_bytes(path: str) -> bytes:
                 with open(path, "rb") as f:
                     return f.read()
@@ -564,7 +571,9 @@ class MisskeyAPI:
                 form.add_field("folderId", str(folder_id))
 
             try:
-                file_bytes = await loop.run_in_executor(None, _read_file_bytes, file_path)
+                file_bytes = await loop.run_in_executor(
+                    None, _read_file_bytes, file_path
+                )
             except FileNotFoundError as e:
                 logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
                 raise APIError(f"File not found: {file_path}") from e
@@ -573,9 +582,7 @@ class MisskeyAPI:
             async with self.session.post(url, data=form) as resp:
                 result = await self._process_response(resp, "drive/files/create")
                 file_id = FileIDExtractor.extract_file_id(result)
-                logger.debug(
-                    f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}"
-                )
+                logger.debug(f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}")
                 return {"id": file_id, "raw": result}
         except aiohttp.ClientError as e:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
@@ -797,7 +804,9 @@ class MisskeyAPI:
                     raise APIError("下载文件超出允许的最大字节数")
                 # enforce a hard upper limit to avoid pathological cases
                 if total > self.MAX_STREAM_MD5_BYTES:
-                    logger.warning(f"[Misskey API] 文件过大，已超过最大流式 MD5 限制: {url}")
+                    logger.warning(
+                        f"[Misskey API] 文件过大，已超过最大流式 MD5 限制: {url}"
+                    )
                     return None
                 m.update(chunk)
         return m.hexdigest()
@@ -882,7 +891,9 @@ class MisskeyAPI:
         # 回退：下载远端文件并做本地上传
         try:
             # 使用现有 session 下载内容到临时文件
-            tmp_bytes = await self._download_with_existing_session(url) or await self._download_with_temp_session(url)
+            tmp_bytes = await self._download_with_existing_session(
+                url
+            ) or await self._download_with_temp_session(url)
 
             if tmp_bytes:
                 # 写入临时文件并上传本地文件

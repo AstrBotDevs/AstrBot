@@ -284,8 +284,13 @@ def format_poll(poll: Dict[str, Any]) -> str:
         return ""
     multiple = poll.get("multiple", False)
     choices = poll.get("choices", [])
-    text_choices = [f"({idx}) {c.get('text','')} [{c.get('votes',0)}票]" for idx, c in enumerate(choices, start=1)]
-    parts = ["[投票]", ("允许多选" if multiple else "单选")] + (["选项: " + ", ".join(text_choices)] if text_choices else [])
+    text_choices = [
+        f"({idx}) {c.get('text', '')} [{c.get('votes', 0)}票]"
+        for idx, c in enumerate(choices, start=1)
+    ]
+    parts = ["[投票]", ("允许多选" if multiple else "单选")] + (
+        ["选项: " + ", ".join(text_choices)] if text_choices else []
+    )
     return " ".join(parts)
 
 
@@ -585,7 +590,12 @@ async def upload_local_with_retries(
                 tried.add(try_name)
                 try:
                     r = await api.upload_file(local_path, try_name, folder_id)
-                    if isinstance(r, dict) and (fid := (r.get("id") or (r.get("raw") or {}).get("createdFile", {}).get("id"))):
+                    if isinstance(r, dict) and (
+                        fid := (
+                            r.get("id")
+                            or (r.get("raw") or {}).get("createdFile", {}).get("id")
+                        )
+                    ):
                         return str(fid)
                 except Exception:
                     continue
