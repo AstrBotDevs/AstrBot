@@ -821,6 +821,21 @@ CONFIG_METADATA_2 = {
                         },
                         "custom_extra_body": {},
                     },
+                    "小马算力": {
+                        "id": "tokenpony",
+                        "provider": "tokenpony",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.tokenpony.cn/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "kimi-k2-instruct-0905",
+                            "temperature": 0.7,
+                        },
+                        "custom_extra_body": {},
+                    },
                     "优云智算": {
                         "id": "compshare",
                         "provider": "compshare",
