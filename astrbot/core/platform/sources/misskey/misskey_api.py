@@ -1,6 +1,9 @@
 import json
 import random
 import asyncio
+import hashlib
+import base64
+import re
 from typing import Any, Optional, Dict, List, Callable, Awaitable
 import uuid
 
@@ -13,6 +16,7 @@ except ImportError as e:
     ) from e
 
 from astrbot.api import logger
+from .misskey_utils import FileIDExtractor
 
 # Constants
 API_MAX_RETRIES = 3
@@ -269,19 +273,60 @@ class StreamingClient:
                 await self.message_handlers["_debug"](data)
 
 
-def retry_async(max_retries: int = 3, retryable_exceptions: tuple = (())):
+def retry_async(
+    max_retries: int = 3,
+    retryable_exceptions: tuple = (APIConnectionError, APIRateLimitError),
+    backoff_base: float = 1.0,
+    max_backoff: float = 30.0,
+):
+    """
+    智能异步重试装饰器
+
+    Args:
+        max_retries: 最大重试次数
+        retryable_exceptions: 可重试的异常类型
+        backoff_base: 退避基数
+        max_backoff: 最大退避时间
+    """
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
             last_exc = None
+            func_name = getattr(func, "__name__", "unknown")
+
             for attempt in range(1, max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
                 except retryable_exceptions as e:
                     last_exc = e
-                    backoff = min(2 ** (attempt - 1), 30)
-                    jitter = random.uniform(0, 1)
-                    await asyncio.sleep(backoff + jitter)
+                    if attempt == max_retries:
+                        logger.error(
+                            f"[Misskey API] {func_name} 重试 {max_retries} 次后仍失败: {e}"
+                        )
+                        break
+
+                    # 智能退避策略
+                    if isinstance(e, APIRateLimitError):
+                        # 频率限制用更长的退避时间
+                        backoff = min(backoff_base * (3**attempt), max_backoff)
+                    else:
+                        # 其他错误用指数退避
+                        backoff = min(backoff_base * (2**attempt), max_backoff)
+
+                    jitter = random.uniform(0.1, 0.5)  # 随机抖动
+                    sleep_time = backoff + jitter
+
+                    logger.warning(
+                        f"[Misskey API] {func_name} 第 {attempt} 次重试失败: {e}，"
+                        f"{sleep_time:.1f}s后重试"
+                    )
+                    await asyncio.sleep(sleep_time)
                     continue
+                except Exception as e:
+                    # 非可重试异常直接抛出
+                    logger.error(f"[Misskey API] {func_name} 遇到不可重试异常: {e}")
+                    raise
+
             if last_exc:
                 raise last_exc
 
@@ -291,11 +336,27 @@ def retry_async(max_retries: int = 3, retryable_exceptions: tuple = (())):
 
 
 class MisskeyAPI:
-    def __init__(self, instance_url: str, access_token: str):
+    def __init__(
+        self,
+        instance_url: str,
+        access_token: str,
+        *,
+        allow_insecure_downloads: bool = False,
+        download_timeout: int = 15,
+        chunk_size: int = 64 * 1024,
+        max_download_bytes: Optional[int] = None,
+    ):
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self._session: Optional[aiohttp.ClientSession] = None
         self.streaming: Optional[StreamingClient] = None
+        # download options
+        self.allow_insecure_downloads = bool(allow_insecure_downloads)
+        self.download_timeout = int(download_timeout)
+        self.chunk_size = int(chunk_size)
+        self.max_download_bytes = (
+            int(max_download_bytes) if max_download_bytes is not None else None
+        )
 
     async def __aenter__(self):
         return self
@@ -328,16 +389,37 @@ class MisskeyAPI:
     def _handle_response_status(self, status: int, endpoint: str):
         """处理 HTTP 响应状态码"""
         if status == 400:
-            logger.error(f"API 请求错误: {endpoint} (状态码: {status})")
+            logger.error(f"[Misskey API] 请求参数错误: {endpoint} (HTTP {status})")
             raise APIError(f"Bad request for {endpoint}")
-        elif status in (401, 403):
-            logger.error(f"API 认证失败: {endpoint} (状态码: {status})")
-            raise AuthenticationError(f"Authentication failed for {endpoint}")
+        elif status == 401:
+            logger.error(f"[Misskey API] 未授权访问: {endpoint} (HTTP {status})")
+            raise AuthenticationError(f"Unauthorized access for {endpoint}")
+        elif status == 403:
+            logger.error(f"[Misskey API] 访问被禁止: {endpoint} (HTTP {status})")
+            raise AuthenticationError(f"Forbidden access for {endpoint}")
+        elif status == 404:
+            logger.error(f"[Misskey API] 资源不存在: {endpoint} (HTTP {status})")
+            raise APIError(f"Resource not found for {endpoint}")
+        elif status == 413:
+            logger.error(f"[Misskey API] 请求体过大: {endpoint} (HTTP {status})")
+            raise APIError(f"Request entity too large for {endpoint}")
         elif status == 429:
-            logger.warning(f"API 频率限制: {endpoint} (状态码: {status})")
+            logger.warning(f"[Misskey API] 请求频率限制: {endpoint} (HTTP {status})")
             raise APIRateLimitError(f"Rate limit exceeded for {endpoint}")
+        elif status == 500:
+            logger.error(f"[Misskey API] 服务器内部错误: {endpoint} (HTTP {status})")
+            raise APIConnectionError(f"Internal server error for {endpoint}")
+        elif status == 502:
+            logger.error(f"[Misskey API] 网关错误: {endpoint} (HTTP {status})")
+            raise APIConnectionError(f"Bad gateway for {endpoint}")
+        elif status == 503:
+            logger.error(f"[Misskey API] 服务不可用: {endpoint} (HTTP {status})")
+            raise APIConnectionError(f"Service unavailable for {endpoint}")
+        elif status == 504:
+            logger.error(f"[Misskey API] 网关超时: {endpoint} (HTTP {status})")
+            raise APIConnectionError(f"Gateway timeout for {endpoint}")
         else:
-            logger.error(f"API 请求失败: {endpoint} (状态码: {status})")
+            logger.error(f"[Misskey API] 未知错误: {endpoint} (HTTP {status})")
             raise APIConnectionError(f"HTTP {status} for {endpoint}")
 
     async def _process_response(
@@ -356,21 +438,28 @@ class MisskeyAPI:
                         else []
                     )
                     if notifications_data:
-                        logger.debug(f"获取到 {len(notifications_data)} 条新通知")
+                        logger.debug(
+                            f"[Misskey API] 获取到 {len(notifications_data)} 条新通知"
+                        )
                 else:
-                    logger.debug(f"API 请求成功: {endpoint}")
+                    logger.debug(f"[Misskey API] 请求成功: {endpoint}")
                 return result
             except json.JSONDecodeError as e:
-                logger.error(f"响应不是有效的 JSON 格式: {e}")
+                logger.error(f"[Misskey API] 响应格式错误: {e}")
                 raise APIConnectionError("Invalid JSON response") from e
+        elif response.status == 204 and endpoint == "drive/files/upload-from-url":
+            logger.debug(f"[Misskey API] 异步上传请求已接受: {endpoint}")
+            return {"status": "accepted", "async": True}
         else:
             try:
                 error_text = await response.text()
                 logger.error(
-                    f"API 请求失败: {endpoint} - 状态码: {response.status}, 响应: {error_text}"
+                    f"[Misskey API] 请求失败: {endpoint} - HTTP {response.status}, 响应: {error_text}"
                 )
             except Exception:
-                logger.error(f"API 请求失败: {endpoint} - 状态码: {response.status}")
+                logger.error(
+                    f"[Misskey API] 请求失败: {endpoint} - HTTP {response.status}"
+                )
 
             self._handle_response_status(response.status, endpoint)
             raise APIConnectionError(f"Request failed for {endpoint}")
@@ -391,7 +480,7 @@ class MisskeyAPI:
             async with self.session.post(url, json=payload) as response:
                 return await self._process_response(response, endpoint)
         except aiohttp.ClientError as e:
-            logger.error(f"HTTP 请求错误: {e}")
+            logger.error(f"[Misskey API] HTTP 请求错误: {e}")
             raise APIConnectionError(f"HTTP request failed: {e}") from e
 
     async def create_note(
@@ -455,7 +544,7 @@ class MisskeyAPI:
             if isinstance(result, dict)
             else "unknown"
         )
-        logger.debug(f"发帖成功，note_id: {note_id}")
+        logger.debug(f"[Misskey API] 发帖成功: {note_id}")
         return result
 
     async def upload_file(
@@ -480,21 +569,439 @@ class MisskeyAPI:
                     form.add_field("folderId", str(folder_id))
                 async with self.session.post(url, data=form) as resp:
                     result = await self._process_response(resp, "drive/files/create")
-                    logger.debug(f"上传文件到 Misskey 成功: {filename}")
-                    fid = None
-                    if isinstance(result, dict):
-                        fid = (
-                            (result.get("createdFile") or {}).get("id")
-                            or result.get("id")
-                            or (result.get("file") or {}).get("id")
-                        )
-                    return {"id": fid, "raw": result}
+                    file_id = FileIDExtractor.extract_file_id(result)
+                    logger.debug(
+                        f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}"
+                    )
+                    return {"id": file_id, "raw": result}
         except FileNotFoundError as e:
-            logger.error(f"上传文件失败，本地文件未找到: {file_path}")
+            logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
             raise APIError(f"File not found: {file_path}") from e
         except aiohttp.ClientError as e:
-            logger.error(f"上传文件 HTTP 错误: {e}")
+            logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e
+
+    async def upload_file_from_url(
+        self, url: str, name: Optional[str] = None, folder_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Upload a file to Misskey using a remote URL (drive/files/upload-from-url).
+
+        Returns a dict containing id and raw result on success.
+        """
+        if not url:
+            raise APIError("No URL provided for upload-from-url")
+
+        data: Dict[str, Any] = {"url": url}
+        if name:
+            data["name"] = name
+        if folder_id:
+            data["folderId"] = str(folder_id)
+
+        try:
+            logger.debug(
+                f"[Misskey API] upload-from-url 请求: url={url}, name={name}, folder_id={folder_id}"
+            )
+            result = await self._make_request("drive/files/upload-from-url", data)
+            logger.debug(f"[Misskey API] upload-from-url 响应: {result}")
+
+            # 检查是否是异步上传响应 (HTTP 204)
+            if (
+                isinstance(result, dict)
+                and result.get("status") == "accepted"
+                and result.get("async")
+            ):
+                logger.debug(
+                    "[Misskey API] upload-from-url 异步请求已接受，文件将在后台上传"
+                )
+                return {"status": "accepted", "async": True, "url": url}
+
+            # 同步上传响应，提取文件ID
+            fid = None
+            if isinstance(result, dict):
+                fid = (
+                    (result.get("createdFile") or {}).get("id")
+                    or result.get("id")
+                    or (result.get("file") or {}).get("id")
+                )
+            logger.debug(f"[Misskey API] upload-from-url 得到 fid: {fid}")
+            return {"id": fid, "raw": result}
+        except Exception as e:
+            logger.error(f"上传 URL 文件失败: {e}")
+            raise
+
+    async def find_files_by_hash(self, md5_hash: str) -> List[Dict[str, Any]]:
+        """Find files by MD5 hash"""
+        if not md5_hash:
+            raise APIError("No MD5 hash provided for find-by-hash")
+
+        data = {"md5": md5_hash}
+
+        try:
+            logger.debug(f"[Misskey API] find-by-hash 请求: md5={md5_hash}")
+            result = await self._make_request("drive/files/find-by-hash", data)
+            logger.debug(
+                f"[Misskey API] find-by-hash 响应: 找到 {len(result) if isinstance(result, list) else 0} 个文件"
+            )
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            logger.error(f"[Misskey API] 根据哈希查找文件失败: {e}")
+            raise
+
+    async def find_files_by_name(
+        self, name: str, folder_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Find files by name"""
+        if not name:
+            raise APIError("No name provided for find")
+
+        data: Dict[str, Any] = {"name": name}
+        if folder_id:
+            data["folderId"] = folder_id
+
+        try:
+            logger.debug(f"[Misskey API] find 请求: name={name}, folder_id={folder_id}")
+            result = await self._make_request("drive/files/find", data)
+            logger.debug(
+                f"[Misskey API] find 响应: 找到 {len(result) if isinstance(result, list) else 0} 个文件"
+            )
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            logger.error(f"[Misskey API] 根据名称查找文件失败: {e}")
+            raise
+
+    async def find_files(
+        self,
+        limit: int = 10,
+        folder_id: Optional[str] = None,
+        type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List files with optional filters"""
+        data: Dict[str, Any] = {"limit": limit}
+        if folder_id is not None:
+            data["folderId"] = folder_id
+        if type is not None:
+            data["type"] = type
+
+        try:
+            logger.debug(
+                f"[Misskey API] 列表文件请求: limit={limit}, folder_id={folder_id}, type={type}"
+            )
+            result = await self._make_request("drive/files", data)
+            logger.debug(
+                f"[Misskey API] 列表文件响应: 找到 {len(result) if isinstance(result, list) else 0} 个文件"
+            )
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            logger.error(f"[Misskey API] 列表文件失败: {e}")
+            raise
+
+    async def check_file_existence(self, md5_hash: str) -> bool:
+        """Check if a file exists by MD5 hash"""
+        if not md5_hash:
+            raise APIError("No MD5 hash provided for check-existence")
+
+        data = {"md5": md5_hash}
+
+        try:
+            logger.debug(f"[Misskey API] check-existence 请求: md5={md5_hash}")
+            result = await self._make_request("drive/files/check-existence", data)
+            exists = bool(result) if result is not None else False
+            logger.debug(f"[Misskey API] check-existence 响应: 存在={exists}")
+            return exists
+        except Exception as e:
+            logger.error(f"[Misskey API] 检查文件存在性失败: {e}")
+            raise
+
+    async def calculate_url_md5(self, url: str) -> Optional[str]:
+        """Calculate MD5 hash of file from URL with fallback strategies"""
+        if not url:
+            return None
+        # 1) 尝试 HEAD 查找 Content-MD5 / ETag（轻量）
+        try:
+            async with self.session.head(
+                url, timeout=aiohttp.ClientTimeout(total=self.download_timeout)
+            ) as head_resp:
+                if head_resp.status == 200:
+                    # Content-MD5 header 通常是 base64(md5)
+                    content_md5 = head_resp.headers.get("Content-MD5")
+                    if content_md5:
+                        try:
+                            raw = base64.b64decode(content_md5)
+                            hex_md5 = raw.hex()
+                            logger.debug(
+                                f"[Misskey API] 从 HEAD Content-MD5 获取 md5: {hex_md5}"
+                            )
+                            return hex_md5
+                        except Exception:
+                            logger.debug(
+                                "[Misskey API] 无法解析 Content-MD5 header，继续流式下载"
+                            )
+
+                    # 尝试 ETag（有些服务直接返回十六进制 MD5）
+                    etag = head_resp.headers.get("ETag")
+                    if etag:
+                        etag_val = etag.strip('"')
+                        if re.fullmatch(r"[0-9a-fA-F]{32}", etag_val):
+                            logger.debug(
+                                f"[Misskey API] 从 HEAD ETag 获取 md5: {etag_val}"
+                            )
+                            return etag_val.lower()
+        except Exception:
+            logger.debug("[Misskey API] HEAD 请求失败，继续使用流式 GET")
+
+        # 2) 流式 GET（使用现有 session）
+        try:
+            md5 = await self._stream_md5_with_session(url, ssl_verify=True)
+            if md5:
+                logger.debug(f"[Misskey API] 流式 MD5 计算成功 (ssl): {md5}")
+                return md5
+        except Exception as e:
+            logger.debug(f"[Misskey API] 流式下载(ssl)失败: {e}")
+
+        # 3) 可选：不安全下载（受配置控制，仅做最后退路）
+        if self.allow_insecure_downloads:
+            try:
+                md5 = await self._stream_md5_with_session(url, ssl_verify=False)
+                if md5:
+                    logger.warning(
+                        f"[Misskey API] 使用不安全下载获取 MD5（ssl 验证已禁用）: {url}"
+                    )
+                    return md5
+            except Exception as e:
+                logger.debug(f"[Misskey API] 不安全流式下载失败: {e}")
+
+        logger.warning(f"[Misskey API] 无法计算 MD5: {url}")
+        return None
+
+    async def _stream_md5_with_session(
+        self, url: str, ssl_verify: bool = True
+    ) -> Optional[str]:
+        """使用 session 流式读取并计算 MD5，支持下载大小限制"""
+        total = 0
+        m = hashlib.md5()
+        async with self.session.get(
+            url,
+            timeout=aiohttp.ClientTimeout(total=self.download_timeout),
+            ssl=ssl_verify,
+        ) as resp:
+            if resp.status != 200:
+                return None
+            async for chunk in resp.content.iter_chunked(self.chunk_size):
+                if not chunk:
+                    continue
+                m.update(chunk)
+                total += len(chunk)
+                if self.max_download_bytes and total > self.max_download_bytes:
+                    raise APIError("下载文件超出允许的最大字节数")
+        return m.hexdigest()
+
+    async def _download_with_existing_session(
+        self, url: str, ssl_verify: bool = True
+    ) -> Optional[bytes]:
+        """使用现有会话下载文件"""
+        if not (hasattr(self, "session") and self.session):
+            raise Exception("No existing session available")
+
+        async with self.session.get(
+            url, timeout=aiohttp.ClientTimeout(total=15), ssl=ssl_verify
+        ) as response:
+            if response.status == 200:
+                return await response.read()
+        return None
+
+    async def _download_with_temp_session(
+        self, url: str, ssl_verify: bool = True
+    ) -> Optional[bytes]:
+        """使用临时会话下载文件"""
+        connector = aiohttp.TCPConnector(ssl=ssl_verify)
+        async with aiohttp.ClientSession(connector=connector) as temp_session:
+            async with temp_session.get(
+                url, timeout=aiohttp.ClientTimeout(total=15)
+            ) as response:
+                if response.status == 200:
+                    return await response.read()
+        return None
+
+    async def upload_and_find_file(
+        self,
+        url: str,
+        name: Optional[str] = None,
+        folder_id: Optional[str] = None,
+        max_wait_time: float = 30.0,
+        check_interval: float = 2.0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        智能文件上传：先检查重复，再上传，最后轮询查找
+
+        Args:
+            url: 文件URL
+            name: 文件名（可选）
+            folder_id: 文件夹ID（可选）
+            max_wait_time: 最大等待时间
+            check_interval: 轮询间隔
+
+        Returns:
+            包含文件ID和元信息的字典，失败时返回None
+        """
+        if not url:
+            raise APIError("URL不能为空")
+
+        # 优先按文件名在已有文件中查找（避免重复上传）
+        try:
+            filename = name or url.split("/")[-1].split("?")[0]
+            if filename:
+                matches = await self.find_files_by_name(filename, folder_id)
+                if matches:
+                    file_id = matches[0].get("id")
+                    logger.debug(f"[Misskey API] 通过名称找到已存在文件: {file_id}")
+                    return {"id": file_id, "raw": matches[0], "name_match": True}
+        except Exception:
+            # 名称查找失败时继续尝试 upload-from-url
+            logger.debug("[Misskey API] 名称查找失败或异常，继续处理")
+
+        # 尝试使用 Misskey 的 upload-from-url 接口（服务器端处理远程 URL）
+        try:
+            upload_result = await self.upload_file_from_url(url, name, folder_id)
+            # 处理 upload-from-url 的返回（可能为 accepted 或直接返回文件）
+            md5_hash = await self.calculate_url_md5(url)
+            return await self._handle_upload_result(
+                upload_result, md5_hash, url, max_wait_time, check_interval
+            )
+        except Exception as e:
+            logger.warning(
+                f"[Misskey API] upload-from-url 失败，准备回退到下载并本地上传: {e}"
+            )
+
+        # 回退：下载远端文件并做本地上传
+        try:
+            # 使用现有 session 下载内容到临时文件
+            tmp_bytes = await self._download_with_existing_session(url)
+            if not tmp_bytes:
+                tmp_bytes = await self._download_with_temp_session(url)
+
+            if tmp_bytes:
+                # 写入临时文件并上传本地文件
+                import tempfile
+
+                with tempfile.NamedTemporaryFile(delete=False) as tmpf:
+                    tmpf.write(tmp_bytes)
+                    tmp_path = tmpf.name
+
+                try:
+                    result = await self.upload_file(tmp_path, name, folder_id)
+                    return result
+                finally:
+                    import os
+
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"[Misskey API] 下载并本地上传回退失败: {e}")
+
+        return None
+
+    async def _check_existing_file(self, md5_hash: str) -> Optional[Dict[str, Any]]:
+        """检查文件是否已存在"""
+        try:
+            existing_files = await self.find_files_by_hash(md5_hash)
+            if existing_files:
+                file_id = existing_files[0].get("id")
+                logger.debug(f"[Misskey API] 发现已存在文件: {file_id}")
+                return {
+                    "id": file_id,
+                    "raw": existing_files[0],
+                    "existing": True,
+                }
+        except Exception as e:
+            logger.debug(f"[Misskey API] 检查已存在文件失败: {e}")
+        return None
+
+    async def _handle_upload_result(
+        self,
+        upload_result: Any,
+        md5_hash: Optional[str],
+        url: str,
+        max_wait_time: float,
+        check_interval: float,
+    ) -> Optional[Dict[str, Any]]:
+        """处理上传结果"""
+        # 同步上传成功
+        if isinstance(upload_result, dict) and upload_result.get("id"):
+            return upload_result
+
+        # 异步上传
+        if (
+            isinstance(upload_result, dict)
+            and upload_result.get("status") == "accepted"
+        ):
+            if md5_hash:
+                return await self._poll_by_hash(
+                    md5_hash, max_wait_time, check_interval, url
+                )
+            else:
+                return await self._poll_by_name(url, max_wait_time)
+
+        logger.error(f"[Misskey API] 文件上传失败: {url}")
+        return None
+
+    async def _poll_by_hash(
+        self, md5_hash: str, max_wait_time: float, check_interval: float, url: str
+    ) -> Optional[Dict[str, Any]]:
+        """通过MD5哈希轮询查找文件"""
+        logger.debug(f"[Misskey API] 开始轮询查找文件: {md5_hash}")
+
+        waited_time = 0.0
+        while waited_time < max_wait_time:
+            try:
+                files = await self.find_files_by_hash(md5_hash)
+                if files:
+                    file_id = files[0].get("id")
+                    if file_id:
+                        logger.debug(f"[Misskey API] 异步上传完成: {file_id}")
+                        return {"id": file_id, "raw": files[0], "async_found": True}
+            except Exception as e:
+                logger.debug(f"[Misskey API] 轮询查找出错: {e}")
+
+            await asyncio.sleep(check_interval)
+            waited_time += check_interval
+
+        # MD5轮询超时，尝试名称匹配
+        return await self._fallback_name_search(url)
+
+    async def _poll_by_name(
+        self, url: str, max_wait_time: float
+    ) -> Optional[Dict[str, Any]]:
+        """通过文件名轮询查找"""
+        logger.debug("[Misskey API] 无MD5哈希，等待后按名称查找")
+
+        # 等待异步上传完成
+        await asyncio.sleep(min(3.0, max_wait_time / 2))
+        return await self._fallback_name_search(url)
+
+    async def _fallback_name_search(self, url: str) -> Optional[Dict[str, Any]]:
+        """回退到名称匹配搜索"""
+        try:
+            recent_files = await self.find_files(limit=20)
+            filename = url.split("/")[-1].split("?")[0]
+
+            # 精确匹配
+            for file in recent_files:
+                if file.get("name") == filename:
+                    logger.debug(f"[Misskey API] 精确名称匹配: {file.get('id')}")
+                    return {"id": file.get("id"), "raw": file, "name_match": True}
+
+            # 模糊匹配
+            for file in recent_files:
+                if file.get("name") and filename in file["name"]:
+                    logger.debug(f"[Misskey API] 模糊名称匹配: {file.get('id')}")
+                    return {"id": file.get("id"), "raw": file, "name_match": True}
+
+        except Exception as e:
+            logger.error(f"[Misskey API] 名称搜索失败: {e}")
+
+        return None
 
     async def get_current_user(self) -> Dict[str, Any]:
         """获取当前用户信息"""
@@ -514,7 +1021,7 @@ class MisskeyAPI:
 
         result = await self._make_request("chat/messages/create-to-user", data)
         message_id = result.get("id", "unknown")
-        logger.debug(f"聊天发送成功，message_id: {message_id}")
+        logger.debug(f"[Misskey API] 聊天消息发送成功: {message_id}")
         return result
 
     async def send_room_message(
@@ -531,7 +1038,7 @@ class MisskeyAPI:
 
         result = await self._make_request("chat/messages/create-to-room", data)
         message_id = result.get("id", "unknown")
-        logger.debug(f"房间消息发送成功，message_id: {message_id}")
+        logger.debug(f"[Misskey API] 房间消息发送成功: {message_id}")
         return result
 
     async def get_messages(
@@ -546,7 +1053,7 @@ class MisskeyAPI:
         if isinstance(result, list):
             return result
         else:
-            logger.warning(f"获取聊天消息响应格式异常: {type(result)}")
+            logger.warning(f"[Misskey API] 聊天消息响应格式异常: {type(result)}")
             return []
 
     async def get_mentions(
@@ -564,5 +1071,187 @@ class MisskeyAPI:
         elif isinstance(result, dict) and "notifications" in result:
             return result["notifications"]
         else:
-            logger.warning(f"获取提及通知响应格式异常: {type(result)}")
+            logger.warning(f"[Misskey API] 提及通知响应格式异常: {type(result)}")
             return []
+
+    async def send_message_with_media(
+        self,
+        message_type: str,
+        target_id: str,
+        text: Optional[str] = None,
+        media_urls: Optional[List[str]] = None,
+        local_files: Optional[List[str]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        通用消息发送函数：统一处理文本+媒体发送
+
+        Args:
+            message_type: 消息类型 ('chat', 'room', 'note')
+            target_id: 目标ID (用户ID/房间ID/频道ID等)
+            text: 文本内容
+            media_urls: 媒体文件URL列表
+            local_files: 本地文件路径列表
+            **kwargs: 其他参数（如visibility等）
+
+        Returns:
+            发送结果字典
+
+        Raises:
+            APIError: 参数错误或发送失败
+        """
+        if not text and not media_urls and not local_files:
+            raise APIError("消息内容不能为空：需要文本或媒体文件")
+
+        file_ids = []
+
+        # 处理远程媒体文件
+        if media_urls:
+            file_ids.extend(await self._process_media_urls(media_urls))
+
+        # 处理本地文件
+        if local_files:
+            file_ids.extend(await self._process_local_files(local_files))
+
+        # 根据消息类型发送
+        return await self._dispatch_message(
+            message_type, target_id, text, file_ids, **kwargs
+        )
+
+    async def _process_media_urls(self, urls: List[str]) -> List[str]:
+        """处理远程媒体文件URL列表，返回文件ID列表"""
+        file_ids = []
+        for url in urls:
+            try:
+                result = await self.upload_and_find_file(url)
+                if result and result.get("id"):
+                    file_ids.append(result["id"])
+                    logger.debug(f"[Misskey API] URL媒体上传成功: {result['id']}")
+                else:
+                    logger.error(f"[Misskey API] URL媒体上传失败: {url}")
+            except Exception as e:
+                logger.error(f"[Misskey API] URL媒体处理失败 {url}: {e}")
+                # 继续处理其他文件，不中断整个流程
+                continue
+        return file_ids
+
+    async def _process_local_files(self, file_paths: List[str]) -> List[str]:
+        """处理本地文件路径列表，返回文件ID列表"""
+        file_ids = []
+        for file_path in file_paths:
+            try:
+                result = await self.upload_file(file_path)
+                if result and result.get("id"):
+                    file_ids.append(result["id"])
+                    logger.debug(f"[Misskey API] 本地文件上传成功: {result['id']}")
+                else:
+                    logger.error(f"[Misskey API] 本地文件上传失败: {file_path}")
+            except Exception as e:
+                logger.error(f"[Misskey API] 本地文件处理失败 {file_path}: {e}")
+                continue
+        return file_ids
+
+    async def _dispatch_message(
+        self,
+        message_type: str,
+        target_id: str,
+        text: Optional[str],
+        file_ids: List[str],
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """根据消息类型分发到对应的发送方法"""
+        if message_type == "chat":
+            # 聊天消息使用 fileId (单数)
+            payload = {"toUserId": target_id}
+            if text:
+                payload["text"] = text
+            if file_ids:
+                if len(file_ids) == 1:
+                    payload["fileId"] = file_ids[0]
+                else:
+                    # 多文件时逐个发送
+                    results = []
+                    for file_id in file_ids:
+                        single_payload = payload.copy()
+                        single_payload["fileId"] = file_id
+                        result = await self.send_message(single_payload)
+                        results.append(result)
+                    return {"multiple": True, "results": results}
+            return await self.send_message(payload)
+
+        elif message_type == "room":
+            # 房间消息使用 fileId (单数)
+            payload = {"toRoomId": target_id}
+            if text:
+                payload["text"] = text
+            if file_ids:
+                if len(file_ids) == 1:
+                    payload["fileId"] = file_ids[0]
+                else:
+                    # 多文件时逐个发送
+                    results = []
+                    for file_id in file_ids:
+                        single_payload = payload.copy()
+                        single_payload["fileId"] = file_id
+                        result = await self.send_room_message(single_payload)
+                        results.append(result)
+                    return {"multiple": True, "results": results}
+            return await self.send_room_message(payload)
+
+        elif message_type == "note":
+            # 发帖使用 fileIds (复数)
+            note_kwargs = {
+                "text": text,
+                "file_ids": file_ids if file_ids else None,
+            }
+            # 合并其他参数
+            note_kwargs.update(kwargs)
+            return await self.create_note(**note_kwargs)
+
+        else:
+            raise APIError(f"不支持的消息类型: {message_type}")
+
+    async def upload_and_find_file_with_fallback(
+        self,
+        url: str,
+        local_backup_path: Optional[str] = None,
+        name: Optional[str] = None,
+        folder_id: Optional[str] = None,
+        max_wait_time: float = 30.0,
+        check_interval: float = 2.0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        增强版文件上传，支持本地文件回退
+
+        Args:
+            url: 远程文件URL
+            local_backup_path: 本地备份文件路径（URL失败时使用）
+            name: 文件名
+            folder_id: 文件夹ID
+            max_wait_time: 最大等待时间
+            check_interval: 轮询间隔
+
+        Returns:
+            上传结果或None
+        """
+        # 首先尝试URL上传
+        try:
+            result = await self.upload_and_find_file(
+                url, name, folder_id, max_wait_time, check_interval
+            )
+            if result:
+                return result
+        except Exception as e:
+            logger.warning(f"[Misskey API] URL上传失败，尝试本地回退: {e}")
+
+        # URL上传失败，尝试本地文件回退
+        if local_backup_path:
+            try:
+                result = await self.upload_file(local_backup_path, name, folder_id)
+                if result and result.get("id"):
+                    logger.info(f"[Misskey API] 本地文件回退上传成功: {result['id']}")
+                    return result
+            except Exception as e:
+                logger.error(f"[Misskey API] 本地文件回退也失败: {e}")
+
+        return None

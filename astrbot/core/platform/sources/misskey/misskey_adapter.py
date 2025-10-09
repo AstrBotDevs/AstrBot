@@ -15,7 +15,6 @@ from astrbot.core.platform.astr_message_event import MessageSession
 import astrbot.api.message_components as Comp
 
 from .misskey_api import MisskeyAPI, APIError
-import mimetypes
 import os
 
 try:
@@ -64,6 +63,29 @@ class MisskeyPlatformAdapter(Platform):
         self.enable_file_upload = self.config.get("misskey_enable_file_upload", True)
         self.upload_folder = self.config.get("misskey_upload_folder")
 
+        # download / security related options (exposed to platform_config)
+        self.allow_insecure_downloads = bool(
+            self.config.get("misskey_allow_insecure_downloads", False)
+        )
+        # parse download timeout and chunk size safely
+        _dt = self.config.get("misskey_download_timeout")
+        try:
+            self.download_timeout = int(_dt) if _dt is not None else 15
+        except Exception:
+            self.download_timeout = 15
+
+        _chunk = self.config.get("misskey_download_chunk_size")
+        try:
+            self.download_chunk_size = int(_chunk) if _chunk is not None else 64 * 1024
+        except Exception:
+            self.download_chunk_size = 64 * 1024
+        # parse max download bytes safely
+        _md_bytes = self.config.get("misskey_max_download_bytes")
+        try:
+            self.max_download_bytes = int(_md_bytes) if _md_bytes is not None else None
+        except Exception:
+            self.max_download_bytes = None
+
         self.unique_session = platform_settings["unique_session"]
 
         self.api: Optional[MisskeyAPI] = None
@@ -80,6 +102,11 @@ class MisskeyPlatformAdapter(Platform):
             "misskey_default_visibility": "public",
             "misskey_local_only": False,
             "misskey_enable_chat": True,
+            # download / security options
+            "misskey_allow_insecure_downloads": False,
+            "misskey_download_timeout": 15,
+            "misskey_download_chunk_size": 65536,
+            "misskey_max_download_bytes": None,
         }
         default_config.update(self.config)
 
@@ -95,7 +122,14 @@ class MisskeyPlatformAdapter(Platform):
             logger.error("[Misskey] 配置不完整，无法启动")
             return
 
-        self.api = MisskeyAPI(self.instance_url, self.access_token)
+        self.api = MisskeyAPI(
+            self.instance_url,
+            self.access_token,
+            allow_insecure_downloads=self.allow_insecure_downloads,
+            download_timeout=self.download_timeout,
+            chunk_size=self.download_chunk_size,
+            max_download_bytes=self.max_download_bytes,
+        )
         self._running = True
 
         try:
@@ -147,28 +181,10 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _detect_mime_and_ext(self, path: str) -> Optional[str]:
-        """检测文件MIME类型并返回对应扩展名"""
-        try:
-            if magic:
-                m = magic.Magic(mime=True)
-                mime = m.from_file(path)
-            else:
-                mime, _ = mimetypes.guess_type(path)
-        except Exception:
-            mime = None
+        """Delegates MIME detection to utils.detect_mime_ext."""
+        from .misskey_utils import detect_mime_ext
 
-        if not mime:
-            return None
-
-        mapping = {
-            "image/jpeg": ".jpg",
-            "image/jpg": ".jpg",
-            "image/png": ".png",
-            "image/gif": ".gif",
-            "text/plain": ".txt",
-            "application/pdf": ".pdf",
-        }
-        return mapping.get(mime, mimetypes.guess_extension(mime) or None)
+        return detect_mime_ext(path)
 
     def _process_poll_data(
         self, message: AstrBotMessage, poll: Dict[str, Any], message_parts: List[str]
@@ -276,7 +292,7 @@ class MisskeyPlatformAdapter(Platform):
                         message_obj=message,
                         platform_meta=self.meta(),
                         session_id=message.session_id,
-                        client=self.api,
+                        client=self,
                     )
                     self.commit_event(event)
         except Exception as e:
@@ -312,7 +328,7 @@ class MisskeyPlatformAdapter(Platform):
                 message_obj=message,
                 platform_meta=self.meta(),
                 session_id=message.session_id,
-                client=self.api,
+                client=self,
             )
             self.commit_event(event)
         except Exception as e:
@@ -351,21 +367,78 @@ class MisskeyPlatformAdapter(Platform):
 
         try:
             session_id = session.session_id
+
+            # 添加消息链组件调试日志
+            logger.debug(
+                f"[Misskey] 收到消息链，包含 {len(message_chain.chain)} 个组件:"
+            )
+            for i, comp in enumerate(message_chain.chain):
+                try:
+                    comp_info = f"类型:{type(comp).__name__}"
+                    if hasattr(comp, "text"):
+                        comp_info += f" 文本:'{getattr(comp, 'text', '')[:50]}'"
+                    for attr in ["file", "url", "path"]:
+                        if hasattr(comp, attr):
+                            val = getattr(comp, attr, None)
+                            if val:
+                                comp_info += f" {attr}:'{str(val)[:100]}'"
+                    logger.debug(f"[Misskey]   组件 {i + 1}: {comp_info}")
+                except Exception as e:
+                    logger.debug(f"[Misskey]   组件 {i + 1}: 无法获取信息 - {e}")
+
             text, has_at_user = serialize_message_chain(message_chain.chain)
+            logger.debug(
+                f"[Misskey] serialize_message_chain 返回文本: '{text}', has_at_user: {has_at_user}"
+            )
 
             if not has_at_user and session_id:
                 user_info = self._user_cache.get(session_id)
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
 
+            # 检查是否有文件组件，即使文本为空或只有占位符也要处理
+            has_file_components = any(
+                isinstance(comp, Comp.Image)
+                or isinstance(comp, Comp.File)
+                or hasattr(comp, "convert_to_file_path")
+                or hasattr(comp, "get_file")
+                or any(
+                    hasattr(comp, a) for a in ("file", "url", "path", "src", "source")
+                )
+                for comp in message_chain.chain
+            )
+            logger.debug(f"[Misskey] 检测到文件组件: {has_file_components}")
+
             if not text or not text.strip():
-                logger.warning("[Misskey] 消息内容为空，跳过发送")
-                return await super().send_by_session(session, message_chain)
+                if not has_file_components:
+                    logger.warning("[Misskey] 消息内容为空且无文件组件，跳过发送")
+                    return await super().send_by_session(session, message_chain)
+                else:
+                    text = ""  # 清空占位符文本，只发送文件
 
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
             file_ids: List[str] = []
             fallback_urls: List[str] = []
+
+            # 添加详细的组件日志以调试插件返回的组件结构
+            try:
+                logger.debug(f"[Misskey] 消息链包含 {len(message_chain.chain)} 个组件")
+                for i, comp in enumerate(message_chain.chain):
+                    comp_type = type(comp).__name__
+                    comp_attrs = {}
+                    for attr in ["file", "url", "path", "src", "source", "name"]:
+                        try:
+                            val = getattr(comp, attr, None)
+                            if val is not None:
+                                comp_attrs[attr] = str(val)[:100]  # 截断长URL
+                        except Exception:
+                            pass
+                    logger.debug(
+                        f"[Misskey] 组件 {i}: {comp_type} - 属性: {comp_attrs}"
+                    )
+            except Exception as e:
+                logger.debug(f"[Misskey] 组件日志失败: {e}")
 
             if not self.enable_file_upload:
                 logger.debug("[Misskey] 文件上传已在配置中禁用，跳过上传流程")
@@ -382,6 +455,8 @@ class MisskeyPlatformAdapter(Platform):
 
             async def _upload_comp(comp) -> Optional[object]:
                 upload_path = None
+                upload_path_local = None
+                url_candidate = None
 
                 try:
                     if hasattr(comp, "convert_to_file_path"):
@@ -395,15 +470,135 @@ class MisskeyPlatformAdapter(Platform):
                         except Exception:
                             pass
 
-                    if not upload_path:
+                    # 不再在此处直接返回，改为先尝试从组件字段中推断 URL，再决定是否进入并发上传
+
+                    # 先推断可能的 URL 或本地路径
+                    url_candidate = None
+                    upload_path_local = None
+
+                    if (
+                        upload_path
+                        and isinstance(upload_path, str)
+                        and str(upload_path).startswith("http")
+                    ):
+                        url_candidate = upload_path
+                    else:
+                        upload_path_local = upload_path
+
+                    # 尝试通过注册到文件服务获取 URL（插件接口）或通过 get_file(True) 获取可直接访问的 URL
+                    try:
+                        if not url_candidate and hasattr(
+                            comp, "register_to_file_service"
+                        ):
+                            try:
+                                url_candidate = await comp.register_to_file_service()
+                            except Exception:
+                                url_candidate = None
+                        if not url_candidate and hasattr(comp, "get_file"):
+                            try:
+                                maybe = await comp.get_file(True)
+                                if (
+                                    maybe
+                                    and isinstance(maybe, str)
+                                    and maybe.startswith("http")
+                                ):
+                                    url_candidate = maybe
+                            except Exception:
+                                url_candidate = None
+                    except Exception:
+                        url_candidate = None
+
+                    # 如果上述都失败，检查常见的同步字段（file/url/path等）
+                    if not url_candidate:
+                        for attr in ("file", "url", "path", "src", "source"):
+                            try:
+                                val = getattr(comp, attr, None)
+                            except Exception:
+                                val = None
+                            if val and isinstance(val, str) and val.startswith("http"):
+                                url_candidate = val
+                                break
+
+                    # 如果既没有 URL，也没有本地路径，则无可上传内容
+                    if not url_candidate and not upload_path_local:
                         return None
 
                     async with sem:
                         if not self.api:
                             return None
+
+                        # 优先尝试通过 URL 上传（使用新的查找方法）
+                        if url_candidate:
+                            try:
+                                logger.debug(
+                                    f"[Misskey] 发现 URL candidate，尝试 upload-and-find: {url_candidate}"
+                                )
+                                upload_result = await self.api.upload_and_find_file(
+                                    str(url_candidate),
+                                    getattr(comp, "name", None)
+                                    or getattr(comp, "file", None),
+                                    folder_id=self.upload_folder,
+                                    max_wait_time=30.0,  # 最多等待30秒
+                                    check_interval=2.0,  # 每2秒检查一次
+                                )
+
+                                if isinstance(upload_result, dict):
+                                    # 检查各种上传结果
+                                    if upload_result.get("id"):
+                                        # 成功获得文件ID（同步、异步找到、或现有文件）
+                                        fid = upload_result.get("id")
+                                        result_type = (
+                                            "existing"
+                                            if upload_result.get("existing")
+                                            else (
+                                                "async_found"
+                                                if upload_result.get("async_found")
+                                                else "sync"
+                                            )
+                                        )
+                                        logger.debug(
+                                            f"[Misskey] upload-and-find 成功 ({result_type})，fid={fid}, URL={url_candidate}"
+                                        )
+                                        return str(fid)
+                                    elif upload_result.get("status") == "timeout":
+                                        # 异步上传超时，回退到URL
+                                        logger.warning(
+                                            f"[Misskey] upload-and-find 超时，回退到URL: {url_candidate}"
+                                        )
+                                        return {"fallback_url": url_candidate}
+                                    elif upload_result.get("fallback_url"):
+                                        # 其他情况需要回退
+                                        logger.debug(
+                                            f"[Misskey] upload-and-find 回退到URL: {url_candidate}"
+                                        )
+                                        return {"fallback_url": url_candidate}
+
+                                # 如果 upload_result 为 None，表示上传完全失败
+                                if upload_result is None:
+                                    logger.warning(
+                                        "[Misskey] upload-and-find 返回 None，尝试本地上传"
+                                    )
+                                    if not upload_path_local:
+                                        return None
+                                else:
+                                    # 未知的响应格式
+                                    logger.warning(
+                                        f"[Misskey] upload-and-find 返回未知格式: {upload_result}"
+                                    )
+                                    if not upload_path_local:
+                                        return None
+
+                            except Exception as e:
+                                logger.debug(
+                                    f"[Misskey] upload-and-find 失败，回退为本地上传: {e}"
+                                )
+
+                                # 再尝试本地上传（如果有）
+                                if not upload_path_local:
+                                    return None
                         try:
                             upload_result = await self.api.upload_file(
-                                upload_path,
+                                str(upload_path_local),
                                 getattr(comp, "name", None)
                                 or getattr(comp, "file", None),
                                 folder_id=self.upload_folder,
@@ -427,9 +622,13 @@ class MisskeyPlatformAdapter(Platform):
                                         and "unallowed" in str(e).lower()
                                     )
                                 ):
-                                    base_name = os.path.basename(upload_path)
+                                    if not upload_path_local:
+                                        raise
+                                    base_name = os.path.basename(upload_path_local)
                                     name_root, ext = os.path.splitext(base_name)
-                                    try_ext = self._detect_mime_and_ext(upload_path)
+                                    try_ext = self._detect_mime_and_ext(
+                                        upload_path_local
+                                    )
                                     candidates = []
                                     if try_ext:
                                         candidates.append(try_ext)
@@ -443,7 +642,7 @@ class MisskeyPlatformAdapter(Platform):
                                         tried_names.append(try_name)
                                         try:
                                             upload_result = await self.api.upload_file(
-                                                upload_path,
+                                                str(upload_path_local),
                                                 try_name,
                                                 folder_id=self.upload_folder,
                                             )
@@ -476,7 +675,37 @@ class MisskeyPlatformAdapter(Platform):
                                         if url_or_path and str(url_or_path).startswith(
                                             "http"
                                         ):
-                                            return {"fallback_url": url_or_path}
+                                            # 优先尝试通过 Misskey 的 upload-and-find 接口上传远程 URL
+                                            try:
+                                                if self.api:
+                                                    upload_result = await self.api.upload_and_find_file(
+                                                        str(url_or_path),
+                                                        getattr(comp, "name", None)
+                                                        or getattr(comp, "file", None),
+                                                        folder_id=self.upload_folder,
+                                                        max_wait_time=30.0,
+                                                        check_interval=2.0,
+                                                    )
+                                                    if isinstance(upload_result, dict):
+                                                        fid = upload_result.get("id")
+                                                        if fid:
+                                                            return str(fid)
+                                                        elif (
+                                                            upload_result.get(
+                                                                "fallback_url"
+                                                            )
+                                                            or upload_result.get(
+                                                                "status"
+                                                            )
+                                                            == "timeout"
+                                                        ):
+                                                            # 回退到URL显示
+                                                            return {
+                                                                "fallback_url": url_or_path
+                                                            }
+                                            except Exception:
+                                                # 如果 upload-from-url 失败，则回退为返回 URL
+                                                return {"fallback_url": url_or_path}
                                     except Exception:
                                         pass
                             except Exception:
@@ -484,26 +713,65 @@ class MisskeyPlatformAdapter(Platform):
                             return None
                 finally:
                     try:
-                        if upload_path:
+                        if upload_path_local:
                             data_temp = os.path.join(get_astrbot_data_path(), "temp")
-                            if upload_path.startswith(data_temp) and os.path.exists(
-                                upload_path
+                            if (
+                                isinstance(upload_path_local, str)
+                                and upload_path_local.startswith(data_temp)
+                                and os.path.exists(upload_path_local)
                             ):
                                 try:
-                                    os.remove(upload_path)
+                                    os.remove(upload_path_local)
                                     logger.debug(
-                                        f"[Misskey] 已清理临时文件: {upload_path}"
+                                        f"[Misskey] 已清理临时文件: {upload_path_local}"
                                     )
                                 except Exception:
                                     pass
                     except Exception:
                         pass
 
-            file_components = [
-                comp
-                for comp in message_chain.chain
-                if hasattr(comp, "convert_to_file_path") or hasattr(comp, "get_file")
-            ]
+            # 收集所有可能包含文件/URL信息的组件：支持异步接口或同步字段
+            file_components = []
+            for comp in message_chain.chain:
+                try:
+                    if (
+                        isinstance(comp, Comp.Image)
+                        or isinstance(comp, Comp.File)
+                        or hasattr(comp, "convert_to_file_path")
+                        or hasattr(comp, "get_file")
+                        or any(
+                            hasattr(comp, a)
+                            for a in ("file", "url", "path", "src", "source")
+                        )
+                    ):
+                        file_components.append(comp)
+                except Exception:
+                    # 保守跳过无法访问属性的组件
+                    continue
+
+            # 打印组件摘要，便于调试插件返回的结构
+            try:
+                logger.debug(
+                    f"[Misskey] 检测到 {len(file_components)} 个可能的文件组件:"
+                )
+                for i, comp in enumerate(file_components):
+                    try:
+                        comp_type = type(comp).__name__
+                        comp_attrs = {}
+                        for attr in ["file", "url", "path", "src", "source", "name"]:
+                            try:
+                                val = getattr(comp, attr, None)
+                                if val is not None:
+                                    comp_attrs[attr] = val
+                            except Exception:
+                                pass
+                        logger.debug(
+                            f"[Misskey]   组件 {i + 1}: {comp_type} - {comp_attrs}"
+                        )
+                    except Exception as e:
+                        logger.debug(f"[Misskey]   组件 {i + 1}: 无法获取属性 - {e}")
+            except Exception:
+                pass
             if len(file_components) > MAX_FILE_UPLOAD_COUNT:
                 logger.warning(
                     f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT})，只上传前{MAX_FILE_UPLOAD_COUNT}个文件"
@@ -542,30 +810,51 @@ class MisskeyPlatformAdapter(Platform):
                 if file_ids:
                     payload["fileIds"] = file_ids
                 await self.api.send_room_message(payload)
-            else:
-                visibility, visible_user_ids = resolve_message_visibility(
-                    user_id=session_id,
-                    user_cache=self._user_cache,
-                    self_id=self.client_self_id,
-                    default_visibility=self.default_visibility,
+            elif session_id:
+                from .misskey_utils import (
+                    extract_user_id_from_session_id,
+                    is_valid_chat_session_id,
                 )
 
-                fields = self._extract_additional_fields(session, message_chain)
-                if fallback_urls:
-                    appended = "\n" + "\n".join(fallback_urls)
-                    text = (text or "") + appended
+                if is_valid_chat_session_id(session_id):
+                    user_id = extract_user_id_from_session_id(session_id)
+                    if fallback_urls:
+                        appended = "\n" + "\n".join(fallback_urls)
+                        text = (text or "") + appended
+                    payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
+                    if file_ids:
+                        # 聊天消息只支持单个文件，使用 fileId 而不是 fileIds
+                        payload["fileId"] = file_ids[0]
+                        if len(file_ids) > 1:
+                            logger.warning(
+                                f"[Misskey] 聊天消息只支持单个文件，忽略其余 {len(file_ids) - 1} 个文件"
+                            )
+                    await self.api.send_message(payload)
+                else:
+                    # 回退到发帖逻辑
+                    visibility, visible_user_ids = resolve_message_visibility(
+                        user_id=session_id,
+                        user_cache=self._user_cache,
+                        self_id=self.client_self_id,
+                        default_visibility=self.default_visibility,
+                    )
 
-                await self.api.create_note(
-                    text=text,
-                    visibility=visibility,
-                    visible_user_ids=visible_user_ids,
-                    file_ids=file_ids if file_ids else None,
-                    local_only=self.local_only,
-                    cw=fields["cw"],
-                    poll=fields["poll"],
-                    renote_id=fields["renote_id"],
-                    channel_id=fields["channel_id"],
-                )
+                    fields = self._extract_additional_fields(session, message_chain)
+                    if fallback_urls:
+                        appended = "\n" + "\n".join(fallback_urls)
+                        text = (text or "") + appended
+
+                    await self.api.create_note(
+                        text=text,
+                        visibility=visibility,
+                        visible_user_ids=visible_user_ids,
+                        file_ids=file_ids if file_ids else None,
+                        local_only=self.local_only,
+                        cw=fields["cw"],
+                        poll=fields["poll"],
+                        renote_id=fields["renote_id"],
+                        channel_id=fields["channel_id"],
+                    )
 
         except Exception as e:
             logger.error(f"[Misskey] 发送消息失败: {e}")

@@ -254,6 +254,11 @@ CONFIG_METADATA_2 = {
                         "misskey_default_visibility": "public",
                         "misskey_local_only": False,
                         "misskey_enable_chat": True,
+                        # download / security options
+                        "misskey_allow_insecure_downloads": False,
+                        "misskey_download_timeout": 15,
+                        "misskey_download_chunk_size": 65536,
+                        "misskey_max_download_bytes": None,
                         "misskey_enable_file_upload": True,
                         "misskey_upload_concurrency": 3,
                         "misskey_upload_folder": "",
@@ -389,6 +394,26 @@ CONFIG_METADATA_2 = {
                         "description": "启用文件上传到 Misskey",
                         "type": "bool",
                         "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey 并在消息中附加 media(fileIds)。",
+                    },
+                    "misskey_allow_insecure_downloads": {
+                        "description": "允许不安全下载（禁用 SSL 验证）",
+                        "type": "bool",
+                        "hint": "仅作为最后回退手段：当远端服务器存在证书问题导致无法正常下载时，允许临时禁用 SSL 验证以获取文件。启用有安全风险，请谨慎使用。",
+                    },
+                    "misskey_download_timeout": {
+                        "description": "远端下载超时时间（秒）",
+                        "type": "int",
+                        "hint": "用于计算 URL 文件 MD5 或回退下载时的总体超时时间（秒）。",
+                    },
+                    "misskey_download_chunk_size": {
+                        "description": "流式下载分块大小（字节）",
+                        "type": "int",
+                        "hint": "流式下载和计算 MD5 时使用的每次读取字节数，过小会增加开销，过大会占用内存。",
+                    },
+                    "misskey_max_download_bytes": {
+                        "description": "最大允许下载字节数（超出则中止）",
+                        "type": "int",
+                        "hint": "如果希望限制下载文件的最大大小以防止 OOM，请填写最大字节数；留空或 null 表示不限制。",
                     },
                     "misskey_upload_concurrency": {
                         "description": "并发上传限制",
