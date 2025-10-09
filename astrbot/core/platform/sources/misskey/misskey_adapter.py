@@ -446,11 +446,13 @@ class MisskeyPlatformAdapter(Platform):
                     session_id, text, session, message_chain
                 )
 
+            MAX_UPLOAD_CONCURRENCY = 10
             upload_concurrency = int(
                 self.config.get(
                     "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY
                 )
             )
+            upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> Optional[object]:
@@ -848,7 +850,7 @@ class MisskeyPlatformAdapter(Platform):
                         text=text,
                         visibility=visibility,
                         visible_user_ids=visible_user_ids,
-                        file_ids=file_ids if file_ids else None,
+                        file_ids=file_ids or None,
                         local_only=self.local_only,
                         cw=fields["cw"],
                         poll=fields["poll"],

@@ -23,8 +23,7 @@ class FileIDExtractor:
 
         for p in id_paths:
             try:
-                fid = p(result)
-                if fid:
+                if fid := p(result):
                     return fid
             except Exception:
                 continue
@@ -66,7 +65,7 @@ class MessagePayloadBuilder:
             payload["text"] = text
         if file_ids:
             payload["fileIds"] = file_ids
-        payload.update(kwargs)
+        payload |= kwargs
         return payload
 
 
@@ -283,18 +282,10 @@ def format_poll(poll: Dict[str, Any]) -> str:
     """将 Misskey 的 poll 对象格式化为可读字符串。"""
     if not poll or not isinstance(poll, dict):
         return ""
-    parts = []
     multiple = poll.get("multiple", False)
     choices = poll.get("choices", [])
-    parts.append("[投票]")
-    parts.append("允许多选" if multiple else "单选")
-    text_choices = []
-    for idx, c in enumerate(choices, start=1):
-        text = c.get("text", "")
-        votes = c.get("votes", 0)
-        text_choices.append(f"({idx}) {text} [{votes}票]")
-    if text_choices:
-        parts.append("选项: " + ", ".join(text_choices))
+    text_choices = [f"({idx}) {c.get('text','')} [{c.get('votes',0)}票]" for idx, c in enumerate(choices, start=1)]
+    parts = ["[投票]", ("允许多选" if multiple else "单选")] + (["选项: " + ", ".join(text_choices)] if text_choices else [])
     return " ".join(parts)
 
 
@@ -481,46 +472,52 @@ async def resolve_component_url_or_path(
     local_path = None
 
     try:
-        if hasattr(comp, "convert_to_file_path"):
+        # helper to normalize a candidate string
+        async def _maybe_str_source(coro_or_val):
             try:
-                p = await comp.convert_to_file_path()
-                if isinstance(p, str):
-                    if p.startswith("http"):
-                        url_candidate = p
-                    else:
-                        local_path = p
+                v = coro_or_val
+                if hasattr(coro_or_val, "__await__"):
+                    v = await coro_or_val
+                if isinstance(v, str):
+                    return v
             except Exception:
-                pass
+                return None
+            return None
+
+        # check async helpers first
+        if hasattr(comp, "convert_to_file_path"):
+            p = await _maybe_str_source(comp.convert_to_file_path())
+        else:
+            p = None
+        if p:
+            if p.startswith("http"):
+                url_candidate = p
+            else:
+                local_path = p
 
         if not local_path and hasattr(comp, "get_file"):
-            try:
-                p = await comp.get_file()
-                if isinstance(p, str):
-                    if p.startswith("http"):
-                        url_candidate = p
-                    else:
-                        local_path = p
-            except Exception:
-                pass
+            p = await _maybe_str_source(comp.get_file())
+        else:
+            p = None
+            if p:
+                if p.startswith("http"):
+                    url_candidate = p
+                else:
+                    local_path = p
 
-        # register_to_file_service or get_file(True) may provide a URL
         if not url_candidate and hasattr(comp, "register_to_file_service"):
-            try:
-                r = await comp.register_to_file_service()
-                if isinstance(r, str) and r.startswith("http"):
-                    url_candidate = r
-            except Exception:
-                pass
+            r = await _maybe_str_source(comp.register_to_file_service())
+            if r and r.startswith("http"):
+                url_candidate = r
 
         if not url_candidate and hasattr(comp, "get_file"):
-            try:
-                maybe = await comp.get_file(True)
-                if isinstance(maybe, str) and maybe.startswith("http"):
-                    url_candidate = maybe
-            except Exception:
-                pass
+            p = await _maybe_str_source(comp.get_file(True))
+        else:
+            p = None
+            if p and p.startswith("http"):
+                url_candidate = p
 
-        # fallback to common attributes
+        # fallback to sync attributes
         if not url_candidate and not local_path:
             for attr in ("file", "url", "path", "src", "source"):
                 try:
@@ -588,12 +585,8 @@ async def upload_local_with_retries(
                 tried.add(try_name)
                 try:
                     r = await api.upload_file(local_path, try_name, folder_id)
-                    if isinstance(r, dict):
-                        fid = r.get("id") or (r.get("raw") or {}).get(
-                            "createdFile", {}
-                        ).get("id")
-                        if fid:
-                            return str(fid)
+                    if isinstance(r, dict) and (fid := (r.get("id") or (r.get("raw") or {}).get("createdFile", {}).get("id"))):
+                        return str(fid)
                 except Exception:
                     continue
     return None

@@ -195,38 +195,31 @@ class StreamingClient:
         message_type = data.get("type")
         body = data.get("body", {})
 
-        try:
-            body = data.get("body") or {}
-            channel_summary = None
-            if isinstance(body, dict):
-                inner = body.get("body") if isinstance(body.get("body"), dict) else body
-                note = None
-                if isinstance(inner, dict) and isinstance(inner.get("note"), dict):
-                    note = inner.get("note")
-                text = None
-                has_files = False
-                is_hidden = False
-                note_id = None
-                user = None
-                if note:
-                    text = note.get("text")
-                    note_id = note.get("id")
-                    files = note.get("files") or []
-                    has_files = bool(files)
-                    is_hidden = bool(note.get("isHidden"))
-                    user = note.get("user", {})
+        def _build_channel_summary(message_type: Optional[str], body: Any) -> str:
+            try:
+                if not isinstance(body, dict):
+                    return f"[Misskey WebSocket] 收到消息类型: {message_type}"
 
-                channel_summary = (
+                inner = body.get("body") if isinstance(body.get("body"), dict) else body
+                note = inner.get("note") if isinstance(inner, dict) and isinstance(inner.get("note"), dict) else None
+
+                text = note.get("text") if note else None
+                note_id = note.get("id") if note else None
+                files = note.get("files") or [] if note else []
+                has_files = bool(files)
+                is_hidden = bool(note.get("isHidden")) if note else False
+                user = note.get("user", {}) if note else None
+
+                return (
                     f"[Misskey WebSocket] 收到消息类型: {message_type} | "
                     f"note_id={note_id} | user={user.get('username') if user else None} | "
-                    f"text={'[no-text]' if not text else text[:80]} | files={has_files} | hidden={is_hidden}"
+                    f"text={text[:80] if text else '[no-text]'} | files={has_files} | hidden={is_hidden}"
                 )
-            else:
-                channel_summary = f"[Misskey WebSocket] 收到消息类型: {message_type}"
+            except Exception:
+                return f"[Misskey WebSocket] 收到消息类型: {message_type}"
 
-            logger.info(channel_summary)
-        except Exception:
-            logger.info(f"[Misskey WebSocket] 收到消息类型: {message_type}")
+        channel_summary = _build_channel_summary(message_type, body)
+        logger.info(channel_summary)
 
         logger.debug(
             f"[Misskey WebSocket] 收到完整消息: {json.dumps(data, indent=2, ensure_ascii=False)}"
@@ -351,12 +344,10 @@ class MisskeyAPI:
         self._session: Optional[aiohttp.ClientSession] = None
         self.streaming: Optional[StreamingClient] = None
         # download options
-        self.allow_insecure_downloads = bool(allow_insecure_downloads)
-        self.download_timeout = int(download_timeout)
-        self.chunk_size = int(chunk_size)
-        self.max_download_bytes = (
-            int(max_download_bytes) if max_download_bytes is not None else None
-        )
+        self.allow_insecure_downloads = allow_insecure_downloads
+        self.download_timeout = download_timeout
+        self.chunk_size = chunk_size
+        self.max_download_bytes = int(max_download_bytes) if max_download_bytes is not None else None
 
     async def __aenter__(self):
         return self
@@ -562,21 +553,30 @@ class MisskeyAPI:
         form.add_field("i", self.access_token)
 
         try:
-            with open(file_path, "rb") as f:
-                filename = name or file_path.split("/")[-1]
-                form.add_field("file", f, filename=filename)
-                if folder_id:
-                    form.add_field("folderId", str(folder_id))
-                async with self.session.post(url, data=form) as resp:
-                    result = await self._process_response(resp, "drive/files/create")
-                    file_id = FileIDExtractor.extract_file_id(result)
-                    logger.debug(
-                        f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}"
-                    )
-                    return {"id": file_id, "raw": result}
-        except FileNotFoundError as e:
-            logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
-            raise APIError(f"File not found: {file_path}") from e
+            # Read file bytes using thread executor to avoid adding new dependencies
+            loop = asyncio.get_running_loop()
+            def _read_file_bytes(path: str) -> bytes:
+                with open(path, "rb") as f:
+                    return f.read()
+
+            filename = name or file_path.split("/")[-1]
+            if folder_id:
+                form.add_field("folderId", str(folder_id))
+
+            try:
+                file_bytes = await loop.run_in_executor(None, _read_file_bytes, file_path)
+            except FileNotFoundError as e:
+                logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
+                raise APIError(f"File not found: {file_path}") from e
+
+            form.add_field("file", file_bytes, filename=filename)
+            async with self.session.post(url, data=form) as resp:
+                result = await self._process_response(resp, "drive/files/create")
+                file_id = FileIDExtractor.extract_file_id(result)
+                logger.debug(
+                    f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}"
+                )
+                return {"id": file_id, "raw": result}
         except aiohttp.ClientError as e:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e
@@ -773,10 +773,12 @@ class MisskeyAPI:
         logger.warning(f"[Misskey API] 无法计算 MD5: {url}")
         return None
 
+    MAX_STREAM_MD5_BYTES = 100 * 1024 * 1024  # 100MB safeguard
+
     async def _stream_md5_with_session(
         self, url: str, ssl_verify: bool = True
     ) -> Optional[str]:
-        """使用 session 流式读取并计算 MD5，支持下载大小限制"""
+        """使用 session 流式读取并计算 MD5，支持下载大小限制和硬性最大下载字节数"""
         total = 0
         m = hashlib.md5()
         async with self.session.get(
@@ -789,10 +791,15 @@ class MisskeyAPI:
             async for chunk in resp.content.iter_chunked(self.chunk_size):
                 if not chunk:
                     continue
-                m.update(chunk)
                 total += len(chunk)
+                # enforce configured max_download_bytes first
                 if self.max_download_bytes and total > self.max_download_bytes:
                     raise APIError("下载文件超出允许的最大字节数")
+                # enforce a hard upper limit to avoid pathological cases
+                if total > self.MAX_STREAM_MD5_BYTES:
+                    logger.warning(f"[Misskey API] 文件过大，已超过最大流式 MD5 限制: {url}")
+                    return None
+                m.update(chunk)
         return m.hexdigest()
 
     async def _download_with_existing_session(
@@ -800,7 +807,7 @@ class MisskeyAPI:
     ) -> Optional[bytes]:
         """使用现有会话下载文件"""
         if not (hasattr(self, "session") and self.session):
-            raise Exception("No existing session available")
+            raise APIConnectionError("No existing session available")
 
         async with self.session.get(
             url, timeout=aiohttp.ClientTimeout(total=15), ssl=ssl_verify
@@ -875,9 +882,7 @@ class MisskeyAPI:
         # 回退：下载远端文件并做本地上传
         try:
             # 使用现有 session 下载内容到临时文件
-            tmp_bytes = await self._download_with_existing_session(url)
-            if not tmp_bytes:
-                tmp_bytes = await self._download_with_temp_session(url)
+            tmp_bytes = await self._download_with_existing_session(url) or await self._download_with_temp_session(url)
 
             if tmp_bytes:
                 # 写入临时文件并上传本地文件
@@ -957,8 +962,7 @@ class MisskeyAPI:
             try:
                 files = await self.find_files_by_hash(md5_hash)
                 if files:
-                    file_id = files[0].get("id")
-                    if file_id:
+                    if file_id := files[0].get("id"):
                         logger.debug(f"[Misskey API] 异步上传完成: {file_id}")
                         return {"id": file_id, "raw": files[0], "async_found": True}
             except Exception as e:
@@ -1052,9 +1056,8 @@ class MisskeyAPI:
         result = await self._make_request("chat/messages/user-timeline", data)
         if isinstance(result, list):
             return result
-        else:
-            logger.warning(f"[Misskey API] 聊天消息响应格式异常: {type(result)}")
-            return []
+        logger.warning(f"[Misskey API] 聊天消息响应格式异常: {type(result)}")
+        return []
 
     async def get_mentions(
         self, limit: int = 10, since_id: Optional[str] = None
@@ -1202,7 +1205,7 @@ class MisskeyAPI:
             # 发帖使用 fileIds (复数)
             note_kwargs = {
                 "text": text,
-                "file_ids": file_ids if file_ids else None,
+                "file_ids": file_ids or None,
             }
             # 合并其他参数
             note_kwargs.update(kwargs)
