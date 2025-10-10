@@ -434,8 +434,9 @@ class ConversationCommands:
         await self.context.conversation_manager.delete_conversation(
             message.unified_msg_origin, session_curr_cid
         )
-        message.set_result(
-            MessageEventResult().message(
-                "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
-            )
-        )
+
+        ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
+        if self.ltm and self.ltm_enabled(message):
+            cnt = await self.ltm.remove_session(event=message)
+            ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
+        message.set_result(MessageEventResult().message(ret))
