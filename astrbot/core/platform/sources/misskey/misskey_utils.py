@@ -1,8 +1,72 @@
 """Misskey 平台适配器通用工具函数"""
 
+import mimetypes
+import os
 from typing import Dict, Any, List, Tuple, Optional, Union
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
+
+
+class FileIDExtractor:
+    """从 API 响应中提取文件 ID 的帮助类（无状态）。"""
+
+    @staticmethod
+    def extract_file_id(result: Any) -> Optional[str]:
+        if not isinstance(result, dict):
+            return None
+
+        id_paths = [
+            lambda r: r.get("createdFile", {}).get("id"),
+            lambda r: r.get("file", {}).get("id"),
+            lambda r: r.get("id"),
+        ]
+
+        for p in id_paths:
+            try:
+                if fid := p(result):
+                    return fid
+            except Exception:
+                continue
+
+        return None
+
+
+class MessagePayloadBuilder:
+    """构建不同类型消息负载的帮助类（无状态）。"""
+
+    @staticmethod
+    def build_chat_payload(
+        user_id: str, text: Optional[str], file_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        payload = {"toUserId": user_id}
+        if text:
+            payload["text"] = text
+        if file_id:
+            payload["fileId"] = file_id
+        return payload
+
+    @staticmethod
+    def build_room_payload(
+        room_id: str, text: Optional[str], file_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        payload = {"toRoomId": room_id}
+        if text:
+            payload["text"] = text
+        if file_id:
+            payload["fileId"] = file_id
+        return payload
+
+    @staticmethod
+    def build_note_payload(
+        text: Optional[str], file_ids: Optional[List[str]] = None, **kwargs
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {}
+        if text:
+            payload["text"] = text
+        if file_ids:
+            payload["fileIds"] = file_ids
+        payload |= kwargs
+        return payload
 
 
 def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
@@ -15,8 +79,11 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
         if isinstance(component, Comp.Plain):
             return component.text
         elif isinstance(component, Comp.File):
-            file_name = getattr(component, "name", "文件")
-            return f"[文件: {file_name}]"
+            # 为文件组件返回占位符，但适配器仍会处理原组件
+            return "[文件]"
+        elif isinstance(component, Comp.Image):
+            # 为图片组件返回占位符，但适配器仍会处理原组件
+            return "[图片]"
         elif isinstance(component, Comp.At):
             has_at = True
             return f"@{component.qq}"
@@ -128,6 +195,20 @@ def is_valid_room_session_id(session_id: Union[str, Any]) -> bool:
     )
 
 
+def is_valid_chat_session_id(session_id: Union[str, Any]) -> bool:
+    """检查 session_id 是否是有效的聊天 session_id (仅限chat%前缀)"""
+    if not isinstance(session_id, str) or "%" not in session_id:
+        return False
+
+    parts = session_id.split("%")
+    return (
+        len(parts) == 2
+        and parts[0] == "chat"
+        and bool(parts[1])
+        and parts[1] != "unknown"
+    )
+
+
 def extract_user_id_from_session_id(session_id: str) -> str:
     """从 session_id 中提取用户 ID"""
     if "%" in session_id:
@@ -197,6 +278,22 @@ def process_files(
     return file_parts
 
 
+def format_poll(poll: Dict[str, Any]) -> str:
+    """将 Misskey 的 poll 对象格式化为可读字符串。"""
+    if not poll or not isinstance(poll, dict):
+        return ""
+    multiple = poll.get("multiple", False)
+    choices = poll.get("choices", [])
+    text_choices = [
+        f"({idx}) {c.get('text', '')} [{c.get('votes', 0)}票]"
+        for idx, c in enumerate(choices, start=1)
+    ]
+    parts = ["[投票]", ("允许多选" if multiple else "单选")] + (
+        ["选项: " + ", ".join(text_choices)] if text_choices else []
+    )
+    return " ".join(parts)
+
+
 def extract_sender_info(
     raw_data: Dict[str, Any], is_chat: bool = False
 ) -> Dict[str, Any]:
@@ -248,7 +345,7 @@ def create_base_message(
     else:
         session_prefix = "note"
         session_id = f"{session_prefix}%{sender_info['sender_id']}"
-        message.type = MessageType.FRIEND_MESSAGE
+        message.type = MessageType.OTHER_MESSAGE
 
     message.session_id = (
         session_id if sender_info["sender_id"] else f"{session_prefix}%unknown"
@@ -325,3 +422,181 @@ def cache_room_info(
             "visibility": "specified",
             "visible_user_ids": [client_self_id],
         }
+
+
+def detect_mime_ext(path: str) -> Optional[str]:
+    """检测文件 MIME 并返回常用扩展，作为 adapter 的可复用工具。"""
+    try:
+        try:
+            from magic import Magic  # type: ignore
+
+            m = Magic(mime=True)
+            mime = m.from_file(path)
+        except Exception:
+            import mimetypes as _m
+
+            mime, _ = _m.guess_type(path)
+    except Exception:
+        mime = None
+
+    if not mime:
+        return None
+
+    mapping = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "audio/mpeg": ".mp3",
+        "audio/mp4": ".m4a",
+        "audio/ogg": ".ogg",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/webm": ".webm",
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+        "video/x-matroska": ".mkv",
+        "video/quicktime": ".mov",
+        "video/avi": ".avi",
+        "video/mpeg": ".mpeg",
+        "text/plain": ".txt",
+        "application/pdf": ".pdf",
+    }
+    return mapping.get(mime, mimetypes.guess_extension(mime) or None)
+
+
+async def resolve_component_url_or_path(
+    comp: Any,
+) -> Tuple[Optional[str], Optional[str]]:
+    """尝试从组件解析可上传的远程 URL 或本地路径。
+
+    返回 (url_candidate, local_path)。两者可能都为 None。
+    这个函数尽量不抛异常，调用方可按需处理 None。
+    """
+    url_candidate = None
+    local_path = None
+
+    try:
+        # helper to normalize a candidate string
+        async def _maybe_str_source(coro_or_val):
+            try:
+                v = coro_or_val
+                if hasattr(coro_or_val, "__await__"):
+                    v = await coro_or_val
+                if isinstance(v, str):
+                    return v
+            except Exception:
+                return None
+            return None
+
+        # check async helpers first
+        if hasattr(comp, "convert_to_file_path"):
+            p = await _maybe_str_source(comp.convert_to_file_path())
+        else:
+            p = None
+        if p:
+            if p.startswith("http"):
+                url_candidate = p
+            else:
+                local_path = p
+
+        if not local_path and hasattr(comp, "get_file"):
+            p = await _maybe_str_source(comp.get_file())
+        else:
+            p = None
+            if p:
+                if p.startswith("http"):
+                    url_candidate = p
+                else:
+                    local_path = p
+
+        if not url_candidate and hasattr(comp, "register_to_file_service"):
+            r = await _maybe_str_source(comp.register_to_file_service())
+            if r and r.startswith("http"):
+                url_candidate = r
+
+        if not url_candidate and hasattr(comp, "get_file"):
+            p = await _maybe_str_source(comp.get_file(True))
+        else:
+            p = None
+            if p and p.startswith("http"):
+                url_candidate = p
+
+        # fallback to sync attributes
+        if not url_candidate and not local_path:
+            for attr in ("file", "url", "path", "src", "source"):
+                try:
+                    val = getattr(comp, attr, None)
+                except Exception:
+                    val = None
+                if val and isinstance(val, str):
+                    if val.startswith("http"):
+                        url_candidate = val
+                        break
+                    else:
+                        local_path = val
+                        break
+    except Exception:
+        return None, None
+
+    return url_candidate, local_path
+
+
+def summarize_component_for_log(comp: Any) -> Dict[str, Any]:
+    """生成适合日志的组件属性字典（尽量不抛异常）。"""
+    attrs = {}
+    for a in ("file", "url", "path", "src", "source", "name"):
+        try:
+            v = getattr(comp, a, None)
+            if v is not None:
+                attrs[a] = v
+        except Exception:
+            continue
+    return attrs
+
+
+async def upload_local_with_retries(
+    api: Any,
+    local_path: str,
+    preferred_name: Optional[str],
+    folder_id: Optional[str],
+) -> Optional[str]:
+    """尝试本地上传并在遇到 unallowed 错误时按扩展名重试，返回 file id 或 None。"""
+    try:
+        res = await api.upload_file(local_path, preferred_name, folder_id)
+        if isinstance(res, dict):
+            fid = res.get("id") or (res.get("raw") or {}).get("createdFile", {}).get(
+                "id"
+            )
+            if fid:
+                return str(fid)
+    except Exception as e:
+        msg = str(e).lower()
+        if "unallowed" in msg or "unallowed_file_type" in msg:
+            base = os.path.basename(local_path)
+            name_root, ext = os.path.splitext(base)
+            try_ext = detect_mime_ext(local_path)
+            candidates = []
+            if try_ext:
+                candidates.append(try_ext)
+            candidates.extend([".jpg", ".png", ".txt", ".bin"])
+            if ext and len(ext) <= 5 and ext not in candidates:
+                candidates.insert(0, ext)
+            tried = set()
+            for c in candidates:
+                try_name = name_root + c
+                if try_name in tried:
+                    continue
+                tried.add(try_name)
+                try:
+                    r = await api.upload_file(local_path, try_name, folder_id)
+                    if isinstance(r, dict) and (
+                        fid := (
+                            r.get("id")
+                            or (r.get("raw") or {}).get("createdFile", {}).get("id")
+                        )
+                    ):
+                        return str(fid)
+                except Exception:
+                    continue
+    return None
