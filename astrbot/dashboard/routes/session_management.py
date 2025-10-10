@@ -67,8 +67,9 @@ class SessionManagementRoute(Route):
                 # 处理 persona 显示
                 if persona_name is None:
                     if conv_persona_id is None:
-                        default_persona = persona_mgr.selected_default_persona_v3
-                        if default_persona:
+                        if (
+                            default_persona := persona_mgr.selected_default_persona_v3
+                        ):
                             persona_name = default_persona["name"]
                     else:
                         persona_name = "[%None]"
