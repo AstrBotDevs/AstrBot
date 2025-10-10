@@ -38,7 +38,7 @@ class ProviderOpenAIOfficial(Provider):
             default_persona,
         )
         self.chosen_api_key = None
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: List = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
