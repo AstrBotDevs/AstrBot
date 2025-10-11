@@ -1056,6 +1056,7 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                     },
                     "阿里云百炼 TTS(API)": {
+                        "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
                         "id": "dashscope_tts",
                         "provider": "dashscope",
                         "type": "dashscope_tts",
@@ -1436,9 +1437,8 @@ CONFIG_METADATA_2 = {
                         "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
                     "dashscope_tts_voice": {
-                        "description": "语音合成模型",
-                        "type": "string",
-                        "hint": "阿里云百炼语音合成模型名称。具体可参考 https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-python-api 等内容",
+                        "description": "音色",
+                        "type": "string"
                     },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
