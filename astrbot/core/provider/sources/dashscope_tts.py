@@ -10,7 +10,9 @@ from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
 try:
     from dashscope.aigc.multimodal_conversation import MultiModalConversation
-except ImportError:  # pragma: no cover - older dashscope versions without Qwen TTS support
+except (
+    ImportError
+):  # pragma: no cover - older dashscope versions without Qwen TTS support
     MultiModalConversation = None
 
 from ..entities import ProviderType
@@ -71,18 +73,20 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             "voice": self.voice or "Cherry",
         }
         if not self.voice:
-            logging.warning("No voice specified for Qwen TTS model, using default 'Cherry'.")
+            logging.warning(
+                "No voice specified for Qwen TTS model, using default 'Cherry'."
+            )
         return MultiModalConversation.call(**kwargs)
 
-    async def _synthesize_with_qwen_tts(self, model: str, text: str) -> Tuple[Optional[bytes], str]:
+    async def _synthesize_with_qwen_tts(
+        self, model: str, text: str
+    ) -> Tuple[Optional[bytes], str]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
-
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
-            error_details = self._format_dashscope_error(response)
             raise RuntimeError(
-                f"Audio synthesis failed for model '{model}'. {error_details}"
+                f"Audio synthesis failed for model '{model}'. {response}"
             )
         ext = ".wav"
         return audio_bytes, ext
@@ -112,13 +116,17 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=timeout)
+                ) as response:
                     return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logging.error(f"Failed to download audio from URL {url}: {e}")
             return None
 
-    async def _synthesize_with_cosyvoice(self, model: str, text: str) -> Tuple[Optional[bytes], str]:
+    async def _synthesize_with_cosyvoice(
+        self, model: str, text: str
+    ) -> Tuple[Optional[bytes], str]:
         synthesizer = SpeechSynthesizer(
             model=model,
             voice=self.voice,
@@ -129,31 +137,13 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             None, synthesizer.call, text, self.timeout_ms
         )
         if not audio_bytes:
-            response = getattr(synthesizer, "get_response", None)
-            detail = ""
-            if callable(response):
-                resp = response()
-                detail = self._format_dashscope_error(resp)
-            raise RuntimeError(
-                f"Audio synthesis failed for model '{model}'. {detail}".strip()
-            )
+            resp = synthesizer.get_response()
+            if resp and isinstance(resp, dict):
+                raise RuntimeError(
+                    f"Audio synthesis failed for model '{model}'. {resp}".strip()
+                )
         return audio_bytes, ".wav"
 
     def _is_qwen_tts_model(self, model: str) -> bool:
         model_lower = model.lower()
         return "tts" in model_lower and model_lower.startswith("qwen")
-
-    def _format_dashscope_error(self, response) -> str:
-        status_code = getattr(response, "status_code", None)
-        code = getattr(response, "code", None)
-        message = getattr(response, "message", None)
-        parts = []
-        if status_code is not None:
-            parts.append(f"status_code={status_code}")
-        if code:
-            parts.append(f"code={code}")
-        if message:
-            parts.append(f"message={message}")
-        if not parts:
-            return ""
-        return " ".join(parts)
