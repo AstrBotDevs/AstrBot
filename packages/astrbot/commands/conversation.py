@@ -255,8 +255,17 @@ class ConversationCommands:
             )
             return
 
+        cpersona = None
+        if curr_cid := await self.context.conversation_manager.get_curr_conversation_id(
+            message.unified_msg_origin
+        ):
+            conv = await self.context.conversation_manager.get_conversation(
+                message.unified_msg_origin, curr_cid
+            )
+            cpersona = conv.persona_id
+
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin, message.get_platform_id()
+            message.unified_msg_origin, message.get_platform_id(), persona_id=cpersona
         )
 
         # 长期记忆
@@ -290,8 +299,21 @@ class ConversationCommands:
                     session_id=sid,
                 )
             )
+
+            cpersona = None
+            if (
+                curr_cid
+                := await self.context.conversation_manager.get_curr_conversation_id(
+                    session
+                )
+            ):
+                conv = await self.context.conversation_manager.get_conversation(
+                    session, curr_cid
+                )
+                cpersona = conv.persona_id
+
             cid = await self.context.conversation_manager.new_conversation(
-                session, message.get_platform_id()
+                session, message.get_platform_id(), persona_id=cpersona
             )
             message.set_result(
                 MessageEventResult().message(
