@@ -65,12 +65,12 @@ class SessionManagementRoute(Route):
                 persona_name = data["persona_name"]
 
                 # 处理 persona 显示
-                if conv_persona_id == "[%None]":
-                    persona_name = "无人格"
-                else:
-                    default_persona = persona_mgr.selected_default_persona_v3
-                    if default_persona:
-                        persona_name = default_persona["name"]
+                if persona_name is None:
+                    if conv_persona_id is None:
+                        if default_persona := persona_mgr.selected_default_persona_v3:
+                            persona_name = default_persona["name"]
+                    else:
+                        persona_name = "[%None]"
 
                 session_info = {
                     "session_id": session_id,
