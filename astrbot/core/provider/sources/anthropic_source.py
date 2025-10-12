@@ -33,7 +33,7 @@ class ProviderAnthropic(Provider):
         )
 
         self.chosen_api_key: str = ""
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: List = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
@@ -70,9 +70,13 @@ class ProviderAnthropic(Provider):
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
-                                "input": json.loads(tool_call["function"]["arguments"])
-                                if isinstance(tool_call["function"]["arguments"], str)
-                                else tool_call["function"]["arguments"],
+                                "input": (
+                                    json.loads(tool_call["function"]["arguments"])
+                                    if isinstance(
+                                        tool_call["function"]["arguments"], str
+                                    )
+                                    else tool_call["function"]["arguments"]
+                                ),
                                 "id": tool_call["id"],
                             }
                         )
@@ -355,9 +359,11 @@ class ProviderAnthropic(Provider):
                     "source": {
                         "type": "base64",
                         "media_type": mime_type,
-                        "data": image_data.split("base64,")[1]
-                        if "base64," in image_data
-                        else image_data,
+                        "data": (
+                            image_data.split("base64,")[1]
+                            if "base64," in image_data
+                            else image_data
+                        ),
                     },
                 }
             )
