@@ -41,6 +41,17 @@ class ConversationCommands:
         self.context = context
         self.ltm = ltm
 
+    async def _get_current_persona_id(self, session_id):
+        curr = await self.context.conversation_manager.get_curr_conversation_id(
+            session_id
+        )
+        if not curr:
+            return None
+        conv = await self.context.conversation_manager.get_conversation(
+            session_id, curr
+        )
+        return conv.persona_id
+
     def ltm_enabled(self, event: AstrMessageEvent):
         if not self.ltm:
             return False
@@ -255,8 +266,9 @@ class ConversationCommands:
             )
             return
 
+        cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin, message.get_platform_id()
+            message.unified_msg_origin, message.get_platform_id(), persona_id=cpersona
         )
 
         # 长期记忆
@@ -290,8 +302,10 @@ class ConversationCommands:
                     session_id=sid,
                 )
             )
+
+            cpersona = await self._get_current_persona_id(session)
             cid = await self.context.conversation_manager.new_conversation(
-                session, message.get_platform_id()
+                session, message.get_platform_id(), persona_id=cpersona
             )
             message.set_result(
                 MessageEventResult().message(

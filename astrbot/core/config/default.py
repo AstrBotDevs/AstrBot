@@ -1436,10 +1436,7 @@ CONFIG_METADATA_2 = {
                         "description": "服务订阅密钥",
                         "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
-                    "dashscope_tts_voice": {
-                        "description": "音色",
-                        "type": "string"
-                    },
+                    "dashscope_tts_voice": {"description": "音色", "type": "string"},
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
