@@ -97,5 +97,6 @@ async def call_event_hook(
             logger.info(
                 f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。"
             )
+            return True
 
     return event.is_stopped()

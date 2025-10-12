@@ -75,7 +75,9 @@ class Persona(SQLModel, table=True):
 
     __tablename__ = "personas"
 
-    id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    id: int | None = Field(
+        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+    )
     persona_id: str = Field(max_length=255, nullable=False)
     system_prompt: str = Field(sa_type=Text, nullable=False)
     begin_dialogs: Optional[list] = Field(default=None, sa_type=JSON)
@@ -135,7 +137,9 @@ class PlatformMessageHistory(SQLModel, table=True):
 
     __tablename__ = "platform_message_history"
 
-    id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
+    id: int | None = Field(
+        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+    )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
     sender_id: Optional[str] = Field(default=None)  # ID of the sender in the platform
@@ -158,8 +162,8 @@ class Attachment(SQLModel, table=True):
 
     __tablename__ = "attachments"
 
-    inner_attachment_id: int = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}
+    inner_attachment_id: int | None = Field(
+        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
     )
     attachment_id: str = Field(
         max_length=36,

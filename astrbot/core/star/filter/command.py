@@ -1,5 +1,7 @@
 import re
 import inspect
+import types
+import typing
 from typing import List, Any, Type, Dict
 from . import HandlerFilter
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -12,6 +14,18 @@ class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
     pass
+
+
+def unwrap_optional(annotation) -> tuple:
+    """去掉 Optional[T] / Union[T, None] / T|None，返回 T"""
+    args = typing.get_args(annotation)
+    non_none_args = [a for a in args if a is not type(None)]
+    if len(non_none_args) == 1:
+        return (non_none_args[0],)
+    elif len(non_none_args) > 1:
+        return tuple(non_none_args)
+    else:
+        return ()
 
 
 # 标准指令受到 wake_prefix 的制约。
@@ -32,11 +46,16 @@ class CommandFilter(HandlerFilter):
             self.init_handler_md(handler_md)
         self.custom_filter_list: List[CustomFilter] = []
 
+        # Cache for complete command names list
+        self._cmpl_cmd_names: list | None = None
+
     def print_types(self):
         result = ""
         for k, v in self.handler_params.items():
             if isinstance(v, type):
                 result += f"{k}({v.__name__}),"
+            elif isinstance(v, types.UnionType) or typing.get_origin(v) is typing.Union:
+                result += f"{k}({v}),"
             else:
                 result += f"{k}({type(v).__name__})={v},"
         result = result.rstrip(",")
@@ -92,7 +111,8 @@ class CommandFilter(HandlerFilter):
             # 没有 GreedyStr 的情况
             if i >= len(params):
                 if (
-                    isinstance(param_type_or_default_val, Type)
+                    isinstance(param_type_or_default_val, (Type, types.UnionType))
+                    or typing.get_origin(param_type_or_default_val) is typing.Union
                     or param_type_or_default_val is inspect.Parameter.empty
                 ):
                     # 是类型
@@ -129,12 +149,41 @@ class CommandFilter(HandlerFilter):
                     elif isinstance(param_type_or_default_val, float):
                         result[param_name] = float(params[i])
                     else:
-                        result[param_name] = param_type_or_default_val(params[i])
+                        origin = typing.get_origin(param_type_or_default_val)
+                        if origin in (typing.Union, types.UnionType):
+                            # 注解是联合类型
+                            # NOTE: 目前没有处理联合类型嵌套相关的注解写法
+                            nn_types = unwrap_optional(param_type_or_default_val)
+                            if len(nn_types) == 1:
+                                # 只有一个非 NoneType 类型
+                                result[param_name] = nn_types[0](params[i])
+                            else:
+                                # 没有或者有多个非 NoneType 类型，这里我们暂时直接赋值为原始值。
+                                # NOTE: 目前还没有做类型校验
+                                result[param_name] = params[i]
+                        else:
+                            result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(
                         f"参数 {param_name} 类型错误。完整参数: {self.print_types()}"
                     )
         return result
+
+    def get_complete_command_names(self):
+        if self._cmpl_cmd_names is not None:
+            return self._cmpl_cmd_names
+        self._cmpl_cmd_names = [
+            f"{parent} {cmd}" if parent else cmd
+            for cmd in [self.command_name] + list(self.alias)
+            for parent in self.parent_command_names or [""]
+        ]
+        return self._cmpl_cmd_names
+
+    def equals(self, message_str: str) -> bool:
+        for full_cmd in self.get_complete_command_names():
+            if message_str == full_cmd:
+                return True
+        return False
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         if not event.is_at_or_wake_command:
@@ -145,18 +194,11 @@ class CommandFilter(HandlerFilter):
 
         # 检查是否以指令开头
         message_str = re.sub(r"\s+", " ", event.get_message_str().strip())
-        candidates = [self.command_name] + list(self.alias)
         ok = False
-        for candidate in candidates:
-            for parent_command_name in self.parent_command_names:
-                if parent_command_name:
-                    _full = f"{parent_command_name} {candidate}"
-                else:
-                    _full = candidate
-                if message_str.startswith(f"{_full} ") or message_str == _full:
-                    message_str = message_str[len(_full) :].strip()
-                    ok = True
-                    break
+        for full_cmd in self.get_complete_command_names():
+            if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
+                ok = True
+                message_str = message_str[len(full_cmd) :].strip()
         if not ok:
             return False
 

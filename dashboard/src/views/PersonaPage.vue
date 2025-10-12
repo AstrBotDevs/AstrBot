@@ -23,7 +23,7 @@
             <!-- 人格卡片网格 -->
             <v-row>
                 <v-col v-for="persona in personas" :key="persona.persona_id" cols="12" md="6" lg="4" xl="3">
-                    <v-card class="persona-card" elevation="2" rounded="lg" @click="viewPersona(persona)">
+                    <v-card class="persona-card" rounded="md" @click="viewPersona(persona)">
                         <v-card-title class="d-flex justify-space-between align-center">
                             <div class="text-truncate ml-2">
                                 {{ persona.persona_id }}
@@ -296,9 +296,9 @@
                 <v-card-text>
                     <div class="mb-4">
                         <h4 class="text-h6 mb-2">{{ tm('form.systemPrompt') }}</h4>
-                        <div class="system-prompt-content">
+                        <pre class="system-prompt-content">
                             {{ viewingPersona.system_prompt }}
-                        </div>
+                        </pre>
                     </div>
 
                     <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
@@ -759,10 +759,6 @@ export default {
     cursor: pointer;
 }
 
-.persona-card:hover {
-    box-shadow: 0 8px 25px 0 rgba(0, 0, 0, 0.15);
-}
-
 .system-prompt-preview {
     font-size: 14px;
     line-height: 1.4;
@@ -775,10 +771,10 @@ export default {
 }
 
 .system-prompt-content {
-    background-color: rgba(var(--v-theme-surface-variant), 0.3);
+    max-height: 400px;
+    overflow: auto;
     padding: 12px;
     border-radius: 8px;
-    font-family: 'Roboto Mono', monospace;
     font-size: 14px;
     line-height: 1.5;
     white-space: pre-wrap;

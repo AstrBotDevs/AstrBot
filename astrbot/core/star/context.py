@@ -6,6 +6,7 @@ from astrbot.core.provider.provider import (
     TTSProvider,
     STTProvider,
     EmbeddingProvider,
+    RerankProvider,
 )
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.db import BaseDatabase
@@ -103,11 +104,13 @@ class Context:
         """
         self.provider_manager.provider_insts.append(provider)
 
-    def get_provider_by_id(self, provider_id: str) -> Provider | None:
-        """通过 ID 获取对应的 LLM Provider(Chat_Completion 类型)。"""
+    def get_provider_by_id(
+        self, provider_id: str
+    ) -> (
+        Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
+    ):
+        """通过 ID 获取对应的 LLM Provider。"""
         prov = self.provider_manager.inst_map.get(provider_id)
-        if prov and not isinstance(prov, Provider):
-            raise ValueError("返回的 Provider 不是 Provider 类型")
         return prov
 
     def get_all_providers(self) -> List[Provider]:

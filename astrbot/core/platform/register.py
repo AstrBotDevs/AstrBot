@@ -13,10 +13,12 @@ def register_platform_adapter(
     desc: str,
     default_config_tmpl: dict = None,
     adapter_display_name: str = None,
+    logo_path: str = None,
 ):
     """用于注册平台适配器的带参装饰器。
 
     default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。
+    logo_path 指定了平台适配器的 logo 文件路径，是相对于插件目录的路径。
     """
 
     def decorator(cls):
@@ -39,6 +41,7 @@ def register_platform_adapter(
             description=desc,
             default_config_tmpl=default_config_tmpl,
             adapter_display_name=adapter_display_name,
+            logo_path=logo_path,
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls

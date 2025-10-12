@@ -285,19 +285,12 @@ async def run_agent(
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            astr_event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
-                )
-            )
+            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
+            if agent_runner.streaming:
+                yield MessageChain().message(err_msg)
+            else:
+                astr_event.set_result(MessageEventResult().message(err_msg))
             return
-        asyncio.create_task(
-            Metric.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            )
-        )
 
 
 class LLMRequestSubStage(Stage):
@@ -524,6 +517,14 @@ class LLMRequestSubStage(Stage):
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
 
+        asyncio.create_task(
+            Metric.upload(
+                llm_tick=1,
+                model_name=agent_runner.provider.get_model(),
+                provider_type=agent_runner.provider.meta().type,
+            )
+        )
+
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
     ):
@@ -536,7 +537,23 @@ class LLMRequestSubStage(Stage):
             latest_pair = messages[-2:]
             if not latest_pair:
                 return
-            cleaned_text = "User: " + latest_pair[0].get("content", "").strip()
+            content = latest_pair[0].get("content", "")
+            if isinstance(content, list):
+                # 多模态
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image":
+                            text_parts.append("[图片]")
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                cleaned_text = "User: " + " ".join(text_parts).strip()
+            elif isinstance(content, str):
+                cleaned_text = "User: " + content.strip()
+            else:
+                return
             logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
             llm_resp = await prov.text_chat(
                 system_prompt="You are expert in summarizing user's query.",

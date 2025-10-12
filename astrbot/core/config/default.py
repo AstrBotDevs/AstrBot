@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.1.4"
+VERSION = "4.3.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         "datetime_system_prompt": True,
         "default_personality": "default",
         "persona_pool": ["*"],
-        "prompt_prefix": "",
+        "prompt_prefix": "{{prompt}}",
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -116,6 +116,15 @@ DEFAULT_CONFIG = {
         "port": 6185,
     },
     "platform": [],
+    "platform_specific": {
+        # 平台特异配置：按平台分类，平台下按功能分组
+        "lark": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["Typing"]},
+        },
+        "telegram": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+        },
+    },
     "wake_prefix": ["/"],
     "log_level": "INFO",
     "pip_install_arg": "",
@@ -263,7 +272,7 @@ CONFIG_METADATA_2 = {
                         "type": "satori",
                         "enable": False,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
-                        "satori_endpoint": "ws://127.0.0.1:5140/satori/v1/events",
+                        "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
                         "satori_auto_reconnect": True,
                         "satori_heartbeat_interval": 10,
@@ -272,34 +281,34 @@ CONFIG_METADATA_2 = {
                 },
                 "items": {
                     "satori_api_base_url": {
-                        "description": "Satori API Base URL",
+                        "description": "Satori API 终结点",
                         "type": "string",
-                        "hint": "The base URL for the Satori API.",
+                        "hint": "Satori API 的基础地址。",
                     },
                     "satori_endpoint": {
-                        "description": "Satori WebSocket Endpoint",
+                        "description": "Satori WebSocket 终结点",
                         "type": "string",
-                        "hint": "The WebSocket endpoint for Satori events.",
+                        "hint": "Satori 事件的 WebSocket 端点。",
                     },
                     "satori_token": {
-                        "description": "Satori Token",
+                        "description": "Satori 令牌",
                         "type": "string",
-                        "hint": "The token used for authenticating with the Satori API.",
+                        "hint": "用于 Satori API 身份验证的令牌。",
                     },
                     "satori_auto_reconnect": {
-                        "description": "Enable Auto Reconnect",
+                        "description": "启用自动重连",
                         "type": "bool",
-                        "hint": "Whether to automatically reconnect the WebSocket on disconnection.",
+                        "hint": "断开连接时是否自动重新连接 WebSocket。",
                     },
                     "satori_heartbeat_interval": {
-                        "description": "Satori Heartbeat Interval",
+                        "description": "Satori 心跳间隔",
                         "type": "int",
-                        "hint": "The interval (in seconds) for sending heartbeat messages.",
+                        "hint": "发送心跳消息的间隔（秒）。",
                     },
                     "satori_reconnect_delay": {
-                        "description": "Satori Reconnect Delay",
+                        "description": "Satori 重连延迟",
                         "type": "int",
-                        "hint": "The delay (in seconds) before attempting to reconnect.",
+                        "hint": "尝试重新连接前的延迟时间（秒）。",
                     },
                     "slack_connection_mode": {
                         "description": "Slack Connection Mode",
@@ -766,7 +775,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                         "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
+                        "modalities": ["text", "tool_use"],
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -809,6 +818,21 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "deepseek/deepseek-r1",
                             "temperature": 0.4,
+                        },
+                        "custom_extra_body": {},
+                    },
+                    "小马算力": {
+                        "id": "tokenpony",
+                        "provider": "tokenpony",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.tokenpony.cn/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "kimi-k2-instruct-0905",
+                            "temperature": 0.7,
                         },
                         "custom_extra_body": {},
                     },
@@ -868,6 +892,18 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                         "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！",
+                    },
+                    "Coze": {
+                        "id": "coze",
+                        "provider": "coze",
+                        "provider_type": "chat_completion",
+                        "type": "coze",
+                        "enable": True,
+                        "coze_api_key": "",
+                        "bot_id": "",
+                        "coze_api_base": "https://api.coze.cn",
+                        "timeout": 60,
+                        "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
@@ -1020,6 +1056,7 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                     },
                     "阿里云百炼 TTS(API)": {
+                        "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
                         "id": "dashscope_tts",
                         "provider": "dashscope",
                         "type": "dashscope_tts",
@@ -1400,9 +1437,8 @@ CONFIG_METADATA_2 = {
                         "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
                     "dashscope_tts_voice": {
-                        "description": "语音合成模型",
-                        "type": "string",
-                        "hint": "阿里云百炼语音合成模型名称。具体可参考 https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-python-api 等内容",
+                        "description": "音色",
+                        "type": "string"
                     },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
@@ -1735,6 +1771,26 @@ CONFIG_METADATA_2 = {
                         "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。",
                         "obvious": True,
                     },
+                    "coze_api_key": {
+                        "description": "Coze API Key",
+                        "type": "string",
+                        "hint": "Coze API 密钥，用于访问 Coze 服务。",
+                    },
+                    "bot_id": {
+                        "description": "Bot ID",
+                        "type": "string",
+                        "hint": "Coze 机器人的 ID，在 Coze 平台上创建机器人后获得。",
+                    },
+                    "coze_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                        "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn",
+                    },
+                    "auto_save_history": {
+                        "description": "由 Coze 管理对话记录",
+                        "type": "bool",
+                        "hint": "启用后，将由 Coze 进行对话历史记录管理, 此时 AstrBot 本地保存的上下文不会生效(仅供浏览), 对 AstrBot 的上下文进行的操作也不会生效。如果为禁用, 则使用 AstrBot 管理上下文。",
+                    },
                 },
             },
             "provider_settings": {
@@ -1944,26 +2000,28 @@ CONFIG_METADATA_3 = {
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
                     },
                     "provider_stt_settings.enable": {
-                        "description": "默认启用语音转文本",
+                        "description": "启用语音转文本",
                         "type": "bool",
+                        "hint": "STT 总开关。",
                     },
                     "provider_stt_settings.provider_id": {
-                        "description": "语音转文本模型",
+                        "description": "默认语音转文本模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
                         "_special": "select_provider_stt",
                         "condition": {
                             "provider_stt_settings.enable": True,
                         },
                     },
                     "provider_tts_settings.enable": {
-                        "description": "默认启用文本转语音",
+                        "description": "启用文本转语音",
                         "type": "bool",
+                        "hint": "TTS 总开关。当关闭时，会话启用 TTS 也不会生效。",
                     },
                     "provider_tts_settings.provider_id": {
-                        "description": "文本转语音模型",
+                        "description": "默认文本转语音模型",
                         "type": "string",
-                        "hint": "留空代表不使用。",
+                        "hint": "用户也可使用 /provider 单独选择会话的 TTS 模型。",
                         "_special": "select_provider_tts",
                         "condition": {
                             "provider_tts_settings.enable": True,
@@ -2075,12 +2133,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
+                        "hint": "例子: 如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
                     },
                     "provider_settings.prompt_prefix": {
-                        "description": "额外前缀提示词",
+                        "description": "用户提示词",
                         "type": "string",
+                        "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
-                    "provider_settings.dual_output": {
+                    "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
                     },
@@ -2260,6 +2320,32 @@ CONFIG_METADATA_3 = {
                     "platform_settings.no_permission_reply": {
                         "description": "用户权限不足时是否回复",
                         "type": "bool",
+                    },
+                    "platform_specific.lark.pre_ack_emoji.enable": {
+                        "description": "[飞书] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.lark.pre_ack_emoji.emojis": {
+                        "description": "表情列表（飞书表情枚举名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "表情枚举名参考：https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce",
+                        "condition": {
+                            "platform_specific.lark.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.telegram.pre_ack_emoji.enable": {
+                        "description": "[Telegram] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.telegram.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
+                        "condition": {
+                            "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
                     },
                 },
             },

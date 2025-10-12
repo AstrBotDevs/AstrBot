@@ -76,7 +76,7 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_models(self) -> List[str]:
+    async def get_models(self) -> List[str]:
         """获得支持的模型列表"""
         raise NotImplementedError()
 
