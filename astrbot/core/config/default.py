@@ -57,7 +57,7 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
-        "webseach_baidu_app_builder_key": "",
+        "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
