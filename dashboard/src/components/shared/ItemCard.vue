@@ -28,6 +28,7 @@
         variant="outlined"
         color="error"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('delete', item)"
       >
         {{ t('core.common.itemCard.delete') }}
@@ -36,6 +37,7 @@
         variant="tonal"
         color="primary"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('edit', item)"
       >
         {{ t('core.common.itemCard.edit') }}
@@ -45,10 +47,12 @@
         variant="tonal"
         color="secondary"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('copy', item)"
       >
         {{ t('core.common.itemCard.copy') }}
       </v-btn>
+      <slot name="actions" :item="item"></slot>
       <v-spacer></v-spacer>
     </v-card-actions>
 

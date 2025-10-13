@@ -32,7 +32,8 @@
     "available": "可用",
     "unavailable": "不可用",
     "pending": "检查中...",
-    "errorMessage": "错误信息"
+    "errorMessage": "错误信息",
+    "test": "测试"
   },
   "logs": {
     "title": "服务日志",
@@ -77,7 +78,8 @@
     },
     "error": {
       "sessionSeparation": "获取会话隔离配置失败",
-      "fetchStatus": "获取服务提供商状态失败"
+      "fetchStatus": "获取服务提供商状态失败",
+      "testError": "测试 {id} 失败: {error}"
     },
     "confirm": {
       "delete": "确定要删除服务提供商 {id} 吗?"
