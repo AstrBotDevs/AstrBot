@@ -69,9 +69,11 @@
               :show-copy-button="true">
                <template #actions="{ item }">
                  <v-btn
+                   style="z-index: 100000;"
                    variant="tonal"
                    color="info"
                    rounded="xl"
+                   size="small"
                    :loading="isProviderTesting(item.id)"
                    @click="testSingleProvider(item)"
                  >

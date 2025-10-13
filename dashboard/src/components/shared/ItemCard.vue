@@ -27,6 +27,7 @@
       <v-btn
         variant="outlined"
         color="error"
+        size="small"
         rounded="xl"
         :disabled="loading"
         @click="$emit('delete', item)"
@@ -36,6 +37,7 @@
       <v-btn
         variant="tonal"
         color="primary"
+        size="small"
         rounded="xl"
         :disabled="loading"
         @click="$emit('edit', item)"
@@ -46,6 +48,7 @@
         v-if="showCopyButton"
         variant="tonal"
         color="secondary"
+        size="small"
         rounded="xl"
         :disabled="loading"
         @click="$emit('copy', item)"
