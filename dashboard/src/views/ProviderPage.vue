@@ -60,12 +60,26 @@
               :item="provider"
               title-field="id"
               enabled-field="enable"
+              :loading="isProviderTesting(provider.id)"
               @toggle-enabled="providerStatusChange"
               :bglogo="getProviderIcon(provider.provider)"
               @delete="deleteProvider"
               @edit="configExistingProvider"
               @copy="copyProvider"
               :show-copy-button="true">
+               <template #actions="{ item }">
+                 <v-btn
+                   style="z-index: 100000;"
+                   variant="tonal"
+                   color="info"
+                   rounded="xl"
+                   size="small"
+                   :loading="isProviderTesting(item.id)"
+                   @click="testSingleProvider(item)"
+                 >
+                   {{ tm('availability.test') }}
+                 </v-btn>
+               </template>
               <template v-slot:details="{ item }">
               </template>
             </item-card>
@@ -79,7 +93,7 @@
           <v-icon class="me-2">mdi-heart-pulse</v-icon>
           <span class="text-h4">{{ tm('availability.title') }}</span>
           <v-spacer></v-spacer>
-          <v-btn color="primary" variant="tonal" :loading="loadingStatus" @click="fetchProviderStatus">
+          <v-btn color="primary" variant="tonal" :loading="testingProviders.length > 0" @click="fetchProviderStatus">
             <v-icon left>mdi-refresh</v-icon>
             {{ tm('availability.refresh') }}
           </v-btn>
@@ -288,7 +302,7 @@ export default {
 
       // 供应商状态相关
       providerStatuses: [],
-      loadingStatus: false,
+      testingProviders: [], // 存储正在测试的 provider ID
 
       // 新增提供商对话框相关
       showAddProviderDialog: false,
@@ -359,7 +373,8 @@ export default {
           statusUpdate: this.tm('messages.success.statusUpdate'),
         },
         error: {
-          fetchStatus: this.tm('messages.error.fetchStatus')
+          fetchStatus: this.tm('messages.error.fetchStatus'),
+          testError: this.tm('messages.error.testError')
         },
         confirm: {
           delete: this.tm('messages.confirm.delete')
@@ -368,6 +383,9 @@ export default {
           available: this.tm('availability.available'),
           unavailable: this.tm('availability.unavailable'),
           pending: this.tm('availability.pending')
+        },
+        availability: {
+          test: this.tm('availability.test')
         }
       };
     },
@@ -615,70 +633,107 @@ export default {
 
     // 获取供应商状态
     async fetchProviderStatus() {
-      if (this.loadingStatus) return;
+      if (this.testingProviders.length > 0) return;
 
-      this.loadingStatus = true;
       this.showStatus = true; // 自动展开状态部分
 
-      // 1. 立即初始化UI为pending状态
-      this.providerStatuses = this.config_data.provider.map(p => ({
-        id: p.id,
-        name: p.id,
-        status: 'pending',
-        error: null
-      }));
+      const providersToTest = this.config_data.provider.filter(p => p.enable);
+      if (providersToTest.length === 0) return;
+
+      // 1. 初始化UI为pending状态，并将所有待测试的 provider ID 加入 loading 列表
+      this.providerStatuses = providersToTest.map(p => {
+        this.testingProviders.push(p.id);
+        return { id: p.id, name: p.id, status: 'pending', error: null };
+      });
 
       // 2. 为每个provider创建一个并发的测试请求
-      const promises = this.config_data.provider.map(p => {
-        if (!p.enable) {
-          const index = this.providerStatuses.findIndex(s => s.id === p.id);
-          if (index !== -1) {
-            const disabledStatus = {
-              ...this.providerStatuses[index],
-              status: 'unavailable',
-              error: '该提供商未被用户启用'
-            };
-            this.providerStatuses.splice(index, 1, disabledStatus);
-          }
-          return Promise.resolve();
-        }
-
-        return axios.get(`/api/config/provider/check_one?id=${p.id}`)
+      const promises = providersToTest.map(p =>
+        axios.get(`/api/config/provider/check_one?id=${p.id}`)
           .then(res => {
             if (res.data && res.data.status === 'ok') {
-              // 成功，更新对应的provider状态
               const index = this.providerStatuses.findIndex(s => s.id === p.id);
-              if (index !== -1) {
-                this.providerStatuses.splice(index, 1, res.data.data);
-              }
+              if (index !== -1) this.providerStatuses.splice(index, 1, res.data.data);
             } else {
-              // 接口返回了业务错误
               throw new Error(res.data?.message || `Failed to check status for ${p.id}`);
             }
           })
           .catch(err => {
-            // 网络错误或业务错误
             const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
             const index = this.providerStatuses.findIndex(s => s.id === p.id);
             if (index !== -1) {
-              const failedStatus = {
-                ...this.providerStatuses[index],
-                status: 'unavailable',
-                error: errorMessage
-              };
+              const failedStatus = { ...this.providerStatuses[index], status: 'unavailable', error: errorMessage };
               this.providerStatuses.splice(index, 1, failedStatus);
             }
-            // 可以在这里选择性地向上抛出错误，以便Promise.allSettled知道
-            return Promise.reject(errorMessage);
-          });
-      });
+            return Promise.reject(errorMessage); // Propagate error for Promise.allSettled
+          })
+      );
 
-      // 3. 等待所有请求完成（无论成功或失败）
+      // 3. 等待所有请求完成
       try {
         await Promise.allSettled(promises);
       } finally {
-        // 4. 关闭全局加载状态
-        this.loadingStatus = false;
+        // 4. 关闭所有加载状态
+        this.testingProviders = [];
+      }
+    },
+
+    isProviderTesting(providerId) {
+      return this.testingProviders.includes(providerId);
+    },
+
+    async testSingleProvider(provider) {
+      if (this.isProviderTesting(provider.id)) return;
+
+      this.testingProviders.push(provider.id);
+      this.showStatus = true; // 自动展开状态部分
+
+      // 更新UI为pending状态
+      const statusIndex = this.providerStatuses.findIndex(s => s.id === provider.id);
+      const pendingStatus = {
+        id: provider.id,
+        name: provider.id,
+        status: 'pending',
+        error: null
+      };
+      if (statusIndex !== -1) {
+        this.providerStatuses.splice(statusIndex, 1, pendingStatus);
+      } else {
+        this.providerStatuses.unshift(pendingStatus);
+      }
+
+      try {
+        if (!provider.enable) {
+          throw new Error('该提供商未被用户启用');
+        }
+
+        const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
+        if (res.data && res.data.status === 'ok') {
+          const index = this.providerStatuses.findIndex(s => s.id === provider.id);
+          if (index !== -1) {
+            this.providerStatuses.splice(index, 1, res.data.data);
+          }
+        } else {
+          throw new Error(res.data?.message || `Failed to check status for ${provider.id}`);
+        }
+      } catch (err) {
+        const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+        const index = this.providerStatuses.findIndex(s => s.id === provider.id);
+        const failedStatus = {
+          id: provider.id,
+          name: provider.id,
+          status: 'unavailable',
+          error: errorMessage
+        };
+        if (index !== -1) {
+          this.providerStatuses.splice(index, 1, failedStatus);
+        }
+        // 不再显示全局的错误提示，因为卡片本身会显示错误信息
+        // this.showError(this.tm('messages.error.testError', { id: provider.id, error: errorMessage }));
+      } finally {
+        const index = this.testingProviders.indexOf(provider.id);
+        if (index > -1) {
+          this.testingProviders.splice(index, 1);
+        }
       }
     },
 

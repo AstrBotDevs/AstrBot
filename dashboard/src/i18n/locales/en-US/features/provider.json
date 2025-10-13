@@ -31,7 +31,8 @@
     "available": "Available",
     "unavailable": "Unavailable",
     "pending": "Pending...",
-    "errorMessage": "Error Message"
+    "errorMessage": "Error Message",
+    "test": "Test"
   },
   "logs": {
     "title": "Service Logs",
@@ -76,7 +77,8 @@
     },
     "error": {
       "sessionSeparation": "Failed to get session isolation configuration",
-      "fetchStatus": "Failed to get service provider status"
+      "fetchStatus": "Failed to get service provider status",
+      "testError": "Test failed for {id}: {error}"
     },
     "confirm": {
       "delete": "Are you sure you want to delete service provider {id}?"
