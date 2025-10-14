@@ -208,6 +208,18 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
+                    "企业微信智能机器人": {
+                        "id": "wecom_ai_bot",
+                        "type": "wecom_ai_bot",
+                        "enable": True,
+                        "wecomaibot_init_respond_text": "💭 思考中...",
+                        "wecomaibot_friend_message_welcome_text": "",
+                        "wecom_ai_bot_name": "",
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6198,
+                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
@@ -448,10 +460,25 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
+                    "wecom_ai_bot_name": {
+                        "description": "企业微信智能机器人的名字",
+                        "type": "string",
+                        "hint": "请务必填写正确，否则无法使用一些指令。",
+                    },
+                    "wecomaibot_init_respond_text": {
+                        "description": "企业微信智能机器人初始响应文本",
+                        "type": "string",
+                        "hint": "当机器人收到消息时，首先回复的文本内容。留空则使用默认值。",
+                    },
+                    "wecomaibot_friend_message_welcome_text": {
+                        "description": "企业微信智能机器人私聊欢迎语",
+                        "type": "string",
+                        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。",
+                    },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
                         "type": "string",
-                        "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
+                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                     },
                     "discord_token": {
                         "description": "Discord Bot Token",
