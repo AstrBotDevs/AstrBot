@@ -209,9 +209,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
+                # 参数过滤：只传递函数实际需要的参数
+                import inspect
+                valid_params = {}
+                
+                # 获取实际的 handler 函数
+                handler_func = func_tool.handler
+                if handler_func:
+                    sig = inspect.signature(handler_func)
+                    for param_name, param_value in func_tool_args.items():
+                        if param_name in sig.parameters:
+                            valid_params[param_name] = param_value
+                        else:
+                            logger.warning(f"工具 {func_tool_name} 忽略未知参数: {param_name}")
+                else:
+                    # 如果没有 handler（如 MCP 工具），使用所有参数
+                    valid_params = func_tool_args
+                    logger.warning(f"工具 {func_tool_name} 没有 handler，使用所有参数")
+
                 try:
                     await self.agent_hooks.on_tool_start(
-                        self.run_context, func_tool, func_tool_args
+                        self.run_context, func_tool, valid_params
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
@@ -219,7 +237,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
-                    **func_tool_args,
+                    **valid_params,
                 )
 
                 _final_resp: CallToolResult | None = None
