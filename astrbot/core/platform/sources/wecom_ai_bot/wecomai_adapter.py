@@ -7,6 +7,8 @@
 import time
 import asyncio
 import uuid
+import hashlib
+import base64
 from typing import Awaitable, Any, Dict, Optional, Callable
 
 
@@ -18,7 +20,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, At
+from astrbot.api.message_components import Plain, At, Image
 from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
@@ -35,6 +37,7 @@ from .wecomai_utils import (
     WecomAIBotConstants,
     format_session_id,
     generate_random_string,
+    process_encrypted_image,
 )
 
 
@@ -107,7 +110,7 @@ class WecomAIBotAdapter(Platform):
         self.host = self.config.get("callback_server_host", "0.0.0.0")
         self.bot_name = self.config.get("wecom_ai_bot_name", "")
         self.initial_respond_text = self.config.get(
-            "wecomaibot_init_respond_text", "思考中..."
+            "wecomaibot_init_respond_text", "💭 思考中..."
         )
         self.friend_message_welcome_text = self.config.get(
             "wecomaibot_friend_message_welcome_text", ""
@@ -164,8 +167,8 @@ class WecomAIBotAdapter(Platform):
             logger.warning(f"消息类型未知，忽略: {message_data}")
             return None
         session_id = self._extract_session_id(message_data)
-        if msgtype == "text":
-            # user sent a text message
+        if msgtype in ("text", "image", "mixed"):
+            # user sent a text / image / mixed message
             try:
                 # create a brand-new unique stream_id for this message session
                 stream_id = f"{session_id}_{generate_random_string(10)}"
@@ -208,23 +211,41 @@ class WecomAIBotAdapter(Platform):
 
             # aggregate all delta chains in the back queue
             latest_plain_content = ""
+            image_base64 = []
             finish = False
             while not queue.empty():
                 msg = await queue.get()
                 if msg["type"] == "plain":
-                    latest_plain_content = msg["data"]
+                    latest_plain_content = msg["data"] or ""
                 elif msg["type"] == "image":
-                    pass
+                    image_base64.append(msg["image_data"])
                 elif msg["type"] == "end":
+                    # stream end
                     finish = True
+                    wecomai_queue_mgr.remove_queues(stream_id)
+                    break
                 else:
                     pass
             logger.debug(
-                f"Aggregated content: {latest_plain_content}, finish: {finish}"
+                f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}"
             )
-            if latest_plain_content:
-                plain_message = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id, latest_plain_content, finish
+            if latest_plain_content or image_base64:
+                msg_items = []
+                if finish and image_base64:
+                    for img_b64 in image_base64:
+                        # get md5 of image
+                        img_data = base64.b64decode(img_b64)
+                        img_md5 = hashlib.md5(img_data).hexdigest()
+                        msg_items.append(
+                            {
+                                "msgtype": WecomAIBotConstants.MSG_TYPE_IMAGE,
+                                "image": {"base64": img_b64, "md5": img_md5},
+                            }
+                        )
+                    image_base64 = []
+
+                plain_message = WecomAIBotStreamMessageBuilder.make_mixed_stream(
+                    stream_id, latest_plain_content, msg_items, finish
                 )
                 encrypted_message = await self.api_client.encrypt_message(
                     plain_message,
@@ -239,8 +260,6 @@ class WecomAIBotAdapter(Platform):
                     logger.error("消息加密失败")
                 return encrypted_message
             return None
-        elif msgtype == "image":
-            pass
         elif msgtype == "event":
             event = message_data.get("event")
             if event == "enter_chat" and self.friend_message_welcome_text:
@@ -292,11 +311,17 @@ class WecomAIBotAdapter(Platform):
         # 解析消息内容
         msgtype = message_data.get("msgtype")
         content = ""
+        image_base64 = []
+
+        _img_url_to_process = []
+        msg_items = []
 
         if msgtype == WecomAIBotConstants.MSG_TYPE_TEXT:
             content = WecomAIBotMessageParser.parse_text_message(message_data)
         elif msgtype == WecomAIBotConstants.MSG_TYPE_IMAGE:
-            content = "[图片消息]"
+            _img_url_to_process.append(
+                WecomAIBotMessageParser.parse_image_message(message_data)
+            )
         elif msgtype == WecomAIBotConstants.MSG_TYPE_MIXED:
             # 提取混合消息中的文本内容
             msg_items = WecomAIBotMessageParser.parse_mixed_message(message_data)
@@ -306,11 +331,28 @@ class WecomAIBotAdapter(Platform):
                     text_content = item.get("text", {}).get("content", "")
                     if text_content:
                         text_parts.append(text_content)
-            content = " ".join(text_parts) if text_parts else "[混合消息]"
+                elif item.get("msgtype") == WecomAIBotConstants.MSG_TYPE_IMAGE:
+                    image_url = item.get("image", {}).get("url", "")
+                    if image_url:
+                        _img_url_to_process.append(image_url)
+            content = " ".join(text_parts) if text_parts else ""
         else:
             content = f"[{msgtype}消息]"
 
-        # 构建AstrBotMessage
+        # 并行处理图片下载和解密
+        if _img_url_to_process:
+            tasks = [
+                process_encrypted_image(url, self.encoding_aes_key)
+                for url in _img_url_to_process
+            ]
+            results = await asyncio.gather(*tasks)
+            for success, result in results:
+                if success:
+                    image_base64.append(result)
+                else:
+                    logger.error(f"处理加密图片失败: {result}")
+
+        # 构建 AstrBotMessage
         abm = AstrBotMessage()
         abm.self_id = self.bot_name
         abm.message_str = content or "[未知消息]"
@@ -340,6 +382,9 @@ class WecomAIBotAdapter(Platform):
             abm.message_str = abm.message_str.replace(f"@{self.bot_name}", "").strip()
             abm.message.append(At(qq=self.bot_name, name=self.bot_name))
         abm.message.append(Plain(abm.message_str))
+        if image_base64:
+            for img_b64 in image_base64:
+                abm.message.append(Image.fromBase64(img_b64))
 
         logger.debug(f"WecomAIAdapter: {abm.message}")
         return abm

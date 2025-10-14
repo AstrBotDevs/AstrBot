@@ -252,11 +252,14 @@ class WecomAIBotStreamMessageBuilder:
         return json.dumps(plain, ensure_ascii=False)
 
     @staticmethod
-    def make_mixed_stream(stream_id: str, msg_items: list, finish: bool = False) -> str:
+    def make_mixed_stream(
+        stream_id: str, content: str, msg_items: list, finish: bool = False
+    ) -> str:
         """构建混合类型流消息
 
         Args:
             stream_id: 流 ID
+            content: 文本内容
             msg_items: 消息项列表
             finish: 是否结束
 
@@ -267,6 +270,8 @@ class WecomAIBotStreamMessageBuilder:
             "msgtype": WecomAIBotConstants.MSG_TYPE_STREAM,
             "stream": {"id": stream_id, "finish": finish, "msg_item": msg_items},
         }
+        if content:
+            plain["stream"]["content"] = content
         return json.dumps(plain, ensure_ascii=False)
 
     @staticmethod
