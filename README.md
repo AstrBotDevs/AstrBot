@@ -20,10 +20,11 @@
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
+<a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
 <a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的一站式 Agentic 聊天机器人平台及开发框架。
+AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架。
 
 ## 主要功能
 
