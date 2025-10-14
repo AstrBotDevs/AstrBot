@@ -52,6 +52,8 @@ class Main(star.Star):
         except Exception as e:
             logger.error(f"google search init error: {e}, disable google search")
 
+        self.baidu_initialized = False
+
     async def _tidy_text(self, text: str) -> str:
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
@@ -225,6 +227,30 @@ class Main(star.Star):
 
         return ret
 
+    async def ensure_baidu_ai_search_mcp(self, umo: str | None = None):
+        if self.baidu_initialized:
+            return
+        cfg = self.context.get_config(umo=umo)
+        key = cfg.get("provider_settings", {}).get(
+            "websearch_baidu_app_builder_key", ""
+        )
+        if not key:
+            raise ValueError(
+                "Error: Baidu AI Search API key is not configured in AstrBot."
+            )
+        func_tool_mgr = self.context.get_llm_tool_manager()
+        await func_tool_mgr.enable_mcp_server(
+            "baidu_ai_search",
+            config={
+                "transport": "sse",
+                "url": f"http://appbuilder.baidu.com/v2/ai_search/mcp/sse?api_key={key}",
+                "headers": {},
+                "timeout": 30,
+            },
+        )
+        self.baidu_initialized = True
+        logger.info("Successfully initialized Baidu AI Search MCP server.")
+
     @llm_tool(name="fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
         """fetch the content of a website with the given web url
@@ -371,6 +397,7 @@ class Main(star.Star):
                 tool_set.add_tool(fetch_url_t)
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
+            tool_set.remove_tool("AIsearch")
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
@@ -380,3 +407,17 @@ class Main(star.Star):
                 tool_set.add_tool(tavily_extract_web_page)
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
+            tool_set.remove_tool("AIsearch")
+        elif provider == "baidu_ai_search":
+            try:
+                await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
+                aisearch_tool = func_tool_mgr.get_func("AIsearch")
+                if not aisearch_tool:
+                    raise ValueError("Cannot get Baidu AI Search MCP tool.")
+                tool_set.add_tool(aisearch_tool)
+                tool_set.remove_tool("web_search")
+                tool_set.remove_tool("fetch_url")
+                tool_set.remove_tool("web_search_tavily")
+                tool_set.remove_tool("tavily_extract_web_page")
+            except Exception as e:
+                logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
