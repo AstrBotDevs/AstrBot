@@ -18,7 +18,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, At
 from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from ...register import register_platform_adapter
@@ -33,7 +33,6 @@ from .wecomai_server import WecomAIBotServer
 from .wecomai_queue_mgr import wecomai_queue_mgr, WecomAIQueueMgr
 from .wecomai_utils import (
     WecomAIBotConstants,
-    validate_config,
     format_session_id,
     generate_random_string,
 )
@@ -43,7 +42,7 @@ class WecomAIQueueListener:
     """企业微信智能机器人队列监听器，参考webchat的QueueListener设计"""
 
     def __init__(
-        self, queue_mgr: WecomAIQueueMgr, callback: Callable[[tuple], Awaitable[None]]
+        self, queue_mgr: WecomAIQueueMgr, callback: Callable[[dict], Awaitable[None]]
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
@@ -101,17 +100,18 @@ class WecomAIBotAdapter(Platform):
         self.config = platform_config
         self.settings = platform_settings
 
-        # 验证配置
-        is_valid, error_msg = validate_config(self.config)
-        if not is_valid:
-            raise ValueError(f"配置验证失败: {error_msg}")
-
         # 初始化配置参数
         self.token = self.config["token"]
         self.encoding_aes_key = self.config["encoding_aes_key"]
         self.port = int(self.config["port"])
         self.host = self.config.get("callback_server_host", "0.0.0.0")
-        self.bot_id = self.config.get("bot_id", "default")
+        self.bot_name = self.config.get("wecom_ai_bot_name", "")
+        self.initial_respond_text = self.config.get(
+            "wecomaibot_init_respond_text", "思考中..."
+        )
+        self.friend_message_welcome_text = self.config.get(
+            "wecomaibot_friend_message_welcome_text", ""
+        )
 
         # 平台元数据
         self.metadata = PlatformMetadata(
@@ -127,7 +127,6 @@ class WecomAIBotAdapter(Platform):
         self.server = WecomAIBotServer(
             host=self.host,
             port=self.port,
-            bot_id=self.bot_id,
             api_client=self.api_client,
             message_handler=self._process_message,
         )
@@ -140,7 +139,7 @@ class WecomAIBotAdapter(Platform):
             wecomai_queue_mgr, self._handle_queued_message
         )
 
-    async def _handle_queued_message(self, data: tuple):
+    async def _handle_queued_message(self, data: dict):
         """处理队列中的消息，类似webchat的callback"""
         try:
             abm = await self.convert_message(data)
@@ -176,7 +175,7 @@ class WecomAIBotAdapter(Platform):
                 wecomai_queue_mgr.set_pending_response(stream_id, callback_params)
 
                 resp = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id, "思考中...", False
+                    stream_id, self.initial_respond_text, False
                 )
                 return await self.api_client.encrypt_message(
                     resp, callback_params["nonce"], callback_params["timestamp"]
@@ -189,7 +188,17 @@ class WecomAIBotAdapter(Platform):
             stream_id = message_data["stream"]["id"]
             if not wecomai_queue_mgr.has_back_queue(stream_id):
                 logger.error(f"Cannot find back queue for stream_id: {stream_id}")
-                return None
+
+                # 返回结束标志，告诉微信服务器流已结束
+                end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
+                    stream_id, "", True
+                )
+                resp = await self.api_client.encrypt_message(
+                    end_message,
+                    callback_params["nonce"],
+                    callback_params["timestamp"],
+                )
+                return resp
             queue = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
             if queue.empty():
                 logger.debug(
@@ -197,21 +206,25 @@ class WecomAIBotAdapter(Platform):
                 )
                 return None
 
-            # aggregate all delta messages in the back queue
-            aggregated_content = ""
+            # aggregate all delta chains in the back queue
+            latest_plain_content = ""
             finish = False
             while not queue.empty():
                 msg = await queue.get()
                 if msg["type"] == "plain":
-                    aggregated_content += msg["data"]
+                    latest_plain_content = msg["data"]
+                elif msg["type"] == "image":
+                    pass
                 elif msg["type"] == "end":
                     finish = True
                 else:
                     pass
-            logger.debug(f"Aggregated content: {aggregated_content}, finish: {finish}")
-            if aggregated_content:
+            logger.debug(
+                f"Aggregated content: {latest_plain_content}, finish: {finish}"
+            )
+            if latest_plain_content:
                 plain_message = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id, aggregated_content, finish
+                    stream_id, latest_plain_content, finish
                 )
                 encrypted_message = await self.api_client.encrypt_message(
                     plain_message,
@@ -227,6 +240,23 @@ class WecomAIBotAdapter(Platform):
                 return encrypted_message
             return None
         elif msgtype == "image":
+            pass
+        elif msgtype == "event":
+            event = message_data.get("event")
+            if event == "enter_chat" and self.friend_message_welcome_text:
+                # 用户进入会话，发送欢迎消息
+                try:
+                    resp = WecomAIBotStreamMessageBuilder.make_text(
+                        self.friend_message_welcome_text
+                    )
+                    return await self.api_client.encrypt_message(
+                        resp,
+                        callback_params["nonce"],
+                        callback_params["timestamp"],
+                    )
+                except Exception as e:
+                    logger.error("处理欢迎消息时发生异常: %s", e)
+                    return None
             pass
 
     def _extract_session_id(self, message_data: Dict[str, Any]) -> str:
@@ -248,15 +278,13 @@ class WecomAIBotAdapter(Platform):
             "message_data": message_data,
             "callback_params": callback_params,
             "session_id": session_id,
+            "stream_id": stream_id,
         }
-
-        await input_queue.put(("wecomai", stream_id, message_payload))
+        await input_queue.put(message_payload)
         logger.debug(f"[WecomAI] 消息已入队: {stream_id}")
 
-    async def convert_message(self, data: tuple) -> AstrBotMessage:
+    async def convert_message(self, payload: dict) -> AstrBotMessage:
         """转换队列中的消息数据为AstrBotMessage，类似webchat的convert_message"""
-        platform, stream_id, payload = data
-
         message_data = payload["message_data"]
         session_id = payload["session_id"]
         # callback_params = payload["callback_params"]  # 保留但暂时不使用
@@ -284,24 +312,34 @@ class WecomAIBotAdapter(Platform):
 
         # 构建AstrBotMessage
         abm = AstrBotMessage()
-        abm.self_id = self.config.get("id", "wecom_ai_bot")
+        abm.self_id = self.bot_name
         abm.message_str = content or "[未知消息]"
         abm.message_id = str(uuid.uuid4())
         abm.timestamp = int(time.time())
-        abm.raw_message = data
+        abm.raw_message = payload
 
         # 发送者信息
         abm.sender = MessageMember(
-            user_id="wecom_user",
-            nickname="WeChat Work User",
+            user_id=message_data.get("from", {}).get("userid", "unknown"),
+            nickname=message_data.get("from", {}).get("userid", "unknown"),
         )
 
         # 消息类型
-        abm.type = MessageType.FRIEND_MESSAGE
+        abm.type = (
+            MessageType.GROUP_MESSAGE
+            if message_data.get("chattype") == "group"
+            else MessageType.FRIEND_MESSAGE
+        )
         abm.session_id = session_id
 
         # 消息内容
-        abm.message = [Plain(text=content or "[未知消息]")]
+        abm.message = []
+
+        # 处理 At
+        if self.bot_name and f"@{self.bot_name}" in abm.message_str:
+            abm.message_str = abm.message_str.replace(f"@{self.bot_name}", "").strip()
+            abm.message.append(At(qq=self.bot_name, name=self.bot_name))
+        abm.message.append(Plain(abm.message_str))
 
         logger.debug(f"WecomAIAdapter: {abm.message}")
         return abm
@@ -340,29 +378,15 @@ class WecomAIBotAdapter(Platform):
     async def handle_msg(self, message: AstrBotMessage):
         """处理消息，创建消息事件并提交到事件队列"""
         try:
-            # 从原始消息中获取回调参数
-            if isinstance(message.raw_message, tuple) and len(message.raw_message) == 3:
-                _, _, payload = message.raw_message
-                callback_params = payload["callback_params"]
-            else:
-                # 如果没有有效的回调参数，使用默认值
-                callback_params = {
-                    "nonce": "default",
-                    "timestamp": str(int(time.time())),
-                }
-                logger.warning("使用默认回调参数")
-
             message_event = WecomAIBotMessageEvent(
                 message_str=message.message_str,
                 message_obj=message,
                 platform_meta=self.meta(),
                 session_id=message.session_id,
                 api_client=self.api_client,
-                callback_params=callback_params,
             )
 
             self.commit_event(message_event)
-            logger.debug("消息事件已提交: %s", message.message_str)
 
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)

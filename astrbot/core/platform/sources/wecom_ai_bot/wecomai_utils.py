@@ -3,14 +3,12 @@
 提供常量定义、工具函数和辅助方法
 """
 
-import logging
 import string
 import random
 import hashlib
 import base64
-from typing import Dict, Any, Tuple
-
-logger = logging.getLogger(__name__)
+from typing import Any, Tuple
+from astrbot.api import logger
 
 
 # 常量定义
@@ -75,37 +73,6 @@ def encode_image_base64(image_data: bytes) -> str:
         Base64 编码的字符串
     """
     return base64.b64encode(image_data).decode("utf-8")
-
-
-def validate_config(config: Dict[str, Any]) -> Tuple[bool, str]:
-    """验证配置参数
-
-    Args:
-        config: 配置字典
-
-    Returns:
-        (是否有效, 错误信息)
-    """
-    required_fields = ["token", "encoding_aes_key", "callback_url", "port"]
-
-    for field in required_fields:
-        if not config.get(field):
-            return False, f"缺少必要配置项: {field}"
-
-    # 验证端口号
-    try:
-        port = int(config.get("port", 0))
-        if port <= 0 or port > 65535:
-            return False, "端口号必须在 1-65535 范围内"
-    except (ValueError, TypeError):
-        return False, "端口号必须是有效的数字"
-
-    # 验证 AES 密钥长度
-    encoding_aes_key = config.get("encoding_aes_key", "")
-    if len(encoding_aes_key) != 43:
-        return False, "EncodingAESKey 长度必须为 43 位"
-
-    return True, ""
 
 
 def format_session_id(session_type: str, session_id: str) -> str:

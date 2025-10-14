@@ -20,7 +20,6 @@ class WecomAIBotServer:
         self,
         host: str,
         port: int,
-        bot_id: str,
         api_client: WecomAIBotAPIClient,
         message_handler: Optional[
             Callable[[Dict[str, Any], Dict[str, str]], Any]
@@ -31,13 +30,11 @@ class WecomAIBotServer:
         Args:
             host: 监听地址
             port: 监听端口
-            bot_id: 机器人ID
             api_client: API客户端实例
             message_handler: 消息处理回调函数
         """
         self.host = host
         self.port = port
-        self.bot_id = bot_id
         self.api_client = api_client
         self.message_handler = message_handler
 
@@ -51,13 +48,13 @@ class WecomAIBotServer:
 
         # 使用 Quart 的 add_url_rule 方法添加路由
         self.app.add_url_rule(
-            f"/ai-bot/callback/{self.bot_id}",
+            "/webhook/wecom-ai-bot",
             view_func=self.verify_url,
             methods=["GET"],
         )
 
         self.app.add_url_rule(
-            f"/ai-bot/callback/{self.bot_id}",
+            "/webhook/wecom-ai-bot",
             view_func=self.handle_message,
             methods=["POST"],
         )
@@ -80,7 +77,7 @@ class WecomAIBotServer:
         assert nonce is not None
         assert echostr is not None
 
-        logger.info("收到 URL 验证请求")
+        logger.info("收到企业微信智能机器人 WebHook URL 验证请求。")
         result = self.api_client.verify_url(msg_signature, timestamp, nonce, echostr)
         return result, 200, {"Content-Type": "text/plain"}
 
@@ -100,11 +97,8 @@ class WecomAIBotServer:
         assert timestamp is not None
         assert nonce is not None
 
-        logger.info(
-            "收到消息回调，msg_signature=%s, timestamp=%s, nonce=%s",
-            msg_signature,
-            timestamp,
-            nonce,
+        logger.debug(
+            f"收到消息回调，msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}"
         )
 
         try:

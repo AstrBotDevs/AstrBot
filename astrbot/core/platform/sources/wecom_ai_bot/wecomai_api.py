@@ -4,7 +4,6 @@
 """
 
 import json
-import logging
 import base64
 import hashlib
 from typing import Dict, Any, Optional, Tuple, Union
@@ -13,8 +12,7 @@ import aiohttp
 
 from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
 from .wecomai_utils import WecomAIBotConstants
-
-logger = logging.getLogger(__name__)
+from astrbot import logger
 
 
 class WecomAIBotAPIClient:
@@ -58,10 +56,10 @@ class WecomAIBotAPIClient:
             if decrypted_msg:
                 try:
                     message_data = json.loads(decrypted_msg)
-                    logger.debug("解密成功，消息内容: %s", message_data)
+                    logger.debug(f"解密成功，消息内容: {message_data}")
                     return WecomAIBotConstants.SUCCESS, message_data
                 except json.JSONDecodeError as e:
-                    logger.error("JSON 解析失败: %s, 原始消息: %s", e, decrypted_msg)
+                    logger.error(f"JSON 解析失败: {e}, 原始消息: {decrypted_msg}")
                     return WecomAIBotConstants.PARSE_XML_ERROR, None
             else:
                 logger.error("解密消息为空")
@@ -118,14 +116,14 @@ class WecomAIBotAPIClient:
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
-                logger.error("URL 验证失败，错误码: %d", ret)
+                logger.error(f"URL 验证失败，错误码: {ret}")
                 return "verify fail"
 
             logger.info("URL 验证成功")
             return echo_result if echo_result else "verify fail"
 
         except Exception as e:
-            logger.error("URL 验证发生异常: %s", e)
+            logger.error(f"URL 验证发生异常: {e}")
             return "verify fail"
 
     async def process_encrypted_image(
@@ -269,6 +267,19 @@ class WecomAIBotStreamMessageBuilder:
             "msgtype": WecomAIBotConstants.MSG_TYPE_STREAM,
             "stream": {"id": stream_id, "finish": finish, "msg_item": msg_items},
         }
+        return json.dumps(plain, ensure_ascii=False)
+
+    @staticmethod
+    def make_text(content: str) -> str:
+        """构建文本消息
+
+        Args:
+            content: 文本内容
+
+        Returns:
+            JSON 格式的文本消息字符串
+        """
+        plain = {"msgtype": "text", "text": {"content": content}}
         return json.dumps(plain, ensure_ascii=False)
 
 

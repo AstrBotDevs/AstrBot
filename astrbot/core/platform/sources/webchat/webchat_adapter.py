@@ -91,7 +91,6 @@ class WebChatAdapter(Platform):
 
         abm = AstrBotMessage()
         abm.self_id = "webchat"
-        abm.tag = "webchat"
         abm.sender = MessageMember(username, username)
 
         abm.type = MessageType.FRIEND_MESSAGE

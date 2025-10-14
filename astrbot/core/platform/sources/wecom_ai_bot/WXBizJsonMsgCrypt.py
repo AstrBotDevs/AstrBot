@@ -17,7 +17,7 @@ from Crypto.Cipher import AES
 import socket
 import json
 
-import ierror
+from . import ierror
 
 """
 关于Crypto.Cipher模块，ImportError: No module named 'Crypto'解决方案

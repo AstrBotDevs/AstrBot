@@ -51,7 +51,6 @@ dependencies = [
     "wechatpy>=1.8.18",
     "audioop-lts ; python_full_version >= '3.13'",
     "click>=8.2.1",
-    "fastapi>=0.119.0",
 ]
 
 [project.scripts]
