@@ -207,6 +207,15 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
+                    "企业微信智能机器人": {
+                        "id": "wecom_ai_bot",
+                        "type": "wecom_ai_bot",
+                        "enable": True,
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6198,
+                    },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
