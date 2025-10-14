@@ -238,7 +238,6 @@ class Main(star.Star):
             raise ValueError(
                 "Error: Baidu AI Search API key is not configured in AstrBot."
             )
-        self.baidu_initialized = True
         func_tool_mgr = self.context.get_llm_tool_manager()
         await func_tool_mgr.enable_mcp_server(
             "baidu_ai_search",
@@ -249,6 +248,7 @@ class Main(star.Star):
                 "timeout": 30,
             },
         )
+        self.baidu_initialized = True
         logger.info("Successfully initialized Baidu AI Search MCP server.")
 
     @llm_tool(name="fetch_url")
