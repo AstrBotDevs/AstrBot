@@ -1,5 +1,3 @@
-<img width="430" height="31" alt="image" src="https://github.com/user-attachments/assets/474c822c-fab7-41be-8c23-6dae252823ed" /><p align="center">
- 
 ![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
 </p>
@@ -13,7 +11,6 @@
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?style=for-the-badge&color=76bad9"/></a>
 <a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
 <a  href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-[![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg?style=for-the-badge&color=76bad9)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600)
 
 <a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
@@ -36,7 +33,7 @@ AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架�
 
 ## 部署方式
 
-#### Docker 部署
+#### Docker 部署(推荐 🥳)
 
 推荐使用 Docker / Docker Compose 方式部署 AstrBot。
 
@@ -102,7 +99,6 @@ uv run main.py
 - 5 群：822130018
 - 6 群：753075035
 - 开发者群：975206796
-- 开发者群（备份）：295657329
 
 ### Telegram 群组
 
@@ -114,48 +110,80 @@ uv run main.py
 
 ## ⚡ 消息平台支持情况
 
+**官方维护**
+
 | 平台    | 支持性 |
 | -------- | ------- |
-| QQ(官方机器人接口) | ✔    |
+| QQ(官方平台) | ✔    |
 | QQ(OneBot)      | ✔    |
 | Telegram   | ✔    |
-| 企业微信    | ✔    |
+| 企微应用    | ✔    |
 | 微信客服    | ✔    |
 | 微信公众号    | ✔    |
 | 飞书   | ✔    |
 | 钉钉   | ✔    |
 | Slack   | ✔    |
 | Discord   | ✔    |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
-| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
 | Satori   | ✔    |
 | Misskey   | ✔    |
+| 企微智能机器人 | 将支持 |
+| Whatsapp | 将支持 |
+| LINE | 将支持 |
+
+**社区维护**
+
+| 平台    | 支持性 |
+| -------- | ------- |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
+| [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)   | ✔    |
 
 ## ⚡ 提供商支持情况
 
-| 名称    | 支持性 | 类型 | 备注 |
-| -------- | ------- | ------- | ------- |
-| OpenAI | ✔    | 文本生成 | 支持任何兼容 OpenAI API 的服务 |
-| Anthropic | ✔    | 文本生成 |  |
-| Google Gemini | ✔    | 文本生成 |  |
-| Dify | ✔    | LLMOps |  |
-| 阿里云百炼应用 | ✔    | LLMOps |  |
-| Ollama | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
-| LM Studio | ✔    | 模型加载器 | 本地部署 DeepSeek、Llama 等开源语言模型 |
-| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔    | 模型 API 及算力服务平台 |  |
-| [302.AI](https://share.302.ai/rr1M3l) | ✔    | 模型 API 服务平台 |  |
-| 硅基流动 | ✔    | 模型 API 服务平台 |  |
-| PPIO 派欧云 | ✔    | 模型 API 服务平台 |  |
-| OneAPI | ✔    | LLM 分发系统 |  |
-| Whisper | ✔    | 语音转文本 | 支持 API、本地部署 |
-| SenseVoice | ✔    | 语音转文本 | 本地部署 |
-| OpenAI TTS API | ✔    | 文本转语音 |  |
-| GSVI | ✔    | 文本转语音 | GPT-Sovits-Inference |
-| GPT-SoVITs | ✔    | 文本转语音 | GPT-Sovits-Inference |
-| FishAudio | ✔    | 文本转语音 | GPT-Sovits 作者参与的项目 |
-| Edge TTS | ✔    | 文本转语音 | Edge 浏览器的免费 TTS |
-| 阿里云百炼 TTS | ✔    | 文本转语音 |  |
-| Azure TTS | ✔    | 文本转语音 | Microsoft Azure TTS |
+**大模型服务**
+
+| 名称  | 支持性 | 备注 |
+| -------- | ------- | ------- |
+| OpenAI | ✔    | 支持任何兼容 OpenAI API 的服务 |
+| Anthropic | ✔    |  |
+| Google Gemini | ✔   |  |
+| Moonshot AI | ✔   |  |
+| 智谱 AI | ✔   |  |
+| DeepSeek | ✔   |  |
+| Ollama | ✔     | 本地部署 DeepSeek 等开源语言模型 |
+| LM Studio | ✔    | 本地部署 DeepSeek 等开源语言模型 |
+| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔  |  |
+| [302.AI](https://share.302.ai/rr1M3l) | ✔   |  |
+| [小马算力](https://www.tokenpony.cn/3YPyf) | ✔   |  |
+| 硅基流动 | ✔    |  |
+| PPIO 派欧云 | ✔    |  |
+| ModelScope | ✔    |  |
+| OneAPI | ✔    |  |
+| Dify | ✔    |  |
+| 阿里云百炼应用 | ✔    |  |
+| Coze | ✔    |  |
+
+**语音转文本服务**
+
+| 名称  | 支持性 | 备注 |
+| -------- | ------- | ------- |
+| Whisper | ✔    | 支持 API、本地部署 |
+| SenseVoice | ✔   | 本地部署 |
+
+**文本转语音服务**
+
+| 名称  | 支持性 | 备注 |
+| -------- | ------- | ------- |
+| OpenAI TTS | ✔    |  |
+| Gemini TTS | ✔    |  |
+| GSVI | ✔    | GPT-Sovits-Inference |
+| GPT-SoVITs | ✔     | GPT-Sovits |
+| FishAudio | ✔    | |
+| Edge TTS | ✔    | Edge 浏览器的免费 TTS |
+| 阿里云百炼 TTS | ✔    |  |
+| Azure TTS | ✔   | |
+| Minimax TTS | ✔   | |
+| 火山引擎 TTS | ✔   | |
 
 ## ❤️ 贡献
 
@@ -187,19 +215,10 @@ pre-commit install
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
 
-另外，一些同类型其他的活跃开源 Bot 项目：
-
-- [nonebot/nonebot2](https://github.com/nonebot/nonebot2) - 扩展性极强的 Bot 框架
-- [koishijs/koishi](https://github.com/koishijs/koishi) - 扩展性极强的 Bot 框架
-- [MaiM-with-u/MaiBot](https://github.com/MaiM-with-u/MaiBot) - 注重拟人功能的 ChatBot
-- [langbot-app/LangBot](https://github.com/langbot-app/LangBot) - 功能丰富的 Bot 平台
-- [KroMiose/nekro-agent](https://github.com/KroMiose/nekro-agent) - 注重 Agent 的 ChatBot
-- [zhenxun-org/zhenxun_bot](https://github.com/zhenxun-org/zhenxun_bot) - 功能完善的 ChatBot
-
 ## ⭐ Star History
 
 > [!TIP] 
-> 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我维护这个开源项目的动力 <3
+> 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我们维护这个开源项目的动力 <3
 
 <div align="center">
 
