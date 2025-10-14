@@ -10,7 +10,7 @@
 export function getPlatformIcon(name) {
   if (name === 'aiocqhttp' || name === 'qq_official' || name === 'qq_official_webhook') {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-  } else if (name === 'wecom') {
+  } else if (name === 'wecom' || name === 'wecom_ai_bot') {
     return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
   } else if (name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
     return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
