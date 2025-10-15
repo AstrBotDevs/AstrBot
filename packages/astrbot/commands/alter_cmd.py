@@ -6,26 +6,7 @@ from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from enum import Enum
-
-
-class RstScene(Enum):
-    GROUP_UNIQUE_ON = ("group_unique_on", "群聊+会话隔离开启")
-    GROUP_UNIQUE_OFF = ("group_unique_off", "群聊+会话隔离关闭")
-    PRIVATE = ("private", "私聊")
-
-    @property
-    def key(self) -> str:
-        return self.value[0]
-
-    @property
-    def name(self) -> str:
-        return self.value[1]
-
-    @classmethod
-    def from_index(cls, index: int) -> "RstScene":
-        mapping = {1: cls.GROUP_UNIQUE_ON, 2: cls.GROUP_UNIQUE_OFF, 3: cls.PRIVATE}
-        return mapping[index]
+from .utils.rst_scene import RstScene
 
 
 class AlterCmdCommands(CommandParserMixin):
@@ -58,8 +39,9 @@ class AlterCmdCommands(CommandParserMixin):
             )
             return
 
-        cmd_name = " ".join(token.tokens[1:-1])
-        cmd_type = token.get(-1)
+        # 兼容 reset scene 的专门配置
+        cmd_name = token.get(1)
+        cmd_type = token.get(2)
 
         if cmd_name == "reset" and cmd_type == "config":
             from astrbot.api import sp
@@ -123,6 +105,8 @@ class AlterCmdCommands(CommandParserMixin):
             return
 
         # 查找指令
+        cmd_name = " ".join(token.tokens[1:-1])
+        cmd_type = token.get(-1)
         found_command = None
         cmd_group = False
         for handler in star_handlers_registry:
