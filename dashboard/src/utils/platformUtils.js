@@ -46,6 +46,7 @@ export function getTutorialLink(platformType) {
     "qq_official": "https://docs.astrbot.app/deploy/platform/qqofficial/websockets.html",
     "aiocqhttp": "https://docs.astrbot.app/deploy/platform/aiocqhttp/napcat.html",
     "wecom": "https://docs.astrbot.app/deploy/platform/wecom.html",
+    "wecom_ai_bot": "https://docs.astrbot.app/deploy/platform/wecom_ai_bot.html",
     "lark": "https://docs.astrbot.app/deploy/platform/lark.html",
     "telegram": "https://docs.astrbot.app/deploy/platform/telegram.html",
     "dingtalk": "https://docs.astrbot.app/deploy/platform/dingtalk.html",
