@@ -17,6 +17,7 @@ jobs:
         run: |
           cd dashboard
           npm install
+          npm i --save-dev @types/markdown-it
           npm run build
 
       - name: Inject Commit SHA
