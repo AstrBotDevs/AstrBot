@@ -556,11 +556,18 @@ class MisskeyPlatformAdapter(Platform):
                     await self.api.send_message(payload)
                 else:
                     # 回退到发帖逻辑
+                    # 去掉 session_id 中的 note% 前缀以匹配 user_cache 的键格式
+                    user_id_for_cache = (
+                        session_id.split("%")[1] if "%" in session_id else session_id
+                    )
                     visibility, visible_user_ids = resolve_message_visibility(
-                        user_id=session_id,
+                        user_id=user_id_for_cache,
                         user_cache=self._user_cache,
                         self_id=self.client_self_id,
                         default_visibility=self.default_visibility,
+                    )
+                    logger.debug(
+                        f"[Misskey] 解析可见性: visibility={visibility}, visible_user_ids={visible_user_ids}, session_id={session_id}, user_id_for_cache={user_id_for_cache}"
                     )
 
                     fields = self._extract_additional_fields(session, message_chain)
