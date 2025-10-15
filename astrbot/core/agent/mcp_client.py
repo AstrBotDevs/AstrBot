@@ -48,8 +48,6 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
             raise Exception("MCP 连接配置缺少 transport 或 type 字段")
 
         async with aiohttp.ClientSession() as session:
-
-
             if transport_type == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
