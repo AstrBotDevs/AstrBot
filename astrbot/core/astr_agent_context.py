@@ -9,3 +9,4 @@ class AstrAgentContext:
     first_provider_request: ProviderRequest
     curr_provider_request: ProviderRequest
     streaming: bool
+    tool_call_timeout: int = 60  # Default tool call timeout in seconds
