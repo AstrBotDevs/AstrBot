@@ -80,6 +80,9 @@
         "save": "保存",
         "testConnection": "测试连接",
         "sync": "同步"
+      },
+      "tips": {
+        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
       }
     },
     "serverDetail": {

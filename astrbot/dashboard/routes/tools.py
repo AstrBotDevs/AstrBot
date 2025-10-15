@@ -273,6 +273,20 @@ class ToolsRoute(Route):
             server_data = await request.json
             config = server_data.get("mcp_server_config", None)
 
+            if not isinstance(config, dict) or not config:
+                return Response().error("无效的 MCP 服务器配置").__dict__
+
+            if "mcpServers" in config:
+                keys = list(config["mcpServers"].keys())
+                if not keys:
+                    return Response().error("MCP 服务器配置不能为空").__dict__
+                if len(keys) > 1:
+                    return Response().error("一次只能配置一个 MCP 服务器配置").__dict__
+                config = config["mcpServers"][keys[0]]
+            else:
+                if not config:
+                    return Response().error("MCP 服务器配置不能为空").__dict__
+
             tools_name = await self.tool_mgr.test_mcp_server_connection(config)
             return (
                 Response().ok(data=tools_name, message="🎉 MCP 服务器可用！").__dict__

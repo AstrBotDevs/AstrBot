@@ -72,6 +72,7 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
+        "tool_call_timeout": 60,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -1873,6 +1874,10 @@ CONFIG_METADATA_2 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
+                    "tool_call_timeout": {
+                        "description": "工具调用超时时间（秒）",
+                        "type": "int",
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2143,6 +2148,10 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "provider_settings.tool_call_timeout": {
+                        "description": "工具调用超时时间（秒）",
                         "type": "int",
                     },
                     "provider_settings.streaming_response": {

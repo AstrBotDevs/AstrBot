@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import traceback
+from datetime import timedelta
 from typing import AsyncGenerator, Union
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core import logger
@@ -185,21 +186,33 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             handler=awaitable,
             **tool_args,
         )
-        async for resp in wrapper:
-            if resp is not None:
-                if isinstance(resp, mcp.types.CallToolResult):
-                    yield resp
+        # async for resp in wrapper:
+        while True:
+            try:
+                resp = await asyncio.wait_for(
+                    anext(wrapper),
+                    timeout=run_context.context.tool_call_timeout,
+                )
+                if resp is not None:
+                    if isinstance(resp, mcp.types.CallToolResult):
+                        yield resp
+                    else:
+                        text_content = mcp.types.TextContent(
+                            type="text",
+                            text=str(resp),
+                        )
+                        yield mcp.types.CallToolResult(content=[text_content])
                 else:
-                    text_content = mcp.types.TextContent(
-                        type="text",
-                        text=str(resp),
-                    )
-                    yield mcp.types.CallToolResult(content=[text_content])
-            else:
-                # NOTE: Tool 在这里直接请求发送消息给用户
-                # TODO: 是否需要判断 event.get_result() 是否为空?
-                # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                yield None
+                    # NOTE: Tool 在这里直接请求发送消息给用户
+                    # TODO: 是否需要判断 event.get_result() 是否为空?
+                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                    yield None
+            except asyncio.TimeoutError:
+                raise Exception(
+                    f"tool {tool.name} execution timeout after {run_context.context.tool_call_timeout} seconds."
+                )
+            except StopAsyncIteration:
+                break
 
     @classmethod
     async def _execute_mcp(
@@ -217,6 +230,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         res = await session.call_tool(
             name=tool.name,
             arguments=tool_args,
+            read_timeout_seconds=timedelta(
+                seconds=run_context.context.tool_call_timeout
+            ),
         )
         if not res:
             return
@@ -307,6 +323,7 @@ class LLMRequestSubStage(Stage):
         )
         self.streaming_response: bool = settings["streaming_response"]
         self.max_step: int = settings.get("max_agent_step", 30)
+        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -473,6 +490,7 @@ class LLMRequestSubStage(Stage):
             first_provider_request=req,
             curr_provider_request=req,
             streaming=self.streaming_response,
+            tool_call_timeout=self.tool_call_timeout,
         )
         await agent_runner.reset(
             provider=provider,

@@ -80,6 +80,9 @@
         "save": "Save",
         "testConnection": "Test Connection",
         "sync": "Sync"
+      },
+      "tips": {
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
       }
     },
     "serverDetail": {
