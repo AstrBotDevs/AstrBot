@@ -118,6 +118,7 @@ uv run main.py
 | QQ(OneBot)      | ✔    |
 | Telegram   | ✔    |
 | 企微应用    | ✔    |
+| 企智机器人 | ✔ |
 | 微信客服    | ✔    |
 | 微信公众号    | ✔    |
 | 飞书   | ✔    |
@@ -126,7 +127,6 @@ uv run main.py
 | Discord   | ✔    |
 | Satori   | ✔    |
 | Misskey   | ✔    |
-| 企微智能机器人 | 将支持 |
 | Whatsapp | 将支持 |
 | LINE | 将支持 |
 
@@ -137,6 +137,7 @@ uv run main.py
 | [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
 | [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
 | [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)   | ✔    |
+| [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)   | ✔    |
 
 ## ⚡ 提供商支持情况
 
