@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image, At, File, Record
+from astrbot.api.message_components import Plain, Image, At, File, Record, Video, Reply
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
@@ -87,6 +87,17 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"语音转换为base64失败: {e}")
 
+                elif isinstance(component, Reply):
+                    content_parts.append(f'<reply id="{component.id}"/>')
+
+                elif isinstance(component, Video):
+                    try:
+                        video_path_url = await component.convert_to_file_path()
+                        if video_path_url:
+                            content_parts.append(f'<video src="{video_path_url}"/>')
+                    except Exception as e:
+                        logger.error(f"视频文件转换失败: {e}")
+
             content = "".join(content_parts)
             channel_id = session_id
             data = {"channel_id": channel_id, "content": content}
@@ -165,6 +176,17 @@ class SatoriPlatformEvent(AstrMessageEvent):
                             )
                     except Exception as e:
                         logger.error(f"语音转换为base64失败: {e}")
+
+                elif isinstance(component, Reply):
+                    content_parts.append(f'<reply id="{component.id}"/>')
+
+                elif isinstance(component, Video):
+                    try:
+                        video_path_url = await component.convert_to_file_path()
+                        if video_path_url:
+                            content_parts.append(f'<video src="{video_path_url}"/>')
+                    except Exception as e:
+                        logger.error(f"视频文件转换失败: {e}")
 
             content = "".join(content_parts)
             channel_id = self.session_id
