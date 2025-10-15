@@ -94,9 +94,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     try:
                         video_path_url = await component.convert_to_file_path()
                         if video_path_url:
-                            content_parts.append(
-                                f'<video src="{video_path_url}"/>'
-                            )
+                            content_parts.append(f'<video src="{video_path_url}"/>')
                     except Exception as e:
                         logger.error(f"视频文件转换失败: {e}")
 
@@ -186,9 +184,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     try:
                         video_path_url = await component.convert_to_file_path()
                         if video_path_url:
-                            content_parts.append(
-                                f'<video src="{video_path_url}"/>'
-                            )
+                            content_parts.append(f'<video src="{video_path_url}"/>')
                     except Exception as e:
                         logger.error(f"视频文件转换失败: {e}")
 
