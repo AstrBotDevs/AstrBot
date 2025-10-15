@@ -441,9 +441,6 @@ class MisskeyAPI:
             except json.JSONDecodeError as e:
                 logger.error(f"[Misskey API] 响应格式错误: {e}")
                 raise APIConnectionError("Invalid JSON response") from e
-        elif response.status == 204 and endpoint == "drive/files/upload-from-url":
-            logger.debug(f"[Misskey API] 异步上传请求已接受: {endpoint}")
-            return {"status": "accepted", "async": True}
         else:
             try:
                 error_text = await response.text()
@@ -585,54 +582,6 @@ class MisskeyAPI:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e
 
-    async def upload_file_from_url(
-        self, url: str, name: Optional[str] = None, folder_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Upload a file to Misskey using a remote URL (drive/files/upload-from-url).
-
-        Returns a dict containing id and raw result on success.
-        """
-        if not url:
-            raise APIError("No URL provided for upload-from-url")
-
-        data: Dict[str, Any] = {"url": url}
-        if name:
-            data["name"] = name
-        if folder_id:
-            data["folderId"] = str(folder_id)
-
-        try:
-            logger.debug(
-                f"[Misskey API] upload-from-url 请求: url={url}, name={name}, folder_id={folder_id}"
-            )
-            result = await self._make_request("drive/files/upload-from-url", data)
-            logger.debug(f"[Misskey API] upload-from-url 响应: {result}")
-
-            # 检查是否是异步上传响应 (HTTP 204)
-            if (
-                isinstance(result, dict)
-                and result.get("status") == "accepted"
-                and result.get("async")
-            ):
-                logger.debug(
-                    "[Misskey API] upload-from-url 异步请求已接受，文件将在后台上传"
-                )
-                return {"status": "accepted", "async": True, "url": url}
-
-            # 同步上传响应，提取文件ID
-            fid = None
-            if isinstance(result, dict):
-                fid = (
-                    (result.get("createdFile") or {}).get("id")
-                    or result.get("id")
-                    or (result.get("file") or {}).get("id")
-                )
-            logger.debug(f"[Misskey API] upload-from-url 得到 fid: {fid}")
-            return {"id": fid, "raw": result}
-        except Exception as e:
-            logger.error(f"上传 URL 文件失败: {e}")
-            raise
-
     async def find_files_by_hash(self, md5_hash: str) -> List[Dict[str, Any]]:
         """Find files by MD5 hash"""
         if not md5_hash:
@@ -750,35 +699,18 @@ class MisskeyAPI:
         if not url:
             raise APIError("URL不能为空")
 
-        # 1. 尝试使用 Misskey 的 upload-from-url 接口（服务器端处理远程 URL）
-        try:
-            upload_result = await self.upload_file_from_url(url, name, folder_id)
-            if isinstance(upload_result, dict):
-                # 只有同步上传成功才返回，异步上传需要回退到本地上传
-                if upload_result.get("id"):
-                    logger.debug(f"[Misskey API] URL上传成功: {upload_result['id']}")
-                    return upload_result
-                elif upload_result.get("status") == "accepted":
-                    logger.debug(
-                        "[Misskey API] 异步上传已接受，回退到本地上传以获取即时文件ID"
-                    )
-                    # 不返回，继续执行本地上传逻辑
-        except Exception as e:
-            logger.debug(f"[Misskey API] upload-from-url 失败: {e}，尝试本地上传")
-
-        # 2. 回退：下载文件并本地上传
+        # 通过本地上传获取即时文件 ID（下载文件 → 上传 → 返回 ID）
         try:
             import tempfile
             import os
 
-            # 首先尝试使用 SSL 验证下载
+            # SSL 验证下载，失败则重试不验证 SSL
             tmp_bytes = None
             try:
                 tmp_bytes = await self._download_with_existing_session(
                     url, ssl_verify=True
                 ) or await self._download_with_temp_session(url, ssl_verify=True)
             except Exception as ssl_error:
-                # SSL 验证失败，重试不验证 SSL
                 logger.debug(
                     f"[Misskey API] SSL 验证下载失败: {ssl_error}，重试不验证 SSL"
                 )
@@ -804,7 +736,7 @@ class MisskeyAPI:
                     except Exception:
                         pass
         except Exception as e:
-            logger.error(f"[Misskey API] 本地上传回退失败: {e}")
+            logger.error(f"[Misskey API] 本地上传失败: {e}")
 
         return None
 

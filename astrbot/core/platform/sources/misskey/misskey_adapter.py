@@ -362,34 +362,13 @@ class MisskeyPlatformAdapter(Platform):
         try:
             session_id = session.session_id
 
-            # 添加消息链组件调试日志
-            logger.debug(
-                f"[Misskey] 收到消息链，包含 {len(message_chain.chain)} 个组件:"
-            )
-            for i, comp in enumerate(message_chain.chain):
-                try:
-                    comp_info = f"类型:{type(comp).__name__}"
-                    if hasattr(comp, "text"):
-                        comp_info += f" 文本:'{getattr(comp, 'text', '')[:50]}'"
-                    for attr in ["file", "url", "path"]:
-                        if hasattr(comp, attr):
-                            val = getattr(comp, attr, None)
-                            if val:
-                                comp_info += f" {attr}:'{str(val)[:100]}'"
-                    logger.debug(f"[Misskey]   组件 {i + 1}: {comp_info}")
-                except Exception as e:
-                    logger.debug(f"[Misskey]   组件 {i + 1}: 无法获取信息 - {e}")
-
             text, has_at_user = serialize_message_chain(message_chain.chain)
-            logger.debug(
-                f"[Misskey] serialize_message_chain 返回文本: '{text}', has_at_user: {has_at_user}"
-            )
 
             if not has_at_user and session_id:
                 user_info = self._user_cache.get(session_id)
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
 
-            # 检查是否有文件组件，即使文本为空或只有占位符也要处理
+            # 检查是否有文件组件
             has_file_components = any(
                 isinstance(comp, Comp.Image)
                 or isinstance(comp, Comp.File)
@@ -400,14 +379,13 @@ class MisskeyPlatformAdapter(Platform):
                 )
                 for comp in message_chain.chain
             )
-            logger.debug(f"[Misskey] 检测到文件组件: {has_file_components}")
 
             if not text or not text.strip():
                 if not has_file_components:
                     logger.warning("[Misskey] 消息内容为空且无文件组件，跳过发送")
                     return await super().send_by_session(session, message_chain)
                 else:
-                    text = ""  # 清空占位符文本，只发送文件
+                    text = ""
 
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
@@ -415,27 +393,7 @@ class MisskeyPlatformAdapter(Platform):
             file_ids: List[str] = []
             fallback_urls: List[str] = []
 
-            # 添加详细的组件日志以调试插件返回的组件结构
-            try:
-                logger.debug(f"[Misskey] 消息链包含 {len(message_chain.chain)} 个组件")
-                for i, comp in enumerate(message_chain.chain):
-                    comp_type = type(comp).__name__
-                    comp_attrs = {}
-                    for attr in ["file", "url", "path", "src", "source", "name"]:
-                        try:
-                            val = getattr(comp, attr, None)
-                            if val is not None:
-                                comp_attrs[attr] = str(val)[:100]  # 截断长URL
-                        except Exception:
-                            pass
-                    logger.debug(
-                        f"[Misskey] 组件 {i}: {comp_type} - 属性: {comp_attrs}"
-                    )
-            except Exception as e:
-                logger.debug(f"[Misskey] 组件日志失败: {e}")
-
             if not self.enable_file_upload:
-                logger.debug("[Misskey] 文件上传已在配置中禁用，跳过上传流程")
                 return await self._send_text_only_message(
                     session_id, text, session, message_chain
                 )
@@ -450,19 +408,19 @@ class MisskeyPlatformAdapter(Platform):
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> Optional[object]:
-                """简化的组件上传函数，使用工具函数处理"""
+                """组件上传函数：下载文件后本地上传"""
                 from .misskey_utils import (
                     resolve_component_url_or_path,
                     upload_local_with_retries,
                 )
 
-                local_path = None  # 初始化变量以供finally块使用
+                local_path = None
                 try:
                     async with sem:
                         if not self.api:
                             return None
 
-                        # 1. 解析组件的 URL 或本地路径
+                        # 解析组件的 URL 或本地路径
                         url_candidate, local_path = await resolve_component_url_or_path(
                             comp
                         )
@@ -474,33 +432,18 @@ class MisskeyPlatformAdapter(Platform):
                             comp, "file", None
                         )
 
-                        # 2. 优先尝试 URL 上传
+                        # URL 上传：下载后本地上传
                         if url_candidate:
-                            try:
-                                logger.debug(
-                                    f"[Misskey] 尝试 URL 上传: {url_candidate[:100]}"
-                                )
-                                upload_result = await self.api.upload_and_find_file(
-                                    str(url_candidate),
-                                    preferred_name,
-                                    folder_id=self.upload_folder,
-                                )
+                            result = await self.api.upload_and_find_file(
+                                str(url_candidate),
+                                preferred_name,
+                                folder_id=self.upload_folder,
+                            )
+                            if isinstance(result, dict) and result.get("id"):
+                                return str(result["id"])
 
-                                if isinstance(
-                                    upload_result, dict
-                                ) and upload_result.get("id"):
-                                    logger.debug(
-                                        f"[Misskey] URL 上传成功: {upload_result['id']}"
-                                    )
-                                    return str(upload_result["id"])
-                            except Exception as e:
-                                logger.debug(
-                                    f"[Misskey] URL 上传失败: {e}，尝试本地上传"
-                                )
-
-                        # 3. 回退到本地上传（使用扩展名重试逻辑）
+                        # 本地文件上传
                         if local_path:
-                            logger.debug(f"[Misskey] 尝试本地上传: {local_path}")
                             file_id = await upload_local_with_retries(
                                 self.api,
                                 str(local_path),
@@ -508,10 +451,9 @@ class MisskeyPlatformAdapter(Platform):
                                 self.upload_folder,
                             )
                             if file_id:
-                                logger.debug(f"[Misskey] 本地上传成功: {file_id}")
                                 return file_id
 
-                        # 4. 所有上传都失败，尝试获取 URL 作为回退
+                        # 所有上传都失败，尝试获取 URL 作为回退
                         if hasattr(comp, "register_to_file_service"):
                             try:
                                 url = await comp.register_to_file_service()
@@ -554,29 +496,6 @@ class MisskeyPlatformAdapter(Platform):
                     # 保守跳过无法访问属性的组件
                     continue
 
-            # 打印组件摘要，便于调试插件返回的结构
-            try:
-                logger.debug(
-                    f"[Misskey] 检测到 {len(file_components)} 个可能的文件组件:"
-                )
-                for i, comp in enumerate(file_components):
-                    try:
-                        comp_type = type(comp).__name__
-                        comp_attrs = {}
-                        for attr in ["file", "url", "path", "src", "source", "name"]:
-                            try:
-                                val = getattr(comp, attr, None)
-                                if val is not None:
-                                    comp_attrs[attr] = val
-                            except Exception:
-                                pass
-                        logger.debug(
-                            f"[Misskey]   组件 {i + 1}: {comp_type} - {comp_attrs}"
-                        )
-                    except Exception as e:
-                        logger.debug(f"[Misskey]   组件 {i + 1}: 无法获取属性 - {e}")
-            except Exception:
-                pass
             if len(file_components) > MAX_FILE_UPLOAD_COUNT:
                 logger.warning(
                     f"[Misskey] 文件数量超过限制 ({len(file_components)} > {MAX_FILE_UPLOAD_COUNT})，只上传前{MAX_FILE_UPLOAD_COUNT}个文件"
