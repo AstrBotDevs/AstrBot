@@ -408,7 +408,7 @@ class MisskeyPlatformAdapter(Platform):
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> Optional[object]:
-                """组件上传函数：下载文件后本地上传"""
+                """组件上传函数：处理 URL（下载后上传）或本地文件（直接上传）"""
                 from .misskey_utils import (
                     resolve_component_url_or_path,
                     upload_local_with_retries,
