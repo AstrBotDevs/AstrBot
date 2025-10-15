@@ -393,17 +393,17 @@ CONFIG_METADATA_2 = {
                     "misskey_enable_file_upload": {
                         "description": "启用文件上传到 Misskey",
                         "type": "bool",
-                        "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey 并在消息中附加 media(fileIds)。",
+                        "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey。URL 文件会先尝试服务器端上传，异步上传失败时会回退到下载后本地上传。",
                     },
                     "misskey_allow_insecure_downloads": {
                         "description": "允许不安全下载（禁用 SSL 验证）",
                         "type": "bool",
-                        "hint": "仅作为最后回退手段：当远端服务器存在证书问题导致无法正常下载时，允许临时禁用 SSL 验证以获取文件。启用有安全风险，请谨慎使用。",
+                        "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。",
                     },
                     "misskey_download_timeout": {
                         "description": "远端下载超时时间（秒）",
                         "type": "int",
-                        "hint": "用于计算 URL 文件 MD5 或回退下载时的总体超时时间（秒）。",
+                        "hint": "下载远程文件时的超时时间（秒），用于异步上传回退到本地上传的场景。",
                     },
                     "misskey_download_chunk_size": {
                         "description": "流式下载分块大小（字节）",
@@ -423,7 +423,7 @@ CONFIG_METADATA_2 = {
                     "misskey_upload_folder": {
                         "description": "上传到网盘的目标文件夹 ID",
                         "type": "string",
-                        "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内以避免账号网盘根目录混乱。留空则使用默认位置。",
+                        "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",

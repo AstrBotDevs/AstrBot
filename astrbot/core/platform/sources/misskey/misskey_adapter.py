@@ -14,7 +14,7 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSession
 import astrbot.api.message_components as Comp
 
-from .misskey_api import MisskeyAPI, APIError
+from .misskey_api import MisskeyAPI
 import os
 
 try:
@@ -179,12 +179,6 @@ class MisskeyPlatformAdapter(Platform):
             await self.api.send_room_message(payload)
 
         return await super().send_by_session(session, message_chain)
-
-    def _detect_mime_and_ext(self, path: str) -> Optional[str]:
-        """Delegates MIME detection to utils.detect_mime_ext."""
-        from .misskey_utils import detect_mime_ext
-
-        return detect_mime_ext(path)
 
     def _process_poll_data(
         self, message: AstrBotMessage, poll: Dict[str, Any], message_parts: List[str]
@@ -456,281 +450,90 @@ class MisskeyPlatformAdapter(Platform):
             sem = asyncio.Semaphore(upload_concurrency)
 
             async def _upload_comp(comp) -> Optional[object]:
-                upload_path = None
-                upload_path_local = None
-                url_candidate = None
+                """简化的组件上传函数，使用工具函数处理"""
+                from .misskey_utils import (
+                    resolve_component_url_or_path,
+                    upload_local_with_retries,
+                )
 
+                local_path = None  # 初始化变量以供finally块使用
                 try:
-                    if hasattr(comp, "convert_to_file_path"):
-                        try:
-                            upload_path = await comp.convert_to_file_path()
-                        except Exception:
-                            pass
-                    if not upload_path and hasattr(comp, "get_file"):
-                        try:
-                            upload_path = await comp.get_file()
-                        except Exception:
-                            pass
-
-                    # 不再在此处直接返回，改为先尝试从组件字段中推断 URL，再决定是否进入并发上传
-
-                    # 先推断可能的 URL 或本地路径
-                    url_candidate = None
-                    upload_path_local = None
-
-                    if (
-                        upload_path
-                        and isinstance(upload_path, str)
-                        and str(upload_path).startswith("http")
-                    ):
-                        url_candidate = upload_path
-                    else:
-                        upload_path_local = upload_path
-
-                    # 尝试通过注册到文件服务获取 URL（插件接口）或通过 get_file(True) 获取可直接访问的 URL
-                    try:
-                        if not url_candidate and hasattr(
-                            comp, "register_to_file_service"
-                        ):
-                            try:
-                                url_candidate = await comp.register_to_file_service()
-                            except Exception:
-                                url_candidate = None
-                        if not url_candidate and hasattr(comp, "get_file"):
-                            try:
-                                maybe = await comp.get_file(True)
-                                if (
-                                    maybe
-                                    and isinstance(maybe, str)
-                                    and maybe.startswith("http")
-                                ):
-                                    url_candidate = maybe
-                            except Exception:
-                                url_candidate = None
-                    except Exception:
-                        url_candidate = None
-
-                    # 如果上述都失败，检查常见的同步字段（file/url/path等）
-                    if not url_candidate:
-                        for attr in ("file", "url", "path", "src", "source"):
-                            try:
-                                val = getattr(comp, attr, None)
-                            except Exception:
-                                val = None
-                            if val and isinstance(val, str) and val.startswith("http"):
-                                url_candidate = val
-                                break
-
-                    # 如果既没有 URL，也没有本地路径，则无可上传内容
-                    if not url_candidate and not upload_path_local:
-                        return None
-
                     async with sem:
                         if not self.api:
                             return None
 
-                        # 优先尝试通过 URL 上传（使用新的查找方法）
+                        # 1. 解析组件的 URL 或本地路径
+                        url_candidate, local_path = await resolve_component_url_or_path(
+                            comp
+                        )
+
+                        if not url_candidate and not local_path:
+                            return None
+
+                        preferred_name = getattr(comp, "name", None) or getattr(
+                            comp, "file", None
+                        )
+
+                        # 2. 优先尝试 URL 上传
                         if url_candidate:
                             try:
                                 logger.debug(
-                                    f"[Misskey] 发现 URL candidate，尝试 upload-and-find: {url_candidate}"
+                                    f"[Misskey] 尝试 URL 上传: {url_candidate[:100]}"
                                 )
                                 upload_result = await self.api.upload_and_find_file(
                                     str(url_candidate),
-                                    getattr(comp, "name", None)
-                                    or getattr(comp, "file", None),
+                                    preferred_name,
                                     folder_id=self.upload_folder,
-                                    max_wait_time=30.0,  # 最多等待30秒
-                                    check_interval=2.0,  # 每2秒检查一次
                                 )
 
-                                if isinstance(upload_result, dict):
-                                    # 检查各种上传结果
-                                    if upload_result.get("id"):
-                                        # 成功获得文件ID（同步、异步找到、或现有文件）
-                                        fid = upload_result.get("id")
-                                        result_type = (
-                                            "existing"
-                                            if upload_result.get("existing")
-                                            else (
-                                                "async_found"
-                                                if upload_result.get("async_found")
-                                                else "sync"
-                                            )
-                                        )
-                                        logger.debug(
-                                            f"[Misskey] upload-and-find 成功 ({result_type})，fid={fid}, URL={url_candidate}"
-                                        )
-                                        return str(fid)
-                                    elif upload_result.get("status") == "timeout":
-                                        # 异步上传超时，回退到URL
-                                        logger.warning(
-                                            f"[Misskey] upload-and-find 超时，回退到URL: {url_candidate}"
-                                        )
-                                        return {"fallback_url": url_candidate}
-                                    elif upload_result.get("fallback_url"):
-                                        # 其他情况需要回退
-                                        logger.debug(
-                                            f"[Misskey] upload-and-find 回退到URL: {url_candidate}"
-                                        )
-                                        return {"fallback_url": url_candidate}
-
-                                # 如果 upload_result 为 None，表示上传完全失败
-                                if upload_result is None:
-                                    logger.warning(
-                                        "[Misskey] upload-and-find 返回 None，尝试本地上传"
+                                if isinstance(
+                                    upload_result, dict
+                                ) and upload_result.get("id"):
+                                    logger.debug(
+                                        f"[Misskey] URL 上传成功: {upload_result['id']}"
                                     )
-                                    if not upload_path_local:
-                                        return None
-                                else:
-                                    # 未知的响应格式
-                                    logger.warning(
-                                        f"[Misskey] upload-and-find 返回未知格式: {upload_result}"
-                                    )
-                                    if not upload_path_local:
-                                        return None
-
+                                    return str(upload_result["id"])
                             except Exception as e:
                                 logger.debug(
-                                    f"[Misskey] upload-and-find 失败，回退为本地上传: {e}"
+                                    f"[Misskey] URL 上传失败: {e}，尝试本地上传"
                                 )
 
-                                # 再尝试本地上传（如果有）
-                                if not upload_path_local:
-                                    return None
-                        try:
-                            upload_result = await self.api.upload_file(
-                                str(upload_path_local),
-                                getattr(comp, "name", None)
-                                or getattr(comp, "file", None),
-                                folder_id=self.upload_folder,
+                        # 3. 回退到本地上传（使用扩展名重试逻辑）
+                        if local_path:
+                            logger.debug(f"[Misskey] 尝试本地上传: {local_path}")
+                            file_id = await upload_local_with_retries(
+                                self.api,
+                                str(local_path),
+                                preferred_name,
+                                self.upload_folder,
                             )
-                            fid = None
-                            if isinstance(upload_result, dict):
-                                fid = upload_result.get("id") or (
-                                    upload_result.get("raw") or {}
-                                ).get("createdFile", {}).get("id")
-                            return str(fid) if fid else None
-                        except Exception as e:
-                            logger.error(f"[Misskey] 文件上传失败: {e}")
-                            tried_names = []
+                            if file_id:
+                                logger.debug(f"[Misskey] 本地上传成功: {file_id}")
+                                return file_id
+
+                        # 4. 所有上传都失败，尝试获取 URL 作为回退
+                        if hasattr(comp, "register_to_file_service"):
                             try:
-                                msg = str(e).lower()
-                                if (
-                                    "unallowed" in msg
-                                    or "unallowed_file_type" in msg
-                                    or (
-                                        isinstance(e, APIError)
-                                        and "unallowed" in str(e).lower()
-                                    )
-                                ):
-                                    if not upload_path_local:
-                                        raise
-                                    base_name = os.path.basename(upload_path_local)
-                                    name_root, ext = os.path.splitext(base_name)
-                                    try_ext = self._detect_mime_and_ext(
-                                        upload_path_local
-                                    )
-                                    candidates = []
-                                    if try_ext:
-                                        candidates.append(try_ext)
-                                    candidates.extend([".jpg", ".png", ".txt", ".bin"])
-                                    if ext and len(ext) <= 5 and ext not in candidates:
-                                        candidates.insert(0, ext)
-                                    for c in candidates:
-                                        try_name = name_root + c
-                                        if try_name in tried_names:
-                                            continue
-                                        tried_names.append(try_name)
-                                        try:
-                                            upload_result = await self.api.upload_file(
-                                                str(upload_path_local),
-                                                try_name,
-                                                folder_id=self.upload_folder,
-                                            )
-                                            fid = None
-                                            if isinstance(upload_result, dict):
-                                                fid = upload_result.get("id") or (
-                                                    upload_result.get("raw") or {}
-                                                ).get("createdFile", {}).get("id")
-                                            if fid:
-                                                logger.debug(
-                                                    f"[Misskey] 通过重试上传成功，使用文件名: {try_name}"
-                                                )
-                                                return str(fid)
-                                        except Exception:
-                                            pass
+                                url = await comp.register_to_file_service()
+                                if url:
+                                    return {"fallback_url": url}
                             except Exception:
                                 pass
 
+                        return None
+
+                finally:
+                    # 清理临时文件
+                    if local_path and isinstance(local_path, str):
+                        data_temp = os.path.join(get_astrbot_data_path(), "temp")
+                        if local_path.startswith(data_temp) and os.path.exists(
+                            local_path
+                        ):
                             try:
-                                if hasattr(comp, "register_to_file_service"):
-                                    try:
-                                        url = await comp.register_to_file_service()
-                                        if url:
-                                            return {"fallback_url": url}
-                                    except Exception:
-                                        pass
-                                if hasattr(comp, "get_file"):
-                                    try:
-                                        url_or_path = await comp.get_file(True)
-                                        if url_or_path and str(url_or_path).startswith(
-                                            "http"
-                                        ):
-                                            # 优先尝试通过 Misskey 的 upload-and-find 接口上传远程 URL
-                                            try:
-                                                if self.api:
-                                                    upload_result = await self.api.upload_and_find_file(
-                                                        str(url_or_path),
-                                                        getattr(comp, "name", None)
-                                                        or getattr(comp, "file", None),
-                                                        folder_id=self.upload_folder,
-                                                        max_wait_time=30.0,
-                                                        check_interval=2.0,
-                                                    )
-                                                    if isinstance(upload_result, dict):
-                                                        fid = upload_result.get("id")
-                                                        if fid:
-                                                            return str(fid)
-                                                        elif (
-                                                            upload_result.get(
-                                                                "fallback_url"
-                                                            )
-                                                            or upload_result.get(
-                                                                "status"
-                                                            )
-                                                            == "timeout"
-                                                        ):
-                                                            # 回退到URL显示
-                                                            return {
-                                                                "fallback_url": url_or_path
-                                                            }
-                                            except Exception:
-                                                # 如果 upload-from-url 失败，则回退为返回 URL
-                                                return {"fallback_url": url_or_path}
-                                    except Exception:
-                                        pass
+                                os.remove(local_path)
+                                logger.debug(f"[Misskey] 已清理临时文件: {local_path}")
                             except Exception:
                                 pass
-                            return None
-                finally:
-                    try:
-                        if upload_path_local:
-                            data_temp = os.path.join(get_astrbot_data_path(), "temp")
-                            if (
-                                isinstance(upload_path_local, str)
-                                and upload_path_local.startswith(data_temp)
-                                and os.path.exists(upload_path_local)
-                            ):
-                                try:
-                                    os.remove(upload_path_local)
-                                    logger.debug(
-                                        f"[Misskey] 已清理临时文件: {upload_path_local}"
-                                    )
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
 
             # 收集所有可能包含文件/URL信息的组件：支持异步接口或同步字段
             file_components = []

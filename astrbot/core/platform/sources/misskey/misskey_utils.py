@@ -1,7 +1,5 @@
 """Misskey 平台适配器通用工具函数"""
 
-import mimetypes
-import os
 from typing import Dict, Any, List, Tuple, Optional, Union
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
@@ -110,15 +108,22 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
 
 
 def resolve_message_visibility(
-    user_id: Optional[str],
-    user_cache: Dict[str, Any],
-    self_id: Optional[str],
+    user_id: Optional[str] = None,
+    user_cache: Optional[Dict[str, Any]] = None,
+    self_id: Optional[str] = None,
+    raw_message: Optional[Dict[str, Any]] = None,
     default_visibility: str = "public",
 ) -> Tuple[str, Optional[List[str]]]:
-    """解析 Misskey 消息的可见性设置"""
+    """解析 Misskey 消息的可见性设置
+
+    可以从 user_cache 或 raw_message 中解析，支持两种调用方式：
+    1. 基于 user_cache: resolve_message_visibility(user_id, user_cache, self_id)
+    2. 基于 raw_message: resolve_message_visibility(raw_message=raw_message, self_id=self_id)
+    """
     visibility = default_visibility
     visible_user_ids = None
 
+    # 优先从 user_cache 解析
     if user_id and user_cache:
         user_info = user_cache.get(user_id)
         if user_info:
@@ -133,38 +138,36 @@ def resolve_message_visibility(
                 visible_user_ids = [uid for uid in visible_user_ids if uid]
             else:
                 visibility = original_visibility
+            return visibility, visible_user_ids
+
+    # 回退到从 raw_message 解析
+    if raw_message:
+        original_visibility = raw_message.get("visibility", default_visibility)
+        if original_visibility == "specified":
+            visibility = "specified"
+            original_visible_users = raw_message.get("visibleUserIds", [])
+            sender_id = raw_message.get("userId", "")
+
+            users_to_include = []
+            if sender_id:
+                users_to_include.append(sender_id)
+            if self_id:
+                users_to_include.append(self_id)
+
+            visible_user_ids = list(set(original_visible_users + users_to_include))
+            visible_user_ids = [uid for uid in visible_user_ids if uid]
+        else:
+            visibility = original_visibility
 
     return visibility, visible_user_ids
 
 
+# 保留旧函数名作为向后兼容的别名
 def resolve_visibility_from_raw_message(
     raw_message: Dict[str, Any], self_id: Optional[str] = None
 ) -> Tuple[str, Optional[List[str]]]:
-    """从原始消息数据中解析可见性设置"""
-    visibility = "public"
-    visible_user_ids = None
-
-    if not raw_message:
-        return visibility, visible_user_ids
-
-    original_visibility = raw_message.get("visibility", "public")
-    if original_visibility == "specified":
-        visibility = "specified"
-        original_visible_users = raw_message.get("visibleUserIds", [])
-        sender_id = raw_message.get("userId", "")
-
-        users_to_include = []
-        if sender_id:
-            users_to_include.append(sender_id)
-        if self_id:
-            users_to_include.append(self_id)
-
-        visible_user_ids = list(set(original_visible_users + users_to_include))
-        visible_user_ids = [uid for uid in visible_user_ids if uid]
-    else:
-        visibility = original_visibility
-
-    return visibility, visible_user_ids
+    """从原始消息数据中解析可见性设置（已弃用，使用 resolve_message_visibility 替代）"""
+    return resolve_message_visibility(raw_message=raw_message, self_id=self_id)
 
 
 def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
@@ -424,47 +427,6 @@ def cache_room_info(
         }
 
 
-def detect_mime_ext(path: str) -> Optional[str]:
-    """检测文件 MIME 并返回常用扩展，作为 adapter 的可复用工具。"""
-    try:
-        try:
-            from magic import Magic  # type: ignore
-
-            m = Magic(mime=True)
-            mime = m.from_file(path)
-        except Exception:
-            import mimetypes as _m
-
-            mime, _ = _m.guess_type(path)
-    except Exception:
-        mime = None
-
-    if not mime:
-        return None
-
-    mapping = {
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "audio/mpeg": ".mp3",
-        "audio/mp4": ".m4a",
-        "audio/ogg": ".ogg",
-        "audio/wav": ".wav",
-        "audio/x-wav": ".wav",
-        "audio/webm": ".webm",
-        "video/mp4": ".mp4",
-        "video/webm": ".webm",
-        "video/x-matroska": ".mkv",
-        "video/quicktime": ".mov",
-        "video/avi": ".avi",
-        "video/mpeg": ".mpeg",
-        "text/plain": ".txt",
-        "application/pdf": ".pdf",
-    }
-    return mapping.get(mime, mimetypes.guess_extension(mime) or None)
-
-
 async def resolve_component_url_or_path(
     comp: Any,
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -476,68 +438,59 @@ async def resolve_component_url_or_path(
     url_candidate = None
     local_path = None
 
-    try:
-        # helper to normalize a candidate string
-        async def _maybe_str_source(coro_or_val):
-            try:
-                v = coro_or_val
-                if hasattr(coro_or_val, "__await__"):
-                    v = await coro_or_val
-                if isinstance(v, str):
-                    return v
-            except Exception:
-                return None
+    async def _get_str_value(coro_or_val):
+        """辅助函数：统一处理协程或普通值"""
+        try:
+            if hasattr(coro_or_val, "__await__"):
+                result = await coro_or_val
+            else:
+                result = coro_or_val
+            return result if isinstance(result, str) else None
+        except Exception:
             return None
 
-        # check async helpers first
-        if hasattr(comp, "convert_to_file_path"):
-            p = await _maybe_str_source(comp.convert_to_file_path())
-        else:
-            p = None
-        if p:
-            if p.startswith("http"):
-                url_candidate = p
-            else:
-                local_path = p
+    try:
+        # 1. 尝试异步方法
+        for method in ["convert_to_file_path", "get_file", "register_to_file_service"]:
+            if not hasattr(comp, method):
+                continue
+            try:
+                value = await _get_str_value(getattr(comp, method)())
+                if value:
+                    if value.startswith("http"):
+                        url_candidate = value
+                        break
+                    else:
+                        local_path = value
+            except Exception:
+                continue
 
-        if not local_path and hasattr(comp, "get_file"):
-            p = await _maybe_str_source(comp.get_file())
-        else:
-            p = None
-            if p:
-                if p.startswith("http"):
-                    url_candidate = p
-                else:
-                    local_path = p
-
-        if not url_candidate and hasattr(comp, "register_to_file_service"):
-            r = await _maybe_str_source(comp.register_to_file_service())
-            if r and r.startswith("http"):
-                url_candidate = r
-
+        # 2. 尝试 get_file(True) 获取可直接访问的 URL
         if not url_candidate and hasattr(comp, "get_file"):
-            p = await _maybe_str_source(comp.get_file(True))
-        else:
-            p = None
-            if p and p.startswith("http"):
-                url_candidate = p
+            try:
+                value = await _get_str_value(comp.get_file(True))
+                if value and value.startswith("http"):
+                    url_candidate = value
+            except Exception:
+                pass
 
-        # fallback to sync attributes
+        # 3. 回退到同步属性
         if not url_candidate and not local_path:
             for attr in ("file", "url", "path", "src", "source"):
                 try:
-                    val = getattr(comp, attr, None)
+                    value = getattr(comp, attr, None)
+                    if value and isinstance(value, str):
+                        if value.startswith("http"):
+                            url_candidate = value
+                            break
+                        else:
+                            local_path = value
+                            break
                 except Exception:
-                    val = None
-                if val and isinstance(val, str):
-                    if val.startswith("http"):
-                        url_candidate = val
-                        break
-                    else:
-                        local_path = val
-                        break
+                    continue
+
     except Exception:
-        return None, None
+        pass
 
     return url_candidate, local_path
 
@@ -561,7 +514,7 @@ async def upload_local_with_retries(
     preferred_name: Optional[str],
     folder_id: Optional[str],
 ) -> Optional[str]:
-    """尝试本地上传并在遇到 unallowed 错误时按扩展名重试，返回 file id 或 None。"""
+    """尝试本地上传，返回 file id 或 None。如果文件类型不允许则直接失败。"""
     try:
         res = await api.upload_file(local_path, preferred_name, folder_id)
         if isinstance(res, dict):
@@ -570,33 +523,8 @@ async def upload_local_with_retries(
             )
             if fid:
                 return str(fid)
-    except Exception as e:
-        msg = str(e).lower()
-        if "unallowed" in msg or "unallowed_file_type" in msg:
-            base = os.path.basename(local_path)
-            name_root, ext = os.path.splitext(base)
-            try_ext = detect_mime_ext(local_path)
-            candidates = []
-            if try_ext:
-                candidates.append(try_ext)
-            candidates.extend([".jpg", ".png", ".txt", ".bin"])
-            if ext and len(ext) <= 5 and ext not in candidates:
-                candidates.insert(0, ext)
-            tried = set()
-            for c in candidates:
-                try_name = name_root + c
-                if try_name in tried:
-                    continue
-                tried.add(try_name)
-                try:
-                    r = await api.upload_file(local_path, try_name, folder_id)
-                    if isinstance(r, dict) and (
-                        fid := (
-                            r.get("id")
-                            or (r.get("raw") or {}).get("createdFile", {}).get("id")
-                        )
-                    ):
-                        return str(fid)
-                except Exception:
-                    continue
+    except Exception:
+        # 上传失败，直接返回 None，让上层处理错误
+        return None
+
     return None
