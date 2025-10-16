@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.3.2"
+VERSION = "4.3.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
+        "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -71,6 +72,7 @@ DEFAULT_CONFIG = {
         "show_tool_use_status": False,
         "streaming_segmented": False,
         "max_agent_step": 30,
+        "tool_call_timeout": 60,
     },
     "provider_stt_settings": {
         "enable": False,
@@ -206,6 +208,18 @@ CONFIG_METADATA_2 = {
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
+                    },
+                    "企业微信智能机器人": {
+                        "id": "wecom_ai_bot",
+                        "type": "wecom_ai_bot",
+                        "enable": True,
+                        "wecomaibot_init_respond_text": "💭 思考中...",
+                        "wecomaibot_friend_message_welcome_text": "",
+                        "wecom_ai_bot_name": "",
+                        "token": "",
+                        "encoding_aes_key": "",
+                        "callback_server_host": "0.0.0.0",
+                        "port": 6198,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -490,10 +504,25 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
+                    "wecom_ai_bot_name": {
+                        "description": "企业微信智能机器人的名字",
+                        "type": "string",
+                        "hint": "请务必填写正确，否则无法使用一些指令。",
+                    },
+                    "wecomaibot_init_respond_text": {
+                        "description": "企业微信智能机器人初始响应文本",
+                        "type": "string",
+                        "hint": "当机器人收到消息时，首先回复的文本内容。留空则使用默认值。",
+                    },
+                    "wecomaibot_friend_message_welcome_text": {
+                        "description": "企业微信智能机器人私聊欢迎语",
+                        "type": "string",
+                        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。",
+                    },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
                         "type": "string",
-                        "hint": "请务必填对，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
+                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
                     },
                     "discord_token": {
                         "description": "Discord Bot Token",
@@ -864,6 +893,21 @@ CONFIG_METADATA_2 = {
                         },
                         "custom_extra_body": {},
                     },
+                    "小马算力": {
+                        "id": "tokenpony",
+                        "provider": "tokenpony",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.tokenpony.cn/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "kimi-k2-instruct-0905",
+                            "temperature": 0.7,
+                        },
+                        "custom_extra_body": {},
+                    },
                     "优云智算": {
                         "id": "compshare",
                         "provider": "compshare",
@@ -1084,6 +1128,7 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                     },
                     "阿里云百炼 TTS(API)": {
+                        "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
                         "id": "dashscope_tts",
                         "provider": "dashscope",
                         "type": "dashscope_tts",
@@ -1463,11 +1508,7 @@ CONFIG_METADATA_2 = {
                         "description": "服务订阅密钥",
                         "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
-                    "dashscope_tts_voice": {
-                        "description": "语音合成模型",
-                        "type": "string",
-                        "hint": "阿里云百炼语音合成模型名称。具体可参考 https://help.aliyun.com/zh/model-studio/developer-reference/cosyvoice-python-api 等内容",
-                    },
+                    "dashscope_tts_voice": {"description": "音色", "type": "string"},
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
@@ -1876,6 +1917,10 @@ CONFIG_METADATA_2 = {
                         "description": "工具调用轮数上限",
                         "type": "int",
                     },
+                    "tool_call_timeout": {
+                        "description": "工具调用超时时间（秒）",
+                        "type": "int",
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2094,7 +2139,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily"],
+                        "options": ["default", "tavily", "baidu_ai_search"],
                     },
                     "provider_settings.websearch_tavily_key": {
                         "description": "Tavily API Key",
@@ -2103,6 +2148,14 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "tavily",
+                        },
+                    },
+                    "provider_settings.websearch_baidu_app_builder_key": {
+                        "description": "百度千帆智能云 APP Builder API Key",
+                        "type": "string",
+                        "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
+                        "condition": {
+                            "provider_settings.websearch_provider": "baidu_ai_search",
                         },
                     },
                     "provider_settings.web_search_link": {
@@ -2138,6 +2191,10 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
+                        "type": "int",
+                    },
+                    "provider_settings.tool_call_timeout": {
+                        "description": "工具调用超时时间（秒）",
                         "type": "int",
                     },
                     "provider_settings.streaming_response": {

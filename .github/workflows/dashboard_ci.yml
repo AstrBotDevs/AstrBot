@@ -13,11 +13,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'latest'
+
       - name: npm install, build
         run: |
           cd dashboard
-          npm install
-          npm run build
+          npm install pnpm -g
+          pnpm install
+          pnpm i --save-dev @types/markdown-it
+          pnpm run build
 
       - name: Inject Commit SHA
         id: get_sha

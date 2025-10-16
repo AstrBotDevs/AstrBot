@@ -7,39 +7,25 @@ from astrbot.core.provider.sources.dify_source import ProviderDify
 from astrbot.core.provider.sources.coze_source import ProviderCoze
 from astrbot.api import sp, logger
 from ..long_term_memory import LongTermMemory
+from .utils.rst_scene import RstScene
 from typing import Union
-from enum import Enum
-
-
-class RstScene(Enum):
-    GROUP_UNIQUE_ON = ("group_unique_on", "群聊+会话隔离开启")
-    GROUP_UNIQUE_OFF = ("group_unique_off", "群聊+会话隔离关闭")
-    PRIVATE = ("private", "私聊")
-
-    @property
-    def key(self) -> str:
-        return self.value[0]
-
-    @property
-    def name(self) -> str:
-        return self.value[1]
-
-    @classmethod
-    def from_index(cls, index: int) -> "RstScene":
-        mapping = {1: cls.GROUP_UNIQUE_ON, 2: cls.GROUP_UNIQUE_OFF, 3: cls.PRIVATE}
-        return mapping[index]
-
-    @classmethod
-    def get_scene(cls, is_group: bool, is_unique_session: bool) -> "RstScene":
-        if is_group:
-            return cls.GROUP_UNIQUE_ON if is_unique_session else cls.GROUP_UNIQUE_OFF
-        return cls.PRIVATE
 
 
 class ConversationCommands:
     def __init__(self, context: star.Context, ltm: LongTermMemory | None = None):
         self.context = context
         self.ltm = ltm
+
+    async def _get_current_persona_id(self, session_id):
+        curr = await self.context.conversation_manager.get_curr_conversation_id(
+            session_id
+        )
+        if not curr:
+            return None
+        conv = await self.context.conversation_manager.get_conversation(
+            session_id, curr
+        )
+        return conv.persona_id
 
     def ltm_enabled(self, event: AstrMessageEvent):
         if not self.ltm:
@@ -255,8 +241,9 @@ class ConversationCommands:
             )
             return
 
+        cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin, message.get_platform_id()
+            message.unified_msg_origin, message.get_platform_id(), persona_id=cpersona
         )
 
         # 长期记忆
@@ -290,8 +277,10 @@ class ConversationCommands:
                     session_id=sid,
                 )
             )
+
+            cpersona = await self._get_current_persona_id(session)
             cid = await self.context.conversation_manager.new_conversation(
-                session, message.get_platform_id()
+                session, message.get_platform_id(), persona_id=cpersona
             )
             message.set_result(
                 MessageEventResult().message(
@@ -434,8 +423,9 @@ class ConversationCommands:
         await self.context.conversation_manager.delete_conversation(
             message.unified_msg_origin, session_curr_cid
         )
-        message.set_result(
-            MessageEventResult().message(
-                "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
-            )
-        )
+
+        ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
+        if self.ltm and self.ltm_enabled(message):
+            cnt = await self.ltm.remove_session(event=message)
+            ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
+        message.set_result(MessageEventResult().message(ret))
