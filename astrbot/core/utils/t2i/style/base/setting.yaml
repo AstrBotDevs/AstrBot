@@ -1,0 +1,149 @@
+# =====================================================
+# 本地渲染器主题配置文件-示例样版
+# 基于 YAML 格式，方便写注释与后期维护
+# 所有未启用的参数均已保留，可直接取消注释后使用
+# =====================================================
+
+# ---------- 基本信息 ----------
+name: "Astrbot娘"          # 主题名称
+intr: "Astrbot的默认样式"  # 主题简介
+author: "Zhalslar"         # 作者
+version: "1.0"             # 版本号
+
+# stylePath： 主题样式文件总路径, 用于拼接以下的资源路径, 支持相对路径和绝对路径
+stylePath: "data/t2i_styles/astrbot_style" 
+# ---------- 资源路径  ----------
+# stylePath/
+#     ├── backgrounds/            背景图片目录        
+#     │   ├── 1.2.200.png
+#     │   └── xxx.png
+#     ├── fonts/                 字体目录         
+#     │   ├── default.ttf
+#     │   └── xxx.ttf
+#     ├── images/                   
+#     │   └── xxx.png...         Markdown中引用的图片所在目录、URL图片下载缓存目录
+#     ├── paint.png              立绘图片   
+#     └── setting.yaml                样式设置                  
+                 
+ 
+# ---------- 字体文件路径 ----------
+font: "default.ttf"            # 正文字体
+titleFont: "fdefault.ttf"       # 标题字体
+expressionFont: "STIXTwoMath-Regular.ttf"  # 公式字体
+codeFont: "default.ttf"        # 代码字体
+
+
+# ---------- 字号 ----------
+fontSize: 25               # 正文字号
+title1FontSize: 70         # 一级标题
+title2FontSize: 55         # 二级标题
+title3FontSize: 40         # 三级标题
+expressionFontSizeRate: 0.8 # 公式字号 = 正文字号 * 该比例
+codeBlockFontSize: 15      # 代码块字号
+remarkFontSize: 14       # 备注字号
+
+# ---------- 页边距 ----------
+rb: 200  # right distance 右边距
+lb: 200  # left distance   左边距
+ub: 200  # up distance     上边距
+db: 200  # down distance   下边距
+
+# ---------- 画布最大宽度 ----------
+maxX: 1000  # 单行元素最大像素宽度
+
+# ---------- 代码块 / 表格内边距 ----------
+codeLb: 20   # 代码块左右留白
+codeUb: 20   # 代码块上下留白
+formLineb: 20      # 表格行间距
+lineb: 10           # 普通行间距
+citeb: 30           # 引用竖线间距
+
+# ---------- 页面分割线 ----------
+pageLineColor: [253, 205, 207, 150]  # RGBA
+pageLineStyle: "dotted_line"         # full_line | dotted_line
+
+# ---------- 列表符号颜色 ----------
+unorderedListDotColor: [234, 149, 123]   # 无序列表
+orderedListDotColor: [241, 207, 131]     # 有序列表符号
+orderedListNumberColor: [240, 240, 233]  # 有序列表数字
+
+# ---------- 引用块 ----------
+citeUnderpainting: [196, 237, 237]      # 引用背景
+citeSplitLineColor: [74, 72, 114, 200]  # 引用竖线
+
+# ---------- 代码块 ----------
+codeBlockUnderpainting: [253, 205, 207, 180]  # 代码块背景
+codeBlockTitleColor: [227, 95, 130]            # 代码块标题文字
+codeBlockTextColor: [80, 89, 162]              # 代码块正文
+insertCodeUnderpainting: [253, 205, 207, 180]    # 行内代码背景
+insertCodeTextColor: [77, 84, 139]             # 行内代码文字
+
+# ---------- 正文颜色 ----------
+textColor: [98, 79, 137]
+textGradientEndColor: [186, 99, 133]  # 标题渐变终止色
+linkColor: [132, 162, 240]            # 超链接
+
+# ---------- 公式 ----------
+expressionUnderpainting: [74, 72, 114]  # 公式背景
+expressionTextColor: [244, 248, 248]    # 公式文字
+
+# ---------- 备注 / 表单 ----------
+remarkColor: [212, 234, 151]          # 备注文字
+formTextColor: [105, 83, 118]         # 表格文字
+formLineColor: [105, 83, 118]         # 表格线
+formUnderpainting: [212, 227, 205, 255]      # 表格行背景
+formTitleUnderpainting: [245, 213, 100, 90]  # 表头背景
+
+# ---------- 分割线 ----------
+idlineColor: [186, 99, 133]  # 标题下方分割线（预留）
+
+# ---------- 背景 ----------
+background:
+  mode: 1  # 0=单图拉伸 1=九宫格
+  data:
+    left-up: "1.2.200.png"
+    left: "4.3.200.png"
+    left-down: "6.2.200.png"
+    up: "2.3.200.png"
+    down: "7.3.200.png"
+    right-up: "3.2.200.png"
+    right: "5.3.200.png"
+    right-down: "8.2.200.png"
+    middle: "9.2.200.png"
+    lr-mode: 0  # 0=拉伸 1=横向平铺 2=居中平铺
+    ud-mode: 0  # 0=拉伸 1=纵向平铺 2=居中平铺
+    middle-mode: 0  # 中心区域填充模式（同背景填充枚举）
+
+
+# ---------- 装饰图 ----------
+decorates:
+  top:     # 顶部装饰（九宫格时可选 include 是否纳入中心区）
+    left-up: []
+    left: []
+    left-down: []
+    up: []
+    down: []
+    right-up: []
+    right: []
+    right-down: []
+    middle: []
+  bottom:  # 底部装饰
+    left-up: []
+    left: []
+    left-down: []
+    up:
+      - img: "2.aa.png"
+        mode: 0   # 0=原图 1=按区域等比缩放
+        # xlimit: 0.5  # 以下参数仅在 mode=1 时生效
+        # ylimit: 0.2
+        # min: 0.5
+        # max: 2.0
+        # include: true  # 是否只在中心区域绘制
+        # lock: false    # 是否锁定不跟随 GIF 换帧
+    down: []
+    right-up: []
+    right: []
+    right-down: []
+    middle: []
+
+autoPage: true           # 是否默认自动分页，仅默认值，实际调用渲染器时可传参指定是否分页
