@@ -553,9 +553,6 @@ class MisskeyAPI:
         form.add_field("i", self.access_token)
 
         try:
-            # Read file bytes using thread executor to avoid adding new dependencies
-            loop = asyncio.get_running_loop()
-
             filename = name or file_path.split("/")[-1]
             if folder_id:
                 form.add_field("folderId", str(folder_id))
