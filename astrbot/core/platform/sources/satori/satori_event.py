@@ -7,7 +7,6 @@ from astrbot.api.message_components import Plain, Image, At, File, Record, Video
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
 
-
 class SatoriPlatformEvent(AstrMessageEvent):
     def __init__(
         self,
