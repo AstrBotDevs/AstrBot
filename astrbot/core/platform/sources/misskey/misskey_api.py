@@ -571,7 +571,9 @@ class MisskeyAPI:
                 async with self.session.post(url, data=form) as resp:
                     result = await self._process_response(resp, "drive/files/create")
                     file_id = FileIDExtractor.extract_file_id(result)
-                    logger.debug(f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}")
+                    logger.debug(
+                        f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}"
+                    )
                     return {"id": file_id, "raw": result}
             finally:
                 f.close()
