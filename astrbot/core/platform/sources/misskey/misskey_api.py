@@ -556,28 +556,25 @@ class MisskeyAPI:
             # Read file bytes using thread executor to avoid adding new dependencies
             loop = asyncio.get_running_loop()
 
-            def _read_file_bytes(path: str) -> bytes:
-                with open(path, "rb") as f:
-                    return f.read()
-
             filename = name or file_path.split("/")[-1]
             if folder_id:
                 form.add_field("folderId", str(folder_id))
 
             try:
-                file_bytes = await loop.run_in_executor(
-                    None, _read_file_bytes, file_path
-                )
+                f = open(file_path, "rb")
             except FileNotFoundError as e:
                 logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
                 raise APIError(f"File not found: {file_path}") from e
 
-            form.add_field("file", file_bytes, filename=filename)
-            async with self.session.post(url, data=form) as resp:
-                result = await self._process_response(resp, "drive/files/create")
-                file_id = FileIDExtractor.extract_file_id(result)
-                logger.debug(f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}")
-                return {"id": file_id, "raw": result}
+            try:
+                form.add_field("file", f, filename=filename)
+                async with self.session.post(url, data=form) as resp:
+                    result = await self._process_response(resp, "drive/files/create")
+                    file_id = FileIDExtractor.extract_file_id(result)
+                    logger.debug(f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}")
+                    return {"id": file_id, "raw": result}
+            finally:
+                f.close()
         except aiohttp.ClientError as e:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e
