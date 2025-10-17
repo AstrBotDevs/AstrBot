@@ -68,14 +68,15 @@ class Provider(AbstractProvider):
 
     def get_keys(self) -> List[str]:
         """获得提供商 Key"""
-        return self.provider_config.get("key", [])
+        keys = self.provider_config.get("key", [""])
+        return keys or [""]
 
     @abc.abstractmethod
     def set_key(self, key: str):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_models(self) -> List[str]:
+    async def get_models(self) -> List[str]:
         """获得支持的模型列表"""
         raise NotImplementedError()
 

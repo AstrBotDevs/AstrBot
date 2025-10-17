@@ -4,13 +4,13 @@
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('sessions.activeSessions') }}</span>
-          <v-chip size="small" class="ml-2">{{ sessions.length }} {{ tm('sessions.sessionCount') }}</v-chip>
+          <v-chip size="small" class="ml-2">{{ totalItems }} {{ tm('sessions.sessionCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
             <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
-              hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
+              hide-details clearable variant="solo-filled" flat class="me-4" density="compact" @update:model-value="handleSearchChange"></v-text-field>
             <v-select v-model="filterPlatform" :items="platformOptions" :label="tm('search.platformFilter')"
               hide-details clearable variant="solo-filled" flat class="me-4" style="max-width: 150px;"
-              density="compact"></v-select>
+              density="compact" @update:model-value="handlePlatformChange"></v-select>
           </v-row>
           <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshSessions" :loading="loading"
             size="small">
@@ -22,8 +22,17 @@
 
         <v-card-text class="pa-0">
           <!-- 会话列表 -->
-          <v-data-table :headers="headers" :items="filteredSessions" :loading="loading" :items-per-page="itemsPerPage" density="compact"
-            class="elevation-0" style="font-size: 11px;">
+          <v-data-table-server
+            :headers="headers"
+            :items="sessions"
+            :loading="loading"
+            :items-per-page="itemsPerPage"
+            :page="currentPage"
+            :items-length="totalItems"
+            @update:options="handlePaginationUpdate"
+            density="compact"
+            class="elevation-0"
+            style="font-size: 11px;">
 
             <!-- 会话启停 -->
             <template v-slot:item.session_enabled="{ item }">
@@ -141,6 +150,17 @@
               </v-btn>
             </template>
 
+            <!-- 操作按钮 -->
+            <template v-slot:item.actions="{ item }">
+              <v-btn size="x-small" variant="tonal" color="error" @click="deleteSession(item)"
+                :loading="item.deleting" icon>
+                <v-icon>mdi-delete</v-icon>
+                <v-tooltip activator="parent" location="top">
+                  {{ tm('buttons.delete') }}
+                </v-tooltip>
+              </v-btn>
+            </template>
+
             <!-- 空状态 -->
             <template v-slot:no-data>
               <div class="text-center py-8">
@@ -149,7 +169,7 @@
                 <div class="text-body-2 text-grey-500">{{ tm('sessions.noActiveSessionsDesc') }}</div>
               </div>
             </template>
-          </v-data-table>
+          </v-data-table-server>
         </v-card-text>
       </v-card>
 
@@ -325,6 +345,7 @@
 
 <script>
 import axios from 'axios'
+import { debounce } from 'lodash'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 export default {
@@ -346,7 +367,10 @@ export default {
       filterPlatform: null,
 
       // 分页相关
+      currentPage: 1,
       itemsPerPage: 10,
+      totalItems: 0,
+      totalPages: 0,
 
       // 可用选项
       availablePersonas: [],
@@ -409,30 +433,8 @@ export default {
         { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, minWidth: '120px' },
+        { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '100px' },
       ]
-    },
-
-    // 懒加载过滤会话 - 使用客户端分页
-    filteredSessions() {
-      let filtered = this.sessions;
-
-      // 搜索筛选
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
-        filtered = filtered.filter(session =>
-          session.session_name.toLowerCase().includes(query) ||
-          session.platform.toLowerCase().includes(query) ||
-          session.persona_name?.toLowerCase().includes(query) ||
-          session.chat_provider_name?.toLowerCase().includes(query)
-        );
-      }
-
-      // 平台筛选
-      if (this.filterPlatform) {
-        filtered = filtered.filter(session => session.platform === this.filterPlatform);
-      }
-
-      return filtered;
     },
 
     platformOptions() {
@@ -481,18 +483,39 @@ export default {
     async loadSessions() {
       this.loading = true;
       try {
-        const response = await axios.get('/api/session/list');
+        const params = {
+          page: this.currentPage,
+          page_size: this.itemsPerPage
+        };
+        
+        // 添加搜索和平台筛选参数
+        if (this.searchQuery) {
+          params.search = this.searchQuery;
+        }
+        if (this.filterPlatform) {
+          params.platform = this.filterPlatform;
+        }
+        
+        const response = await axios.get('/api/session/list', { params });
         if (response.data.status === 'ok') {
           const data = response.data.data;
           this.sessions = data.sessions.map(session => ({
             ...session,
             updating: false, // 添加更新状态标志
-            loadingPlugins: false // 添加插件加载状态标志
+            loadingPlugins: false, // 添加插件加载状态标志
+            deleting: false // 添加删除状态标志
           }));
           this.availablePersonas = data.available_personas;
           this.availableChatProviders = data.available_chat_providers;
           this.availableSttProviders = data.available_stt_providers;
           this.availableTtsProviders = data.available_tts_providers;
+          
+          // 处理分页信息
+          if (data.pagination) {
+            this.totalItems = data.pagination.total;
+            this.totalPages = data.pagination.total_pages;
+            this.currentPage = data.pagination.page;
+          }
         } else {
           this.showError(response.data.message || this.tm('messages.loadSessionsError'));
         }
@@ -508,60 +531,131 @@ export default {
     },
 
     async updatePersona(session, personaName) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_persona', {
-          session_id: session.session_id,
-          persona_name: personaName
-        });
-
-        if (response.data.status === 'ok') {
-          session.persona_id = personaName;
-          session.persona_name = personaName === '[%None]' ? this.tm('persona.none') :
+      return this._updateSession('persona', session, { persona_name: personaName }, (s, success) => {
+        if (success) {
+          s.persona_id = personaName;
+          s.persona_name = personaName === '[%None]' ? this.tm('persona.none') :
             this.availablePersonas.find(p => p.name === personaName)?.name || personaName;
-          this.showSuccess(this.tm('messages.personaUpdateSuccess'));
-        } else {
-          this.showError(response.data.message || this.tm('messages.personaUpdateError'));
         }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.personaUpdateError'));
-      }
-      session.updating = false;
+      });
     },
 
     async updateProvider(session, providerId, providerType) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_provider', {
-          session_id: session.session_id,
-          provider_id: providerId,
-          provider_type: providerType
-        });
-
-        if (response.data.status === 'ok') {
-          // 更新本地数据
+      return this._updateSession('provider', session, { 
+        provider_id: providerId, 
+        provider_type: providerType 
+      }, (s, success) => {
+        if (success) {
           if (providerType === 'chat_completion') {
-            session.chat_provider_id = providerId;
+            s.chat_provider_id = providerId;
             const provider = this.availableChatProviders.find(p => p.id === providerId);
-            session.chat_provider_name = provider?.name || providerId;
+            s.chat_provider_name = provider?.name || providerId;
           } else if (providerType === 'speech_to_text') {
-            session.stt_provider_id = providerId;
+            s.stt_provider_id = providerId;
             const provider = this.availableSttProviders.find(p => p.id === providerId);
-            session.stt_provider_name = provider?.name || providerId;
+            s.stt_provider_name = provider?.name || providerId;
           } else if (providerType === 'text_to_speech') {
-            session.tts_provider_id = providerId;
+            s.tts_provider_id = providerId;
             const provider = this.availableTtsProviders.find(p => p.id === providerId);
-            session.tts_provider_name = provider?.name || providerId;
+            s.tts_provider_name = provider?.name || providerId;
           }
-          this.showSuccess(this.tm('messages.providerUpdateSuccess'));
-        } else {
-          this.showError(response.data.message || this.tm('messages.providerUpdateError'));
         }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.providerUpdateError'));
-      } session.updating = false;
+      });
     },
 
+    async updateLLM(session, enabled) {
+      return this._updateSession('llm', session, { enabled }, (s, success) => {
+        if (success) s.llm_enabled = enabled;
+      });
+    },
+
+    async updateTTS(session, enabled) {
+      return this._updateSession('tts', session, { enabled }, (s, success) => {
+        if (success) s.tts_enabled = enabled;
+      });
+    },
+
+    // 通用的更新会话方法，支持单个和批量操作
+    async _updateSession(type, sessionOrSessions, params, updateLocalData) {
+      const isBatch = Array.isArray(sessionOrSessions);
+      
+      if (!isBatch) {
+        // 单个操作
+        const session = sessionOrSessions;
+        session.updating = true;
+        
+        try {
+          const payload = {
+            is_batch: false,
+            session_id: session.session_id,
+            ...params
+          };
+
+          const response = await axios.post(`/api/session/update_${type}`, payload);
+
+          if (response.data.status === 'ok') {
+            updateLocalData(session, true);
+            this.showSuccess(this.tm(`messages.${type}UpdateSuccess`));
+            return { success: true };
+          } else {
+            this.showError(response.data.message || this.tm(`messages.${type}UpdateError`));
+            return { success: false, error: response.data.message };
+          }
+        } catch (error) {
+          this.showError(error.response?.data?.message || this.tm(`messages.${type}UpdateError`));
+          return { success: false, error: error.message };
+        } finally {
+          session.updating = false;
+        }
+      } else {
+        // 批量操作
+        const sessions = sessionOrSessions;
+        const sessionIds = sessions.map(s => s.session_id);
+        
+        try {
+          const payload = {
+            is_batch: true,
+            session_ids: sessionIds,
+            ...params
+          };
+
+          const response = await axios.post(`/api/session/update_${type}`, payload);
+
+          if (response.data.status === 'ok') {
+            const data = response.data.data;
+            
+            // 更新成功的会话的本地数据
+            sessions.forEach(session => {
+              const wasSuccessful = !data.error_sessions || !data.error_sessions.includes(session.session_id);
+              updateLocalData(session, wasSuccessful);
+            });
+
+            return {
+              success: true,
+              successCount: data.success_count || 0,
+              errorCount: data.error_count || 0,
+              errorSessions: data.error_sessions || []
+            };
+          } else {
+            return { 
+              success: false, 
+              error: response.data.message,
+              errorCount: sessionIds.length,
+              successCount: 0
+            };
+          }
+        } catch (error) {
+          return { 
+            success: false, 
+            error: error.response?.data?.message || error.message,
+            errorCount: sessionIds.length,
+            successCount: 0
+          };
+        }
+      }
+    },
+
+    // 单独的会话状态更新方法（不支持批量操作）
     async updateSessionStatus(session, enabled) {
       session.updating = true;
       try {
@@ -572,47 +666,9 @@ export default {
 
         if (response.data.status === 'ok') {
           session.session_enabled = enabled;
-          this.showSuccess(this.tm('messages.sessionStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
-        } else {
-          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
-      }
-      session.updating = false;
-    },
-
-    async updateLLM(session, enabled) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_llm', {
-          session_id: session.session_id,
-          enabled: enabled
-        });
-
-        if (response.data.status === 'ok') {
-          session.llm_enabled = enabled;
-          this.showSuccess(this.tm('messages.llmStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
-        } else {
-          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
-      }
-      session.updating = false;
-    },
-
-    async updateTTS(session, enabled) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_tts', {
-          session_id: session.session_id,
-          enabled: enabled
-        });
-
-        if (response.data.status === 'ok') {
-          session.tts_enabled = enabled;
-          this.showSuccess(this.tm('messages.ttsStatusSuccess', { status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') }));
+          this.showSuccess(this.tm('messages.sessionStatusSuccess', { 
+            status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') 
+          }));
         } else {
           this.showError(response.data.message || this.tm('messages.statusUpdateError'));
         }
@@ -628,59 +684,119 @@ export default {
       }
 
       this.batchUpdating = true;
-      let successCount = 0;
-      let errorCount = 0;
+      let totalSuccessCount = 0;
+      let totalErrorCount = 0;
+      let allErrorSessions = [];
 
-      // 使用过滤后的会话数据进行批量操作
-      for (const session of this.filteredSessions) {
-        try {
-          // 批量更新人格
-          if (this.batchPersona) {
-            await this.updatePersona(session, this.batchPersona);
-            successCount++;
-          }
+      const sessions = this.sessions;
 
-          // 批量更新 Chat Provider
-          if (this.batchChatProvider) {
-            await this.updateProvider(session, this.batchChatProvider, 'chat_completion');
-            successCount++;
-          }
+      try {
+        // 定义批量操作任务
+        const batchTasks = [];
 
-          // 批量更新 STT Provider
-          if (this.batchSttProvider) {
-            await this.updateProvider(session, this.batchSttProvider, 'speech_to_text');
-            successCount++;
-          }
-
-          // 批量更新 TTS Provider
-          if (this.batchTtsProvider) {
-            await this.updateProvider(session, this.batchTtsProvider, 'text_to_speech');
-            successCount++;
-          }
-
-          // 批量更新 LLM 状态
-          if (this.batchLlmStatus !== null) {
-            await this.updateLLM(session, this.batchLlmStatus);
-            successCount++;
-          }
-
-          // 批量更新 TTS 状态
-          if (this.batchTtsStatus !== null) {
-            await this.updateTTS(session, this.batchTtsStatus);
-            successCount++;
-          }
-        } catch (error) {
-          errorCount++;
+        if (this.batchPersona) {
+          batchTasks.push({
+            type: 'persona',
+            params: { persona_name: this.batchPersona }
+          });
         }
+
+        if (this.batchChatProvider) {
+          batchTasks.push({
+            type: 'provider',
+            params: { provider_id: this.batchChatProvider, provider_type: 'chat_completion' }
+          });
+        }
+
+        if (this.batchSttProvider) {
+          batchTasks.push({
+            type: 'provider',
+            params: { provider_id: this.batchSttProvider, provider_type: 'speech_to_text' }
+          });
+        }
+
+        if (this.batchTtsProvider) {
+          batchTasks.push({
+            type: 'provider',
+            params: { provider_id: this.batchTtsProvider, provider_type: 'text_to_speech' }
+          });
+        }
+
+        if (this.batchLlmStatus !== null) {
+          batchTasks.push({
+            type: 'llm',
+            params: { enabled: this.batchLlmStatus }
+          });
+        }
+
+        if (this.batchTtsStatus !== null) {
+          batchTasks.push({
+            type: 'tts',
+            params: { enabled: this.batchTtsStatus }
+          });
+        }
+
+        // 执行所有批量任务
+        for (const task of batchTasks) {
+          let updateLocalData;
+          
+          // 定义本地数据更新逻辑
+          switch (task.type) {
+            case 'persona':
+              updateLocalData = (s, success) => {
+                if (success) s.persona_id = task.params.persona_name;
+              };
+              break;
+            case 'provider':
+              updateLocalData = (s, success) => {
+                if (!success) return;
+                const { provider_id, provider_type } = task.params;
+                if (provider_type === 'chat_completion') {
+                  s.chat_provider_id = provider_id;
+                } else if (provider_type === 'speech_to_text') {
+                  s.stt_provider_id = provider_id;
+                } else if (provider_type === 'text_to_speech') {
+                  s.tts_provider_id = provider_id;
+                }
+              };
+              break;
+            case 'llm':
+              updateLocalData = (s, success) => {
+                if (success) s.llm_enabled = task.params.enabled;
+              };
+              break;
+            case 'tts':
+              updateLocalData = (s, success) => {
+                if (success) s.tts_enabled = task.params.enabled;
+              };
+              break;
+          }
+
+          const result = await this._updateSession(task.type, sessions, task.params, updateLocalData);
+          
+          totalSuccessCount += result.successCount || 0;
+          totalErrorCount += result.errorCount || 0;
+          if (result.errorSessions) {
+            allErrorSessions.push(...result.errorSessions);
+          }
+        }
+
+        // 显示最终结果
+        if (totalErrorCount === 0) {
+          this.showSuccess(this.tm('messages.batchUpdateSuccess', { count: totalSuccessCount }));
+        } else {
+          const uniqueErrorSessions = [...new Set(allErrorSessions)];
+          this.showError(this.tm('messages.batchUpdatePartial', { 
+            success: totalSuccessCount, 
+            error: uniqueErrorSessions.length 
+          }));
+        }
+
+      } catch (error) {
+        this.showError(this.tm('messages.batchUpdateError'));
       }
 
       this.batchUpdating = false;
-
-      if (errorCount === 0) {
-        this.showSuccess(this.tm('messages.batchUpdateSuccess', { count: successCount }));
-      } else {
-        this.showError(this.tm('messages.batchUpdatePartial', { success: successCount, error: errorCount }));
-      }
 
       // 清空批量设置
       this.batchPersona = null;
@@ -796,6 +912,57 @@ export default {
       this.snackbarText = message;
       this.snackbarColor = 'error';
       this.snackbar = true;
+    },
+
+    async deleteSession(session) {
+      const confirmMessage = this.tm('deleteConfirm.message', { 
+        sessionName: session.session_name || session.session_id 
+      }) + '\n\n' + this.tm('deleteConfirm.warning');
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      session.deleting = true;
+      try {
+        const response = await axios.post('/api/session/delete', {
+          session_id: session.session_id
+        });
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.data.message || this.tm('messages.deleteSuccess'));
+          // 从列表中移除已删除的会话
+          const index = this.sessions.findIndex(s => s.session_id === session.session_id);
+          if (index > -1) {
+            this.sessions.splice(index, 1);
+          }
+        } else {
+          this.showError(response.data.message || this.tm('messages.deleteError'));
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.deleteError'));
+      }
+
+      session.deleting = false;
+    },
+
+    // 处理分页更新事件
+    handlePaginationUpdate(options) {
+      this.currentPage = options.page;
+      this.itemsPerPage = options.itemsPerPage;
+      this.loadSessions();
+    },
+
+    // 处理搜索变化
+    handleSearchChange: debounce(function() {
+      this.currentPage = 1; // 重置到第一页
+      this.loadSessions();
+    }, 300),
+
+    // 处理平台筛选变化
+    handlePlatformChange() {
+      this.currentPage = 1; // 重置到第一页
+      this.loadSessions();
     },
   },
 }

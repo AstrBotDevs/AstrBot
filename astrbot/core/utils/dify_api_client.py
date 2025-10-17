@@ -1,11 +1,11 @@
 import codecs
 import json
 from astrbot.core import logger
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientResponse
 from typing import Dict, List, Any, AsyncGenerator
 
 
-async def _stream_sse(resp) -> AsyncGenerator[dict, None]:
+async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
     decoder = codecs.getincrementaldecoder("utf-8")()
     buffer = ""
     async for chunk in resp.content.iter_chunked(8192):
@@ -16,11 +16,16 @@ async def _stream_sse(resp) -> AsyncGenerator[dict, None]:
                 try:
                     yield json.loads(block[5:])
                 except json.JSONDecodeError:
+                    logger.warning(f"Drop invalid dify json data: {block[5:]}")
                     continue
     # flush any remaining text
     buffer += decoder.decode(b"", final=True)
     if buffer.strip().startswith("data:"):
-        yield json.loads(buffer[5:])
+        try:
+            yield json.loads(buffer[5:])
+        except json.JSONDecodeError:
+            logger.warning(f"Drop invalid dify json data: {buffer[5:]}")
+            pass
 
 
 class DifyAPIClient:
@@ -88,12 +93,15 @@ class DifyAPIClient:
         user: str,
     ) -> Dict[str, Any]:
         url = f"{self.api_base}/files/upload"
-        payload = {
-            "user": user,
-            "file": open(file_path, "rb"),
-        }
-        async with self.session.post(url, data=payload, headers=self.headers) as resp:
-            return await resp.json()  # {"id": "xxx", ...}
+        with open(file_path, "rb") as f:
+            payload = {
+                "user": user,
+                "file": f,
+            }
+            async with self.session.post(
+                url, data=payload, headers=self.headers
+            ) as resp:
+                return await resp.json()  # {"id": "xxx", ...}
 
     async def close(self):
         await self.session.close()

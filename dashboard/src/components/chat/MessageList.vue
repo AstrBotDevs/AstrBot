@@ -29,12 +29,11 @@
 
                 <!-- Bot Messages -->
                 <div v-else class="bot-message">
-                    <div v-if="isStreaming && index === messages.length - 1" style="width: 36px; height: 36px;">
-                        <v-progress-circular indeterminate size="28" width="2"
-                            style="margin-top: 12px;"></v-progress-circular>
-                    </div>
-                    <v-avatar v-else class="bot-avatar" size="36">
-                        <span class="text-h2">✨</span>
+
+                    <v-avatar class="bot-avatar" size="36">
+                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1" indeterminate size="28"
+                            width="2"></v-progress-circular>
+                        <span v-else-if="messages[index - 1]?.content.type !== 'bot'" class="text-h2">✨</span>
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">

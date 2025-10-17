@@ -141,6 +141,8 @@
               </v-btn>
             </div>
 
+            <small style="color: grey">*{{ tm('dialogs.addServer.tips.timeoutConfig') }}</small>
+
             <div class="monaco-container" style="margin-top: 16px;">
               <VueMonacoEditor v-model:value="serverConfigJson" theme="vs-dark" language="json" :options="{
                 minimap: {
@@ -524,14 +526,16 @@ export default {
           transport: "streamable_http",
           url: "your mcp server url",
           headers: {},
-          timeout: 30,
+          timeout: 5,
+          sse_read_timeout: 300,
         };
       } else if (type === 'sse') {
         template = {
           transport: "sse",
           url: "your mcp server url",
           headers: {},
-          timeout: 30,
+          timeout: 5,
+          sse_read_timeout: 300,
         };
       } else {
         template = {
