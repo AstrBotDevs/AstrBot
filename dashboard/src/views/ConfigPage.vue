@@ -340,6 +340,10 @@ export default {
         // 切换到手动输入，从快速构建同步数据
         this.syncManualRulesText();
       }
+    },
+    appliedToRadioValue: function (newVal) {
+      this.conflictMessage = '';
+      this.configFormData.umop = [];
     }
   },
   data() {
@@ -910,6 +914,7 @@ export default {
           this.save_message = res.data.message;
           this.save_message_snack = true;
           this.save_message_success = "success";
+          this.cancelConfigForm();
           // 删除成功后，更新配置列表
           this.getConfigInfoList("default");
         } else {
