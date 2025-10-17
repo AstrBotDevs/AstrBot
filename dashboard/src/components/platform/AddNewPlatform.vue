@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="900px" height="95%">
+  <v-dialog v-model="showDialog" max-width="800px" height="90%">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
       <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
@@ -11,7 +11,7 @@
             <h3>
               选择消息平台类别
             </h3>
-            <small style="color: grey;">选择你想接入的消息平台，如 QQ、Discord、Telegram 等。</small>
+            <small style="color: grey;">想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。</small>
             <div>
 
               <div v-if="!updatingMode">
@@ -69,8 +69,8 @@
                   </h3>
                   <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2" v-if="!updatingMode">可选</v-chip>
                 </div>
-                <small style="color: grey;">配置文件包含了聊天模型、人格、知识库、插件范围等配置项。</small>
-                <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。</small>
+                <small style="color: grey;">想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。</small>
+                <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
                 <small style="color: grey;" v-if="updatingMode">配置文件的修改请前往「配置文件」页。</small>
               </div>
               <div>

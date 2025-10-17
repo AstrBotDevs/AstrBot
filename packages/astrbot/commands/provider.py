@@ -129,7 +129,7 @@ class ProviderCommands:
                 )
                 return
             i = 1
-            ret = "下面列出了此服务提供商可用模型:"
+            ret = "下面列出了此模型提供商可用模型:"
             for model in models:
                 ret += f"\n{i}. {model}"
                 i += 1

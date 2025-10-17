@@ -19,11 +19,6 @@ export interface menu {
 // 所有键名都使用 core.navigation.* 格式
 const sidebarItem: menu[] = [
   {
-    title: 'core.navigation.dashboard',
-    icon: 'mdi-view-dashboard',
-    to: '/dashboard/default'
-  },
-  {
     title: 'core.navigation.platforms',
     icon: 'mdi-robot',
     to: '/platforms',
@@ -72,6 +67,11 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.sessionManagement',
     icon: 'mdi-account-group',
     to: '/session-management'
+  },
+  {
+    title: 'core.navigation.dashboard',
+    icon: 'mdi-view-dashboard',
+    to: '/dashboard/default'
   },
   {
     title: 'core.navigation.console',

@@ -90,7 +90,7 @@
       </v-card-title>
 
       <v-card-text>
-        <small>AstrBot 支持针对不同消息平台实例分别设置配置文件。默认会使用 `default` 配置。</small>
+        <small>AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。</small>
         <div class="mt-6 mb-4">
           <v-btn prepend-icon="mdi-plus" @click="startCreateConfig" variant="tonal" color="primary">
             新建配置文件
