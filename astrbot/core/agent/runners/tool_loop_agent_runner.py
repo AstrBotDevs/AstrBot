@@ -209,23 +209,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                valid_params = {} # 参数过滤：只传递函数实际需要的参数
+                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
 
                 # 获取实际的 handler 函数
                 if func_tool.handler:
-                    logger.debug(f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}")
+                    logger.debug(
+                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}"
+                    )
                     if func_tool.parameters and func_tool.parameters.get("properties"):
                         expected_params = set(func_tool.parameters["properties"].keys())
 
                         valid_params = {
-                            k: v for k, v in func_tool_args.items()
+                            k: v
+                            for k, v in func_tool_args.items()
                             if k in expected_params
                         }
 
                     # 记录被忽略的参数
-                    ignored_params = set(func_tool_args.keys()) - set(valid_params.keys())
+                    ignored_params = set(func_tool_args.keys()) - set(
+                        valid_params.keys()
+                    )
                     if ignored_params:
-                        logger.warning(f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}")
+                        logger.warning(
+                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}"
+                        )
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
