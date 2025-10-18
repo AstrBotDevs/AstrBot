@@ -222,10 +222,6 @@ class StreamingClient:
         channel_summary = _build_channel_summary(message_type, body)
         logger.info(channel_summary)
 
-        logger.debug(
-            f"[Misskey WebSocket] 收到完整消息: {json.dumps(data, indent=2, ensure_ascii=False)}"
-        )
-
         if message_type == "channel":
             channel_id = body.get("id")
             event_type = body.get("type")
