@@ -162,6 +162,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "appid": "",
                         "secret": "",
+                        "is_sandbox": False,
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
