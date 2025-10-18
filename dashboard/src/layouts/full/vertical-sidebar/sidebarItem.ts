@@ -29,6 +29,11 @@ const sidebarItem: menu[] = [
     to: '/providers',
   },
   {
+    title: 'core.navigation.config',
+    icon: 'mdi-cog',
+    to: '/config',
+  },
+  {
     title: 'core.navigation.toolUse',
     icon: 'mdi-function-variant',
     to: '/tool-use'
@@ -47,11 +52,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.knowledgeBase',
     icon: 'mdi-text-box-search',
     to: '/alkaid/knowledge-base',
-  },
-  {
-    title: 'core.navigation.config',
-    icon: 'mdi-cog',
-    to: '/config',
   },
   {
     title: 'core.navigation.chat',

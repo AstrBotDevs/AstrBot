@@ -127,7 +127,6 @@ export default {
   transition: all 0.3s ease;
   overflow: hidden;
   min-height: 220px;
-  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

@@ -67,7 +67,8 @@
                   <h3>
                     配置文件
                   </h3>
-                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2" v-if="!updatingMode">可选</v-chip>
+                  <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2"
+                    v-if="!updatingMode">可选</v-chip>
                 </div>
                 <small style="color: grey;">想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。</small>
                 <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
@@ -110,7 +111,8 @@
                   </div>
                   <div v-else-if="selectedConfigData && selectedConfigMetadata" class="config-preview-container">
                     <h4 class="mb-3">配置文件预览</h4>
-                    <AstrBotCoreConfigWrapper :metadata="selectedConfigMetadata" :config_data="selectedConfigData" readonly="true"/>
+                    <AstrBotCoreConfigWrapper :metadata="selectedConfigMetadata" :config_data="selectedConfigData"
+                      readonly="true" />
                   </div>
                   <div v-else class="text-center py-4 text-grey">
                     <v-icon>mdi-information-outline</v-icon>
@@ -140,16 +142,22 @@
                 <v-data-table :headers="configTableHeaders" :items="platformConfigs" item-value="id"
                   no-data-text="该平台暂无关联的配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
                   <template v-slot:item.scope="{ item }">
-                    <v-chip v-for="(umop, index) in item.umop" :key="index"
-                      v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
-                      variant="tonal" rounded="md" class="mr-1 mb-1">
-                      {{ formatUmopScope(umop) }}
-                    </v-chip>
+                    <v-tooltip bottom>
+                      <template v-slot:activator="{ props }">
+                        <v-chip v-for="(umop, index) in item.umop" :key="index" v-bind="props"
+                          v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
+                          variant="tonal" rounded="md" class="mr-1 mb-1">
+                          {{ formatUmopScope(umop) }}
+                        </v-chip>
+                      </template>
+                      <span>X:Y 表示在这个机器人下，配置文件适用于消息类型 X 下的会话 Y。</span>
+                    </v-tooltip>
+
                   </template>
                   <template v-slot:item.name="{ item }">
                     <span> {{ item.name }} </span>
                     <v-chip v-if="item.name === 'default'" size="x-small" variant="tonal" rounded="sm"
-                      class="ml-2">兜底配置</v-chip>
+                      class="ml-2">默认配置</v-chip>
                   </template>
                 </v-data-table>
                 <small class="ml-2">Tips: 暂时无法在此更新配置文件，请前往「配置文件」页更新。</small>
@@ -272,7 +280,7 @@ export default {
       platformConfigs: [],
       configTableHeaders: [
         { title: '与此实例关联的配置文件 ID', key: 'name', sortable: false },
-        { title: '在此实例下的应用范围 (UMOP)', key: 'scope', sortable: false },
+        { title: '在此实例下的应用范围', key: 'scope', sortable: false },
       ],
 
       // ID冲突确认对话框
@@ -735,4 +743,3 @@ export default {
   }
 }
 </script>
-

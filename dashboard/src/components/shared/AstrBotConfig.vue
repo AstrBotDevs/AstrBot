@@ -528,8 +528,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
 }
 
 .config-divider {
-  border-color: rgba(0, 0, 0, 0.1);
-  margin: 6px 16px;
+  border-color: rgba(0, 0, 0, 0.05);
+  margin: 0px 16px;
 }
 
 .editor-container {
