@@ -16,5 +16,8 @@
   "settings": "设置",
   "documentation": "官方文档",
   "github": "GitHub",
-  "drag": "拖拽"
+  "drag": "拖拽",
+  "groups": {
+    "more": "更多功能"
+  }
 }

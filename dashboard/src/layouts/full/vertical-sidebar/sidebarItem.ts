@@ -59,25 +59,31 @@ const sidebarItem: menu[] = [
     to: '/chat'
   },
   {
-    title: 'core.navigation.conversation',
-    icon: 'mdi-database',
-    to: '/conversation'
-  },
-  {
-    title: 'core.navigation.sessionManagement',
-    icon: 'mdi-account-group',
-    to: '/session-management'
-  },
-  {
-    title: 'core.navigation.dashboard',
-    icon: 'mdi-view-dashboard',
-    to: '/dashboard/default'
-  },
-  {
-    title: 'core.navigation.console',
-    icon: 'mdi-console',
-    to: '/console'
-  },
+    title: 'core.navigation.groups.more',
+    icon: 'mdi-dots-horizontal',
+    children: [
+      {
+        title: 'core.navigation.conversation',
+        icon: 'mdi-database',
+        to: '/conversation'
+      },
+      {
+        title: 'core.navigation.sessionManagement',
+        icon: 'mdi-account-group',
+        to: '/session-management'
+      },
+      {
+        title: 'core.navigation.dashboard',
+        icon: 'mdi-view-dashboard',
+        to: '/dashboard/default'
+      },
+      {
+        title: 'core.navigation.console',
+        icon: 'mdi-console',
+        to: '/console'
+      },
+    ]
+  }
   // {
   //   title: 'Project ATRI',
   //   icon: 'mdi-grain',
