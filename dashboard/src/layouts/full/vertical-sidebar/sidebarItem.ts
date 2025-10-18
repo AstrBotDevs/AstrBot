@@ -39,11 +39,6 @@ const sidebarItem: menu[] = [
     to: '/tool-use'
   },
   {
-    title: 'core.navigation.persona',
-    icon: 'mdi-heart',
-    to: '/persona'
-  },
-  {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
@@ -62,6 +57,11 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [
+      {
+        title: 'core.navigation.persona',
+        icon: 'mdi-heart',
+        to: '/persona'
+      },
       {
         title: 'core.navigation.conversation',
         icon: 'mdi-database',
