@@ -603,6 +603,7 @@ export default {
                 .then(response => {
                     if (response.data.status !== 'ok' || response.data.data.length === 0) {
                         this.showSnackbar(this.tm('messages.pluginNotAvailable'), 'error');
+                        this.installed = false;
                         return
                     }
                     if (!response.data.data[0].activated) {
