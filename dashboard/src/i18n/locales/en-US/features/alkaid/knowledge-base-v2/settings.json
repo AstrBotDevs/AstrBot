@@ -1,0 +1,44 @@
+{
+  "basic": {
+    "title": "Basic Information",
+    "nameLabel": "Knowledge Base Name",
+    "namePlaceholder": "Enter knowledge base name",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Brief description of the knowledge base..."
+  },
+  "models": {
+    "title": "Model Configuration",
+    "embeddingLabel": "Embedding Model",
+    "embeddingHint": "Model for generating document vectors",
+    "rerankLabel": "Rerank Model",
+    "rerankHint": "Model for optimizing retrieval result ranking (optional)"
+  },
+  "chunking": {
+    "title": "Chunking Parameters",
+    "chunkSizeLabel": "Chunk Size",
+    "chunkSizeHint": "Number of characters per document chunk (50-2000)",
+    "chunkOverlapLabel": "Chunk Overlap",
+    "chunkOverlapHint": "Number of overlapping characters between adjacent chunks (0-half of chunk size)"
+  },
+  "retrieval": {
+    "title": "Retrieval Parameters",
+    "topKDenseLabel": "Dense Retrieval Top-K",
+    "topKDenseHint": "Number of results from vector retrieval",
+    "topKSparseLabel": "Sparse Retrieval Top-K",
+    "topKSparseHint": "Number of results from keyword retrieval",
+    "topMFinalLabel": "Final Results Top-M",
+    "topMFinalHint": "Number of final results after fusion",
+    "enableRerankLabel": "Enable Reranking"
+  },
+  "actions": {
+    "save": "Save Settings"
+  },
+  "messages": {
+    "nameRequired": "Please enter knowledge base name",
+    "embeddingRequired": "Please select embedding model",
+    "saveSuccess": "Settings saved successfully",
+    "saveFailed": "Save failed",
+    "saveError": "Error saving settings",
+    "loadProvidersError": "Failed to load model providers"
+  }
+}

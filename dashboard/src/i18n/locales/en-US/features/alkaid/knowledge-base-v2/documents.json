@@ -1,0 +1,49 @@
+{
+  "stats": {
+    "totalDocuments": "Total Documents",
+    "totalChunks": "Total Chunks",
+    "totalMedia": "Media Resources",
+    "totalSize": "Total Size"
+  },
+  "actions": {
+    "upload": "Upload Document",
+    "refresh": "Refresh",
+    "view": "View",
+    "delete": "Delete"
+  },
+  "empty": {
+    "noDocuments": "No documents yet. Click the upload button to add documents"
+  },
+  "upload": {
+    "title": "Upload Document",
+    "dropzone": "Drag and drop files here or click to upload",
+    "supportedFormats": "Supported formats: PDF, TXT, MD",
+    "selectedFiles": "Selected files:",
+    "cancel": "Cancel",
+    "upload": "Start Upload",
+    "uploading": "Uploading files..."
+  },
+  "detail": {
+    "fileType": "File Type",
+    "fileSize": "File Size",
+    "chunks": "Document Chunks",
+    "uploadedAt": "Upload Time",
+    "noChunks": "No document chunks",
+    "chunkIndex": "Chunk #{index}",
+    "characters": "characters"
+  },
+  "delete": {
+    "title": "Confirm Delete",
+    "confirmText": "Are you sure you want to delete document \"{name}\"?",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "messages": {
+    "loadError": "Failed to load document list",
+    "uploadSuccess": "Successfully uploaded {count} document(s)",
+    "uploadPartial": "Upload completed: {success} succeeded, {fail} failed",
+    "deleteSuccess": "Document deleted successfully",
+    "deleteFailed": "Delete failed",
+    "deleteError": "Error deleting document"
+  }
+}

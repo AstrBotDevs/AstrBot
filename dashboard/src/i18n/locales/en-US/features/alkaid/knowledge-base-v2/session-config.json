@@ -1,0 +1,68 @@
+{
+  "info": {
+    "title": "What is Session Configuration?",
+    "description": "Session configuration allows you to specify which knowledge bases to use for different platforms or sessions, enabling personalized knowledge enhancement.",
+    "platformLevel": "Platform Level: Applies to the entire platform (e.g., all QQ sessions)",
+    "sessionLevel": "Session Level: Applies to specific sessions (e.g., specific QQ group)"
+  },
+  "list": {
+    "title": "Configuration List",
+    "refresh": "Refresh",
+    "add": "Add Configuration",
+    "noKB": "No knowledge bases configured"
+  },
+  "scope": {
+    "platform": "Platform Level",
+    "session": "Session Level"
+  },
+  "dialog": {
+    "addTitle": "Add Session Configuration",
+    "editTitle": "Edit Session Configuration",
+    "scopeLabel": "Configuration Scope",
+    "platformIdLabel": "Platform ID",
+    "platformIdPlaceholder": "e.g., qq, telegram, discord",
+    "platformIdHint": "Platform identifier, such as qq, telegram, etc.",
+    "sessionIdLabel": "Session ID",
+    "sessionIdPlaceholder": "e.g., qq:group:123456",
+    "sessionIdHint": "Session identifier, format: platform:type:ID",
+    "platformTooltip": "Applies to all sessions on the platform",
+    "sessionTooltip": "Applies only to the specified session",
+    "kbLabel": "Select Knowledge Base",
+    "kbPlaceholder": "Select one or more knowledge bases",
+    "kbHint": "You can select multiple knowledge bases; they will be searched together during retrieval",
+    "advancedSettings": "Advanced Settings (Optional)",
+    "topKLabel": "Number of Results (Top-K)",
+    "topKHint": "Number of results to return during retrieval",
+    "enableRerankLabel": "Enable Reranking",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "empty": {
+    "noConfigs": "No configurations yet. Click the add button to create your first configuration",
+    "createFirst": "Create First Configuration"
+  },
+  "delete": {
+    "title": "Confirm Delete",
+    "confirmText": "Are you sure you want to delete this configuration?",
+    "warning": "After deletion, the platform or session will no longer use the specified knowledge bases.",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "messages": {
+    "loadFailed": "Failed to load configuration list",
+    "loadError": "Error loading configurations",
+    "scopeIdRequired": "Please enter platform ID or session ID",
+    "kbIdsRequired": "Please select at least one knowledge base",
+    "createSuccess": "Configuration created successfully",
+    "updateSuccess": "Configuration updated successfully",
+    "saveFailed": "Save failed",
+    "saveError": "Error saving configuration",
+    "deleteSuccess": "Configuration deleted successfully",
+    "deleteFailed": "Delete failed",
+    "deleteError": "Error deleting configuration"
+  }
+}

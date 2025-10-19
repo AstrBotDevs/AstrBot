@@ -25,6 +25,11 @@ import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
 import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
+import zhCNAlkaidKBV2Index from './locales/zh-CN/features/alkaid/knowledge-base-v2/index.json';
+import zhCNAlkaidKBV2Documents from './locales/zh-CN/features/alkaid/knowledge-base-v2/documents.json';
+import zhCNAlkaidKBV2Search from './locales/zh-CN/features/alkaid/knowledge-base-v2/search.json';
+import zhCNAlkaidKBV2Settings from './locales/zh-CN/features/alkaid/knowledge-base-v2/settings.json';
+import zhCNAlkaidKBV2SessionConfig from './locales/zh-CN/features/alkaid/knowledge-base-v2/session-config.json';
 import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNMigration from './locales/zh-CN/features/migration.json';
 
@@ -56,6 +61,11 @@ import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
 import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
+import enUSAlkaidKBV2Index from './locales/en-US/features/alkaid/knowledge-base-v2/index.json';
+import enUSAlkaidKBV2Documents from './locales/en-US/features/alkaid/knowledge-base-v2/documents.json';
+import enUSAlkaidKBV2Search from './locales/en-US/features/alkaid/knowledge-base-v2/search.json';
+import enUSAlkaidKBV2Settings from './locales/en-US/features/alkaid/knowledge-base-v2/settings.json';
+import enUSAlkaidKBV2SessionConfig from './locales/en-US/features/alkaid/knowledge-base-v2/session-config.json';
 import enUSPersona from './locales/en-US/features/persona.json';
 import enUSMigration from './locales/en-US/features/migration.json';
 
@@ -91,7 +101,14 @@ export const translations = {
       alkaid: {
         index: zhCNAlkaidIndex,
         'knowledge-base': zhCNAlkaidKnowledgeBase,
-        memory: zhCNAlkaidMemory
+        memory: zhCNAlkaidMemory,
+        'knowledge-base-v2': {
+          index: zhCNAlkaidKBV2Index,
+          documents: zhCNAlkaidKBV2Documents,
+          search: zhCNAlkaidKBV2Search,
+          settings: zhCNAlkaidKBV2Settings,
+          'session-config': zhCNAlkaidKBV2SessionConfig
+        }
       },
       persona: zhCNPersona,
       migration: zhCNMigration
@@ -128,7 +145,14 @@ export const translations = {
       alkaid: {
         index: enUSAlkaidIndex,
         'knowledge-base': enUSAlkaidKnowledgeBase,
-        memory: enUSAlkaidMemory
+        memory: enUSAlkaidMemory,
+        'knowledge-base-v2': {
+          index: enUSAlkaidKBV2Index,
+          documents: enUSAlkaidKBV2Documents,
+          search: enUSAlkaidKBV2Search,
+          settings: enUSAlkaidKBV2Settings,
+          'session-config': enUSAlkaidKBV2SessionConfig
+        }
       },
       persona: enUSPersona,
       migration: enUSMigration
