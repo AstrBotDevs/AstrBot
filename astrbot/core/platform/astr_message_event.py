@@ -92,8 +92,10 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.message_str
 
-    def _outline_chain(self, chain: List[BaseMessageComponent]) -> str:
+    def _outline_chain(self, chain: Optional[List[BaseMessageComponent]]) -> str:
         outline = ""
+        if not chain:
+            return outline
         for i in chain:
             if isinstance(i, Plain):
                 outline += i.text
@@ -265,6 +267,9 @@ class AstrMessageEvent(abc.ABC):
         """
         if isinstance(result, str):
             result = MessageEventResult().message(result)
+        # 兼容外部插件或调用方传入的 chain=None 的情况，确保为可迭代列表
+        if isinstance(result, MessageEventResult) and result.chain is None:
+            result.chain = []
         self._result = result
 
     def stop_event(self):
