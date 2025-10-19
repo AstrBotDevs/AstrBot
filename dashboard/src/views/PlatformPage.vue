@@ -56,7 +56,7 @@
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data"
+    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data" ref="addPlatformDialog"
       :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
       @show-toast="showToast" @refresh-config="getConfig"/>
 
@@ -175,6 +175,9 @@ export default {
       this.updatingPlatformConfig = JSON.parse(JSON.stringify(platform));
       this.updatingMode = true;
       this.showAddPlatformDialog = true;
+      this.$nextTick(() => {
+        this.$refs.addPlatformDialog.toggleShowConfigSection();
+      });
     },
 
     deletePlatform(platform) {

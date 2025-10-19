@@ -72,7 +72,6 @@
                 </div>
                 <small style="color: grey;">想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。</small>
                 <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
-                <small style="color: grey;" v-if="updatingMode">配置文件的修改请前往「配置文件」页。</small>
               </div>
               <div>
                 <v-btn variant="plain" icon @click="showConfigSection = !showConfigSection" class="mt-2">
@@ -139,28 +138,60 @@
               </div>
 
               <div v-else>
-                <v-data-table :headers="configTableHeaders" :items="platformConfigs" item-value="id"
-                  no-data-text="该平台暂无关联的配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
-                  <template v-slot:item.scope="{ item }">
-                    <v-tooltip bottom>
-                      <template v-slot:activator="{ props }">
-                        <v-chip v-for="(umop, index) in item.umop" :key="index" v-bind="props"
-                          v-show="isUmopMatchPlatform(umop, updatingPlatformConfig.id)" size="small" color="primary"
-                          variant="tonal" rounded="md" class="mr-1 mb-1">
-                          {{ formatUmopScope(umop) }}
-                        </v-chip>
-                      </template>
-                      <span>X:Y 表示在这个机器人下，配置文件适用于消息类型 X 下的会话 Y。</span>
-                    </v-tooltip>
+                <div class="mb-3 d-flex align-center justify-space-between">
+                  <div>
+                    <v-btn v-if="isEditingRoutes" color="primary" variant="tonal" @click="addNewRoute" size="small">
+                      <v-icon start>mdi-plus</v-icon>
+                      添加路由规则
+                    </v-btn>
+                  </div>
+                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small" @click="toggleEditMode">
+                    <v-icon start>{{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
+                    {{ isEditingRoutes ? '查看' : '编辑' }}
+                  </v-btn>
+                </div>
 
+                <v-data-table :headers="routeTableHeaders" :items="platformRoutes" item-value="umop"
+                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
+                  
+                  <template v-slot:item.source="{ item }">
+                    <div class="d-flex align-center" style="min-width: 250px;">
+                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions" item-title="label" item-value="value"
+                        variant="outlined" density="compact" hide-details style="max-width: 120px;" class="mr-2">
+                      </v-select>
+                      <span v-else class="mr-2">{{ getMessageTypeLabel(item.messageType) }}</span>
+                      <span class="mx-1">:</span>
+                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact" hide-details
+                        placeholder="会话ID或*" style="max-width: 120px;">
+                      </v-text-field>
+                      <span v-else>{{ item.sessionId === '*' ? '全部会话' : item.sessionId }}</span>
+                    </div>
                   </template>
-                  <template v-slot:item.name="{ item }">
-                    <span> {{ item.name }} </span>
-                    <v-chip v-if="item.name === 'default'" size="x-small" variant="tonal" rounded="sm"
-                      class="ml-2">默认配置</v-chip>
+
+                  <template v-slot:item.configId="{ item }">
+                    <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList" item-title="name" item-value="id"
+                      variant="outlined" density="compact" hide-details style="min-width: 200px;">
+                    </v-select>
+                    <span v-else>{{ getConfigName(item.configId) }}</span>
                   </template>
+
+                  <template v-slot:item.actions="{ item, index }">
+                    <div v-if="isEditingRoutes" class="d-flex align-center">
+                      <v-btn icon size="x-small" variant="text" @click="moveRouteUp(index)" :disabled="index === 0">
+                        <v-icon>mdi-arrow-up</v-icon>
+                      </v-btn>
+                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)" :disabled="index === platformRoutes.length - 1">
+                        <v-icon>mdi-arrow-down</v-icon>
+                      </v-btn>
+                      <v-btn icon size="x-small" variant="text" color="error" @click="deleteRoute(index)">
+                        <v-icon>mdi-delete</v-icon>
+                      </v-btn>
+                    </div>
+                    <span v-else class="text-grey">-</span>
+                  </template>
+
                 </v-data-table>
-                <small class="ml-2">Tips: 暂时无法在此更新配置文件，请前往「配置文件」页更新。</small>
+                <small class="ml-2 mt-2 d-block">*消息下发时，会根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。</small>
               </div>
             </div>
 
@@ -224,6 +255,7 @@
   </v-dialog>
 </template>
 
+
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
@@ -276,12 +308,26 @@ export default {
       newConfigMetadata: null,
       newConfigLoading: false,
 
-      // 平台配置文件表格
+      // 平台配置文件表格（已弃用，改用 platformRoutes）
       platformConfigs: [],
       configTableHeaders: [
         { title: '与此实例关联的配置文件 ID', key: 'name', sortable: false },
         { title: '在此实例下的应用范围', key: 'scope', sortable: false },
       ],
+
+      // 平台路由表
+      platformRoutes: [],
+      routeTableHeaders: [
+        { title: '消息会话来源', key: 'source', sortable: false, width: '40%' },
+        { title: '使用配置文件', key: 'configId', sortable: false, width: '40%' },
+        { title: '操作', key: 'actions', sortable: false, align: 'center', width: '20%' },
+      ],
+      messageTypeOptions: [
+        { label: '全部消息', value: '*' },
+        { label: '群组消息', value: 'GroupMessage' },
+        { label: '私聊消息', value: 'FriendMessage' },
+      ],
+      isEditingRoutes: false, // 编辑模式开关
 
       // ID冲突确认对话框
       showIdConflictDialog: false,
@@ -391,6 +437,17 @@ export default {
       if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
         this.getConfigForPreview(this.selectedAbConfId);
       }
+    },
+    // 监听编辑模式变化，自动展开配置文件部分
+    updatingMode: {
+      handler(newValue) {
+        if (newValue) {
+          this.showConfigSection = true;
+          // 编辑模式下默认不开启路由编辑模式，用户需要手动点击
+          this.isEditingRoutes = false;
+        }
+      },
+      immediate: true
     }
   },
   methods: {
@@ -414,6 +471,7 @@ export default {
       this.newConfigLoading = false;
 
       this.showConfigSection = false;
+      this.isEditingRoutes = false; // 重置编辑模式
     },
     closeDialog() {
       this.resetForm();
@@ -491,27 +549,33 @@ export default {
         this.savePlatform();
       }
     },
-    updatePlatform() {
+    async updatePlatform() {
       let id = this.updatingPlatformConfig.id;
       if (!id) {
         this.loading = false;
         this.showError('更新失败，缺少平台 ID。');
         return;
       }
-      axios.post('/api/config/platform/update', {
-        id: id,
-        config: this.updatingPlatformConfig
-      }).then((res) => {
+
+      try {
+        // 更新平台配置
+        await axios.post('/api/config/platform/update', {
+          id: id,
+          config: this.updatingPlatformConfig
+        });
+
+        // 同时更新路由表
+        await this.saveRoutesInternal();
+
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
         this.$emit('refresh-config');
-        this.showSuccess(res.data.message || '更新成功');
-      }).catch((err) => {
+        this.showSuccess('更新成功');
+      } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
-      });
-      this.updatingMode = false;
+      }
     },
     async savePlatform() {
       // 检查 ID 是否已存在
@@ -562,61 +626,56 @@ export default {
       // 生成默认的UMOP：平台ID:*:*（表示该平台的所有消息类型和会话）
       const newUmop = `${platformId}:*:*`;
 
+      let configId = null;
+
+      // 第一步：创建或获取配置文件ID
       if (this.aBConfigRadioVal === '0') {
-        // 使用现有配置文件，更新其UMOP
-        await this.updateExistingConfigUmop(this.selectedAbConfId, newUmop);
+        // 使用现有配置文件
+        configId = this.selectedAbConfId;
       } else if (this.aBConfigRadioVal === '1') {
         // 创建新配置文件
-        await this.createNewConfigFile(this.selectedAbConfId, newUmop);
+        configId = await this.createNewConfigFile(this.selectedAbConfId);
       }
+
+      if (!configId) {
+        throw new Error('无法获取配置文件ID');
+      }
+
+      // 第二步：统一更新路由表
+      await this.updateRoutingTable(newUmop, configId);
     },
 
-    async updateExistingConfigUmop(configId, newUmop) {
+    async updateRoutingTable(umop, configId) {
       try {
-        // 先获取现有配置文件信息
-        await this.getConfigInfoList(); // 确保configInfoList是最新的
-        const existingConfig = this.configInfoList.find(conf => conf.id === configId);
-
-        if (!existingConfig) {
-          throw new Error(`配置文件 ID ${configId} 不存在`);
-        }
-
-        // 获取现有的UMOP数组，如果不存在则创建新数组
-        let currentUmop = existingConfig.umop || [];
-
-        // 检查是否已存在相同的UMOP
-        if (!currentUmop.includes(newUmop)) {
-          currentUmop.push(newUmop);
-        }
-
-        // 更新配置文件的UMOP
-        await axios.post('/api/config/abconf/update', {
-          id: configId,
-          umo_parts: currentUmop
+        await axios.post('/api/config/umo_abconf_route/update', {
+          umo: umop,
+          conf_id: configId
         });
 
-        console.log(`成功更新配置文件 ${configId} 的UMOP`);
+        console.log(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (err) {
-        console.error('更新配置文件UMOP失败:', err);
-        throw new Error(`更新配置文件失败: ${err.response?.data?.message || err.message}`);
+        console.error('更新路由表失败:', err);
+        throw new Error(`更新路由表失败: ${err.response?.data?.message || err.message}`);
       }
     },
 
-    async createNewConfigFile(configName, newUmop) {
+    async createNewConfigFile(configName) {
       try {
         // 准备配置数据，如果是创建模式且有新配置数据，使用用户填写的配置
         const configData = this.aBConfigRadioVal === '1' && this.newConfigData
           ? this.newConfigData
           : undefined;
 
-        // 创建新的配置文件
+        // 创建新的配置文件（不传入umop）
         const createRes = await axios.post('/api/config/abconf/new', {
           name: configName,
-          umo_parts: [newUmop],
           config: configData  // 传入用户配置的数据
         });
 
-        console.log(`成功创建新配置文件 ${configName}，ID: ${createRes.data.data.conf_id}`);
+        const newConfigId = createRes.data.data.conf_id;
+        console.log(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
+        
+        return newConfigId;
       } catch (err) {
         console.error('创建新配置文件失败:', err);
         throw new Error(`创建新配置文件失败: ${err.response?.data?.message || err.message}`);
@@ -665,31 +724,140 @@ export default {
       this.$emit('show-toast', { message: message, type: 'error' });
     },
 
-    // 获取该平台适配器使用的所有配置文件
-    getPlatformConfigs(platformId) {
+    // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
+    async getPlatformConfigs(platformId) {
       if (!platformId) {
-        this.platformConfigs = [];
+        this.platformRoutes = [];
         return;
       }
 
-      axios.get('/api/config/abconfs').then((res) => {
-        const allConfigs = res.data.data.info_list;
+      try {
+        // 获取路由表 (UMOP -> conf_id)
+        const routesRes = await axios.get('/api/config/umo_abconf_routes');
+        const routingTable = routesRes.data.data.routing;
 
-        // 过滤出使用该平台的配置文件
-        this.platformConfigs = allConfigs.filter(config => {
-          if (!config.umop || config.umop.length === 0) {
-            return false;
+        // 过滤出属于该平台的路由，并保持顺序
+        const routes = [];
+        for (const [umop, confId] of Object.entries(routingTable)) {
+          if (this.isUmopMatchPlatform(umop, platformId)) {
+            const parts = umop.split(':');
+            if (parts.length === 3) {
+              routes.push({
+                umop: umop,
+                originalUmop: umop, // 保存原始 UMOP 用于更新时查找
+                messageType: parts[1] === '' || parts[1] === '*' ? '*' : parts[1],
+                sessionId: parts[2] === '' || parts[2] === '*' ? '*' : parts[2],
+                configId: confId
+              });
+            }
           }
+        }
 
-          // 检查UMOP是否匹配该平台
-          return config.umop.some(umop => {
-            return this.isUmopMatchPlatform(umop, platformId);
+        this.platformRoutes = routes;
+        
+        // 如果没有路由，添加一个默认的空路由供用户编辑
+        if (this.platformRoutes.length === 0) {
+          this.platformRoutes.push({
+            umop: null,
+            originalUmop: null,
+            messageType: '*',
+            sessionId: '*',
+            configId: 'default'
           });
-        });
-      }).catch((err) => {
-        console.error('获取平台配置文件失败:', err);
-        this.platformConfigs = [];
+        }
+      } catch (err) {
+        console.error('获取平台路由配置失败:', err);
+        this.platformRoutes = [];
+      }
+    },
+
+    // 添加新路由
+    addNewRoute() {
+      this.platformRoutes.push({
+        umop: null,
+        originalUmop: null,
+        messageType: '*',
+        sessionId: '*',
+        configId: 'default'
       });
+    },
+
+    // 删除路由
+    deleteRoute(index) {
+      this.platformRoutes.splice(index, 1);
+    },
+
+    // 上移路由
+    moveRouteUp(index) {
+      if (index > 0) {
+        const temp = this.platformRoutes[index];
+        this.platformRoutes[index] = this.platformRoutes[index - 1];
+        this.platformRoutes[index - 1] = temp;
+        // 强制更新视图
+        this.platformRoutes = [...this.platformRoutes];
+      }
+    },
+
+    // 下移路由
+    moveRouteDown(index) {
+      if (index < this.platformRoutes.length - 1) {
+        const temp = this.platformRoutes[index];
+        this.platformRoutes[index] = this.platformRoutes[index + 1];
+        this.platformRoutes[index + 1] = temp;
+        // 强制更新视图
+        this.platformRoutes = [...this.platformRoutes];
+      }
+    },
+
+    // 内部保存路由表方法（不显示成功提示）
+    async saveRoutesInternal() {
+      if (!this.updatingPlatformConfig || !this.updatingPlatformConfig.id) {
+        throw new Error('无法获取平台 ID');
+      }
+
+      try {
+        // 获取完整的路由表
+        const routesRes = await axios.get('/api/config/umo_abconf_routes');
+        const fullRoutingTable = routesRes.data.data.routing;
+
+        // 删除该平台的所有旧路由
+        const platformId = this.updatingPlatformConfig.id;
+        for (const umop in fullRoutingTable) {
+          if (this.isUmopMatchPlatform(umop, platformId)) {
+            delete fullRoutingTable[umop];
+          }
+        }
+
+        // 添加新路由（按顺序）
+        for (const route of this.platformRoutes) {
+          const messageType = route.messageType === '*' ? '*' : route.messageType;
+          const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
+          const newUmop = `${platformId}:${messageType}:${sessionId}`;
+          
+          if (route.configId) {
+            fullRoutingTable[newUmop] = route.configId;
+          }
+        }
+
+        // 使用 update_all 更新整个路由表
+        await axios.post('/api/config/umo_abconf_route/update_all', {
+          routing: fullRoutingTable
+        });
+      } catch (err) {
+        console.error('保存路由表失败:', err);
+        throw new Error(`保存路由表失败: ${err.response?.data?.message || err.message}`);
+      }
+    },
+
+    // 切换编辑模式
+    toggleEditMode() {
+      this.isEditingRoutes = !this.isEditingRoutes;
+    },
+
+    // 根据配置文件ID获取名称
+    getConfigName(configId) {
+      const config = this.configInfoList.find(c => c.id === configId);
+      return config ? config.name : configId;
     },
 
     isUmopMatchPlatform(umop, platformId) {
@@ -732,6 +900,11 @@ export default {
     editPlatformConfig(config) {
       this.$emit('edit-platform-config', config);
     },
+
+    toggleShowConfigSection() {
+      this.showConfigSection = false;
+      this.showConfigSection = true;
+    }
 
   },
   mounted() {
