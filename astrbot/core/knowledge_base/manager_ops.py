@@ -111,7 +111,9 @@ class KBManagerOps:
                 await session.execute(delete(KBMedia).where(KBMedia.doc_id == doc_id))
 
                 # 删除文档记录
-                await session.execute(delete(KBDocument).where(KBDocument.doc_id == doc_id))
+                await session.execute(
+                    delete(KBDocument).where(KBDocument.doc_id == doc_id)
+                )
 
                 await session.commit()
 
@@ -183,7 +185,9 @@ class KBManagerOps:
         # 3. 删除数据库记录
         async with self.db.get_db() as session:
             async with session.begin():
-                await session.execute(delete(KBChunk).where(KBChunk.chunk_id == chunk_id))
+                await session.execute(
+                    delete(KBChunk).where(KBChunk.chunk_id == chunk_id)
+                )
                 await session.commit()
 
         # 4. 更新文档统计
@@ -225,7 +229,9 @@ class KBManagerOps:
         # 2. 删除数据库记录
         async with self.db.get_db() as session:
             async with session.begin():
-                await session.execute(delete(KBMedia).where(KBMedia.media_id == media_id))
+                await session.execute(
+                    delete(KBMedia).where(KBMedia.media_id == media_id)
+                )
                 await session.commit()
 
         # 3. 删除文件(失败不影响)

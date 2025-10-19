@@ -70,7 +70,8 @@ class KBSQLiteDatabase:
 
     async def initialize(self) -> None:
         """初始化数据库,创建表并配置 SQLite 参数"""
-        from astrbot.core.knowledge_base.models import (
+        # noqa: F401 - 这些导入是必需的,用于触发 SQLModel 创建对应的数据库表
+        from astrbot.core.knowledge_base.models import (  # noqa: F401
             KBChunk,
             KBDocument,
             KBMedia,
@@ -170,8 +171,7 @@ class KBSQLiteDatabase:
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunk_kb_id "
-                        "ON kb_chunks(kb_id)"
+                        "CREATE INDEX IF NOT EXISTS idx_chunk_kb_id ON kb_chunks(kb_id)"
                     )
                 )
                 await session.execute(
@@ -196,8 +196,7 @@ class KBSQLiteDatabase:
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_kb_id "
-                        "ON kb_media(kb_id)"
+                        "CREATE INDEX IF NOT EXISTS idx_media_kb_id ON kb_media(kb_id)"
                     )
                 )
                 await session.execute(

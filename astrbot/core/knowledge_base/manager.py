@@ -330,14 +330,22 @@ class KBManager:
         async with self.db.get_db() as session:
             async with session.begin():
                 # 统计文档数（在事务中查询）
-                doc_count = await session.scalar(
-                    select(func.count(KBDocument.id)).where(KBDocument.kb_id == kb_id)
-                ) or 0
+                doc_count = (
+                    await session.scalar(
+                        select(func.count(KBDocument.id)).where(
+                            KBDocument.kb_id == kb_id
+                        )
+                    )
+                    or 0
+                )
 
                 # 统计块数（在事务中查询）
-                chunk_count = await session.scalar(
-                    select(func.count(KBChunk.id)).where(KBChunk.kb_id == kb_id)
-                ) or 0
+                chunk_count = (
+                    await session.scalar(
+                        select(func.count(KBChunk.id)).where(KBChunk.kb_id == kb_id)
+                    )
+                    or 0
+                )
 
                 # 更新知识库（在同一事务中）
                 await session.execute(

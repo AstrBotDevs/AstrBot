@@ -179,6 +179,4 @@ class KBSessionConfig(SQLModel, table=True):
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
 
-    __table_args__ = (
-        UniqueConstraint("scope", "scope_id", name="uix_scope_scope_id"),
-    )
+    __table_args__ = (UniqueConstraint("scope", "scope_id", name="uix_scope_scope_id"),)

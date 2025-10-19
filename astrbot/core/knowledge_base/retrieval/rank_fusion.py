@@ -60,7 +60,9 @@ class RankFusion:
             List[FusedResult]: 融合后的结果列表
         """
         # 1. 构建排名映射
-        dense_ranks = {r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)}
+        dense_ranks = {
+            r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)
+        }
         sparse_ranks = {r.chunk_id: (idx + 1) for idx, r in enumerate(sparse_results)}
 
         # 2. 收集所有唯一的 ID (来自稠密检索的是 vec_doc_id, 稀疏检索的是 chunk_id)
@@ -118,7 +120,6 @@ class RankFusion:
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
-                dr = vec_doc_id_to_dense[identifier]
                 chunk = await self.kb_db.get_chunk_by_vec_doc_id(identifier)
                 if chunk:
                     fused_results.append(

@@ -302,7 +302,9 @@ class KnowledgeBaseManager:
         async def on_session_deleted(session_id: str):
             """会话删除回调：清理知识库配置"""
             try:
-                await self.kb_database.delete_session_kb_config_by_session_id(session_id)
+                await self.kb_database.delete_session_kb_config_by_session_id(
+                    session_id
+                )
                 logger.info(f"已清理会话知识库配置: {session_id}")
             except Exception as e:
                 logger.error(f"清理会话知识库配置失败 ({session_id}): {e}")
