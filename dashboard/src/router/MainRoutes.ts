@@ -7,9 +7,9 @@ const MainRoutes = {
   component: () => import('@/layouts/full/FullLayout.vue'),
   children: [
     {
-      name: 'Dashboard',
+      name: 'MainPage',
       path: '/',
-      component: () => import('@/views/dashboards/default/DefaultDashboard.vue')
+      component: () => import('@/views/PlatformPage.vue')
     },
     {
       name: 'Extensions',

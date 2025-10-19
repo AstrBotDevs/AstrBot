@@ -21,7 +21,7 @@ const sidebarItem: menu[] = [
   {
     title: 'core.navigation.platforms',
     icon: 'mdi-robot',
-    to: '/platforms',
+    to: '/',
   },
   {
     title: 'core.navigation.providers',

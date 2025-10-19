@@ -18,7 +18,7 @@
         选择人格
       </v-card-title>
       
-      <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
+      <v-card-text class="pa-2" style="max-height: 400px; overflow-y: auto;">
         <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
         
         <v-list v-if="!loading && personaList.length > 0" density="compact">
