@@ -4,11 +4,11 @@
 提供文档上传、解析、分块、向量化、检索等功能
 """
 
-from astrbot.core.db.po import KBSessionConfig
 from astrbot.core.knowledge_base.models import (
     KBChunk,
     KBDocument,
     KBMedia,
+    KBSessionConfig,
     KnowledgeBase,
 )
 
