@@ -749,9 +749,9 @@ onMounted(async () => {
                 </v-row>
 
                 <v-row>
-                  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
+                  <v-col cols="12" md="6" lg="6" v-for="extension in filteredPlugins" :key="extension.name"
                     class="pb-4">
-                    <ExtensionCard :extension="extension" class="h-120 rounded-lg"
+                    <ExtensionCard :extension="extension" class="rounded-lg"
                       @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
                       @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
                       @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"

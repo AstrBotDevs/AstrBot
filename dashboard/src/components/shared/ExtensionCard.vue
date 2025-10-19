@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
-import {useCustomizerStore} from "@/stores/customizer";
+import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 
 const props = defineProps({
@@ -84,130 +84,130 @@ const viewReadme = () => {
 </script>
 
 <template>
-  <v-card class="mx-auto d-flex flex-column" :elevation="highlight ? 0 : 1"
-    :style="{ height: $vuetify.display.xs ? '250px' : '220px',
-     backgroundColor: useCustomizerStore().uiTheme==='PurpleTheme' ? marketMode ? '#f8f0dd' : '#ffffff' : '#282833',
-     color: useCustomizerStore().uiTheme==='PurpleTheme' ? '#000000dd' : '#ffffff'}">
-    <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; justify-content: space-between;">
+  <v-card class="mx-auto d-flex flex-column" elevation="2" :style="{
+    position: 'relative',
+    backgroundColor: useCustomizerStore().uiTheme === 'PurpleTheme' ? marketMode ? '#f8f0dd' : '#ffffff' : '#282833',
+    color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'
+  }">
+    <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; gap: 16px; width: 100%;">
 
-      <div class="flex-grow-1">
-        <div>{{ extension.author }} /</div>
+      <div v-if="extension?.icon">
+        <v-avatar size="65">
+          <v-img :src="extension.icon"
+            :alt="extension.name" cover></v-img>
+        </v-avatar>
+      </div>
 
-        <p class="text-h4 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
-          {{ extension.name }}
-          <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
-            <template v-slot:activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
+      <div style="width: 100%;">
+        <!-- Top-right three-dot menu -->
+        <div style="position: absolute; right: 8px; top: 8px; z-index: 5;">
+          <v-menu offset-y>
+            <template v-slot:activator="{ props: menuProps }">
+              <v-btn v-bind="menuProps" icon variant="text" aria-label="more">
+                <v-icon icon="mdi-dots-vertical"></v-icon>
+              </v-btn>
             </template>
-            <span>{{ tm("card.status.hasUpdate") }}: {{ extension.online_version }}</span>
-          </v-tooltip>
-          <v-tooltip location="top" v-if="!extension.activated && !marketMode">
-            <template v-slot:activator="{ props: tooltipProps }">
-              <v-icon v-bind="tooltipProps" color="error" class="ml-2" icon="mdi-cancel" size="small"></v-icon>
-            </template>
-            <span>{{ tm("card.status.disabled") }}</span>
-          </v-tooltip>
-        </p>
 
-        <div class="mt-1 d-flex flex-wrap">
-          <v-chip color="primary" label size="small">
-            <v-icon icon="mdi-source-branch" start></v-icon>
-            {{ extension.version }}
-          </v-chip>
-          <v-chip v-if="extension?.has_update " color="warning" label size="small" class="ml-2">
-            <v-icon icon="mdi-arrow-up-bold" start></v-icon>
-            {{ extension.online_version }}
-          </v-chip>
-          <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length">
-            <v-icon icon="mdi-cogs" start></v-icon>
-            {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
-          </v-chip>
-          <v-chip v-for="tag in extension.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" label
-            size="small" class="ml-2">
-            {{ tag === 'danger' ? tm('tags.danger') : tag }}
-          </v-chip>
+            <v-list>
+              <v-list-item @click="viewReadme">
+                <v-list-item-title>📄 {{ tm('buttons.viewDocs') }}</v-list-item-title>
+              </v-list-item>
+
+              <v-list-item v-if="marketMode && !extension?.installed" @click="installExtension">
+                <v-list-item-title>
+                  {{ tm('buttons.install') }}</v-list-item-title>
+              </v-list-item>
+
+              <v-list-item v-if="marketMode && extension?.installed">
+                <v-list-item-title class="text--disabled">{{ tm('status.installed') }}</v-list-item-title>
+              </v-list-item>
+
+              <!-- Divider between market actions and plugin actions -->
+              <v-divider v-if="!marketMode" />
+
+              <template v-if="!marketMode">
+                <v-list-item @click="configure">
+                  <v-list-item-title>
+                    {{ tm('card.actions.pluginConfig') }}</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="uninstallExtension">
+                  <v-list-item-title class="text-error">{{ tm('card.actions.uninstallPlugin') }}</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="reloadExtension">
+                  <v-list-item-title>{{ tm('card.actions.reloadPlugin') }}</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="toggleActivation">
+                  <v-list-item-title>
+                    {{ extension.activated ? tm('buttons.disable') : tm('buttons.enable') }}{{
+                      tm('card.actions.togglePlugin') }}
+                  </v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="viewHandlers">
+                  <v-list-item-title>{{ tm('card.actions.viewHandlers') }} ({{ extension.handlers.length
+                    }})</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item @click="updateExtension" :disabled="!extension?.has_update">
+                  <v-list-item-title>
+                    {{ tm('card.actions.updateTo') }} {{ extension.online_version || extension.version }}
+                  </v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-list>
+          </v-menu>
         </div>
 
-        <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="max-height: 65px; overflow-y: auto;">
-          {{ extension.desc }}
+        <div style="width: 100%; margin-bottom: 24px;">
+          <!-- 最多一行 -->
+          <div class="text-caption" style="color: gray; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 36px;">
+            {{ extension.author }} / {{ extension.name }}
+          </div>
+          <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
+            {{ extension.name }}
+            <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
+              <template v-slot:activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
+              </template>
+              <span>{{ tm("card.status.hasUpdate") }}: {{ extension.online_version }}</span>
+            </v-tooltip>
+            <v-tooltip location="top" v-if="!extension.activated && !marketMode">
+              <template v-slot:activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" color="error" class="ml-2" icon="mdi-cancel" size="small"></v-icon>
+              </template>
+              <span>{{ tm("card.status.disabled") }}</span>
+            </v-tooltip>
+          </p>
+
+          <div class="mt-1 d-flex flex-wrap">
+            <v-chip color="primary" label size="small">
+              <v-icon icon="mdi-source-branch" start></v-icon>
+              {{ extension.version }}
+            </v-chip>
+            <v-chip v-if="extension?.has_update" color="warning" label size="small" class="ml-2">
+              <v-icon icon="mdi-arrow-up-bold" start></v-icon>
+              {{ extension.online_version }}
+            </v-chip>
+            <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length">
+              <v-icon icon="mdi-cogs" start></v-icon>
+              {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
+            </v-chip>
+            <v-chip v-for="tag in extension.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" label
+              size="small" class="ml-2">
+              {{ tag === 'danger' ? tm('tags.danger') : tag }}
+            </v-chip>
+          </div>
+
+          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 60px;">
+            {{ extension.desc }}
+          </div>
         </div>
       </div>
 
-      <div class="extension-image-container" v-if="extension.logo">
-        <img :src="extension.logo" :style="{
-          height: $vuetify.display.xs ? '75px' : '100px',
-          width: $vuetify.display.xs ? '75px' : '100px',
-          borderRadius: '8px',
-          objectFit: 'cover',
-          objectPosition: 'center'
-        }" :alt="tm('card.alt.logo')" />
-      </div>
     </v-card-text>
-
-    <v-card-actions style="margin-left: 0px; gap: 2px;">
-      <v-btn color="teal-accent-4" :text="tm('buttons.viewDocs')" variant="text" @click="viewReadme"></v-btn>
-      <v-btn v-if="!marketMode" color="teal-accent-4" :text="tm('buttons.actions')" variant="text" @click="reveal = true"></v-btn>
-      <v-btn v-if="marketMode && !extension?.installed" color="teal-accent-4" :text="tm('buttons.install')" variant="text"
-        @click="installExtension"></v-btn>
-      <v-btn v-if="marketMode && extension?.installed" color="teal-accent-4" :text="tm('status.installed')" variant="text" disabled></v-btn>
-    </v-card-actions>
-
-    <v-expand-transition v-if="!marketMode">
-      <v-card v-if="reveal" class="position-absolute w-100" height="100%"
-        style="bottom: 0; display: flex; flex-direction: column;">
-        <v-card-text style="overflow-y: auto;">
-          <div class="d-flex align-center mb-4">
-            <img v-if="extension.logo" :src="extension.logo"
-              style="height: 50px; width: 50px; border-radius: 8px; margin-right: 16px;" :alt="tm('card.alt.extensionIcon')" />
-            <h3>{{ extension.name }}</h3>
-          </div>
-
-          <div class="mt-4" :style="{
-            justifyContent: 'center',
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '8px',
-            flexDirection: $vuetify.display.xs ? 'column' : 'row'
-          }">
-            <v-btn prepend-icon="mdi-cog" color="primary" variant="tonal" @click="configure"
-              :block="$vuetify.display.xs">
-              {{ tm("card.actions.pluginConfig") }}
-            </v-btn>
-
-            <v-btn prepend-icon="mdi-delete" color="error" variant="tonal" @click="uninstallExtension"
-              :block="$vuetify.display.xs">
-              {{ tm("card.actions.uninstallPlugin") }}
-            </v-btn>
-
-            <v-btn prepend-icon="mdi-reload" color="primary" variant="tonal" @click="reloadExtension"
-              :block="$vuetify.display.xs">
-              {{ tm("card.actions.reloadPlugin") }}
-            </v-btn>
-
-            <v-btn :prepend-icon="extension.activated ? 'mdi-cancel' : 'mdi-check-circle'"
-              :color="extension.activated ? 'error' : 'success'" variant="tonal" @click="toggleActivation"
-              :block="$vuetify.display.xs">
-              {{ extension.activated ? tm('buttons.disable') : tm('buttons.enable') }}{{ tm("card.actions.togglePlugin") }}
-            </v-btn>
-
-            <v-btn prepend-icon="mdi-cogs" color="info" variant="tonal" @click="viewHandlers"
-              :block="$vuetify.display.xs">
-              {{ tm("card.actions.viewHandlers") }} ({{ extension.handlers.length }})
-            </v-btn>
-
-            <v-btn prepend-icon="mdi-update" color="primary" variant="tonal" :disabled="!extension?.has_update "
-              @click="updateExtension" :block="$vuetify.display.xs">
-              {{ tm("card.actions.updateTo") }} {{ extension.online_version || extension.version }}
-            </v-btn>
-          </div>
-        </v-card-text>
-
-        <v-card-actions class="pt-0 d-flex justify-center">
-          <v-btn color="teal-accent-4" :text="tm('buttons.back')" variant="text" @click="reveal = false"></v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-expand-transition>
   </v-card>
 
 </template>
