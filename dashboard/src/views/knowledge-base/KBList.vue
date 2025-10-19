@@ -337,10 +337,15 @@ const emojiCategories = [
 ]
 
 // 加载知识库列表
-const loadKnowledgeBases = async () => {
+const loadKnowledgeBases = async (refreshStats = false) => {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/list')
+    const params: any = {}
+    if (refreshStats) {
+      params.refresh_stats = 'true'
+    }
+
+    const response = await axios.get('/api/kb/list', { params })
     if (response.data.status === 'ok') {
       kbList.value = response.data.data.items || []
     } else {
@@ -500,7 +505,7 @@ const showSnackbar = (text: string, color: string = 'success') => {
 }
 
 onMounted(() => {
-  loadKnowledgeBases()
+  loadKnowledgeBases(true)  // 首次加载时刷新统计信息
   loadProviders()
 })
 </script>
@@ -595,7 +600,8 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 500;
 }
 
 .kb-actions {

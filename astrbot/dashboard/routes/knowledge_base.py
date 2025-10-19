@@ -230,17 +230,29 @@ class KnowledgeBaseRoute(Route):
         Query 参数:
         - page: 页码 (默认 1)
         - page_size: 每页数量 (默认 20)
+        - refresh_stats: 是否刷新统计信息 (默认 false，首次加载时可设为 true)
         """
         try:
             kb_manager = self._get_kb_manager()
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 20, type=int)
+            refresh_stats = request.args.get("refresh_stats", "false").lower() == "true"
 
             # 转换为 offset 和 limit
             offset = (page - 1) * page_size
             limit = page_size
 
             kbs = await kb_manager.list_kbs(offset=offset, limit=limit)
+
+            # 如果需要刷新统计信息
+            if refresh_stats:
+                for kb in kbs:
+                    try:
+                        await kb_manager._update_kb_stats(kb.kb_id)
+                    except Exception as e:
+                        logger.warning(f"刷新知识库 {kb.kb_id} 统计信息失败: {e}")
+                # 刷新后重新查询以获取最新数据
+                kbs = await kb_manager.list_kbs(offset=offset, limit=limit)
 
             # 转换为字典列表
             kb_list = []
@@ -260,7 +272,9 @@ class KnowledgeBaseRoute(Route):
                     "top_k_dense": kb.top_k_dense or 50,
                     "top_k_sparse": kb.top_k_sparse or 50,
                     "top_m_final": kb.top_m_final or 5,
-                    "enable_rerank": kb.enable_rerank if kb.enable_rerank is not None else True,
+                    "enable_rerank": kb.enable_rerank
+                    if kb.enable_rerank is not None
+                    else True,
                     "created_at": kb.created_at.isoformat(),
                     "updated_at": kb.updated_at.isoformat(),
                 }
@@ -354,7 +368,9 @@ class KnowledgeBaseRoute(Route):
                 "top_k_dense": kb.top_k_dense or 50,
                 "top_k_sparse": kb.top_k_sparse or 50,
                 "top_m_final": kb.top_m_final or 5,
-                "enable_rerank": kb.enable_rerank if kb.enable_rerank is not None else True,
+                "enable_rerank": kb.enable_rerank
+                if kb.enable_rerank is not None
+                else True,
                 "created_at": kb.created_at.isoformat(),
                 "updated_at": kb.updated_at.isoformat(),
             }
@@ -506,7 +522,9 @@ class KnowledgeBaseRoute(Route):
                 "top_k_dense": kb.top_k_dense or 50,
                 "top_k_sparse": kb.top_k_sparse or 50,
                 "top_m_final": kb.top_m_final or 5,
-                "enable_rerank": kb.enable_rerank if kb.enable_rerank is not None else True,
+                "enable_rerank": kb.enable_rerank
+                if kb.enable_rerank is not None
+                else True,
                 "created_at": kb.created_at.isoformat(),
                 "updated_at": kb.updated_at.isoformat(),
             }
