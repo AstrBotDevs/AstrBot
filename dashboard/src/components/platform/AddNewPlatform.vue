@@ -916,3 +916,9 @@ export default {
   }
 }
 </script>
+
+<style>
+.v-select__selection-text {
+  font-size: 12px;
+}
+</style>
