@@ -136,6 +136,25 @@ DEFAULT_CONFIG = {
     "callback_api_base": "",
     "default_kb_collection": "",  # 默认知识库名称
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
+    "knowledge_base": {
+        "enabled": False,  # 默认禁用，用户需要主动启用
+        "embedding_provider_id": "",  # 嵌入模型提供商 ID (为空时自动选择第一个)
+        "rerank_provider_id": "",  # 重排序模型提供商 ID (为空时自动选择第一个)
+        "storage": {
+            "files_path": "data/knowledge_base",  # 文件存储路径
+            "vector_db_path": "data/knowledge_base/vectors",  # 向量数据库路径
+        },
+        "chunking": {
+            "chunk_size": 512,  # 文档块大小（字符数）
+            "chunk_overlap": 50,  # 文档块重叠大小（字符数）
+        },
+        "retrieval": {
+            "top_k_dense": 50,  # 密集检索返回结果数
+            "top_k_sparse": 50,  # 稀疏检索返回结果数
+            "top_m_final": 5,  # 最终融合后返回的结果数
+            "enable_rerank": True,  # 是否启用重排序
+        },
+    },
 }
 
 
