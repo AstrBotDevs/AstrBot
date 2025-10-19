@@ -5,6 +5,7 @@ from astrbot.core.message.message_event_result import (
 
 from .content_safety_check.stage import ContentSafetyCheckStage
 from .preprocess_stage.stage import PreProcessStage
+from .kb_enhance.stage import KBEnhanceStage
 from .process_stage.stage import ProcessStage
 from .rate_limit_check.stage import RateLimitStage
 from .respond.stage import RespondStage
@@ -21,6 +22,7 @@ STAGES_ORDER = [
     "RateLimitStage",  # 检查会话是否超过频率限制
     "ContentSafetyCheckStage",  # 检查内容安全
     "PreProcessStage",  # 预处理
+    "KBEnhanceStage",  # 知识库增强
     "ProcessStage",  # 交由 Stars 处理（a.k.a 插件），或者 LLM 调用
     "ResultDecorateStage",  # 处理结果，比如添加回复前缀、t2i、转换为语音 等
     "RespondStage",  # 发送消息
@@ -33,6 +35,7 @@ __all__ = [
     "RateLimitStage",
     "ContentSafetyCheckStage",
     "PreProcessStage",
+    "KBEnhanceStage",
     "ProcessStage",
     "ResultDecorateStage",
     "RespondStage",
