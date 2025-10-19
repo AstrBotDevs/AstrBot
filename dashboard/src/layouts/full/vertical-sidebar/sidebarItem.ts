@@ -54,6 +54,14 @@ const sidebarItem: menu[] = [
     to: '/alkaid/knowledge-base',
   },
   {
+    title: 'core.navigation.knowledgeBaseBeta',
+    icon: 'mdi-book-open-variant',
+    to: '/knowledge-base',
+    chip: 'Beta',
+    chipColor: 'primary',
+    chipVariant: 'tonal',
+  },
+  {
     title: 'core.navigation.config',
     icon: 'mdi-cog',
     to: '/config',

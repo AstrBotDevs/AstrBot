@@ -8,12 +8,6 @@
         </div>
 
         <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
-          <v-btn size="large" :variant="isActive('knowledge-base-v2') ? 'flat' : 'tonal'"
-            :color="isActive('knowledge-base-v2') ? '#9b72cb' : ''" rounded="lg"
-            @click="navigateTo('knowledge-base-v2')">
-            <v-icon start>mdi-book-open-page-variant</v-icon>
-            {{ tm('page.navigation.knowledgeBaseV2') }}
-          </v-btn>
           <v-btn size="large" :variant="isActive('knowledge-base') ? 'flat' : 'tonal'"
             :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('knowledge-base')">
@@ -75,9 +69,9 @@ export default {
     }
   },
   mounted() {
-    // 如果在根路径 /alkaid，默认跳转到原生知识库页面
+    // 如果在根路径 /alkaid，默认跳转到知识库页面
     if (this.$route.path === '/alkaid') {
-      this.navigateTo('knowledge-base-v2');
+      this.navigateTo('knowledge-base');
     }
   }
 }

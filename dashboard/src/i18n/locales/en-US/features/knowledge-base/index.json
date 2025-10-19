@@ -1,0 +1,68 @@
+{
+  "title": "Knowledge Base Management",
+  "subtitle": "Manage and query knowledge base contents",
+  "list": {
+    "title": "My Knowledge Bases",
+    "subtitle": "Manage all your knowledge base collections",
+    "create": "Create Knowledge Base",
+    "refresh": "Refresh List",
+    "empty": "No knowledge bases",
+    "loading": "Loading...",
+    "documents": "Documents",
+    "chunks": "Chunks",
+    "sessionConfig": "Session Config"
+  },
+  "card": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "open": "Open",
+    "docCount": "{count} Documents",
+    "chunkCount": "{count} Chunks"
+  },
+  "create": {
+    "title": "Create Knowledge Base",
+    "nameLabel": "Name",
+    "namePlaceholder": "Enter knowledge base name",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe the purpose of this knowledge base...",
+    "emojiLabel": "Icon",
+    "embeddingModelLabel": "Embedding Model",
+    "rerankModelLabel": "Rerank Model (Optional)",
+    "providerInfo": "Provider: {id} | Dimensions: {dimensions}",
+    "rerankProviderInfo": "Provider: {id}",
+    "tips": "Tip: Once you select an embedding model, do not modify the model or vector dimensions, as this will severely affect recall rate.",
+    "cancel": "Cancel",
+    "submit": "Create",
+    "nameRequired": "Please enter knowledge base name"
+  },
+  "edit": {
+    "title": "Edit Knowledge Base",
+    "submit": "Save"
+  },
+  "delete": {
+    "title": "Delete Knowledge Base",
+    "confirmText": "Are you sure you want to delete knowledge base '{name}'?",
+    "warning": "This action is irreversible. All documents, chunks, and associated configurations will be permanently deleted.",
+    "cancel": "Cancel",
+    "confirm": "Delete"
+  },
+  "emoji": {
+    "title": "Select Icon",
+    "close": "Close",
+    "categories": {
+      "books": "Books & Documents",
+      "emotions": "Emotions & Faces",
+      "objects": "Objects & Tools",
+      "symbols": "Symbols & Signs"
+    }
+  },
+  "messages": {
+    "createSuccess": "Knowledge base created successfully",
+    "createFailed": "Failed to create",
+    "updateSuccess": "Knowledge base updated successfully",
+    "updateFailed": "Failed to update",
+    "deleteSuccess": "Knowledge base deleted successfully",
+    "deleteFailed": "Failed to delete",
+    "loadError": "Failed to load knowledge base list"
+  }
+}

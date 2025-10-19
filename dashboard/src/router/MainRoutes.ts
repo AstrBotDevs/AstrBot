@@ -66,6 +66,30 @@ const MainRoutes = {
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
     },
+    {
+      name: 'NativeKnowledgeBase',
+      path: '/knowledge-base',
+      component: () => import('@/views/knowledge-base/index.vue'),
+      children: [
+        {
+          path: '',
+          name: 'NativeKBList',
+          component: () => import('@/views/knowledge-base/KBList.vue')
+        },
+        {
+          path: ':kbId',
+          name: 'NativeKBDetail',
+          component: () => import('@/views/knowledge-base/KBDetail.vue'),
+          props: true
+        },
+        {
+          path: ':kbId/document/:docId',
+          name: 'NativeDocumentDetail',
+          component: () => import('@/views/knowledge-base/DocumentDetail.vue'),
+          props: true
+        }
+      ]
+    },
     // {
     //   name: 'Alkaid',
     //   path: '/alkaid',
@@ -93,11 +117,6 @@ const MainRoutes = {
       path: '/alkaid',
       component: () => import('@/views/AlkaidPage.vue'),
       children: [
-        {
-          path: 'knowledge-base-v2',
-          name: 'KnowledgeBaseV2',
-          component: () => import('@/views/alkaid/knowledge-base-v2/KnowledgeBaseV2.vue')
-        },
         {
           path: 'knowledge-base',
           name: 'KnowledgeBase',

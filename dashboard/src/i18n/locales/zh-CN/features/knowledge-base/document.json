@@ -1,0 +1,51 @@
+{
+  "title": "文档详情",
+  "backToKB": "返回知识库",
+  "info": {
+    "title": "文档信息",
+    "name": "文档名称",
+    "type": "文件类型",
+    "size": "文件大小",
+    "chunkCount": "分块数量",
+    "createdAt": "上传时间"
+  },
+  "chunks": {
+    "title": "分块列表",
+    "empty": "暂无分块",
+    "index": "序号",
+    "content": "内容",
+    "charCount": "字符数",
+    "actions": "操作",
+    "view": "查看",
+    "edit": "编辑",
+    "delete": "删除",
+    "preview": "预览",
+    "search": "搜索分块",
+    "searchPlaceholder": "输入关键词搜索分块内容..."
+  },
+  "edit": {
+    "title": "编辑分块",
+    "content": "分块内容",
+    "cancel": "取消",
+    "save": "保存",
+    "saveSuccess": "分块保存成功",
+    "saveFailed": "分块保存失败"
+  },
+  "delete": {
+    "title": "删除分块",
+    "confirmText": "确定要删除此分块吗?",
+    "warning": "删除后将无法恢复,可能影响知识库检索效果。",
+    "cancel": "取消",
+    "confirm": "删除",
+    "deleteSuccess": "分块删除成功",
+    "deleteFailed": "分块删除失败"
+  },
+  "view": {
+    "title": "分块详情",
+    "index": "序号",
+    "content": "内容",
+    "charCount": "字符数",
+    "vecDocId": "向量ID",
+    "close": "关闭"
+  }
+}
