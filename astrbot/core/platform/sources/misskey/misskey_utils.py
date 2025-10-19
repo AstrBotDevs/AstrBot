@@ -84,7 +84,12 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
             return "[图片]"
         elif isinstance(component, Comp.At):
             has_at = True
-            return f"@{component.qq}"
+            # 优先使用name字段（用户名），如果没有则使用qq字段
+            # 这样可以避免在Misskey中生成 @<user_id> 这样的无效提及
+            if hasattr(component, "name") and component.name:
+                return f"@{component.name}"
+            else:
+                return f"@{component.qq}"
         elif hasattr(component, "text"):
             text = getattr(component, "text", "")
             if "@" in text:
@@ -233,21 +238,22 @@ def extract_room_id_from_session_id(session_id: str) -> str:
 def add_at_mention_if_needed(
     text: str, user_info: Optional[Dict[str, Any]], has_at: bool = False
 ) -> str:
-    """如果需要且没有@用户，则添加@用户"""
+    """如果需要且没有@用户，则添加@用户
+
+    注意：仅在有有效的username时才添加@提及，避免使用用户ID
+    """
     if has_at or not user_info:
         return text
 
     username = user_info.get("username")
-    nickname = user_info.get("nickname")
+    # 如果没有username，则不添加@提及，返回原文本
+    # 这样可以避免生成 @<user_id> 这样的无效提及
+    if not username:
+        return text
 
-    if username:
-        mention = f"@{username}"
-        if not text.startswith(mention):
-            text = f"{mention}\n{text}".strip()
-    elif nickname:
-        mention = f"@{nickname}"
-        if not text.startswith(mention):
-            text = f"{mention}\n{text}".strip()
+    mention = f"@{username}"
+    if not text.startswith(mention):
+        text = f"{mention}\n{text}".strip()
 
     return text
 
@@ -403,6 +409,8 @@ def cache_user_info(
             "nickname": sender_info["nickname"],
             "visibility": raw_data.get("visibility", "public"),
             "visible_user_ids": raw_data.get("visibleUserIds", []),
+            # 保存原消息ID，用于回复时作为reply_id
+            "reply_to_note_id": raw_data.get("id"),
         }
 
     user_cache[sender_info["sender_id"]] = user_cache_data

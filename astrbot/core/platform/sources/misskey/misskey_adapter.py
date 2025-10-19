@@ -1,6 +1,5 @@
 import asyncio
 import random
-import json
 from typing import Dict, Any, Optional, Awaitable, List
 
 from astrbot.api import logger
@@ -270,10 +269,10 @@ class MisskeyPlatformAdapter(Platform):
 
     async def _handle_notification(self, data: Dict[str, Any]):
         try:
-            logger.debug(
-                f"[Misskey] 收到通知事件:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
             notification_type = data.get("type")
+            logger.debug(
+                f"[Misskey] 收到通知事件: type={notification_type}, user_id={data.get('userId', 'unknown')}"
+            )
             if notification_type in ["mention", "reply", "quote"]:
                 note = data.get("note")
                 if note and self._is_bot_mentioned(note):
@@ -294,17 +293,16 @@ class MisskeyPlatformAdapter(Platform):
 
     async def _handle_chat_message(self, data: Dict[str, Any]):
         try:
-            logger.debug(
-                f"[Misskey] 收到聊天事件数据:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
-            )
-
             sender_id = str(
                 data.get("fromUserId", "") or data.get("fromUser", {}).get("id", "")
+            )
+            room_id = data.get("toRoomId")
+            logger.debug(
+                f"[Misskey] 收到聊天事件: sender_id={sender_id}, room_id={room_id}, is_self={sender_id == self.client_self_id}"
             )
             if sender_id == self.client_self_id:
                 return
 
-            room_id = data.get("toRoomId")
             if room_id:
                 raw_text = data.get("text", "")
                 logger.debug(
@@ -329,8 +327,9 @@ class MisskeyPlatformAdapter(Platform):
             logger.error(f"[Misskey] 处理聊天消息失败: {e}")
 
     async def _debug_handler(self, data: Dict[str, Any]):
+        event_type = data.get("type", "unknown")
         logger.debug(
-            f"[Misskey] 收到未处理事件:\n{json.dumps(data, indent=2, ensure_ascii=False)}"
+            f"[Misskey] 收到未处理事件: type={event_type}, channel={data.get('channel', 'unknown')}"
         )
 
     def _is_bot_mentioned(self, note: Dict[str, Any]) -> bool:
@@ -365,7 +364,18 @@ class MisskeyPlatformAdapter(Platform):
             text, has_at_user = serialize_message_chain(message_chain.chain)
 
             if not has_at_user and session_id:
-                user_info = self._user_cache.get(session_id)
+                # 从session_id中提取用户ID用于缓存查询
+                # session_id格式为: "chat%<user_id>" 或 "room%<room_id>" 或 "note%<user_id>"
+                user_id_for_cache = None
+                if "%" in session_id:
+                    parts = session_id.split("%")
+                    if len(parts) >= 2:
+                        user_id_for_cache = parts[1]
+
+                user_info = None
+                if user_id_for_cache:
+                    user_info = self._user_cache.get(user_id_for_cache)
+
                 text = add_at_mention_if_needed(text, user_info, has_at_user)
 
             # 检查是否有文件组件
@@ -560,6 +570,10 @@ class MisskeyPlatformAdapter(Platform):
                     user_id_for_cache = (
                         session_id.split("%")[1] if "%" in session_id else session_id
                     )
+
+                    # 获取用户缓存信息（包含reply_to_note_id）
+                    user_info_for_reply = self._user_cache.get(user_id_for_cache, {})
+
                     visibility, visible_user_ids = resolve_message_visibility(
                         user_id=user_id_for_cache,
                         user_cache=self._user_cache,
@@ -575,12 +589,16 @@ class MisskeyPlatformAdapter(Platform):
                         appended = "\n" + "\n".join(fallback_urls)
                         text = (text or "") + appended
 
+                    # 从缓存中获取原消息ID作为reply_id
+                    reply_id = user_info_for_reply.get("reply_to_note_id")
+
                     await self.api.create_note(
                         text=text,
                         visibility=visibility,
                         visible_user_ids=visible_user_ids,
                         file_ids=file_ids or None,
                         local_only=self.local_only,
+                        reply_id=reply_id,  # 添加reply_id参数
                         cw=fields["cw"],
                         poll=fields["poll"],
                         renote_id=fields["renote_id"],
