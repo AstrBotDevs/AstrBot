@@ -509,20 +509,21 @@ class SatoriPlatformAdapter(Platform):
     async def _extract_quote_with_regex(self, content: str) -> Optional[dict]:
         """使用正则表达式提取quote标签信息"""
         import re
-        quote_pattern = r'<quote\s+([^>]*)>(.*?)</quote>'
+
+        quote_pattern = r"<quote\s+([^>]*)>(.*?)</quote>"
         match = re.search(quote_pattern, content, re.DOTALL)
-        
+
         if not match:
             return None
-            
+
         attrs_str = match.group(1)
         inner_content = match.group(2)
-        
+
         id_match = re.search(r'id\s*=\s*["\']([^"\']*)["\']', attrs_str)
         quote_id = id_match.group(1) if id_match else ""
         content_without_quote = content.replace(match.group(0), "")
         content_without_quote = content_without_quote.strip()
-        
+
         return {
             "quote": {"id": quote_id, "content": inner_content},
             "content_without_quote": content_without_quote,
