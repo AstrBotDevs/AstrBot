@@ -480,6 +480,9 @@ class LLMRequestSubStage(Stage):
                     new_tool_set.add_tool(tool)
             req.func_tool = new_tool_set
 
+        # 备份 req.contexts
+        backup_contexts = copy.deepcopy(req.contexts)
+
         # run agent
         agent_runner = AgentRunner()
         logger.debug(
@@ -528,6 +531,9 @@ class LLMRequestSubStage(Stage):
         else:
             async for _ in run_agent(agent_runner, self.max_step, self.show_tool_use):
                 yield
+
+        # 恢复备份的 contexts
+        req.contexts = backup_contexts
 
         await self._save_to_history(event, req, agent_runner.get_final_llm_resp())
 
