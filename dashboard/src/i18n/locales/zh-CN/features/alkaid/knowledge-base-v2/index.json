@@ -1,0 +1,74 @@
+{
+  "list": {
+    "title": "原生知识库",
+    "subtitle": "AstrBot 内置的知识库管理系统",
+    "create": "创建知识库",
+    "sessionConfig": "会话配置",
+    "refresh": "刷新",
+    "loading": "加载中...",
+    "documents": "文档",
+    "chunks": "块"
+  },
+  "empty": {
+    "title": "还没有知识库",
+    "subtitle": "创建第一个知识库来开始使用",
+    "create": "创建知识库"
+  },
+  "createDialog": {
+    "title": "创建知识库",
+    "nameLabel": "知识库名称",
+    "namePlaceholder": "输入知识库名称",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "知识库的简短描述...",
+    "embeddingModelLabel": "嵌入模型 (Embedding Model)",
+    "rerankModelLabel": "重排序模型 (Rerank Model)",
+    "providerInfo": "提供商 ID: {id} | 维度: {dimensions}",
+    "rerankProviderInfo": "提供商 ID: {id}",
+    "tips": "提示: 一旦选择了嵌入模型，请不要修改该提供商的模型或向量维度，否则将严重影响召回率。",
+    "cancel": "取消",
+    "create": "创建"
+  },
+  "editDialog": {
+    "title": "编辑知识库",
+    "save": "保存"
+  },
+  "deleteDialog": {
+    "title": "确认删除",
+    "confirmText": "确定要删除知识库 \"{name}\" 吗？",
+    "warning": "此操作不可逆，所有知识库内容将被永久删除。",
+    "cancel": "取消",
+    "delete": "删除"
+  },
+  "detailDialog": {
+    "tabs": {
+      "documents": "文档管理",
+      "search": "搜索测试",
+      "settings": "知识库设置"
+    }
+  },
+  "emojiPicker": {
+    "title": "选择表情",
+    "close": "关闭",
+    "categories": {
+      "books": "书籍和文档",
+      "emotions": "表情和情感",
+      "objects": "物品和工具",
+      "symbols": "符号和标记"
+    }
+  },
+  "sessionConfig": {
+    "title": "知识库会话配置"
+  },
+  "messages": {
+    "loadFailed": "加载知识库列表失败",
+    "loadError": "加载知识库列表时出错",
+    "nameRequired": "请输入知识库名称",
+    "createSuccess": "知识库创建成功",
+    "updateSuccess": "知识库更新成功",
+    "saveFailed": "保存失败",
+    "saveError": "保存时出错",
+    "deleteSuccess": "知识库删除成功",
+    "deleteFailed": "删除失败",
+    "deleteError": "删除时出错"
+  }
+}

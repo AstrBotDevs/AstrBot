@@ -6,11 +6,13 @@
     "title": "The Alkaid Project.",
     "subtitle": "AstrBot Alpha 项目",
     "navigation": {
-      "knowledgeBase": "知识库",
+      "knowledgeBaseV2": "原生知识库",
+      "knowledgeBase": "知识库 (插件)",
       "longTermMemory": "长期记忆层",
       "other": "..."
     }
   },
+  "knowledgeBaseV2": "原生知识库",
   "features": {
     "knowledgeBase": "知识库",
     "longTermMemory": "长期记忆",

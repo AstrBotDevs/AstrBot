@@ -1,0 +1,44 @@
+{
+  "basic": {
+    "title": "基本信息",
+    "nameLabel": "知识库名称",
+    "namePlaceholder": "输入知识库名称",
+    "descriptionLabel": "描述",
+    "descriptionPlaceholder": "知识库的简短描述..."
+  },
+  "models": {
+    "title": "模型配置",
+    "embeddingLabel": "嵌入模型",
+    "embeddingHint": "用于生成文档向量的模型",
+    "rerankLabel": "重排序模型",
+    "rerankHint": "用于优化检索结果排序的模型（可选）"
+  },
+  "chunking": {
+    "title": "分块参数",
+    "chunkSizeLabel": "块大小",
+    "chunkSizeHint": "每个文档块的字符数 (50-2000)",
+    "chunkOverlapLabel": "块重叠",
+    "chunkOverlapHint": "相邻块之间的重叠字符数 (0-块大小的一半)"
+  },
+  "retrieval": {
+    "title": "检索参数",
+    "topKDenseLabel": "密集检索 Top-K",
+    "topKDenseHint": "向量检索返回的结果数",
+    "topKSparseLabel": "稀疏检索 Top-K",
+    "topKSparseHint": "关键词检索返回的结果数",
+    "topMFinalLabel": "最终结果数 Top-M",
+    "topMFinalHint": "融合后返回的最终结果数",
+    "enableRerankLabel": "启用重排序"
+  },
+  "actions": {
+    "save": "保存设置"
+  },
+  "messages": {
+    "nameRequired": "请输入知识库名称",
+    "embeddingRequired": "请选择嵌入模型",
+    "saveSuccess": "设置保存成功",
+    "saveFailed": "保存失败",
+    "saveError": "保存设置时出错",
+    "loadProvidersError": "加载模型提供商失败"
+  }
+}
