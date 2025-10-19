@@ -11,6 +11,7 @@ from .conversation import ConversationRoute
 from .file import FileRoute
 from .session_management import SessionManagementRoute
 from .persona import PersonaRoute
+from .knowledge_base import KnowledgeBaseRoute
 
 __all__ = [
     "AuthRoute",
@@ -26,4 +27,5 @@ __all__ = [
     "FileRoute",
     "SessionManagementRoute",
     "PersonaRoute",
+    "KnowledgeBaseRoute",
 ]
