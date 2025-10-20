@@ -72,8 +72,8 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        "dashboard_has_new_version": False,
-                        "dashboard_installed": bool(dv),
+                        # dv正常获取则不会提示需要更新
+                        "dashboard_has_new_version": not bool(dv),
                     },
                 ).__dict__
         except Exception as e:
