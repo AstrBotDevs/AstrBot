@@ -71,6 +71,9 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
+        "agent_runner_type": "local",
+        "dify_runner_provider_id": "",
+        "coze_runner_provider_id": "",
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
@@ -1931,12 +1934,19 @@ CONFIG_METADATA_2 = {
                     "streaming_segmented": {
                         "type": "bool",
                     },
+                    "agent_runner_type": {
+                        "type": "string",
+                    },
+                    "dify_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "coze_runner_provider_id": {
+                        "type": "string",
+                    },
                     "max_agent_step": {
-                        "description": "工具调用轮数上限",
                         "type": "int",
                     },
                     "tool_call_timeout": {
-                        "description": "工具调用超时时间（秒）",
                         "type": "int",
                     },
                 },
@@ -2070,6 +2080,46 @@ CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
         "metadata": {
+            "agent_runner": {
+                "description": "Agent",
+                "type": "object",
+                "items": {
+                    "provider_settings.agent_runner_type": {
+                        "description": "执行器",
+                        "type": "string",
+                        "options": ["local", "dify", "coze"],
+                        "labels": ["内置 Agent", "Dify", "Coze"],
+                    },
+                },
+            },
+            "dify_runner": {
+                "description": "Dify",
+                "type": "object",
+                "items": {
+                    "provider_settings.dify_runner_provider_id": {
+                        "description": "Dify 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_dify_runner_provider",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "dify",
+                },
+            },
+            "coze_runner": {
+                "description": "Coze",
+                "type": "object",
+                "items": {
+                    "provider_settings.coze_runner_provider_id": {
+                        "description": "Coze 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_coze_runner_provider",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "coze",
+                },
+            },
             "ai": {
                 "description": "模型",
                 "type": "object",
@@ -2123,6 +2173,9 @@ CONFIG_METADATA_3 = {
                         "type": "text",
                     },
                 },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                },
             },
             "persona": {
                 "description": "人格",
@@ -2134,6 +2187,9 @@ CONFIG_METADATA_3 = {
                         "_special": "select_persona",
                     },
                 },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                },
             },
             "knowledgebase": {
                 "description": "知识库",
@@ -2144,6 +2200,9 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_knowledgebase",
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
                 },
             },
             "websearch": {
@@ -2180,6 +2239,9 @@ CONFIG_METADATA_3 = {
                         "description": "显示来源引用",
                         "type": "bool",
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
                 },
             },
             "others": {
@@ -2247,6 +2309,9 @@ CONFIG_METADATA_3 = {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
                 },
             },
         },
