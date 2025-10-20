@@ -24,6 +24,7 @@
       "title": "Conversation Title",
       "platform": "Platform",
       "type": "Type",
+      "cid": "Conversation ID",
       "umo": "Unified Message Origin",
       "sessionId": "Session ID",
       "createdAt": "Created At",

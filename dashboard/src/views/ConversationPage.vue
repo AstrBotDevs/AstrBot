@@ -433,7 +433,7 @@ export default {
         tableHeaders() {
             return [
                 { title: this.tm('table.headers.title'), key: 'title', sortable: true },
-                { title: '会话 ID', key: 'cid', sortable: true, width: '100px' },
+                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
                 {
                     title: this.tm('table.headers.umo'),
                     align: 'center',

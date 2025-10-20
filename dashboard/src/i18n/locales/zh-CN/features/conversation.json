@@ -24,6 +24,7 @@
       "title": "对话标题",
       "platform": "机器人 ID",
       "type": "消息类型",
+      "cid": "对话 ID",
       "umo": "消息会话来源",
       "sessionId": "会话 ID",
       "createdAt": "创建时间",
