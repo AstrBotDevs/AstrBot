@@ -8,7 +8,9 @@ async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter):
 
     if not isinstance(abconf_data, dict):
         # should be unreachable
-        logger.warning(f"migrate_45_to_46: abconf_data is not a dict (type={type(abconf_data)}). Value: {abconf_data!r}")
+        logger.warning(
+            f"migrate_45_to_46: abconf_data is not a dict (type={type(abconf_data)}). Value: {abconf_data!r}"
+        )
         return
 
     # 如果任何一项带有 umop，则说明需要迁移
