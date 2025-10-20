@@ -30,6 +30,7 @@
       "ttsProvider": "语音合成模型",
       "llmStatus": "启用 LLM",
       "ttsStatus": "启用 TTS",
+      "knowledgeBase": "知识库配置",
       "pluginManagement": "插件管理",
       "actions": "操作"
     }
@@ -66,6 +67,31 @@
     "originalName": "原始名称",
     "fullSessionId": "完整会话ID",
     "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
+  },
+  "knowledgeBase": {
+    "title": "知识库配置",
+    "configure": "配置",
+    "selectKB": "选择知识库",
+    "selectMultiple": "可以选择多个知识库",
+    "noKBAvailable": "暂无可用的知识库",
+    "noKBDesc": "目前没有创建任何知识库",
+    "createKB": "创建知识库",
+    "advancedSettings": "高级配置",
+    "topK": "返回结果数量",
+    "topKHint": "从知识库检索的结果数量",
+    "enableRerank": "启用重排序",
+    "enableRerankHint": "使用重排序模型提高检索质量",
+    "clearConfig": "清除配置",
+    "save": "保存",
+    "cancel": "取消",
+    "loading": "加载知识库配置中...",
+    "description": "为此会话配置使用的知识库。会话将使用配置的知识库来增强对话上下文。",
+    "saveSuccess": "知识库配置保存成功",
+    "saveFailed": "保存知识库配置失败",
+    "loadFailed": "加载知识库配置失败",
+    "clearSuccess": "知识库配置已清除",
+    "clearFailed": "清除知识库配置失败",
+    "clearConfirm": "确定要清除此会话的知识库配置吗?"
   },
   "deleteConfirm": {
     "message": "确定要删除会话 {sessionName} 吗？",

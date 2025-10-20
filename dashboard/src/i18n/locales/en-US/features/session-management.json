@@ -30,6 +30,7 @@
       "ttsProvider": "TTS Provider",
       "llmStatus": "LLM Status",
       "ttsStatus": "TTS Status",
+      "knowledgeBase": "Knowledge Base",
       "pluginManagement": "Plugin Management",
       "actions": "Actions"
     }
@@ -66,6 +67,31 @@
     "originalName": "Original Name",
     "fullSessionId": "Full Session ID",
     "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
+  },
+  "knowledgeBase": {
+    "title": "Knowledge Base Configuration",
+    "configure": "Configure",
+    "selectKB": "Select Knowledge Bases",
+    "selectMultiple": "You can select multiple knowledge bases",
+    "noKBAvailable": "No knowledge bases available",
+    "noKBDesc": "No knowledge bases have been created yet",
+    "createKB": "Create Knowledge Base",
+    "advancedSettings": "Advanced Settings",
+    "topK": "Result Count",
+    "topKHint": "Number of results to retrieve from knowledge base",
+    "enableRerank": "Enable Reranking",
+    "enableRerankHint": "Use reranking model to improve retrieval quality",
+    "clearConfig": "Clear Configuration",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading knowledge base configuration...",
+    "description": "Configure knowledge bases for this session. The session will use configured knowledge bases to enhance conversation context.",
+    "saveSuccess": "Knowledge base configuration saved successfully",
+    "saveFailed": "Failed to save knowledge base configuration",
+    "loadFailed": "Failed to load knowledge base configuration",
+    "clearSuccess": "Knowledge base configuration cleared",
+    "clearFailed": "Failed to clear knowledge base configuration",
+    "clearConfirm": "Are you sure you want to clear the knowledge base configuration for this session?"
   },
   "deleteConfirm": {
     "message": "Are you sure you want to delete session {sessionName}?",

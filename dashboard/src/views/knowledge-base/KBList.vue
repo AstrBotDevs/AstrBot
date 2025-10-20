@@ -152,6 +152,7 @@
               :label="t('create.embeddingModelLabel')"
               variant="outlined"
               class="mb-4"
+              @update:model-value="handleEmbeddingProviderChange"
             >
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
@@ -164,6 +165,10 @@
                 </v-list-item>
               </template>
             </v-select>
+
+            <v-alert type="warning" variant="tonal" density="compact" class="mb-4" v-if="editingKB && showEmbeddingWarning">
+              <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
+            </v-alert>
 
             <v-select
               v-model="formData.rerank_provider_id"
@@ -272,6 +277,39 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <!-- Embedding Provider 修改确认对话框 -->
+    <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
+      <v-card>
+        <v-card-title class="bg-warning text-white">
+          <v-icon class="mr-2">mdi-alert</v-icon>
+          确认修改嵌入模型
+        </v-card-title>
+        <v-card-text class="pa-6">
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            <strong>警告:</strong> 修改嵌入模型将导致以下影响:
+          </v-alert>
+          <ul class="text-body-2">
+            <li>现有的向量数据将失效</li>
+            <li>检索功能可能无法正常工作</li>
+            <li>建议删除现有文档后重新上传</li>
+            <li>不同嵌入模型生成的向量不兼容</li>
+          </ul>
+          <div class="mt-4 text-body-2">
+            您确定要将嵌入模型从 <strong>{{ originalEmbeddingProvider }}</strong> 修改为 <strong>{{ pendingEmbeddingProvider }}</strong> 吗?
+          </div>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="cancelEmbeddingChange">
+            取消
+          </v-btn>
+          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
+            确认修改
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -291,6 +329,10 @@ const deleting = ref(false)
 const kbList = ref<any[]>([])
 const embeddingProviders = ref<any[]>([])
 const rerankProviders = ref<any[]>([])
+const originalEmbeddingProvider = ref<string | null>(null)
+const showEmbeddingWarning = ref(false)
+const embeddingChangeDialog = ref(false)
+const pendingEmbeddingProvider = ref<string | null>(null)
 
 // 对话框
 const showCreateDialog = ref(false)
@@ -386,6 +428,7 @@ const navigateToDetail = (kbId: string) => {
 // 编辑知识库
 const editKB = (kb: any) => {
   editingKB.value = kb
+  originalEmbeddingProvider.value = kb.embedding_provider_id
   formData.value = {
     kb_name: kb.kb_name,
     description: kb.description || '',
@@ -394,6 +437,39 @@ const editKB = (kb: any) => {
     rerank_provider_id: kb.rerank_provider_id
   }
   showCreateDialog.value = true
+}
+
+// 处理 embedding provider 变更
+const handleEmbeddingProviderChange = (newValue: string | null) => {
+  // 检测是否修改了embedding provider
+  if (newValue && originalEmbeddingProvider.value && newValue !== originalEmbeddingProvider.value) {
+    // 显示二次确认对话框
+    showEmbeddingWarning.value = true
+    pendingEmbeddingProvider.value = newValue
+    embeddingChangeDialog.value = true
+  } else {
+    showEmbeddingWarning.value = false
+  }
+}
+
+// 确认修改 embedding provider
+const confirmEmbeddingChange = () => {
+  if (pendingEmbeddingProvider.value) {
+    formData.value.embedding_provider_id = pendingEmbeddingProvider.value
+    // 更新原始值,这样下次比较时不会重复弹窗
+    originalEmbeddingProvider.value = pendingEmbeddingProvider.value
+  }
+  embeddingChangeDialog.value = false
+  showEmbeddingWarning.value = true
+}
+
+// 取消修改 embedding provider
+const cancelEmbeddingChange = () => {
+  // 恢复到原始值
+  formData.value.embedding_provider_id = originalEmbeddingProvider.value
+  embeddingChangeDialog.value = false
+  showEmbeddingWarning.value = false
+  pendingEmbeddingProvider.value = null
 }
 
 // 确认删除
@@ -481,6 +557,9 @@ const submitForm = async () => {
 const closeCreateDialog = () => {
   showCreateDialog.value = false
   editingKB.value = null
+  originalEmbeddingProvider.value = null
+  showEmbeddingWarning.value = false
+  pendingEmbeddingProvider.value = null
   formData.value = {
     kb_name: '',
     description: '',

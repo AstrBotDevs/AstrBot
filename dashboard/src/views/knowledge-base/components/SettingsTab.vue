@@ -86,9 +86,7 @@
                 :label="t('settings.embeddingProvider')"
                 variant="outlined"
                 density="comfortable"
-                disabled
-                hint="嵌入模型创建后不可修改"
-                persistent-hint
+                @update:model-value="handleEmbeddingProviderChange"
               />
             </v-col>
             <v-col cols="12" md="6">
@@ -107,6 +105,10 @@
 
           <v-alert type="info" variant="tonal" class="mt-4">
             {{ t('settings.tips') }}
+          </v-alert>
+
+          <v-alert type="warning" variant="tonal" class="mt-4" v-if="showEmbeddingWarning">
+            <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
           </v-alert>
         </v-form>
       </v-card-text>
@@ -131,6 +133,39 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <!-- Embedding Provider修改确认对话框 -->
+    <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
+      <v-card>
+        <v-card-title class="bg-warning text-white">
+          <v-icon class="mr-2">mdi-alert</v-icon>
+          确认修改嵌入模型
+        </v-card-title>
+        <v-card-text class="pa-6">
+          <v-alert type="warning" variant="tonal" class="mb-4">
+            <strong>警告:</strong> 修改嵌入模型将导致以下影响:
+          </v-alert>
+          <ul class="text-body-2">
+            <li>现有的向量数据将失效</li>
+            <li>检索功能可能无法正常工作</li>
+            <li>建议删除现有文档后重新上传</li>
+            <li>不同嵌入模型生成的向量不兼容</li>
+          </ul>
+          <div class="mt-4 text-body-2">
+            您确定要将嵌入模型从 <strong>{{ originalEmbeddingProvider }}</strong> 修改为 <strong>{{ pendingEmbeddingProvider }}</strong> 吗?
+          </div>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="cancelEmbeddingChange">
+            取消
+          </v-btn>
+          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
+            确认修改
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -152,6 +187,10 @@ const saving = ref(false)
 const formRef = ref()
 const embeddingProviders = ref<any[]>([])
 const rerankProviders = ref<any[]>([])
+const originalEmbeddingProvider = ref('')
+const showEmbeddingWarning = ref(false)
+const embeddingChangeDialog = ref(false)
+const pendingEmbeddingProvider = ref('')
 
 const snackbar = ref({
   show: false,
@@ -190,6 +229,8 @@ watch(() => props.kb, (kb) => {
       embedding_provider_id: kb.embedding_provider_id || '',
       rerank_provider_id: kb.rerank_provider_id || ''
     }
+    // 保存原始的embedding provider
+    originalEmbeddingProvider.value = kb.embedding_provider_id || ''
   }
 }, { immediate: true })
 
@@ -210,6 +251,33 @@ const loadProviders = async () => {
   } catch (error) {
     console.error('Failed to load providers:', error)
   }
+}
+
+// 处理embedding provider变更
+const handleEmbeddingProviderChange = (newValue: string) => {
+  if (newValue && newValue !== originalEmbeddingProvider.value) {
+    // 显示警告并需要确认
+    showEmbeddingWarning.value = true
+    pendingEmbeddingProvider.value = newValue
+    embeddingChangeDialog.value = true
+  } else {
+    showEmbeddingWarning.value = false
+  }
+}
+
+// 确认修改embedding provider
+const confirmEmbeddingChange = () => {
+  formData.value.embedding_provider_id = pendingEmbeddingProvider.value
+  embeddingChangeDialog.value = false
+  showEmbeddingWarning.value = true
+}
+
+// 取消修改embedding provider
+const cancelEmbeddingChange = () => {
+  formData.value.embedding_provider_id = originalEmbeddingProvider.value
+  embeddingChangeDialog.value = false
+  showEmbeddingWarning.value = false
+  pendingEmbeddingProvider.value = ''
 }
 
 // 保存设置
