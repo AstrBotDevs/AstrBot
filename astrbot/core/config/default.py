@@ -300,26 +300,26 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
-                    "WebChat": {
-                        "id": "webchat",
-                        "type": "webchat",
-                        "enable": False,
-                        "webchat_link_path": "",
-                        "webchat_present_type": "fullscreen",
-                    },
+                    # "WebChat": {
+                    #     "id": "webchat",
+                    #     "type": "webchat",
+                    #     "enable": False,
+                    #     "webchat_link_path": "",
+                    #     "webchat_present_type": "fullscreen",
+                    # },
                 },
                 "items": {
-                    "webchat_link_path": {
-                        "description": "链接路径",
-                        "_special": "webchat_link_path",
-                        "type": "string",
-                    },
-                    "webchat_present_type": {
-                        "_special": "webchat_present_type",
-                        "description": "展现形式",
-                        "type": "string",
-                        "options": ["fullscreen", "embedded"],
-                    },
+                    # "webchat_link_path": {
+                    #     "description": "链接路径",
+                    #     "_special": "webchat_link_path",
+                    #     "type": "string",
+                    # },
+                    # "webchat_present_type": {
+                    #     "_special": "webchat_present_type",
+                    #     "description": "展现形式",
+                    #     "type": "string",
+                    #     "options": ["fullscreen", "embedded"],
+                    # },
                     "satori_api_base_url": {
                         "description": "Satori API 终结点",
                         "type": "string",
