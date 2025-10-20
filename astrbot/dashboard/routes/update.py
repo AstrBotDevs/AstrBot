@@ -56,11 +56,13 @@ class UpdateRoute(Route):
             if type_ == "dashboard":
                 return (
                     Response()
-                    .ok({
-                        "has_new_version": False,
-                        "current_version": dv,
-                        "installed": bool(dv),
-                    })
+                    .ok(
+                        {
+                            "has_new_version": False,
+                            "current_version": dv,
+                            "installed": bool(dv),
+                        }
+                    )
                     .__dict__
                 )
             else:
