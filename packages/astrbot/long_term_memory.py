@@ -32,6 +32,7 @@ class LongTermMemory:
         image_caption = (
             True
             if cfg["provider_settings"]["default_image_caption_provider_id"]
+            and cfg["provider_ltm_settings"]["image_caption"]
             else False
         )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
