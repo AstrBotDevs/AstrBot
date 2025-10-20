@@ -23,7 +23,7 @@
   "table": {
     "headers": {
       "sessionStatus": "会话状态",
-      "sessionInfo": "ID (UMO)",
+      "sessionInfo": "消息会话来源",
       "persona": "人格",
       "chatProvider": "聊天模型",
       "sttProvider": "语音识别模型",

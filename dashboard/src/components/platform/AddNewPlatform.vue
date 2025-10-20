@@ -191,7 +191,7 @@
                   </template>
 
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block">*消息下发时，会根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。</small>
+                <small class="ml-2 mt-2 d-block">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。</small>
               </div>
             </div>
 
@@ -266,7 +266,7 @@ import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapp
 export default {
   name: 'AddNewPlatform',
   components: { AstrBotConfig, AstrBotCoreConfigWrapper },
-  emits: ['update:show', 'show-toast', 'refresh-config', 'edit-platform-config'],
+  emits: ['update:show', 'show-toast', 'refresh-config'],
   props: {
     show: {
       type: Boolean,
@@ -318,14 +318,14 @@ export default {
       // 平台路由表
       platformRoutes: [],
       routeTableHeaders: [
-        { title: '消息会话来源', key: 'source', sortable: false, width: '40%' },
+        { title: '消息会话来源(消息类型:会话 ID)', key: 'source', sortable: false, width: '40%' },
         { title: '使用配置文件', key: 'configId', sortable: false, width: '40%' },
         { title: '操作', key: 'actions', sortable: false, align: 'center', width: '20%' },
       ],
       messageTypeOptions: [
         { label: '全部消息', value: '*' },
-        { label: '群组消息', value: 'GroupMessage' },
-        { label: '私聊消息', value: 'FriendMessage' },
+        { label: '群组消息(GroupMessage)', value: 'GroupMessage' },
+        { label: '私聊消息(FriendMessage)', value: 'FriendMessage' },
       ],
       isEditingRoutes: false, // 编辑模式开关
 
@@ -868,23 +868,6 @@ export default {
       return platform === platformId || platform === '' || platform === '*';
     },
 
-    // 格式化UMOP显示
-    formatUmopScope(umop) {
-      if (!umop) return '';
-
-      const parts = umop.split(':');
-      if (parts.length !== 3) return umop;
-
-      const [platform, messageType, sessionId] = parts;
-
-      // 格式化各部分
-      // const platformText = platform === '' || platform === '*' ? '全部平台' : platform;
-      const messageTypeText = this.getMessageTypeLabel(messageType === '' || messageType === '*' ? '*' : messageType);
-      const sessionText = sessionId === '' || sessionId === '*' ? '全部会话' : sessionId;
-
-      return `${messageTypeText}:${sessionText}`;
-    },
-
     // 获取消息类型标签
     getMessageTypeLabel(messageType) {
       const typeMap = {
@@ -894,11 +877,6 @@ export default {
         'FriendMessage': '私聊消息'
       };
       return typeMap[messageType] || messageType;
-    },
-
-    // 编辑平台配置文件
-    editPlatformConfig(config) {
-      this.$emit('edit-platform-config', config);
     },
 
     toggleShowConfigSection() {
