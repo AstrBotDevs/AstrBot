@@ -56,7 +56,11 @@ class UpdateRoute(Route):
             if type_ == "dashboard":
                 return (
                     Response()
-                    .ok({"has_new_version": False, "current_version": dv})
+                    .ok({
+                        "has_new_version": False,
+                        "current_version": dv,
+                        "installed": bool(dv),
+                    })
                     .__dict__
                 )
             else:
@@ -69,6 +73,7 @@ class UpdateRoute(Route):
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
                         "dashboard_has_new_version": False,
+                        "dashboard_installed": bool(dv),
                     },
                 ).__dict__
         except Exception as e:
