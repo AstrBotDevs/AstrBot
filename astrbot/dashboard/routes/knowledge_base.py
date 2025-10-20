@@ -57,6 +57,7 @@ class KnowledgeBaseRoute(Route):
             "/kb/session/config/set": ("POST", self.set_session_config),
             "/kb/session/config/delete": ("POST", self.delete_session_config),
             "/kb/session/config/list": ("GET", self.list_session_configs),
+            "/kb/session/config/list_by_kb": ("GET", self.list_sessions_by_kb),
         }
         self.register_routes()
 
@@ -1241,3 +1242,51 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"获取会话配置列表失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"获取会话配置列表失败: {str(e)}").__dict__
+
+    async def list_sessions_by_kb(self):
+        """获取使用特定知识库的会话列表
+
+        Query 参数:
+        - kb_id: 知识库 ID (必填)
+        """
+        try:
+            kb_db = self.kb_db if self.kb_db else self._get_kb_manager() and self.kb_db
+            kb_id = request.args.get("kb_id")
+
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            # 获取所有会话配置
+            configs = await kb_db.list_all_session_configs(offset=0, limit=1000)
+
+            import json
+
+            # 筛选包含该知识库的会话
+            session_list = []
+            for config in configs:
+                kb_ids = json.loads(config.kb_ids)
+                if kb_id in kb_ids:
+                    session_dict = {
+                        "config_id": config.config_id,
+                        "scope": config.scope,
+                        "scope_id": config.scope_id,
+                        "kb_ids": kb_ids,
+                        "top_k": config.top_k,
+                        "enable_rerank": config.enable_rerank,
+                        "created_at": config.created_at.isoformat(),
+                        "updated_at": config.updated_at.isoformat(),
+                    }
+                    session_list.append(session_dict)
+
+            return (
+                Response()
+                .ok({"sessions": session_list, "total": len(session_list), "kb_id": kb_id})
+                .__dict__
+            )
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"获取知识库会话列表失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库会话列表失败: {str(e)}").__dict__

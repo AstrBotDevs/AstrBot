@@ -36,6 +36,10 @@
           {{ t('tabs.documents') }}
           <v-chip class="ml-2" size="small" variant="tonal">{{ kb.doc_count || 0 }}</v-chip>
         </v-tab>
+        <v-tab value="retrieval">
+          <v-icon start>mdi-magnify</v-icon>
+          {{ t('tabs.retrieval') }}
+        </v-tab>
         <v-tab value="sessions">
           <v-icon start>mdi-account-multiple</v-icon>
           {{ t('tabs.sessions') }}
@@ -157,7 +161,12 @@
           <DocumentsTab :kb-id="kbId" :kb="kb" @refresh="loadKB" />
         </v-window-item>
 
-        <!-- 会话配置 -->
+        <!-- 知识库检索 -->
+        <v-window-item value="retrieval">
+          <RetrievalTab :kb-id="kbId" />
+        </v-window-item>
+
+        <!-- 使用会话 -->
         <v-window-item value="sessions">
           <SessionsTab :kb-id="kbId" />
         </v-window-item>
@@ -182,6 +191,7 @@ import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
+import RetrievalTab from './components/RetrievalTab.vue'
 import SessionsTab from './components/SessionsTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 

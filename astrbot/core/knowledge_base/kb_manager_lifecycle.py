@@ -238,10 +238,13 @@ class KnowledgeBaseManager:
             )
 
         if len(embedding_providers) > 1 and not configured_provider_id:
-            logger.warning(
+            provider = embedding_providers[0]
+            provider_id = provider.meta().id
+            logger.info(
                 f"检测到 {len(embedding_providers)} 个 Embedding Provider，"
-                f"但未指定使用哪个，将默认使用第一个"
+                f"未在配置文件中指定 embedding_provider_id，将使用第一个: {provider_id}"
             )
+            return provider
 
         provider = embedding_providers[0]
         provider_id = provider.meta().id

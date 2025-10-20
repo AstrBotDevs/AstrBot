@@ -5,13 +5,13 @@
         <span>{{ t('sessions.title') }}</span>
         <v-spacer />
         <v-btn
-          prepend-icon="mdi-plus"
-          color="primary"
-          variant="elevated"
+          prepend-icon="mdi-refresh"
+          variant="tonal"
           size="small"
-          @click="showAddDialog = true"
+          @click="loadSessions"
+          :loading="loading"
         >
-          {{ t('sessions.add') }}
+          {{ t('sessions.refresh') }}
         </v-btn>
       </v-card-title>
 
@@ -41,11 +41,12 @@
 
           <template #item.actions="{ item }">
             <v-btn
-              icon="mdi-delete"
+              icon="mdi-open-in-new"
               variant="text"
               size="small"
-              color="error"
-              @click="confirmDelete(item)"
+              color="primary"
+              @click="goToSessionManagement(item)"
+              :title="t('sessions.viewInSessionManagement')"
             />
           </template>
 
@@ -53,98 +54,20 @@
             <div class="text-center py-8">
               <v-icon size="64" color="grey-lighten-2">mdi-account-multiple-outline</v-icon>
               <p class="mt-4 text-medium-emphasis">{{ t('sessions.empty') }}</p>
+              <v-btn
+                class="mt-4"
+                prepend-icon="mdi-cog"
+                variant="tonal"
+                color="primary"
+                @click="goToSessionManagement()"
+              >
+                {{ t('sessions.goToSessionManagement') }}
+              </v-btn>
             </div>
           </template>
         </v-data-table>
       </v-card-text>
     </v-card>
-
-    <!-- 添加配置对话框 -->
-    <v-dialog v-model="showAddDialog" max-width="500px" persistent>
-      <v-card>
-        <v-card-title class="pa-4">
-          <span class="text-h6">{{ t('sessions.add') }}</span>
-          <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeAddDialog" />
-        </v-card-title>
-
-        <v-divider />
-
-        <v-card-text class="pa-6">
-          <v-form ref="formRef">
-            <v-select
-              v-model="formData.scope"
-              :items="scopeOptions"
-              :label="t('sessions.scope')"
-              variant="outlined"
-              class="mb-4"
-            />
-
-            <v-text-field
-              v-model="formData.scope_id"
-              :label="t('sessions.scopeId')"
-              :placeholder="formData.scope === 'session' ? 'platform:xxx:session_id' : 'platform_id'"
-              variant="outlined"
-              required
-              class="mb-4"
-            />
-
-            <v-text-field
-              v-model.number="formData.top_k"
-              :label="t('sessions.topK')"
-              type="number"
-              variant="outlined"
-              class="mb-4"
-            />
-
-            <v-checkbox
-              v-model="formData.enable_rerank"
-              :label="t('sessions.enableRerank')"
-              color="primary"
-            />
-          </v-form>
-        </v-card-text>
-
-        <v-divider />
-
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="closeAddDialog">取消</v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            @click="addSession"
-            :loading="saving"
-          >
-            添加
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 删除确认对话框 -->
-    <v-dialog v-model="showDeleteDialog" max-width="400px">
-      <v-card>
-        <v-card-title class="pa-4 text-h6">确认删除</v-card-title>
-        <v-divider />
-        <v-card-text class="pa-6">
-          <p>{{ t('sessions.deleteConfirm') }}</p>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
-          <v-btn
-            color="error"
-            variant="elevated"
-            @click="deleteSession"
-            :loading="deleting"
-          >
-            删除
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
 
     <!-- 消息提示 -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
@@ -155,10 +78,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
+const router = useRouter()
 
 const props = defineProps<{
   kbId: string
@@ -166,13 +91,7 @@ const props = defineProps<{
 
 // 状态
 const loading = ref(false)
-const saving = ref(false)
-const deleting = ref(false)
 const sessions = ref<any[]>([])
-const showAddDialog = ref(false)
-const showDeleteDialog = ref(false)
-const deleteTarget = ref<any>(null)
-const formRef = ref()
 
 const snackbar = ref({
   show: false,
@@ -186,14 +105,6 @@ const showSnackbar = (text: string, color: string = 'success') => {
   snackbar.value.show = true
 }
 
-// 表单数据
-const formData = ref({
-  scope: 'session',
-  scope_id: '',
-  top_k: 5,
-  enable_rerank: true
-})
-
 // 表格列
 const headers = [
   { title: t('sessions.scope'), key: 'scope' },
@@ -203,104 +114,46 @@ const headers = [
   { title: t('sessions.actions'), key: 'actions', sortable: false, align: 'end' }
 ]
 
-// 范围选项
-const scopeOptions = [
-  { title: t('sessions.scopeSession'), value: 'session' },
-  { title: t('sessions.scopePlatform'), value: 'platform' }
-]
-
-// 加载会话配置
+// 加载使用该知识库的会话
 const loadSessions = async () => {
   loading.value = true
+  console.log('[SessionsTab] 开始加载会话列表, kb_id:', props.kbId)
+
   try {
-    const response = await axios.get('/api/kb/session/config/list')
+    const url = '/api/kb/session/config/list_by_kb'
+    const params = { kb_id: props.kbId }
+    console.log('[SessionsTab] 请求URL:', url, '参数:', params)
+
+    const response = await axios.get(url, { params })
+    console.log('[SessionsTab] 响应状态:', response.status)
+    console.log('[SessionsTab] 响应数据:', response.data)
+
     if (response.data.status === 'ok') {
-      // 过滤出使用当前知识库的配置
-      sessions.value = response.data.data.items.filter((item: any) => {
-        const kbIds = JSON.parse(item.kb_ids || '[]')
-        return kbIds.includes(props.kbId)
-      })
+      sessions.value = response.data.data.sessions
+      console.log('[SessionsTab] 成功加载会话列表, 数量:', sessions.value.length)
+    } else {
+      console.error('[SessionsTab] API返回错误:', response.data.message)
+      showSnackbar(response.data.message || t('sessions.loadFailed'), 'error')
     }
   } catch (error) {
-    console.error('Failed to load session configs:', error)
-    showSnackbar('加载会话配置失败', 'error')
+    console.error('[SessionsTab] 请求失败:', error)
+    if (error.response) {
+      console.error('[SessionsTab] 错误响应状态:', error.response.status)
+      console.error('[SessionsTab] 错误响应数据:', error.response.data)
+    } else if (error.request) {
+      console.error('[SessionsTab] 请求未收到响应:', error.request)
+    } else {
+      console.error('[SessionsTab] 请求配置错误:', error.message)
+    }
+    showSnackbar(t('sessions.loadFailed'), 'error')
   } finally {
     loading.value = false
   }
 }
 
-// 添加会话配置
-const addSession = async () => {
-  const { valid } = await formRef.value.validate()
-  if (!valid) return
-
-  saving.value = true
-  try {
-    const response = await axios.post('/api/kb/session/config', {
-      scope: formData.value.scope,
-      scope_id: formData.value.scope_id,
-      kb_ids: [props.kbId],
-      top_k: formData.value.top_k,
-      enable_rerank: formData.value.enable_rerank
-    })
-
-    if (response.data.status === 'ok') {
-      showSnackbar(t('sessions.addSuccess'))
-      closeAddDialog()
-      await loadSessions()
-    } else {
-      showSnackbar(response.data.message || t('sessions.addFailed'), 'error')
-    }
-  } catch (error) {
-    console.error('Failed to add session config:', error)
-    showSnackbar(t('sessions.addFailed'), 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-// 确认删除
-const confirmDelete = (session: any) => {
-  deleteTarget.value = session
-  showDeleteDialog.value = true
-}
-
-// 删除会话配置
-const deleteSession = async () => {
-  if (!deleteTarget.value) return
-
-  deleting.value = true
-  try {
-    const response = await axios.post('/api/kb/session/config/delete', {
-      scope: deleteTarget.value.scope,
-      scope_id: deleteTarget.value.scope_id
-    })
-
-    if (response.data.status === 'ok') {
-      showSnackbar(t('sessions.deleteSuccess'))
-      showDeleteDialog.value = false
-      await loadSessions()
-    } else {
-      showSnackbar(response.data.message || t('sessions.deleteFailed'), 'error')
-    }
-  } catch (error) {
-    console.error('Failed to delete session config:', error)
-    showSnackbar(t('sessions.deleteFailed'), 'error')
-  } finally {
-    deleting.value = false
-  }
-}
-
-// 关闭添加对话框
-const closeAddDialog = () => {
-  showAddDialog.value = false
-  formData.value = {
-    scope: 'session',
-    scope_id: '',
-    top_k: 5,
-    enable_rerank: true
-  }
-  formRef.value?.reset()
+// 跳转到会话管理页面
+const goToSessionManagement = (session?: any) => {
+  router.push({ name: 'SessionManagement' })
 }
 
 onMounted(() => {
