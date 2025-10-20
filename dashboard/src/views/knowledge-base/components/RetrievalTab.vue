@@ -45,6 +45,9 @@
                 density="compact"
                 persistent-hint
               />
+              <v-alert v-if="enableRerank" type="info" variant="tonal" class="mt-2" density="compact">
+                如果没有配置重排序模型提供商，将跳过重排序步骤
+              </v-alert>
             </v-card>
           </v-col>
         </v-row>
@@ -147,7 +150,7 @@ const props = defineProps<{
 const loading = ref(false)
 const query = ref('')
 const topK = ref(5)
-const enableRerank = ref(true)
+const enableRerank = ref(false)
 const results = ref<any[]>([])
 const hasSearched = ref(false)
 

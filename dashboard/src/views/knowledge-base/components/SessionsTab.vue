@@ -117,20 +117,19 @@ const headers = [
 // 加载使用该知识库的会话
 const loadSessions = async () => {
   loading.value = true
-  console.log('[SessionsTab] 开始加载会话列表, kb_id:', props.kbId)
+  
 
   try {
     const url = '/api/kb/session/config/list_by_kb'
     const params = { kb_id: props.kbId }
-    console.log('[SessionsTab] 请求URL:', url, '参数:', params)
+    
 
     const response = await axios.get(url, { params })
-    console.log('[SessionsTab] 响应状态:', response.status)
-    console.log('[SessionsTab] 响应数据:', response.data)
+    
 
     if (response.data.status === 'ok') {
       sessions.value = response.data.data.sessions
-      console.log('[SessionsTab] 成功加载会话列表, 数量:', sessions.value.length)
+      
     } else {
       console.error('[SessionsTab] API返回错误:', response.data.message)
       showSnackbar(response.data.message || t('sessions.loadFailed'), 'error')

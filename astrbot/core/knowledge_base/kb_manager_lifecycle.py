@@ -177,6 +177,7 @@ class KnowledgeBaseManager:
             storage_path=files_path,
             parsers=parsers,
             chunker=chunker,
+            provider_manager=self.provider_manager,
         )
 
     async def _init_retrieval_manager(self):

@@ -34,6 +34,7 @@ class KBManager:
         storage_path: str,
         parsers: dict[str, BaseParser],
         chunker: BaseChunker,
+        provider_manager=None,
     ):
         self.db = db
         self.vec_db = vec_db
@@ -42,6 +43,7 @@ class KBManager:
         self.files_path = self.storage_path / "files"
         self.parsers = parsers
         self.chunker = chunker
+        self.provider_manager = provider_manager
 
         # 确保目录存在
         self.media_path.mkdir(parents=True, exist_ok=True)
@@ -63,7 +65,23 @@ class KBManager:
         top_m_final: Optional[int] = None,
         enable_rerank: Optional[bool] = None,
     ) -> KnowledgeBase:
-        """创建知识库"""
+        """创建知识库
+
+        Args:
+            enable_rerank: 是否启用重排序。
+                - 如果明确传入 True/False，则使用该值
+                - 如果为 None，则根据是否有可用的 rerank provider 自动决定
+        """
+        # 智能决定 enable_rerank 的默认值
+        if enable_rerank is None:
+            # 检查是否有可用的 rerank provider
+            has_rerank_provider = (
+                self.provider_manager
+                and hasattr(self.provider_manager, 'rerank_provider_insts')
+                and len(self.provider_manager.rerank_provider_insts) > 0
+            )
+            enable_rerank = has_rerank_provider
+
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -75,7 +93,7 @@ class KBManager:
             top_k_dense=top_k_dense if top_k_dense is not None else 50,
             top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
             top_m_final=top_m_final if top_m_final is not None else 5,
-            enable_rerank=enable_rerank if enable_rerank is not None else True,
+            enable_rerank=enable_rerank,
         )
         async with self.db.get_db() as session:
             session.add(kb)

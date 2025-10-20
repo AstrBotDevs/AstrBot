@@ -49,7 +49,7 @@ class KnowledgeBase(SQLModel, table=True):
     top_k_dense: Optional[int] = Field(default=50, nullable=True)
     top_k_sparse: Optional[int] = Field(default=50, nullable=True)
     top_m_final: Optional[int] = Field(default=5, nullable=True)
-    enable_rerank: Optional[bool] = Field(default=True, nullable=True)
+    enable_rerank: Optional[bool] = Field(default=False, nullable=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
