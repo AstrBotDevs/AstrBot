@@ -135,7 +135,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
         <!-- Regular Property -->
         <template v-else>
           <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
-            <v-col cols="12" sm="6" class="property-info">
+            <v-col cols="12" sm="7" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
@@ -151,16 +151,6 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   {{ metadata[metadataKey].items[key]?.hint }}
                 </v-list-item-subtitle>
               </v-list-item>
-            </v-col>
-
-            <v-col cols="12" sm="1" class="d-flex align-center type-indicator">
-              <v-chip v-if="!metadata[metadataKey].items[key]?.invisible"
-                     color="primary"
-                     label
-                     size="x-small"
-                     variant="flat">
-                {{ metadata[metadataKey].items[key]?.type || 'string' }}
-              </v-chip>
             </v-col>
 
             <v-col cols="12" sm="5" class="config-input">
@@ -335,7 +325,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
     <!-- Simple Value Configuration -->
     <div v-else class="simple-config">
       <v-row class="config-row">
-        <v-col cols="12" sm="6" class="property-info">
+        <v-col cols="12" sm="7" class="property-info">
           <v-list-item density="compact">
             <v-list-item-title class="property-name">
               {{ metadata[metadataKey]?.description }}
@@ -347,16 +337,6 @@ function hasVisibleItemsAfter(items, currentIndex) {
               {{ metadata[metadataKey]?.hint }}
             </v-list-item-subtitle>
           </v-list-item>
-        </v-col>
-
-        <v-col cols="12" sm="1" class="d-flex align-center type-indicator">
-          <v-chip v-if="!metadata[metadataKey]?.invisible"
-                 color="primary"
-                 label
-                 size="x-small"
-                 variant="flat">
-            {{ metadata[metadataKey]?.type }}
-          </v-chip>
         </v-col>
 
         <v-col cols="12" sm="5" class="config-input">
@@ -548,8 +528,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
 }
 
 .config-divider {
-  border-color: rgba(0, 0, 0, 0.1);
-  margin: 4px 0;
+  border-color: rgba(0, 0, 0, 0.05);
+  margin: 0px 16px;
 }
 
 .editor-container {

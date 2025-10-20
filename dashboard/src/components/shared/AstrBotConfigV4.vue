@@ -120,7 +120,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
 
   <v-card style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));" rounded="md" variant="outlined">
-    <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'">
+    <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'" style="padding-bottom: 8px;">
       <v-list-item-title class="config-title">
         {{ metadata[metadataKey]?.description }}
       </v-list-item-title>
@@ -365,7 +365,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
 .config-row {
   margin: 0;
   align-items: center;
-  padding: 10px 8px;
+  padding: 8px 8px;
   border-radius: 4px;
 }
 

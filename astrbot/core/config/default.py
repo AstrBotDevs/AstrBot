@@ -166,7 +166,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "QQ 个人号(aiocqhttp)": {
+                    "QQ 个人号(OneBot v11)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -174,7 +174,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "微信个人号(WeChatPadPro)": {
+                    "WeChatPadPro": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
                         "enable": False,
@@ -301,8 +301,26 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
+                    # "WebChat": {
+                    #     "id": "webchat",
+                    #     "type": "webchat",
+                    #     "enable": False,
+                    #     "webchat_link_path": "",
+                    #     "webchat_present_type": "fullscreen",
+                    # },
                 },
                 "items": {
+                    # "webchat_link_path": {
+                    #     "description": "链接路径",
+                    #     "_special": "webchat_link_path",
+                    #     "type": "string",
+                    # },
+                    # "webchat_present_type": {
+                    #     "_special": "webchat_present_type",
+                    #     "description": "展现形式",
+                    #     "type": "string",
+                    #     "options": ["fullscreen", "embedded"],
+                    # },
                     "satori_api_base_url": {
                         "description": "Satori API 终结点",
                         "type": "string",
@@ -491,19 +509,18 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
                     "ws_reverse_host": {
-                        "description": "反向 Websocket 主机地址(AstrBot 为服务器端)",
+                        "description": "反向 Websocket 主机",
                         "type": "string",
-                        "hint": "aiocqhttp 适配器的反向 Websocket 服务器 IP 地址，不包含端口号。",
+                        "hint": "AstrBot 将作为服务器端。",
                     },
                     "ws_reverse_port": {
                         "description": "反向 Websocket 端口",
                         "type": "int",
-                        "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
                     },
                     "ws_reverse_token": {
                         "description": "反向 Websocket Token",
                         "type": "string",
-                        "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
+                        "hint": "反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
                     "wecom_ai_bot_name": {
                         "description": "企业微信智能机器人的名字",
@@ -2219,7 +2236,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
-                        "hint": "例子: 如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
+                        "hint": "如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",
