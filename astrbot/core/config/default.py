@@ -1804,7 +1804,6 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用",
                         "type": "bool",
-                        "hint": "是否启用。",
                     },
                     "key": {
                         "description": "API Key",
@@ -2081,14 +2080,22 @@ CONFIG_METADATA_3 = {
         "name": "AI 配置",
         "metadata": {
             "agent_runner": {
-                "description": "Agent",
+                "description": "Agent 执行方式",
                 "type": "object",
                 "items": {
+                    "provider_settings.enable": {
+                        "description": "启用",
+                        "type": "bool",
+                        "hint": "AI 对话总开关",
+                    },
                     "provider_settings.agent_runner_type": {
                         "description": "执行器",
                         "type": "string",
                         "options": ["local", "dify", "coze"],
                         "labels": ["内置 Agent", "Dify", "Coze"],
+                        "condition": {
+                            "provider_settings.enable": True,
+                        },
                     },
                 },
             },
@@ -2104,6 +2111,7 @@ CONFIG_METADATA_3 = {
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "dify",
+                    "provider_settings.enable": True,
                 },
             },
             "coze_runner": {
@@ -2118,32 +2126,32 @@ CONFIG_METADATA_3 = {
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "coze",
+                    "provider_settings.enable": True,
                 },
             },
             "ai": {
                 "description": "模型",
                 "type": "object",
                 "items": {
-                    "provider_settings.enable": {
-                        "description": "启用大语言模型聊天",
-                        "type": "bool",
-                    },
                     "provider_settings.default_provider_id": {
                         "description": "默认聊天模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时使用第一个模型。",
+                        "hint": "留空时使用第一个模型",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
+                        "hint": "留空代表不使用，可用于非多模态模型",
                     },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",
                         "type": "bool",
-                        "hint": "STT 总开关。",
+                        "hint": "STT 总开关",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
@@ -2157,12 +2165,11 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.enable": {
                         "description": "启用文本转语音",
                         "type": "bool",
-                        "hint": "TTS 总开关。当关闭时，会话启用 TTS 也不会生效。",
+                        "hint": "TTS 总开关",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
                         "type": "string",
-                        "hint": "用户也可使用 /provider 单独选择会话的 TTS 模型。",
                         "_special": "select_provider_tts",
                         "condition": {
                             "provider_tts_settings.enable": True,
@@ -2174,7 +2181,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "persona": {
@@ -2189,6 +2196,7 @@ CONFIG_METADATA_3 = {
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "knowledgebase": {
@@ -2203,6 +2211,7 @@ CONFIG_METADATA_3 = {
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "websearch": {
@@ -2242,6 +2251,7 @@ CONFIG_METADATA_3 = {
                 },
                 "condition": {
                     "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "others": {
@@ -2255,50 +2265,70 @@ CONFIG_METADATA_3 = {
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
+                        "hint": "启用后，会在提示词前包含用户 ID 信息。",
                     },
                     "provider_settings.group_name_display": {
                         "description": "显示群名称",
                         "type": "bool",
-                        "hint": "启用后，在支持的平台(aiocqhttp)上会在 prompt 中包含群名称信息。",
+                        "hint": "启用后，在支持的平台(OneBot v11)上会在提示词前包含群名称信息。",
                     },
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
                         "type": "bool",
+                        "hint": "启用后，会在系统提示词中附带当前时间信息。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.streaming_response": {
-                        "description": "流式回复",
+                        "description": "流式输出",
                         "type": "bool",
                     },
                     "provider_settings.streaming_segmented": {
-                        "description": "不支持流式回复的平台采取分段输出",
+                        "description": "不支持流式输出的平台采取分段输出",
                         "type": "bool",
                     },
                     "provider_settings.max_context_length": {
                         "description": "最多携带对话轮数",
                         "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条。-1 为不限制。",
+                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.dequeue_context_length": {
                         "description": "丢弃对话轮数",
                         "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数。",
+                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
-                        "hint": "如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
+                        "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",
@@ -2311,7 +2341,7 @@ CONFIG_METADATA_3 = {
                     },
                 },
                 "condition": {
-                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
         },
