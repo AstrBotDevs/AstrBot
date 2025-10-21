@@ -8,7 +8,8 @@
     "providerType": "提供商类型",
     "tabs": {
       "all": "全部",
-      "chatCompletion": "基本对话",
+      "chatCompletion": "对话",
+      "agentRunner": "Agent 执行器",
       "speechToText": "语音转文字",
       "textToSpeech": "文字转语音",
       "embedding": "嵌入(Embedding)",
@@ -44,13 +45,14 @@
     "addProvider": {
       "title": "模型提供商",
       "tabs": {
-        "basic": "基本",
+        "basic": "对话",
+        "agentRunner": "Agent 执行器",
         "speechToText": "语音转文字",
         "textToSpeech": "文字转语音",
         "embedding": "嵌入(Embedding)",
         "rerank": "重排序(Rerank)"
       },
-      "noTemplates": "暂无{type}类型的提供商模板"
+      "noTemplates": "暂无该类型的提供商模板"
     },
     "config": {
       "addTitle": "新增",

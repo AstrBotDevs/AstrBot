@@ -975,7 +975,7 @@ CONFIG_METADATA_2 = {
                         "id": "dify_app_default",
                         "provider": "dify",
                         "type": "dify",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "enable": True,
                         "dify_api_type": "chat",
                         "dify_api_key": "",
@@ -989,7 +989,7 @@ CONFIG_METADATA_2 = {
                     "Coze": {
                         "id": "coze",
                         "provider": "coze",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "type": "coze",
                         "enable": True,
                         "coze_api_key": "",
@@ -2099,7 +2099,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.dify_runner_provider_id": {
                         "description": "Dify 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_dify_runner_provider",
+                        "_special": "select_provider_dify_runner",
                     },
                 },
                 "condition": {
@@ -2113,7 +2113,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.coze_runner_provider_id": {
                         "description": "Coze 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_coze_runner_provider",
+                        "_special": "select_provider_coze_runner",
                     },
                 },
                 "condition": {

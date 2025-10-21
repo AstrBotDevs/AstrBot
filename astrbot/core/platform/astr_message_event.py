@@ -179,7 +179,7 @@ class AstrMessageEvent(abc.ABC):
 
     def get_extra(
         self, key: str | None = None, default: _VT = None
-    ) -> dict[str, Any] | _VT:
+    ) -> Any:
         """
         获取额外的信息。
         """

@@ -29,6 +29,10 @@
             <v-icon start>mdi-message-text</v-icon>
             {{ tm('providers.tabs.chatCompletion') }}
           </v-tab>
+          <v-tab value="agent_runner" class="font-weight-medium px-3">
+            <v-icon start>mdi-message-text</v-icon>
+            {{ tm('providers.tabs.agentRunner') }}
+          </v-tab>
           <v-tab value="speech_to_text" class="font-weight-medium px-3">
             <v-icon start>mdi-microphone-message</v-icon>
             {{ tm('providers.tabs.speechToText') }}
@@ -312,8 +316,8 @@ export default {
         "anthropic_chat_completion": "chat_completion",
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
-        "dify": "chat_completion",
-        "coze": "chat_completion",
+        "dify": "agent_runner",
+        "coze": "agent_runner",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",
@@ -357,6 +361,7 @@ export default {
         },
         tabTypes: {
           'chat_completion': this.tm('providers.tabs.chatCompletion'),
+          'agent_runner': this.tm('providers.tabs.agentRunner'),
           'speech_to_text': this.tm('providers.tabs.speechToText'),
           'text_to_speech': this.tm('providers.tabs.textToSpeech'),
           'embedding': this.tm('providers.tabs.embedding'),

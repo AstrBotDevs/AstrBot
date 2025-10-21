@@ -73,6 +73,7 @@
     "disabled": "Disabled",
     "delete": "Delete",
     "edit": "Edit",
+    "copy": "Copy",
     "noData": "No data available"
   }
 } 
