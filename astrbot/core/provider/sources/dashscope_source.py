@@ -1,15 +1,14 @@
 import re
 import asyncio
 import functools
-from typing import List
 from .. import Provider, Personality
 from ..entities import LLMResponse
-from ..func_tool_manager import FuncCall
 from ..register import register_provider_adapter
 from astrbot.core.message.message_event_result import MessageChain
 from .openai_source import ProviderOpenAIOfficial
 from astrbot.core import logger, sp
 from dashscope import Application
+from dashscope.app.application_response import ApplicationResponse
 
 
 @register_provider_adapter("dashscope", "Dashscope APP 适配器。")
@@ -62,11 +61,11 @@ class ProviderDashscope(ProviderOpenAIOfficial):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = [],
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
+        session_id=None,
+        image_urls=[],
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
         model=None,
         **kwargs,
     ) -> LLMResponse:
@@ -122,6 +121,8 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             )
             response = await asyncio.get_event_loop().run_in_executor(None, partial)
 
+        assert isinstance(response, ApplicationResponse)
+
         logger.debug(f"dashscope resp: {response}")
 
         if response.status_code != 200:
@@ -135,12 +136,12 @@ class ProviderDashscope(ProviderOpenAIOfficial):
                 ),
             )
 
-        output_text = response.output.get("text", "")
+        output_text = response.output.get("text", "") or ""
         # RAG 引用脚标格式化
         output_text = re.sub(r"<ref>\[(\d+)\]</ref>", r"[\1]", output_text)
         if self.output_reference and response.output.get("doc_references", None):
             ref_str = ""
-            for ref in response.output.get("doc_references", []):
+            for ref in response.output.get("doc_references", []) or []:
                 ref_title = (
                     ref.get("title", "")
                     if ref.get("title")

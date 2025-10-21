@@ -4,7 +4,7 @@ import re
 import hashlib
 import uuid
 
-from typing import List, Union, Optional, AsyncGenerator, TypeVar, Any
+from typing import List, Union, Optional, AsyncGenerator, Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -25,8 +25,6 @@ from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
 from .message_session import MessageSession, MessageSesion  # noqa
-
-_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -177,9 +175,7 @@ class AstrMessageEvent(abc.ABC):
         """
         self._extras[key] = value
 
-    def get_extra(
-        self, key: str | None = None, default: _VT = None
-    ) -> dict[str, Any] | _VT:
+    def get_extra(self, key: str | None = None, default=None) -> Any:
         """
         获取额外的信息。
         """

@@ -30,7 +30,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
             timeout=timeout,
         )
 
-        self.set_model(provider_config.get("model", None))
+        self.set_model(provider_config.get("model", ""))
 
     async def get_audio(self, text: str) -> str:
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")

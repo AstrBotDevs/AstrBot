@@ -44,7 +44,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]
-AgentRunner = ToolLoopAgentRunner[AgentContextWrapper]
+AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -102,7 +102,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         request = ProviderRequest(
             prompt=input_,
-            system_prompt=tool.description,
+            system_prompt=tool.description or "",
             image_urls=[],  # 暂时不传递原始 agent 的上下文
             contexts=[],  # 暂时不传递原始 agent 的上下文
             func_tool=toolset,
@@ -239,7 +239,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         yield res
 
 
-class MainAgentHooks(BaseAgentRunHooks[AgentContextWrapper]):
+class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
@@ -337,7 +337,7 @@ class LLMRequestSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-    def _select_provider(self, event: AstrMessageEvent) -> Provider | None:
+    def _select_provider(self, event: AstrMessageEvent):
         """选择使用的 LLM 提供商"""
         sel_provider = event.get_extra("selected_provider")
         _ctx = self.ctx.plugin_manager.context
@@ -381,6 +381,9 @@ class LLMRequestSubStage(Stage):
 
         provider = self._select_provider(event)
         if provider is None:
+            return
+        if not isinstance(provider, Provider):
+            logger.error(f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。")
             return
 
         if event.get_extra("provider_request"):
@@ -520,8 +523,10 @@ class LLMRequestSubStage(Stage):
                         chain = (
                             MessageChain().message(final_llm_resp.completion_text).chain
                         )
-                    else:
+                    elif final_llm_resp.result_chain:
                         chain = final_llm_resp.result_chain.chain
+                    else:
+                        chain = MessageChain().chain
                     event.set_result(
                         MessageEventResult(
                             chain=chain,
@@ -553,6 +558,8 @@ class LLMRequestSubStage(Stage):
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
+        if not req.conversation:
+            return
         conversation = await self.conv_manager.get_conversation(
             event.unified_msg_origin, req.conversation.cid
         )
