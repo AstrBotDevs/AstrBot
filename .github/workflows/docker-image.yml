@@ -2,6 +2,8 @@ name: Docker Image CI/CD
 
 on:
   push:
+    branches:
+      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -27,21 +29,40 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: git checkout ${{ steps.get-latest-tag.outputs.latest_tag }}
 
-      - name: Check if version is pre-release
-        id: check-prerelease
+      - name: Resolve build version
+        id: build-version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          LATEST_TAG: ${{ steps.get-latest-tag.outputs.latest_tag }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            version="${{ steps.get-latest-tag.outputs.latest_tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="$LATEST_TAG"
+            source_type="tag"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            version="$REF_NAME"
+            source_type="tag"
+          elif [ "$REF_TYPE" = "branch" ] && [ "$REF_NAME" = "master" ]; then
+            version="test"
+            source_type="branch"
           else
-            version="${{ github.ref_name }}"
+            version="$REF_NAME"
+            source_type="branch"
           fi
           if [[ "$version" == *"beta"* ]] || [[ "$version" == *"alpha"* ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "Version $version is a pre-release, will not push latest tag"
+            echo "Version $version marked as pre-release"
           else
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "Version $version is a stable release, will push latest tag"
+            echo "Version $version marked as stable"
           fi
+          if [ "$source_type" = "tag" ]; then
+            echo "push_latest=true" >> $GITHUB_OUTPUT
+          else
+            echo "push_latest=false" >> $GITHUB_OUTPUT
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Build Dashboard
         run: |
@@ -80,10 +101,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.check-prerelease.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest', secrets.DOCKER_HUB_USERNAME) || '' }}
-            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
-            ${{ steps.check-prerelease.outputs.is_prerelease == 'false' && 'ghcr.io/soulter/astrbot:latest' || '' }}
-            ghcr.io/soulter/astrbot:${{ github.event_name == 'workflow_dispatch' && steps.get-latest-tag.outputs.latest_tag || github.ref_name }}
+            ${{ steps.build-version.outputs.push_latest == 'true' && steps.build-version.outputs.is_prerelease == 'false' && format('{0}/astrbot:latest', secrets.DOCKER_HUB_USERNAME) || '' }}
+            ${{ steps.build-version.outputs.push_latest == 'true' && steps.build-version.outputs.is_prerelease == 'false' && 'ghcr.io/soulter/astrbot:latest' || '' }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/astrbot:${{ steps.build-version.outputs.version }}
+            ghcr.io/soulter/astrbot:${{ steps.build-version.outputs.version }}
 
       - name: Post build notifications
         run: echo "Docker image has been built and pushed successfully"
