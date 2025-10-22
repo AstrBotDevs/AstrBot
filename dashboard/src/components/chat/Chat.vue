@@ -149,7 +149,7 @@
                         <div
                             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
-                                :disabled="isStreaming || isConvRunning" @click:clear="clearMessage"
+                                :disabled="isStreaming" @click:clear="clearMessage"
                                 placeholder="Ask AstrBot..."
                                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div
@@ -312,6 +312,7 @@ export default {
             isConvRunning: false, // Track if the current conversation is running
 
             isToastedRunningInfo: false, // To avoid multiple toasts
+            activeSSECount: 0, // Track number of active SSE connections
         }
     },
 
@@ -850,6 +851,10 @@ export default {
             const selectedModelName = selection?.modelName || '';
 
             try {
+                this.activeSSECount++;
+                if (this.activeSSECount === 1) {
+                    this.isConvRunning = true;
+                }
                 const response = await fetch('/api/chat/send', {
                     method: 'POST',
                     headers: {
@@ -960,6 +965,10 @@ export default {
                             if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
                                 // break means a segment end
                                 in_streaming = false;
+                                // 当SSE传入streaming=false时，恢复输入框
+                                if (!chunk_json.streaming) {
+                                    this.isStreaming = false;
+                                }
                             }
                         }
                     } catch (readError) {
@@ -979,6 +988,10 @@ export default {
                 this.loadingChat = false;
             } finally {
                 this.isStreaming = false;
+                this.activeSSECount--;
+                if (this.activeSSECount === 0) {
+                    this.isConvRunning = false;
+                }
             }
         },
 
