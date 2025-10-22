@@ -1280,7 +1280,13 @@ class KnowledgeBaseRoute(Route):
 
             return (
                 Response()
-                .ok({"sessions": session_list, "total": len(session_list), "kb_id": kb_id})
+                .ok(
+                    {
+                        "sessions": session_list,
+                        "total": len(session_list),
+                        "kb_id": kb_id,
+                    }
+                )
                 .__dict__
             )
 

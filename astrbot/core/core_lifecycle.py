@@ -113,7 +113,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化知识库管理器
         self.kb_manager = KnowledgeBaseManager(
-            self.astrbot_config, self.db, self.provider_manager
+            self.astrbot_config, self.provider_manager
         )
 
         # 初始化提供给插件的上下文

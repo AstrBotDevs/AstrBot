@@ -16,14 +16,23 @@ class BaseVecDB:
         pass
 
     @abc.abstractmethod
-    async def insert(self, content: str, metadata: dict = None, id: str = None) -> int:
+    async def insert(
+        self, content: str, metadata: dict | None = None, id: str | None = None
+    ) -> int:
         """
         插入一条文本和其对应向量，自动生成 ID 并保持一致性。
         """
         ...
 
     @abc.abstractmethod
-    async def retrieve(self, query: str, top_k: int = 5) -> list[Result]:
+    async def retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        fetch_k: int = 20,
+        rerank: bool = False,
+        metadata_filters: dict | None = None,
+    ) -> list[Result]:
         """
         搜索最相似的文档。
         Args:
@@ -44,3 +53,6 @@ class BaseVecDB:
             bool: 删除是否成功
         """
         ...
+
+    @abc.abstractmethod
+    async def close(self): ...

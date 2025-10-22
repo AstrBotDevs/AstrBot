@@ -3,16 +3,15 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
-import json
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
-from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.knowledge_base.database import KBDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
-
+from astrbot.core.db.vec_db.base import BaseVecDB, Result
+from ..vec_db_factory import VecDBFactory
 
 @dataclass
 class RetrievalResult:
@@ -38,36 +37,34 @@ class RetrievalManager:
 
     def __init__(
         self,
-        vec_db: BaseVecDB,
+        vec_db_factory,  # VecDBFactory
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBDatabase,
-        rerank_provider: Optional[RerankProvider] = None,
     ):
         """初始化检索管理器
 
         Args:
-            vec_db: 向量数据库实例
+            vec_db_factory: 向量数据库工厂
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
-            rerank_provider: Rerank 提供商 (可选)
         """
-        self.vec_db = vec_db
+        self.vec_db_factory = vec_db_factory
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
         self.kb_db = kb_db
-        self.rerank_provider = rerank_provider
 
     async def retrieve(
         self,
+        vec_db_factory: VecDBFactory,
         query: str,
         kb_ids: List[str],
         top_k_dense: int = 50,
         top_k_sparse: int = 50,
         top_n_fusion: int = 20,
         top_m_final: int = 5,
-        enable_rerank: bool = True,
+        rerank_provider: RerankProvider | None = None,
     ) -> List[RetrievalResult]:
         """混合检索
 
@@ -94,6 +91,7 @@ class RetrievalManager:
             query=query,
             kb_ids=kb_ids,
             top_k=top_k_dense,
+            vec_db=vec_db,
         )
 
         # 2. 稀疏检索
@@ -131,13 +129,13 @@ class RetrievalManager:
                     )
                 )
 
-        # 5. Rerank (可选)
-        if enable_rerank and self.rerank_provider and retrieval_results:
+        # 5. Rerank
+        if rerank_provider and retrieval_results:
             retrieval_results = await self._rerank(
                 query=query,
                 results=retrieval_results,
                 top_k=top_m_final,
-                rerank_provider=self.rerank_provider,
+                rerank_provider=rerank_provider,
             )
         else:
             retrieval_results = retrieval_results[:top_m_final]
@@ -149,8 +147,11 @@ class RetrievalManager:
         query: str,
         kb_ids: List[str],
         top_k: int,
+        vec_db: BaseVecDB,
     ):
         """稠密检索 (向量相似度)
+
+        为每个知识库使用独立的向量数据库进行检索,然后合并结果。
 
         Args:
             query: 查询文本
@@ -160,28 +161,27 @@ class RetrievalManager:
         Returns:
             List[Result]: 检索结果列表
         """
-        # 直接调用向量数据库检索
-        vec_results = await self.vec_db.retrieve(
-            query=query,
-            top_k=top_k * len(kb_ids) * 2,  # 增加候选数量以便过滤
-        )
+        all_results: list[Result] = []
 
-        # 过滤:只保留指定知识库的结果
-        filtered_results = []
-        for result in vec_results:
-            metadata_str = result.data.get("metadata", "{}")
+        for kb_id in kb_ids:
             try:
-                metadata = json.loads(metadata_str)
-            except (json.JSONDecodeError, TypeError):
-                metadata = {}
+                vec_results = await vec_db.retrieve(
+                    query=query,
+                    top_k=top_k,
+                    fetch_k=top_k * 2,
+                    metadata_filters={"kb_id": kb_id},
+                )
 
-            if metadata.get("kb_id") in kb_ids:
-                filtered_results.append(result)
+                all_results.extend(vec_results)
+            except Exception as e:
+                from astrbot.core import logger
 
-            if len(filtered_results) >= top_k:
-                break
+                logger.warning(f"知识库 {kb_id} 稠密检索失败: {e}")
+                continue
 
-        return filtered_results[:top_k]
+        # 按相似度排序并返回 top_k
+        all_results.sort(key=lambda x: x.similarity, reverse=True)
+        return all_results[:top_k]
 
     async def _rerank(
         self,

@@ -10,6 +10,7 @@ from astrbot.core.knowledge_base.retrieval.manager import (
     RetrievalManager,
     RetrievalResult,
 )
+from .vec_db_factory import VecDBFactory
 
 
 class KnowledgeBaseInjector:
@@ -24,6 +25,7 @@ class KnowledgeBaseInjector:
     def __init__(
         self,
         kb_db: KBDatabase,
+        vec_db_factory: VecDBFactory,
         retrieval_manager: RetrievalManager,
     ):
         """初始化知识库上下文注入器
@@ -33,18 +35,18 @@ class KnowledgeBaseInjector:
             retrieval_manager: 检索管理器实例
         """
         self.kb_db = kb_db
+        self.vec_db_factory = vec_db_factory
         self.retrieval_manager = retrieval_manager
 
     async def retrieve_and_inject(
         self,
-        unified_msg_origin: str,
+        kb_ids: list[str],
         query: str,
         top_k: int = 5,
     ) -> Optional[dict]:
         """检索并注入知识库上下文
 
         Args:
-            unified_msg_origin: 统一消息来源 ID (会话 ID)
             query: 用户查询
             top_k: 返回结果数量
 
@@ -55,14 +57,9 @@ class KnowledgeBaseInjector:
                 "results": List[dict],  # 原始检索结果列表
             }
         """
-        # 1. 获取会话关联的知识库
-        kb_ids = await self.kb_db.get_session_kb_ids(unified_msg_origin)
-
-        if not kb_ids:
-            return None
-
         # 2. 检索知识
         results = await self.retrieval_manager.retrieve(
+            vec_db_factory=self.vec_db_factory,
             query=query,
             kb_ids=kb_ids,
             top_m_final=top_k,

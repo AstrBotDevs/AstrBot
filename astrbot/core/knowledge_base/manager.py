@@ -10,12 +10,11 @@ from typing import Optional
 import aiofiles
 from sqlalchemy import func, select, update
 
-from astrbot.core.db import BaseDatabase
-from astrbot.core.db.vec_db.base import BaseVecDB
+from .kb_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.chunking.base import BaseChunker
 from astrbot.core.knowledge_base.models import KBChunk, KBDocument, KnowledgeBase
 from astrbot.core.knowledge_base.parsers.base import BaseParser
-
+from .vec_db_factory import VecDBFactory
 
 class KBManager:
     """知识库管理器
@@ -29,15 +28,15 @@ class KBManager:
 
     def __init__(
         self,
-        db: BaseDatabase,
-        vec_db: BaseVecDB,
+        db: KBSQLiteDatabase,
+        vec_db_factory: VecDBFactory,
         storage_path: str,
         parsers: dict[str, BaseParser],
         chunker: BaseChunker,
         provider_manager=None,
     ):
         self.db = db
-        self.vec_db = vec_db
+        self.vec_db_factory = vec_db_factory
         self.storage_path = Path(storage_path)
         self.media_path = self.storage_path / "media"
         self.files_path = self.storage_path / "files"
@@ -48,6 +47,48 @@ class KBManager:
         # 确保目录存在
         self.media_path.mkdir(parents=True, exist_ok=True)
         self.files_path.mkdir(parents=True, exist_ok=True)
+
+    async def _get_embedding_provider_for_kb(self, kb_id: str):
+        """根据知识库配置获取 Embedding Provider
+
+        Args:
+            kb_id: 知识库 ID
+
+        Returns:
+            EmbeddingProvider: Embedding Provider 实例
+
+        Raises:
+            ValueError: 如果找不到合适的 embedding provider
+        """
+        from astrbot.core.knowledge_base.database import KBDatabase
+
+        # 获取知识库配置
+        kb_database = KBDatabase(self.db)
+        kb = await kb_database.get_kb_by_id(kb_id)
+        if not kb:
+            raise ValueError(f"知识库不存在: {kb_id}")
+
+        embedding_provider_id = kb.embedding_provider_id
+
+        # 如果没有 provider_manager,使用默认的第一个
+        if not self.provider_manager:
+            raise ValueError("Provider Manager 未初始化")
+
+        embedding_providers = self.provider_manager.embedding_provider_insts
+        if not embedding_providers:
+            raise ValueError("系统中没有可用的 Embedding Provider")
+
+        # 如果指定了 provider ID,则查找该 provider
+        if embedding_provider_id:
+            for provider in embedding_providers:
+                if provider.meta().id == embedding_provider_id:
+                    return provider
+            raise ValueError(
+                f"未找到配置的 Embedding Provider: {embedding_provider_id}"
+            )
+
+        # 使用第一个可用的 provider
+        return embedding_providers[0]
 
     # ===== 知识库操作 =====
 
@@ -77,7 +118,7 @@ class KBManager:
             # 检查是否有可用的 rerank provider
             has_rerank_provider = (
                 self.provider_manager
-                and hasattr(self.provider_manager, 'rerank_provider_insts')
+                and hasattr(self.provider_manager, "rerank_provider_insts")
                 and len(self.provider_manager.rerank_provider_insts) > 0
             )
             enable_rerank = has_rerank_provider
@@ -182,7 +223,10 @@ class KBManager:
         for doc in docs:
             await ops.delete_document(doc.doc_id)
 
-        # 3. 删除知识库记录
+        # 3. 删除向量数据库
+        await self.vec_db_factory.delete_vec_db(kb_id)
+
+        # 4. 删除知识库记录
         async with self.db.get_db() as session:
             stmt = select(KnowledgeBase).where(KnowledgeBase.kb_id == kb_id)
             result = await session.execute(stmt)
@@ -257,11 +301,15 @@ class KBManager:
             # 4. 文档分块
             chunks_text = await self.chunker.chunk(text_content)
 
-            # 5. 生成向量并存储
+            # 5. 获取 Embedding Provider 和向量数据库
+            embedding_provider = await self._get_embedding_provider_for_kb(kb_id)
+            vec_db = await self.vec_db_factory.get_vec_db(kb_id, embedding_provider)
+
+            # 6. 生成向量并存储
             saved_chunks = []
             for idx, chunk_text in enumerate(chunks_text):
                 # 存储到向量数据库
-                vec_doc_id = await self.vec_db.insert(
+                vec_doc_id = await vec_db.insert(
                     content=chunk_text,
                     metadata={
                         "kb_id": kb_id,
@@ -282,7 +330,7 @@ class KBManager:
                 )
                 saved_chunks.append(chunk)
 
-            # 6. 保存文档元数据（事务）
+            # 7. 保存文档元数据（事务）
             doc = KBDocument(
                 doc_id=doc_id,
                 kb_id=kb_id,
@@ -305,7 +353,7 @@ class KBManager:
 
                 await session.refresh(doc)
 
-            # 7. 更新知识库统计
+            # 8. 更新知识库统计
             await self._update_kb_stats(kb_id)
 
             return doc
@@ -316,12 +364,19 @@ class KBManager:
 
             logger.error(f"文档上传失败，开始清理资源: {e}")
 
-            # 清理向量数据库
-            for vec_id in vec_doc_ids:
-                try:
-                    await self.vec_db.delete(vec_id)
-                except Exception as ve:
-                    logger.warning(f"清理向量失败 {vec_id}: {ve}")
+            # 获取知识库的向量数据库
+            try:
+                embedding_provider = await self._get_embedding_provider_for_kb(kb_id)
+                vec_db = await self.vec_db_factory.get_vec_db(kb_id, embedding_provider)
+
+                # 清理向量数据库
+                for vec_id in vec_doc_ids:
+                    try:
+                        await vec_db.delete(vec_id)
+                    except Exception as ve:
+                        logger.warning(f"清理向量失败 {vec_id}: {ve}")
+            except Exception as vfe:
+                logger.error(f"获取向量数据库失败: {vfe}")
 
             # 清理多媒体文件
             for media_path in media_paths:

@@ -28,7 +28,7 @@ class KBManagerOps:
     def __init__(self, manager: "KBManager"):
         self.manager = manager
         self.db = manager.db
-        self.vec_db = manager.vec_db
+        self.vec_db_factory = manager.vec_db_factory
         self.media_path = manager.media_path
         self.files_path = manager.files_path
 
@@ -75,6 +75,12 @@ class KBManagerOps:
         chunks = await self.list_chunks(doc_id)
         media_list = await self.list_media(doc_id)
 
+        # 获取知识库的向量数据库
+        embedding_provider = await self.manager._get_embedding_provider_for_kb(
+            doc.kb_id
+        )
+        vec_db = await self.vec_db_factory.get_vec_db(doc.kb_id, embedding_provider)
+
         # ===== 第一阶段: 删除向量(可重试) =====
         vec_ids_to_delete = [chunk.vec_doc_id for chunk in chunks]
         deleted_vec_ids = []
@@ -82,7 +88,7 @@ class KBManagerOps:
 
         for vec_id in vec_ids_to_delete:
             try:
-                await self.vec_db.delete(vec_id)
+                await vec_db.delete(vec_id)
                 deleted_vec_ids.append(vec_id)
             except Exception as e:
                 logger.error(f"删除向量失败: {vec_id}, {e}")
@@ -173,11 +179,16 @@ class KBManagerOps:
                 return False
 
             doc_id = chunk.doc_id
+            kb_id = chunk.kb_id
             vec_doc_id = chunk.vec_doc_id
 
-        # 2. 删除向量
+        # 2. 获取知识库的向量数据库并删除向量
         try:
-            await self.vec_db.delete(vec_doc_id)
+            embedding_provider = await self.manager._get_embedding_provider_for_kb(
+                kb_id
+            )
+            vec_db = await self.vec_db_factory.get_vec_db(kb_id, embedding_provider)
+            await vec_db.delete(vec_doc_id)
         except Exception as e:
             logger.error(f"删除向量失败: {vec_doc_id}, {e}")
             return False
