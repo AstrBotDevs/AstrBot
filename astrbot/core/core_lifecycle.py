@@ -111,6 +111,11 @@ class AstrBotCoreLifecycle:
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
+        # 初始化知识库管理器
+        self.kb_manager = KnowledgeBaseManager(
+            self.astrbot_config, self.db, self.provider_manager
+        )
+
         # 初始化提供给插件的上下文
         self.star_context = Context(
             self.event_queue,
@@ -122,6 +127,7 @@ class AstrBotCoreLifecycle:
             self.platform_message_history_manager,
             self.persona_mgr,
             self.astrbot_config_mgr,
+            self.kb_manager,
         )
 
         # 初始化插件管理器
@@ -133,21 +139,13 @@ class AstrBotCoreLifecycle:
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()
 
-        # 初始化知识库管理器
-        self.kb_manager = KnowledgeBaseManager(
-            self.astrbot_config, self.db, self.provider_manager
-        )
         await self.kb_manager.initialize()
-
-        # 将知识库注入器添加到 star_context 中,供 Pipeline 使用
-        self.star_context.kb_injector = self.kb_manager.get_kb_injector()
 
         # 注册知识库会话生命周期钩子（零侵入级联清理）
         if self.kb_manager.is_initialized:
             self.kb_manager.register_session_lifecycle_hooks(self.conversation_manager)
 
         # 初始化消息事件流水线调度器
-
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器

@@ -94,30 +94,6 @@ class KnowledgeBaseInjector:
             "results": results_dict,
         }
 
-    async def inject(
-        self,
-        session_id: str,
-        query: str,
-        top_k: int = 5,
-    ) -> Optional[str]:
-        """注入知识库上下文 (简化版本,仅返回文本)
-
-        Args:
-            session_id: 会话 ID (来自主数据库)
-            query: 用户查询
-            top_k: 返回结果数量
-
-        Returns:
-            Optional[str]: 格式化的知识上下文,如果无结果则返回 None
-        """
-        result = await self.retrieve_and_inject(
-            unified_msg_origin=session_id,
-            query=query,
-            top_k=top_k,
-        )
-
-        return result["context_text"] if result else None
-
     def _format_context(self, results: List[RetrievalResult]) -> str:
         """格式化知识上下文
 

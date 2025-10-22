@@ -137,6 +137,7 @@ class RetrievalManager:
                 query=query,
                 results=retrieval_results,
                 top_k=top_m_final,
+                rerank_provider=self.rerank_provider,
             )
         else:
             retrieval_results = retrieval_results[:top_m_final]
@@ -162,7 +163,7 @@ class RetrievalManager:
         # 直接调用向量数据库检索
         vec_results = await self.vec_db.retrieve(
             query=query,
-            k=top_k * len(kb_ids) * 2,  # 增加候选数量以便过滤
+            top_k=top_k * len(kb_ids) * 2,  # 增加候选数量以便过滤
         )
 
         # 过滤:只保留指定知识库的结果
@@ -187,6 +188,7 @@ class RetrievalManager:
         query: str,
         results: List[RetrievalResult],
         top_k: int,
+        rerank_provider: RerankProvider,
     ) -> List[RetrievalResult]:
         """Rerank 重排序
 
@@ -205,7 +207,7 @@ class RetrievalManager:
         docs = [r.content for r in results]
 
         # 调用 Rerank Provider
-        rerank_results = await self.rerank_provider.rerank(
+        rerank_results = await rerank_provider.rerank(
             query=query,
             documents=docs,
         )
