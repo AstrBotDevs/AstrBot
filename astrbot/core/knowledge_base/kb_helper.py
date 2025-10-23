@@ -1,7 +1,8 @@
 import uuid
 import aiofiles
+import json
 from pathlib import Path
-from .models import KnowledgeBase, KBDocument, KBChunk, KBMedia
+from .models import KnowledgeBase, KBDocument, KBMedia
 from .kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
@@ -142,7 +143,7 @@ class KBHelper:
                 media_paths.append(Path(media.file_path))
 
             # 分块并生成向量
-            saved_chunks = []
+            # saved_chunks = []
             chunks_text = await self.chunker.chunk(text_content)
             for idx, chunk_text in enumerate(chunks_text):
                 vec_doc_id = await self.vec_db.insert(
@@ -155,17 +156,7 @@ class KBHelper:
                 )
                 vec_doc_ids.append(str(vec_doc_id))
 
-                chunk = KBChunk(
-                    doc_id=doc_id,
-                    kb_id=self.kb.kb_id,
-                    chunk_index=idx,
-                    content=chunk_text,
-                    char_count=len(chunk_text),
-                    vec_doc_id=str(vec_doc_id),
-                )
-                saved_chunks.append(chunk)
-
-            # 保存文档和块的元数据
+            # 保存文档的元数据
             doc = KBDocument(
                 doc_id=doc_id,
                 kb_id=self.kb.kb_id,
@@ -173,21 +164,20 @@ class KBHelper:
                 file_type=file_type,
                 file_size=len(file_content),
                 file_path=str(file_path),
-                chunk_count=len(saved_chunks),
+                chunk_count=len(chunks_text),
                 media_count=0,
             )
             async with self.kb_db.get_db() as session:
                 async with session.begin():
                     session.add(doc)
-                    for chunk in saved_chunks:
-                        session.add(chunk)
                     for media in saved_media:
                         session.add(media)
                     await session.commit()
 
                 await session.refresh(doc)
 
-            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id)
+            vec_db: FaissVecDB = self.vec_db  # type: ignore
+            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
 
             return doc
         except Exception as e:
@@ -215,6 +205,29 @@ class KBHelper:
         """获取单个文档"""
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
+
+    async def get_chunks_by_doc_id(
+        self, doc_id: str, offset: int = 0, limit: int = 100
+    ) -> list[dict]:
+        """获取文档的所有块及其元数据"""
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        chunks = await vec_db.document_storage.get_documents(
+            metadata_filters={"doc_id": doc_id}, offset=offset, limit=limit
+        )
+        result = []
+        for chunk in chunks:
+            chunk_md = json.loads(chunk["metadata"])
+            result.append(
+                {
+                    "chunk_id": chunk["doc_id"],
+                    "doc_id": chunk_md["doc_id"],
+                    "kb_id": chunk_md["kb_id"],
+                    "chunk_index": chunk_md["chunk_index"],
+                    "content": chunk["text"],
+                    "char_count": len(chunk["text"]),
+                }
+            )
+        return result
 
     async def _save_media(
         self,

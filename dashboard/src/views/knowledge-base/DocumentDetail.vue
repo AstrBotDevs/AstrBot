@@ -203,7 +203,7 @@
                 <v-icon>mdi-key</v-icon>
               </template>
               <v-list-item-title>{{ t('view.vecDocId') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedChunk?.vec_doc_id || '-' }}</v-list-item-subtitle>
+              <v-list-item-subtitle>{{ selectedChunk?.chunk_id || '-' }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
 

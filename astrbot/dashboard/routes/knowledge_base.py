@@ -602,14 +602,14 @@ class KnowledgeBaseRoute(Route):
             limit = page_size
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
-            chunk_list = await kb_helper.kb_db.get_chunks_by_doc_id(
+            chunk_list = await kb_helper.get_chunks_by_doc_id(
                 doc_id=doc_id, offset=offset, limit=limit
             )
             return (
                 Response()
                 .ok(
                     data={
-                        "items": [chunk.model_dump() for chunk in chunk_list],
+                        "items": chunk_list,
                         "page": page,
                         "page_size": page_size,
                     }

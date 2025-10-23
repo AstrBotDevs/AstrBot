@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from astrbot.core import logger
 from astrbot.core.knowledge_base.models import (
-    KBChunk,
     KBDocument,
     KBMedia,
     KnowledgeBase,
 )
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 from typing import Optional
 
@@ -134,31 +134,6 @@ class KBSQLiteDatabase:
                     )
                 )
 
-                # 创建块表索引
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunk_chunk_id "
-                        "ON kb_chunks(chunk_id)"
-                    )
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunk_doc_id "
-                        "ON kb_chunks(doc_id)"
-                    )
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunk_kb_id ON kb_chunks(kb_id)"
-                    )
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_chunk_vec_doc_id "
-                        "ON kb_chunks(vec_doc_id)"
-                    )
-                )
-
                 # 创建多媒体表索引
                 await session.execute(
                     text(
@@ -181,20 +156,6 @@ class KBSQLiteDatabase:
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_media_type "
                         "ON kb_media(media_type)"
-                    )
-                )
-
-                # 创建会话配置表索引
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_session_config_scope_id "
-                        "ON kb_session_config(scope_id)"
-                    )
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_session_config_scope "
-                        "ON kb_session_config(scope)"
                     )
                 )
 
@@ -271,52 +232,12 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar() or 0
 
-    # ===== 块查询 =====
-
-    async def get_chunk_by_id(self, chunk_id: str) -> Optional[KBChunk]:
-        """根据 ID 获取块"""
-        async with self.get_db() as session:
-            stmt = select(KBChunk).where(col(KBChunk.chunk_id) == chunk_id)
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none()
-
-    async def get_chunks_by_kb_ids(self, kb_ids: list[str]) -> list[KBChunk]:
-        """根据知识库 ID 列表获取所有块"""
-        async with self.get_db() as session:
-            stmt = select(KBChunk).where(col(KBChunk.kb_id).in_(kb_ids))
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def get_chunk_by_vec_doc_id(self, vec_doc_id: str) -> Optional[KBChunk]:
-        """根据向量文档 ID 获取块"""
-        async with self.get_db() as session:
-            stmt = select(KBChunk).where(col(KBChunk.vec_doc_id) == vec_doc_id)
-            result = await session.execute(stmt)
-            return result.scalar_one_or_none()
-
-    async def get_chunks_by_doc_id(
-        self, doc_id: str, offset: int = 0, limit: int = 100
-    ) -> list[KBChunk]:
-        """根据文档 ID 获取所有块"""
+    async def get_document_with_metadata(self, doc_id: str) -> Optional[dict]:
         async with self.get_db() as session:
             stmt = (
-                select(KBChunk)
-                .where(col(KBChunk.doc_id) == doc_id)
-                .offset(offset)
-                .limit(limit)
-                .order_by(col(KBChunk.chunk_index))
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
-
-    async def get_chunk_with_metadata(self, chunk_id: str) -> Optional[dict]:
-        """获取块及其关联的文档和知识库元数据"""
-        async with self.get_db() as session:
-            stmt = (
-                select(KBChunk, KBDocument, KnowledgeBase)
-                .join(KBDocument, col(KBChunk.doc_id) == col(KBDocument.doc_id))
-                .join(KnowledgeBase, col(KBChunk.kb_id) == col(KnowledgeBase.kb_id))
-                .where(col(KBChunk.chunk_id) == chunk_id)
+                select(KBDocument, KnowledgeBase)
+                .join(KnowledgeBase, col(KBDocument.kb_id) == col(KnowledgeBase.kb_id))
+                .where(col(KBDocument.doc_id) == doc_id)
             )
             result = await session.execute(stmt)
             row = result.first()
@@ -324,27 +245,10 @@ class KBSQLiteDatabase:
             if not row:
                 return None
 
-            chunk, doc, kb = row
             return {
-                "chunk": chunk,
-                "document": doc,
-                "knowledge_base": kb,
+                "document": row[0],
+                "knowledge_base": row[1],
             }
-
-    async def list_chunks_by_doc(
-        self, doc_id: str, offset: int = 0, limit: int = 100
-    ) -> list[KBChunk]:
-        """列出文档的所有块"""
-        async with self.get_db() as session:
-            stmt = (
-                select(KBChunk)
-                .where(col(KBChunk.doc_id) == doc_id)
-                .offset(offset)
-                .limit(limit)
-                .order_by(col(KBChunk.chunk_index))
-            )
-            result = await session.execute(stmt)
-            return list(result.scalars().all())
 
     # ===== 多媒体查询 =====
 
@@ -362,8 +266,10 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def update_kb_stats(self, kb_id: str):
+    async def update_kb_stats(self, kb_id: str, vec_db: FaissVecDB) -> None:
         """更新知识库统计信息"""
+        chunk_cnt = await vec_db.count_documents()
+
         async with self.get_db() as session:
             async with session.begin():
                 update_stmt = (
@@ -373,9 +279,7 @@ class KBSQLiteDatabase:
                         doc_count=select(func.count(col(KBDocument.id)))
                         .where(col(KBDocument.kb_id) == kb_id)
                         .scalar_subquery(),
-                        chunk_count=select(func.count(col(KBChunk.id)))
-                        .where(col(KBChunk.kb_id) == kb_id)
-                        .scalar_subquery(),
+                        chunk_count=chunk_cnt,
                     )
                 )
 

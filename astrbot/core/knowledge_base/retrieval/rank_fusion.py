@@ -3,6 +3,7 @@
 使用 Reciprocal Rank Fusion (RRF) 算法融合稠密检索和稀疏检索的结果
 """
 
+import json
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -16,6 +17,7 @@ class FusedResult:
     """融合后的检索结果"""
 
     chunk_id: str
+    chunk_index: int
     doc_id: str
     kb_id: str
     content: str
@@ -62,14 +64,14 @@ class RankFusion:
         # 1. 构建排名映射
         dense_ranks = {
             r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)
-        }
+        }  # 这里的 doc_id 实际上是 chunk_id
         sparse_ranks = {r.chunk_id: (idx + 1) for idx, r in enumerate(sparse_results)}
 
-        # 2. 收集所有唯一的 ID (来自稠密检索的是 vec_doc_id, 稀疏检索的是 chunk_id)
+        # 2. 收集所有唯一的 ID
         # 需要统一为 chunk_id
         all_chunk_ids = set()
-        vec_doc_id_to_dense = {}  # vec_doc_id -> Result
-        chunk_id_to_sparse = {}  # chunk_id -> SparseResult
+        vec_doc_id_to_dense: dict[str, Result] = {}  # vec_doc_id -> Result
+        chunk_id_to_sparse: dict[str, SparseResult] = {}  # chunk_id -> SparseResult
 
         # 处理稀疏检索结果
         for r in sparse_results:
@@ -112,6 +114,7 @@ class RankFusion:
                 fused_results.append(
                     FusedResult(
                         chunk_id=sr.chunk_id,
+                        chunk_index=sr.chunk_index,
                         doc_id=sr.doc_id,
                         kb_id=sr.kb_id,
                         content=sr.content,
@@ -120,16 +123,17 @@ class RankFusion:
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
-                chunk = await self.kb_db.get_chunk_by_vec_doc_id(identifier)
-                if chunk:
-                    fused_results.append(
-                        FusedResult(
-                            chunk_id=chunk.chunk_id,
-                            doc_id=chunk.doc_id,
-                            kb_id=chunk.kb_id,
-                            content=chunk.content,
-                            score=rrf_scores[identifier],
-                        )
+                vec_result = vec_doc_id_to_dense[identifier]
+                chunk_md = json.loads(vec_result.data["metadata"])
+                fused_results.append(
+                    FusedResult(
+                        chunk_id=identifier,
+                        chunk_index=chunk_md["chunk_index"],
+                        doc_id=chunk_md["doc_id"],
+                        kb_id=chunk_md["kb_id"],
+                        content=vec_result.data["text"],
+                        score=rrf_scores[identifier],
                     )
+                )
 
         return fused_results

@@ -125,7 +125,7 @@ class RetrievalManager:
         # 4. 转换为 RetrievalResult (获取元数据)
         retrieval_results = []
         for fr in fused_results:
-            metadata_dict = await self.kb_db.get_chunk_with_metadata(fr.chunk_id)
+            metadata_dict = await self.kb_db.get_document_with_metadata(fr.doc_id)
             if metadata_dict:
                 retrieval_results.append(
                     RetrievalResult(
@@ -137,8 +137,8 @@ class RetrievalManager:
                         content=fr.content,
                         score=fr.score,
                         metadata={
-                            "chunk_index": metadata_dict["chunk"].chunk_index,
-                            "char_count": metadata_dict["chunk"].char_count,
+                            "chunk_index": fr.chunk_index,
+                            "char_count": len(fr.content),
                         },
                     )
                 )

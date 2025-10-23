@@ -26,7 +26,13 @@ class DocumentStorage:
         """Connect to the SQLite database."""
         self.connection = await aiosqlite.connect(self.db_path)
 
-    async def get_documents(self, metadata_filters: dict, ids: list = None):
+    async def get_documents(
+        self,
+        metadata_filters: dict,
+        ids: list | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[dict]:
         """Retrieve documents by metadata filters and ids.
 
         Args:
@@ -49,7 +55,9 @@ class DocumentStorage:
 
         result = []
         async with self.connection.cursor() as cursor:
-            sql = "SELECT * FROM documents WHERE " + where_sql
+            sql = f"SELECT * FROM documents WHERE {where_sql} ORDER BY id LIMIT ? OFFSET ?"
+            values.extend([limit, offset])
+
             await cursor.execute(sql, values)
             for row in await cursor.fetchall():
                 result.append(await self.tuple_to_dict(row))

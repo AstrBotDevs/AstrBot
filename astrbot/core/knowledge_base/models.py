@@ -83,33 +83,6 @@ class KBDocument(SQLModel, table=True):
     )
 
 
-class KBChunk(SQLModel, table=True):
-    """文档块表
-
-    存储文档分块后的文本内容和向量索引关联信息。
-    """
-
-    __tablename__ = "kb_chunks"  # type: ignore
-
-    id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
-    )
-    chunk_id: str = Field(
-        max_length=36,
-        nullable=False,
-        unique=True,
-        default_factory=lambda: str(uuid.uuid4()),
-        index=True,
-    )
-    doc_id: str = Field(max_length=36, nullable=False, index=True)
-    kb_id: str = Field(max_length=36, nullable=False, index=True)
-    chunk_index: int = Field(nullable=False)
-    content: str = Field(sa_type=Text, nullable=False)
-    char_count: int = Field(nullable=False)
-    vec_doc_id: str = Field(max_length=100, nullable=False, index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
 class KBMedia(SQLModel, table=True):
     """多媒体资源表
 
