@@ -8,7 +8,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
-
 from .route import Response, Route, RouteContext
 
 
@@ -371,6 +370,7 @@ class SessionManagementRoute(Route):
         """获取指定会话的插件配置信息"""
         try:
             session_id = request.args.get("session_id")
+            hide_disabled = request.args.get("hide_disabled", "false").lower() == "true"
 
             if not session_id:
                 return Response().error("缺少必要参数: session_id").__dict__
@@ -386,6 +386,10 @@ class SessionManagementRoute(Route):
                     plugin_enabled = SessionPluginManager.is_plugin_enabled_for_session(
                         session_id, plugin_name
                     )
+
+                    # 如果启用了隐藏已禁用插件选项，则跳过已禁用的插件
+                    if hide_disabled and not plugin_enabled:
+                        continue
 
                     all_plugins.append(
                         {

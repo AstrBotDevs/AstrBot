@@ -16,6 +16,8 @@
   "buttons": {
     "showSystemPlugins": "显示系统插件",
     "hideSystemPlugins": "隐藏系统插件",
+    "hideDisabledPlugins": "隐藏已禁用插件",
+    "showDisabledPlugins": "显示已禁用插件",
     "install": "安装",
     "uninstall": "卸载",
     "update": "更新",
