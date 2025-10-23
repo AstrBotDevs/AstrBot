@@ -40,10 +40,6 @@
           <v-icon start>mdi-magnify</v-icon>
           {{ t('tabs.retrieval') }}
         </v-tab>
-        <v-tab value="sessions">
-          <v-icon start>mdi-account-multiple</v-icon>
-          {{ t('tabs.sessions') }}
-        </v-tab>
         <v-tab value="settings">
           <v-icon start>mdi-cog</v-icon>
           {{ t('tabs.settings') }}
@@ -166,11 +162,6 @@
           <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name"/>
         </v-window-item>
 
-        <!-- 使用会话 -->
-        <v-window-item value="sessions">
-          <SessionsTab :kb-id="kbId" />
-        </v-window-item>
-
         <!-- 设置 -->
         <v-window-item value="settings">
           <SettingsTab :kb="kb" @updated="loadKB" />
@@ -192,7 +183,6 @@ import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
-import SessionsTab from './components/SessionsTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')

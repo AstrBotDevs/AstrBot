@@ -57,22 +57,6 @@
     "submit": "上传",
     "fileRequired": "请选择要上传的文件"
   },
-  "sessions": {
-    "title": "使用该知识库的会话",
-    "subtitle": "以下会话正在使用此知识库",
-    "empty": "暂无会话使用此知识库",
-    "refresh": "刷新",
-    "scope": "范围",
-    "scopeId": "会话标识",
-    "topK": "返回结果数",
-    "enableRerank": "启用重排序",
-    "actions": "操作",
-    "scopeSession": "会话级别",
-    "scopePlatform": "平台级别",
-    "viewInSessionManagement": "在会话管理中查看",
-    "goToSessionManagement": "前往会话管理",
-    "loadFailed": "加载会话列表失败"
-  },
   "retrieval": {
     "title": "知识库检索",
     "subtitle": "使用稠密检索和稀疏检索测试知识库内容",

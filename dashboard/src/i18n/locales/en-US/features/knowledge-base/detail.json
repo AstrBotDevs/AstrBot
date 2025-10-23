@@ -56,26 +56,6 @@
     "submit": "Upload",
     "fileRequired": "Please select a file to upload"
   },
-  "sessions": {
-    "title": "Session Configuration",
-    "subtitle": "Configure which sessions can use this knowledge base",
-    "empty": "No session configurations",
-    "add": "Add Configuration",
-    "scope": "Scope",
-    "scopeId": "Identifier",
-    "topK": "Top K Results",
-    "enableRerank": "Enable Rerank",
-    "actions": "Actions",
-    "edit": "Edit",
-    "delete": "Delete",
-    "scopeSession": "Session Level",
-    "scopePlatform": "Platform Level",
-    "deleteConfirm": "Are you sure you want to delete this configuration?",
-    "addSuccess": "Configuration added successfully",
-    "addFailed": "Failed to add configuration",
-    "deleteSuccess": "Configuration deleted successfully",
-    "deleteFailed": "Failed to delete configuration"
-  },
   "settings": {
     "title": "Knowledge Base Settings",
     "basic": "Basic Settings",
