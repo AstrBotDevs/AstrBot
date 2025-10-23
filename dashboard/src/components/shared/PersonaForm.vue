@@ -268,7 +268,12 @@ export default {
     watch: {
         modelValue(newValue) {
             if (newValue) {
-                this.initForm();
+                // 只有在不是编辑状态时才初始化空表单
+                if (this.editingPersona) {
+                    this.initFormWithPersona(this.editingPersona);
+                } else {
+                    this.initForm();
+                }
                 this.loadMcpServers();
                 this.loadTools();
             }
@@ -276,10 +281,13 @@ export default {
         editingPersona: {
             immediate: true,
             handler(newPersona) {
-                if (newPersona) {
-                    this.initFormWithPersona(newPersona);
-                } else {
-                    this.initForm();
+                // 只有在对话框打开时才处理editingPersona的变化
+                if (this.modelValue) {
+                    if (newPersona) {
+                        this.initFormWithPersona(newPersona);
+                    } else {
+                        this.initForm();
+                    }
                 }
             }
         },

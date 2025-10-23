@@ -19,8 +19,7 @@ repos:
       types_or: [ python, pyi ]
       
 - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus]
-        
+  rev: v3.21.0
+  hooks:
+    - id: pyupgrade
+      args: [--py310-plus]
