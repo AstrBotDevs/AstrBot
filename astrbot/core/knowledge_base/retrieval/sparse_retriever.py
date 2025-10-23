@@ -8,7 +8,7 @@ from typing import List
 
 from rank_bm25 import BM25Okapi
 
-from astrbot.core.knowledge_base.database import KBDatabase
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 
 
 @dataclass
@@ -30,7 +30,7 @@ class SparseRetriever:
     - 使用 BM25 算法计算相关度
     """
 
-    def __init__(self, kb_db: KBDatabase):
+    def __init__(self, kb_db: KBSQLiteDatabase):
         """初始化稀疏检索器
 
         Args:
@@ -43,14 +43,14 @@ class SparseRetriever:
         self,
         query: str,
         kb_ids: List[str],
-        top_k: int = 50,
+        kb_options: dict,
     ) -> List[SparseResult]:
         """执行稀疏检索
 
         Args:
             query: 查询文本
             kb_ids: 知识库 ID 列表
-            top_k: 返回结果数量
+            kb_options: 每个知识库的检索选项
 
         Returns:
             List[SparseResult]: 检索结果列表
@@ -87,4 +87,4 @@ class SparseRetriever:
             )
 
         results.sort(key=lambda x: x.score, reverse=True)
-        return results[:top_k]
+        return results[: len(results) // len(kb_ids)]

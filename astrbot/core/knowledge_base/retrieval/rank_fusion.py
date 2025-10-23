@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 from astrbot.core.db.vec_db.base import Result
-from astrbot.core.knowledge_base.database import KBDatabase
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 
 
@@ -30,7 +30,7 @@ class RankFusion:
     - 使用 Reciprocal Rank Fusion (RRF) 算法
     """
 
-    def __init__(self, kb_db: KBDatabase, k: int = 60):
+    def __init__(self, kb_db: KBSQLiteDatabase, k: int = 60):
         """初始化结果融合器
 
         Args:

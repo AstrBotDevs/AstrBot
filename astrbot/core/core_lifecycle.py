@@ -34,7 +34,7 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.knowledge_base.kb_manager_lifecycle import KnowledgeBaseManager
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 class AstrBotCoreLifecycle:
@@ -112,9 +112,7 @@ class AstrBotCoreLifecycle:
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
         # 初始化知识库管理器
-        self.kb_manager = KnowledgeBaseManager(
-            self.astrbot_config, self.provider_manager
-        )
+        self.kb_manager = KnowledgeBaseManager(self.provider_manager)
 
         # 初始化提供给插件的上下文
         self.star_context = Context(
@@ -140,10 +138,6 @@ class AstrBotCoreLifecycle:
         await self.provider_manager.initialize()
 
         await self.kb_manager.initialize()
-
-        # 注册知识库会话生命周期钩子（零侵入级联清理）
-        if self.kb_manager.is_initialized:
-            self.kb_manager.register_session_lifecycle_hooks(self.conversation_manager)
 
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()

@@ -21,7 +21,8 @@
     "delete": "删除",
     "preview": "预览",
     "search": "搜索分块",
-    "searchPlaceholder": "输入关键词搜索分块内容..."
+    "searchPlaceholder": "输入关键词搜索分块内容...",
+    "showing": "显示"
   },
   "edit": {
     "title": "编辑分块",

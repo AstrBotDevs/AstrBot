@@ -7,10 +7,16 @@
       </v-card-subtitle>
 
       <v-divider />
+      <v-progress-linear
+        v-if="loading"
+        indeterminate
+        color="primary"
+        height="2"
+      />
 
       <v-card-text class="pa-6">
         <!-- 查询输入区域 -->
-        <v-row>
+        <v-row class="mb-4">
           <v-col cols="12" md="8">
             <v-textarea
               v-model="query"
@@ -34,20 +40,7 @@
                 variant="outlined"
                 density="compact"
                 persistent-hint
-                class="mb-3"
               />
-
-              <v-checkbox
-                v-model="enableRerank"
-                :label="t('retrieval.enableRerank')"
-                :hint="t('retrieval.enableRerankHint')"
-                color="primary"
-                density="compact"
-                persistent-hint
-              />
-              <v-alert v-if="enableRerank" type="info" variant="tonal" class="mt-2" density="compact">
-                如果没有配置重排序模型提供商，将跳过重排序步骤
-              </v-alert>
             </v-card>
           </v-col>
         </v-row>
@@ -143,7 +136,8 @@ import { useModuleI18n } from '@/i18n/composables'
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
 
 const props = defineProps<{
-  kbId: string
+  kbId: string,
+  kbName: string,
 }>()
 
 // 状态
@@ -179,7 +173,7 @@ const performRetrieval = async () => {
   try {
     const response = await axios.post('/api/kb/retrieve', {
       query: query.value,
-      kb_ids: [props.kbId],
+      kb_names: [props.kbName],
       top_k: topK.value,
       enable_rerank: enableRerank.value
     })

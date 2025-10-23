@@ -6,12 +6,15 @@
 from dataclasses import dataclass
 from typing import List
 
-from astrbot.core.knowledge_base.database import KBDatabase
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
-from astrbot.core.db.vec_db.base import BaseVecDB, Result
-from ..vec_db_factory import VecDBFactory
+from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+from ..kb_helper import KBHelper
+from astrbot import logger
+
 
 @dataclass
 class RetrievalResult:
@@ -37,10 +40,9 @@ class RetrievalManager:
 
     def __init__(
         self,
-        vec_db_factory,  # VecDBFactory
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
-        kb_db: KBDatabase,
+        kb_db: KBSQLiteDatabase,
     ):
         """初始化检索管理器
 
@@ -50,21 +52,16 @@ class RetrievalManager:
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
         """
-        self.vec_db_factory = vec_db_factory
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
         self.kb_db = kb_db
 
     async def retrieve(
         self,
-        vec_db_factory: VecDBFactory,
         query: str,
         kb_ids: List[str],
-        top_k_dense: int = 50,
-        top_k_sparse: int = 50,
-        top_n_fusion: int = 20,
+        kb_id_helper_map: dict[str, KBHelper],
         top_m_final: int = 5,
-        rerank_provider: RerankProvider | None = None,
     ) -> List[RetrievalResult]:
         """混合检索
 
@@ -77,35 +74,52 @@ class RetrievalManager:
         Args:
             query: 查询文本
             kb_ids: 知识库 ID 列表
-            top_k_dense: 稠密检索返回数量
-            top_k_sparse: 稀疏检索返回数量
-            top_n_fusion: 融合后返回数量
             top_m_final: 最终返回数量
             enable_rerank: 是否启用 Rerank
 
         Returns:
             List[RetrievalResult]: 检索结果列表
         """
+        if not kb_ids:
+            return []
+
+        kb_options: dict = {}
+        new_kb_ids = []
+        for kb_id in kb_ids:
+            kb_helper = kb_id_helper_map.get(kb_id)
+            if kb_helper:
+                kb = kb_helper.kb
+                kb_options[kb_id] = {
+                    "top_k_dense": kb.top_k_dense or 50,
+                    "top_k_sparse": kb.top_k_sparse or 50,
+                    "top_m_final": kb.top_m_final or 5,
+                    "vec_db": kb_helper.vec_db,
+                }
+                new_kb_ids.append(kb_id)
+            else:
+                logger.warning(f"知识库 ID {kb_id} 实例未找到, 已跳过该知识库的检索")
+
+        kb_ids = new_kb_ids
+
         # 1. 稠密检索
         dense_results = await self._dense_retrieve(
             query=query,
             kb_ids=kb_ids,
-            top_k=top_k_dense,
-            vec_db=vec_db,
+            kb_options=kb_options,
         )
 
         # 2. 稀疏检索
         sparse_results = await self.sparse_retriever.retrieve(
             query=query,
             kb_ids=kb_ids,
-            top_k=top_k_sparse,
+            kb_options=kb_options,
         )
 
         # 3. 结果融合
         fused_results = await self.rank_fusion.fuse(
             dense_results=dense_results,
             sparse_results=sparse_results,
-            top_k=top_n_fusion,
+            top_k=kb_options.get("top_k_fusion", 20),
         )
 
         # 4. 转换为 RetrievalResult (获取元数据)
@@ -130,24 +144,27 @@ class RetrievalManager:
                 )
 
         # 5. Rerank
-        if rerank_provider and retrieval_results:
+        first_rerank = None
+        for kb_id in kb_ids:
+            vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
+            if vec_db and vec_db.rerank_provider:
+                first_rerank = vec_db.rerank_provider
+                break
+        if first_rerank and retrieval_results:
             retrieval_results = await self._rerank(
                 query=query,
                 results=retrieval_results,
                 top_k=top_m_final,
-                rerank_provider=rerank_provider,
+                rerank_provider=first_rerank,
             )
-        else:
-            retrieval_results = retrieval_results[:top_m_final]
 
-        return retrieval_results
+        return retrieval_results[:top_m_final]
 
     async def _dense_retrieve(
         self,
         query: str,
         kb_ids: List[str],
-        top_k: int,
-        vec_db: BaseVecDB,
+        kb_options: dict,
     ):
         """稠密检索 (向量相似度)
 
@@ -162,13 +179,17 @@ class RetrievalManager:
             List[Result]: 检索结果列表
         """
         all_results: list[Result] = []
-
         for kb_id in kb_ids:
+            if kb_id not in kb_options:
+                continue
             try:
+                vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
+                dense_k = int(kb_options[kb_id]["top_k_dense"])
                 vec_results = await vec_db.retrieve(
                     query=query,
-                    top_k=top_k,
-                    fetch_k=top_k * 2,
+                    k=dense_k,
+                    fetch_k=dense_k * 2,
+                    rerank=False,  # 稠密检索阶段不进行 rerank
                     metadata_filters={"kb_id": kb_id},
                 )
 
@@ -181,7 +202,7 @@ class RetrievalManager:
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)
-        return all_results[:top_k]
+        return all_results[: len(all_results) // len(kb_ids)]
 
     async def _rerank(
         self,

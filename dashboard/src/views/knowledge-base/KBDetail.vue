@@ -51,7 +51,7 @@
       </v-tabs>
 
       <!-- 标签页内容 -->
-      <v-window v-model="activeTab">
+      <v-window v-model="activeTab" style="padding: 8px;">
         <!-- 概览 -->
         <v-window-item value="overview">
           <v-row>
@@ -163,7 +163,7 @@
 
         <!-- 知识库检索 -->
         <v-window-item value="retrieval">
-          <RetrievalTab :kb-id="kbId" />
+          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name"/>
         </v-window-item>
 
         <!-- 使用会话 -->
@@ -329,12 +329,11 @@ onMounted(() => {
   padding: 24px;
   text-align: center;
   border-radius: 12px;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
+  background: rgba(var(--v-theme-surface-variant), 0.1);
   transition: all 0.3s ease;
 }
 
 .stat-box:hover {
-  transform: translateY(-4px);
   background: rgba(var(--v-theme-surface-variant), 0.5);
 }
 
@@ -342,12 +341,10 @@ onMounted(() => {
   font-size: 2rem;
   font-weight: 600;
   margin-top: 8px;
-  color: rgb(var(--v-theme-on-surface));
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
   margin-top: 4px;
 }
 

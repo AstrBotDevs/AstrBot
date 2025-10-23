@@ -1,22 +1,8 @@
-"""知识库管理功能的数据模型定义
-
-该模块定义了知识库系统所需的数据模型,包括:
-- KnowledgeBase: 知识库表 (存储在独立的 kb.db)
-- KBDocument: 文档表 (存储在独立的 kb.db)
-- KBChunk: 文档块表 (存储在独立的 kb.db)
-- KBMedia: 多媒体资源表 (存储在独立的 kb.db)
-- KBSessionConfig: 会话配置表 (存储在独立的 kb.db)
-
-注意:
-- 所有模型存储在独立的知识库数据库 (data/knowledge_base/kb.db)
-- 与主数据库 (astrbot.db) 完全解耦
-"""
-
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlmodel import Field, SQLModel, Text
+from sqlmodel import Field, SQLModel, Text, UniqueConstraint
 
 
 class KnowledgeBase(SQLModel, table=True):
@@ -49,7 +35,6 @@ class KnowledgeBase(SQLModel, table=True):
     top_k_dense: Optional[int] = Field(default=50, nullable=True)
     top_k_sparse: Optional[int] = Field(default=50, nullable=True)
     top_m_final: Optional[int] = Field(default=5, nullable=True)
-    enable_rerank: Optional[bool] = Field(default=False, nullable=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -57,6 +42,13 @@ class KnowledgeBase(SQLModel, table=True):
     )
     doc_count: int = Field(default=0, nullable=False)
     chunk_count: int = Field(default=0, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "kb_name",
+            name="uix_kb_name",
+        ),
+    )
 
 
 class KBDocument(SQLModel, table=True):
