@@ -7,7 +7,6 @@ async def inject_kb_context(
     umo: str,
     p_ctx: PipelineContext,
     req: ProviderRequest,
-    top_k: int = 5,
 ) -> None:
     """inject knowledge base context into the provider request
 
@@ -17,6 +16,7 @@ async def inject_kb_context(
     """
     kb_mgr = p_ctx.plugin_manager.context.kb_manager
     kb_names = p_ctx.astrbot_config.get("kb_names", [])
+    top_k = p_ctx.astrbot_config.get("kb_final_top_k", 5)
 
     if not kb_names:
         return
@@ -24,6 +24,7 @@ async def inject_kb_context(
     kb_context = await kb_mgr.retrieve(
         query=req.prompt,
         kb_names=kb_names,
+        top_m_final=top_k,
     )
     if not kb_context:
         return

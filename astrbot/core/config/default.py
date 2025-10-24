@@ -137,6 +137,7 @@ DEFAULT_CONFIG = {
     "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
     "kb_names": [],  # 默认知识库名称列表
+    "kb_final_top_k": 5,  # 知识库检索的最终返回结果数量
 }
 
 
@@ -2001,6 +2002,8 @@ CONFIG_METADATA_2 = {
             "default_kb_collection": {
                 "type": "string",
             },
+            "kb_names": {"type": "list", "items": {"type": "string"}},
+            "kb_final_top_k": {"type": "int", "default": 5},
         },
     },
 }
@@ -2079,10 +2082,17 @@ CONFIG_METADATA_3 = {
                 "description": "知识库",
                 "type": "object",
                 "items": {
-                    "default_kb_collection": {
-                        "description": "默认使用的知识库",
-                        "type": "string",
+                    "kb_names": {
+                        "description": "知识库列表",
+                        "type": "list",
+                        "items": {"type": "string"},
                         "_special": "select_knowledgebase",
+                        "hint": "支持多选",
+                    },
+                    "kb_final_top_k": {
+                        "description": "最终返回结果数",
+                        "type": "int",
+                        "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
                 },
             },
