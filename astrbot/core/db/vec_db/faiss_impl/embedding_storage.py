@@ -36,6 +36,22 @@ class EmbeddingStorage:
         self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
         await self.save_index()
 
+    async def insert_batch(self, vectors: np.ndarray, ids: list[int]):
+        """批量插入向量
+
+        Args:
+            vectors (np.ndarray): 要插入的向量数组
+            ids (list[int]): 向量的ID列表
+        Raises:
+            ValueError: 如果向量的维度与存储的维度不匹配
+        """
+        assert self.index is not None, "FAISS index is not initialized."
+        if vectors.shape[1] != self.dimension:
+            raise ValueError(
+                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}"
+            )
+        self.index.add_with_ids(vectors, np.array(ids))
+
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索最相似的向量
 

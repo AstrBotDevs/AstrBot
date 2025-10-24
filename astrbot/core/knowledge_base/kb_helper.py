@@ -101,13 +101,18 @@ class KBHelper:
         file_name: str,
         file_content: bytes,
         file_type: str,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
 
         流程:
         1. 保存原始文件
         2. 解析文档内容
-        3. 提取多媒体资源 (TODO)
+        3. 提取多媒体资源
         4. 分块处理
         5. 生成向量并存储
         6. 保存元数据（事务）
@@ -116,7 +121,6 @@ class KBHelper:
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
-        vec_doc_ids = []
 
         # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
         # async with aiofiles.open(file_path, "wb") as f:
@@ -144,18 +148,27 @@ class KBHelper:
                 media_paths.append(Path(media.file_path))
 
             # 分块并生成向量
-            # saved_chunks = []
-            chunks_text = await self.chunker.chunk(text_content)
+            chunks_text = await self.chunker.chunk(
+                text_content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
+            contents = []
+            metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
-                vec_doc_id = await self.vec_db.insert(
-                    content=chunk_text,
-                    metadata={
+                contents.append(chunk_text)
+                metadatas.append(
+                    {
                         "kb_id": self.kb.kb_id,
                         "doc_id": doc_id,
                         "chunk_index": idx,
-                    },
+                    }
                 )
-                vec_doc_ids.append(str(vec_doc_id))
+            await self.vec_db.insert_batch(
+                contents=contents,
+                metadatas=metadatas,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+            )
 
             # 保存文档的元数据
             doc = KBDocument(

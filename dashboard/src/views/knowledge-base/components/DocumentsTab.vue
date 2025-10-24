@@ -2,35 +2,16 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn
-        prepend-icon="mdi-upload"
-        color="primary"
-        variant="elevated"
-        @click="showUploadDialog = true"
-      >
+      <v-btn prepend-icon="mdi-upload" color="primary" variant="elevated" @click="showUploadDialog = true">
         {{ t('documents.upload') }}
       </v-btn>
-      <v-text-field
-        v-model="searchQuery"
-        prepend-inner-icon="mdi-magnify"
-        :placeholder="'搜索文档...'"
-        variant="outlined"
-        density="compact"
-        hide-details
-        clearable
-        style="max-width: 300px"
-      />
+      <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
+        density="compact" hide-details clearable style="max-width: 300px" />
     </div>
 
     <!-- 文档列表 -->
     <v-card elevation="2">
-      <v-data-table
-        :headers="headers"
-        :items="documents"
-        :loading="loading"
-        :search="searchQuery"
-        :items-per-page="10"
-      >
+      <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
             <v-icon :color="getFileColor(item.file_type)">
@@ -49,20 +30,8 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn
-            icon="mdi-eye"
-            variant="text"
-            size="small"
-            color="info"
-            @click="viewDocument(item)"
-          />
-          <v-btn
-            icon="mdi-delete"
-            variant="text"
-            size="small"
-            color="error"
-            @click="confirmDelete(item)"
-          />
+          <v-btn icon="mdi-eye" variant="text" size="small" color="info" @click="viewDocument(item)" />
+          <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="confirmDelete(item)" />
         </template>
 
         <template #no-data>
@@ -75,9 +44,9 @@
     </v-card>
 
     <!-- 上传对话框 -->
-    <v-dialog v-model="showUploadDialog" max-width="600px" persistent>
+    <v-dialog v-model="showUploadDialog" max-width="600px" persistent @after-enter="initUploadSettings">
       <v-card>
-        <v-card-title class="pa-4">
+        <v-card-title class="pa-4 d-flex align-center">
           <span class="text-h5">{{ t('upload.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
@@ -87,68 +56,74 @@
 
         <v-card-text class="pa-6">
           <!-- 文件选择 -->
-          <div
-            class="upload-dropzone"
-            :class="{ 'dragover': isDragging }"
-            @drop.prevent="handleDrop"
-            @dragover.prevent="isDragging = true"
-            @dragleave="isDragging = false"
-            @click="$refs.fileInput.click()"
-          >
+          <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
+            @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
             <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
             <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
             <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
             <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-            <input
-              ref="fileInput"
-              type="file"
-              hidden
-              accept=".txt,.md,.pdf"
-              @change="handleFileSelect"
-            />
+            <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
+            <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf" @change="handleFileSelect" />
           </div>
 
-          <div v-if="selectedFile" class="mt-4 pa-4 rounded bg-surface-variant">
-            <div class="d-flex align-center justify-space-between">
-              <div class="d-flex align-center gap-2">
-                <v-icon>{{ getFileIcon(selectedFile.name) }}</v-icon>
-                <div>
-                  <div class="font-weight-medium">{{ selectedFile.name }}</div>
-                  <div class="text-caption">{{ formatFileSize(selectedFile.size) }}</div>
+          <div v-if="selectedFiles.length > 0" class="mt-4">
+            <div class="d-flex align-center justify-space-between mb-2">
+              <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
+              <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
+            </div>
+            <div class="files-list">
+              <div v-for="(file, index) in selectedFiles" :key="index" class="file-item pa-3 mb-2 rounded bg-surface-variant">
+                <div class="d-flex align-center justify-space-between">
+                  <div class="d-flex align-center gap-2">
+                    <v-icon>{{ getFileIcon(file.name) }}</v-icon>
+                    <div>
+                      <div class="font-weight-medium">{{ file.name }}</div>
+                      <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+                    </div>
+                  </div>
+                  <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
                 </div>
               </div>
-              <v-btn icon="mdi-close" variant="text" size="small" @click="selectedFile = null" />
             </div>
           </div>
 
           <!-- 分块设置 -->
-          <v-expansion-panels class="mt-4">
-            <v-expansion-panel>
-              <v-expansion-panel-title>
-                <v-icon start>mdi-cog</v-icon>
-                {{ t('upload.chunkSettings') }}
-              </v-expansion-panel-title>
-              <v-expansion-panel-text>
-                <v-text-field
-                  v-model.number="uploadSettings.chunk_size"
-                  :label="t('upload.chunkSize')"
-                  :hint="t('upload.chunkSizeHint')"
-                  type="number"
-                  variant="outlined"
-                  density="compact"
-                  class="mb-2"
-                />
-                <v-text-field
-                  v-model.number="uploadSettings.chunk_overlap"
-                  :label="t('upload.chunkOverlap')"
-                  :hint="t('upload.chunkOverlapHint')"
-                  type="number"
-                  variant="outlined"
-                  density="compact"
-                />
-              </v-expansion-panel-text>
-            </v-expansion-panel>
-          </v-expansion-panels>
+          <div class="mt-6">
+            <div class="d-flex align-center mb-4">
+              <h3 class="text-h6">{{ t('upload.chunkSettings') }}</h3>
+            </div>
+            <v-row>
+              <v-col cols="12" sm="6">
+                <v-text-field v-model.number="uploadSettings.chunk_size" :label="t('upload.chunkSize')"
+                  :hint="t('upload.chunkSizeHint')" persistent-hint type="number" variant="outlined"
+                  density="compact" :placeholder="props.kb?.chunk_size?.toString() || '512'" />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field v-model.number="uploadSettings.chunk_overlap" :label="t('upload.chunkOverlap')"
+                  :hint="t('upload.chunkOverlapHint')" persistent-hint type="number" variant="outlined"
+                  density="compact" :placeholder="props.kb?.chunk_overlap?.toString() || '50'" />
+              </v-col>
+            </v-row>
+          </div>
+
+          <div class="mt-2">
+            <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
+            <v-row>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')"
+                  hint="每批处理的文本数量" persistent-hint type="number" variant="outlined" density="compact" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
+                  hint="并发任务数量限制" persistent-hint type="number" variant="outlined" density="compact" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model.number="uploadSettings.max_retries" :label="t('upload.maxRetries')"
+                  hint="失败时的最大重试次数" persistent-hint type="number" variant="outlined" density="compact" />
+              </v-col>
+            </v-row>
+          </div>
+
         </v-card-text>
 
         <v-divider />
@@ -158,13 +133,8 @@
           <v-btn variant="text" @click="closeUploadDialog">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            @click="uploadDocument"
-            :loading="uploading"
-            :disabled="!selectedFile"
-          >
+          <v-btn color="primary" variant="elevated" @click="uploadDocument" :loading="uploading"
+            :disabled="selectedFiles.length === 0">
             {{ t('upload.submit') }}
           </v-btn>
         </v-card-actions>
@@ -224,9 +194,10 @@ const documents = ref<any[]>([])
 const searchQuery = ref('')
 const showUploadDialog = ref(false)
 const showDeleteDialog = ref(false)
-const selectedFile = ref<File | null>(null)
+const selectedFiles = ref<File[]>([])
 const deleteTarget = ref<any>(null)
 const isDragging = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const snackbar = ref({
   show: false,
@@ -242,9 +213,23 @@ const showSnackbar = (text: string, color: string = 'success') => {
 
 // 上传设置
 const uploadSettings = ref({
-  chunk_size: null,
-  chunk_overlap: null
+  chunk_size: null as number | null,
+  chunk_overlap: null as number | null,
+  batch_size: 32,
+  tasks_limit: 3,
+  max_retries: 3
 })
+
+// 初始化上传设置
+const initUploadSettings = () => {
+  uploadSettings.value = {
+    chunk_size: props.kb?.chunk_size || null,
+    chunk_overlap: props.kb?.chunk_overlap || null,
+    batch_size: 32,
+    tasks_limit: 3,
+    max_retries: 3
+  }
+}
 
 // 表格列
 const headers = [
@@ -253,7 +238,7 @@ const headers = [
   { title: t('documents.size'), key: 'file_size', sortable: true },
   { title: t('documents.chunks'), key: 'chunk_count', sortable: true },
   { title: t('documents.createdAt'), key: 'created_at', sortable: true },
-  { title: t('documents.actions'), key: 'actions', sortable: false, align: 'end' }
+  { title: t('documents.actions'), key: 'actions', sortable: false, align: 'end' as const }
 ]
 
 // 加载文档列表
@@ -277,22 +262,39 @@ const loadDocuments = async () => {
 // 文件选择
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) {
-    selectedFile.value = target.files[0]
+  if (target.files && target.files.length > 0) {
+    const newFiles = Array.from(target.files)
+    addFiles(newFiles)
   }
+}
+
+// 添加文件（检查数量限制）
+const addFiles = (files: File[]) => {
+  const totalFiles = selectedFiles.value.length + files.length
+  if (totalFiles > 10) {
+    showSnackbar('最多只能选择 10 个文件', 'warning')
+    return
+  }
+  selectedFiles.value.push(...files)
+}
+
+// 移除文件
+const removeFile = (index: number) => {
+  selectedFiles.value.splice(index, 1)
 }
 
 // 拖放上传
 const handleDrop = (event: DragEvent) => {
   isDragging.value = false
-  if (event.dataTransfer?.files && event.dataTransfer.files[0]) {
-    selectedFile.value = event.dataTransfer.files[0]
+  if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+    const newFiles = Array.from(event.dataTransfer.files)
+    addFiles(newFiles)
   }
 }
 
 // 上传文档
 const uploadDocument = async () => {
-  if (!selectedFile.value) {
+  if (selectedFiles.value.length === 0) {
     showSnackbar(t('upload.fileRequired'), 'warning')
     return
   }
@@ -300,7 +302,12 @@ const uploadDocument = async () => {
   uploading.value = true
   try {
     const formData = new FormData()
-    formData.append('file', selectedFile.value)
+    
+    // 添加所有文件
+    selectedFiles.value.forEach((file, index) => {
+      formData.append(`file${index}`, file)
+    })
+    
     formData.append('kb_id', props.kbId)
     if (uploadSettings.value.chunk_size) {
       formData.append('chunk_size', uploadSettings.value.chunk_size.toString())
@@ -308,13 +315,25 @@ const uploadDocument = async () => {
     if (uploadSettings.value.chunk_overlap) {
       formData.append('chunk_overlap', uploadSettings.value.chunk_overlap.toString())
     }
+    formData.append('batch_size', uploadSettings.value.batch_size.toString())
+    formData.append('tasks_limit', uploadSettings.value.tasks_limit.toString())
+    formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
     const response = await axios.post('/api/kb/document/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
 
     if (response.data.status === 'ok') {
-      showSnackbar(t('documents.uploadSuccess'))
+      const result = response.data.data
+      const successCount = result.success_count || 0
+      const failedCount = result.failed_count || 0
+      
+      if (failedCount === 0) {
+        showSnackbar(`成功上传 ${successCount} 个文档`)
+      } else {
+        showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
+      }
+      
       closeUploadDialog()
       await loadDocuments()
       emit('refresh')
@@ -332,8 +351,9 @@ const uploadDocument = async () => {
 // 关闭上传对话框
 const closeUploadDialog = () => {
   showUploadDialog.value = false
-  selectedFile.value = null
-  uploadSettings.value = { chunk_size: null, chunk_overlap: null }
+  selectedFiles.value = []
+  // 重置为知识库默认设置
+  initUploadSettings()
 }
 
 // 查看文档
@@ -428,8 +448,13 @@ onMounted(() => {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .action-bar {
@@ -457,13 +482,26 @@ onMounted(() => {
   transform: scale(1.02);
 }
 
+.files-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-item {
+  transition: all 0.2s ease;
+}
+
+.file-item:hover {
+  background: rgba(var(--v-theme-surface-variant), 0.8) !important;
+}
+
 @media (max-width: 768px) {
   .action-bar {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .action-bar > * {
+  .action-bar>* {
     width: 100%;
   }
 }

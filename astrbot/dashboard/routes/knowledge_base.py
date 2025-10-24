@@ -428,17 +428,18 @@ class KnowledgeBaseRoute(Route):
         """上传文档
 
         支持两种方式:
-        1. multipart/form-data 文件上传
-        2. JSON 格式 base64 编码上传
+        1. multipart/form-data 文件上传（支持多文件，最多10个）
+        2. JSON 格式 base64 编码上传（支持多文件，最多10个）
 
         Form Data (multipart/form-data):
         - kb_id: 知识库 ID (必填)
-        - file: 文件对象 (必填)
+        - file: 文件对象 (必填，可多个，字段名为 file, file1, file2, ... 或 files[])
 
         JSON Body (application/json):
         - kb_id: 知识库 ID (必填)
-        - file_name: 文件名 (必填)
-        - file_content: base64 编码的文件内容 (必填)
+        - files: 文件数组 (必填)
+          - file_name: 文件名 (必填)
+          - file_content: base64 编码的文件内容 (必填)
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -446,20 +447,46 @@ class KnowledgeBaseRoute(Route):
             # 检查 Content-Type
             content_type = request.content_type
             kb_id = None
+            chunk_size = None
+            chunk_overlap = None
+            batch_size = 32
+            tasks_limit = 3
+            max_retries = 3
+            files_to_upload = []  # 存储待上传的文件信息列表
 
-            if content_type and "multipart/form-data" in content_type:
-                # 方式 1: multipart/form-data
-                form_data = await request.form
-                files = await request.files
+            if content_type and "multipart/form-data" not in content_type:
+                return (
+                    Response().error("Content-Type 须为 multipart/form-data").__dict__
+                )
+            form_data = await request.form
+            files = await request.files
 
-                kb_id = form_data.get("kb_id")
-                if not kb_id:
-                    return Response().error("缺少参数 kb_id").__dict__
+            kb_id = form_data.get("kb_id")
+            chunk_size = int(form_data.get("chunk_size", 512))
+            chunk_overlap = int(form_data.get("chunk_overlap", 50))
+            batch_size = int(form_data.get("batch_size", 32))
+            tasks_limit = int(form_data.get("tasks_limit", 3))
+            max_retries = int(form_data.get("max_retries", 3))
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
 
-                if "file" not in files:
-                    return Response().error("缺少文件").__dict__
+            # 收集所有文件
+            file_list = []
+            # 支持 file, file1, file2, ... 或 files[] 格式
+            for key in files.keys():
+                if key == "file" or key.startswith("file") or key == "files[]":
+                    file_items = files.getlist(key)
+                    file_list.extend(file_items)
 
-                file = files["file"]
+            if not file_list:
+                return Response().error("缺少文件").__dict__
+
+            # 限制文件数量
+            if len(file_list) > 10:
+                return Response().error("最多只能上传10个文件").__dict__
+
+            # 处理每个文件
+            for file in file_list:
                 file_name = file.filename
 
                 # 保存到临时文件
@@ -470,64 +497,83 @@ class KnowledgeBaseRoute(Route):
                     # 异步读取文件内容
                     async with aiofiles.open(temp_file_path, "rb") as f:
                         file_content = await f.read()
+
+                    # 提取文件类型
+                    file_type = (
+                        file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+                    )
+
+                    files_to_upload.append(
+                        {
+                            "file_name": file_name,
+                            "file_content": file_content,
+                            "file_type": file_type,
+                        }
+                    )
                 finally:
                     # 清理临时文件
                     if os.path.exists(temp_file_path):
                         os.remove(temp_file_path)
 
-            else:
-                # 方式 2: JSON base64
-                import base64
-
-                data = await request.json
-
-                kb_id = data.get("kb_id")
-                file_name = data.get("file_name")
-                file_content_b64 = data.get("file_content")
-
-                if not kb_id or not file_name or not file_content_b64:
-                    return (
-                        Response()
-                        .error("缺少参数 kb_id, file_name 或 file_content")
-                        .__dict__
-                    )
-
-                try:
-                    file_content = base64.b64decode(file_content_b64)
-                except Exception:
-                    return (
-                        Response()
-                        .error("file_content 必须是有效的 base64 编码")
-                        .__dict__
-                    )
-
-            # 提取文件类型
-            file_type = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
-
+            # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
-            # 上传文档
-            doc = await kb_helper.upload_document(
-                file_name=file_name,
-                file_content=file_content,
-                file_type=file_type,
-            )
+            # 上传所有文档
+            uploaded_docs = []
+            failed_docs = []
 
-            doc_dict = {
-                "doc_id": doc.doc_id,
-                "kb_id": doc.kb_id,
-                "doc_name": doc.doc_name,
-                "file_type": doc.file_type,
-                "file_size": doc.file_size,
-                "chunk_count": doc.chunk_count,
-                "media_count": doc.media_count,
-                "created_at": doc.created_at.isoformat(),
-                "updated_at": doc.updated_at.isoformat(),
+            for file_info in files_to_upload:
+                try:
+                    doc = await kb_helper.upload_document(
+                        file_name=file_info["file_name"],
+                        file_content=file_info["file_content"],
+                        file_type=file_info["file_type"],
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        batch_size=batch_size,
+                        tasks_limit=tasks_limit,
+                        max_retries=max_retries,
+                    )
+
+                    doc_dict = {
+                        "doc_id": doc.doc_id,
+                        "kb_id": doc.kb_id,
+                        "doc_name": doc.doc_name,
+                        "file_type": doc.file_type,
+                        "file_size": doc.file_size,
+                        "chunk_count": doc.chunk_count,
+                        "media_count": doc.media_count,
+                        "created_at": doc.created_at.isoformat(),
+                        "updated_at": doc.updated_at.isoformat(),
+                    }
+                    uploaded_docs.append(doc_dict)
+                except Exception as e:
+                    logger.error(f"上传文档 {file_info['file_name']} 失败: {e}")
+                    failed_docs.append(
+                        {"file_name": file_info["file_name"], "error": str(e)}
+                    )
+
+            # 返回结果
+            result = {
+                "uploaded": uploaded_docs,
+                "failed": failed_docs,
+                "total": len(files_to_upload),
+                "success_count": len(uploaded_docs),
+                "failed_count": len(failed_docs),
             }
 
-            return Response().ok(doc_dict, "上传文档成功").__dict__
+            if failed_docs:
+                message = (
+                    f"部分文档上传成功 ({len(uploaded_docs)}/{len(files_to_upload)})"
+                )
+            else:
+                message = (
+                    f"所有文档上传成功 ({len(uploaded_docs)}/{len(files_to_upload)})"
+                )
+
+            return Response().ok(result, message).__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__

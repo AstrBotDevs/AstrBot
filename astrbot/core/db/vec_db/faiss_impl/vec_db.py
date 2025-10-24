@@ -1,11 +1,13 @@
 import uuid
 import json
+import time
 import numpy as np
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 from ..base import Result, BaseVecDB
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.core.provider.provider import RerankProvider
+from astrbot import logger
 
 
 class FaissVecDB(BaseVecDB):
@@ -59,6 +61,55 @@ class FaissVecDB(BaseVecDB):
             # 插入向量到 FAISS
             await self.embedding_storage.insert(vector, int_id)
             return int_id
+
+    async def insert_batch(
+        self,
+        contents: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+    ) -> list[int]:
+        """
+        批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+        """
+        assert self.document_storage.connection is not None, (
+            "Database connection is not initialized."
+        )
+        metadatas = metadatas or [{} for _ in contents]
+        ids = ids or [str(uuid.uuid4()) for _ in contents]
+
+        start = time.time()
+        logger.debug(f"Generating embeddings for {len(contents)} contents...")
+        vectors = await self.embedding_provider.get_embeddings_batch(
+            contents,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+        )
+        end = time.time()
+        logger.debug(
+            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds."
+        )
+
+        int_ids = []
+        async with self.document_storage.connection.cursor() as cursor:
+            for str_id, content, metadata in zip(ids, contents, metadatas):
+                await cursor.execute(
+                    "INSERT INTO documents (doc_id, text, metadata) VALUES (?, ?, ?)",
+                    (str_id, content, json.dumps(metadata)),
+                )
+            await self.document_storage.connection.commit()
+
+            for str_id in ids:
+                result = await self.document_storage.get_document_by_doc_id(str_id)
+                int_ids.append(result["id"])
+
+            # 批量插入向量到 FAISS
+            vectors_array = np.array(vectors).astype("float32")
+            await self.embedding_storage.insert_batch(vectors_array, int_ids)
+            return int_ids
 
     async def retrieve(
         self,

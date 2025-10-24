@@ -25,6 +25,21 @@ class BaseVecDB:
         ...
 
     @abc.abstractmethod
+    async def insert_batch(
+        self,
+        contents: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+    ) -> int:
+        """
+        批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+        """
+        ...
+
+    @abc.abstractmethod
     async def retrieve(
         self,
         query: str,
