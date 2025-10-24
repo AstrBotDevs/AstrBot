@@ -6,32 +6,16 @@
         <h1 class="text-h4 mb-2">{{ t('list.title') }}</h1>
         <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
       </div>
-      <v-btn
-        icon="mdi-information-outline"
-        variant="text"
-        size="small"
-        color="grey"
-        href="https://astrbot.app/use/knowledge-base.html"
-        target="_blank"
-      />
+      <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
+        href="https://astrbot.app/use/knowledge-base.html" target="_blank" />
     </div>
 
     <!-- 操作按钮栏 -->
     <div class="action-bar mb-6">
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        variant="elevated"
-        @click="showCreateDialog = true"
-      >
+      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
-      <v-btn
-        prepend-icon="mdi-refresh"
-        variant="tonal"
-        @click="loadKnowledgeBases"
-        :loading="loading"
-      >
+      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
         {{ t('list.refresh') }}
       </v-btn>
     </div>
@@ -43,14 +27,8 @@
     </div>
 
     <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card
-        v-for="kb in kbList"
-        :key="kb.kb_id"
-        class="kb-card"
-        elevation="2"
-        hover
-        @click="navigateToDetail(kb.kb_id)"
-      >
+      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" hover
+        @click="navigateToDetail(kb.kb_id)">
         <div class="kb-card-content">
           <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
           <h3 class="kb-name">{{ kb.kb_name }}</h3>
@@ -68,20 +46,8 @@
           </div>
 
           <div class="kb-actions">
-            <v-btn
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              color="info"
-              @click.stop="editKB(kb)"
-            />
-            <v-btn
-              icon="mdi-delete"
-              size="small"
-              variant="text"
-              color="error"
-              @click.stop="confirmDelete(kb)"
-            />
+            <v-btn icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
+            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
           </div>
         </div>
       </v-card>
@@ -91,14 +57,8 @@
     <div v-else class="empty-state">
       <v-icon size="100" color="grey-lighten-2">mdi-book-open-variant</v-icon>
       <h2 class="mt-4">{{ t('list.empty') }}</h2>
-      <v-btn
-        class="mt-6"
-        prepend-icon="mdi-plus"
-        color="primary"
-        variant="elevated"
-        size="large"
-        @click="showCreateDialog = true"
-      >
+      <v-btn class="mt-6" prepend-icon="mdi-plus" color="primary" variant="elevated" size="large"
+        @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
     </div>
@@ -125,36 +85,17 @@
 
           <!-- 表单 -->
           <v-form ref="formRef" @submit.prevent="submitForm">
-            <v-text-field
-              v-model="formData.kb_name"
-              :label="t('create.nameLabel')"
-              :placeholder="t('create.namePlaceholder')"
-              variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]"
-              required
-              class="mb-4"
-            />
+            <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
+              :placeholder="t('create.namePlaceholder')" variant="outlined"
+              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" />
 
-            <v-textarea
-              v-model="formData.description"
-              :label="t('create.descriptionLabel')"
-              :placeholder="t('create.descriptionPlaceholder')"
-              variant="outlined"
-              rows="3"
-              class="mb-4"
-            />
+            <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
+              :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
 
-            <v-select
-              v-model="formData.embedding_provider_id"
-              :items="embeddingProviders"
-              :item-title="item => item.embedding_model || item.id"
-              :item-value="'id'"
-              :label="t('create.embeddingModelLabel')"
-              variant="outlined"
-              class="mb-4"
-              :disabled="true"
-              @update:model-value="handleEmbeddingProviderChange"
-            >
+            <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
+              :item-title="item => item.embedding_model || item.id" :item-value="'id'"
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="true"
+              @update:model-value="handleEmbeddingProviderChange">
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -167,16 +108,9 @@
               </template>
             </v-select>
 
-            <v-select
-              v-model="formData.rerank_provider_id"
-              :items="rerankProviders"
-              :item-title="item => item.rerank_model || item.id"
-              :item-value="'id'"
-              :label="t('create.rerankModelLabel')"
-              variant="outlined"
-              clearable
-              class="mb-2"
-            >
+            <v-select v-model="formData.rerank_provider_id" :items="rerankProviders"
+              :item-title="item => item.rerank_model || item.id" :item-value="'id'"
+              :label="t('create.rerankModelLabel')" variant="outlined" clearable class="mb-2">
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -199,12 +133,7 @@
           <v-btn variant="text" @click="closeCreateDialog">
             {{ t('create.cancel') }}
           </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            @click="submitForm"
-            :loading="saving"
-          >
+          <v-btn color="primary" variant="elevated" @click="submitForm" :loading="saving">
             {{ editingKB ? t('edit.submit') : t('create.submit') }}
           </v-btn>
         </v-card-actions>
@@ -220,12 +149,7 @@
           <div v-for="category in emojiCategories" :key="category.key" class="mb-4">
             <p class="text-subtitle-2 mb-2">{{ t(`emoji.categories.${category.key}`) }}</p>
             <div class="emoji-grid">
-              <div
-                v-for="emoji in category.emojis"
-                :key="emoji"
-                class="emoji-item"
-                @click="selectEmoji(emoji)"
-              >
+              <div v-for="emoji in category.emojis" :key="emoji" class="emoji-item" @click="selectEmoji(emoji)">
                 {{ emoji }}
               </div>
             </div>
@@ -258,12 +182,7 @@
           <v-btn variant="text" @click="cancelDelete">
             {{ t('delete.cancel') }}
           </v-btn>
-          <v-btn
-            color="error"
-            variant="elevated"
-            @click="deleteKB"
-            :loading="deleting"
-          >
+          <v-btn color="error" variant="elevated" @click="deleteKB" :loading="deleting">
             {{ t('delete.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -274,6 +193,10 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <div class="position-absolute" style="bottom: 0px; right: 16px;">
+      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
+    </div>
 
   </div>
 </template>
