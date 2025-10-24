@@ -1,10 +1,10 @@
 {
-  "title": "服务提供商管理",
-  "subtitle": "管理模型服务提供商",
+  "title": "模型提供商",
+  "subtitle": "管理模型提供商",
   "providers": {
-    "title": "服务提供商",
+    "title": "模型提供商",
     "settings": "设置",
-    "addProvider": "新增服务提供商",
+    "addProvider": "新增模型提供商",
     "providerType": "提供商类型",
     "tabs": {
       "all": "全部",
@@ -15,8 +15,8 @@
       "rerank": "重排序(Rerank)"
     },
     "empty": {
-      "all": "暂无服务提供商，点击 新增服务提供商 添加",
-      "typed": "暂无{type}类型的服务提供商，点击 新增服务提供商 添加"
+      "all": "暂无模型提供商，点击 新增模型提供商 添加",
+      "typed": "暂无{type}类型的模型提供商，点击 新增模型提供商 添加"
     },
     "description": {
       "openai": "也支持所有兼容 OpenAI API 的模型提供商。",
@@ -25,10 +25,10 @@
     }
   },
   "availability": {
-    "title": "服务提供商可用性",
+    "title": "模型提供商可用性",
     "subtitle": "通过测试模型对话可用性判断，可能产生API费用",
     "refresh": "刷新状态",
-    "noData": "点击\"刷新状态\"按钮获取服务提供商可用性",
+    "noData": "点击\"刷新状态\"按钮获取模型提供商可用性",
     "available": "可用",
     "unavailable": "不可用",
     "pending": "检查中...",
@@ -42,7 +42,7 @@
   },
   "dialogs": {
     "addProvider": {
-      "title": "服务提供商",
+      "title": "模型提供商",
       "tabs": {
         "basic": "基本",
         "speechToText": "语音转文字",
@@ -55,15 +55,15 @@
     "config": {
       "addTitle": "新增",
       "editTitle": "编辑",
-      "provider": "服务提供商",
+      "provider": "模型提供商",
       "cancel": "取消",
       "save": "保存"
     },
     "settings": {
-      "title": "服务提供商设置",
+      "title": "模型提供商设置",
       "sessionSeparation": {
         "title": "启用提供商会话隔离",
-        "description": "不同会话将可独立选择文本生成、TTS、STT 等服务提供商。"
+        "description": "不同会话将可独立选择文本生成、TTS、STT 等模型提供商。"
       },
       "close": "关闭"
     }
@@ -78,11 +78,11 @@
     },
     "error": {
       "sessionSeparation": "获取会话隔离配置失败",
-      "fetchStatus": "获取服务提供商状态失败",
+      "fetchStatus": "获取模型提供商状态失败",
       "testError": "测试 {id} 失败: {error}"
     },
     "confirm": {
-      "delete": "确定要删除服务提供商 {id} 吗?"
+      "delete": "确定要删除模型提供商 {id} 吗?"
     }
   }
 } 

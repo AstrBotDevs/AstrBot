@@ -13,7 +13,7 @@ class BaseChunker(ABC):
     """
 
     @abstractmethod
-    async def chunk(self, text: str) -> list[str]:
+    async def chunk(self, text: str, **kwargs) -> list[str]:
         """将文本分块
 
         Args:

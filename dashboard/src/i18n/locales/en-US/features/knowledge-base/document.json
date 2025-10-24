@@ -21,7 +21,8 @@
     "delete": "Delete",
     "preview": "Preview",
     "search": "Search Chunks",
-    "searchPlaceholder": "Enter keywords to search chunks..."
+    "searchPlaceholder": "Enter keywords to search chunks...",
+    "showing": "Showing"
   },
   "edit": {
     "title": "Edit Chunk",

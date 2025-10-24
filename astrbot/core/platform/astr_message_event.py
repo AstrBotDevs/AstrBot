@@ -4,7 +4,7 @@ import re
 import hashlib
 import uuid
 
-from typing import List, Union, Optional, AsyncGenerator, TypeVar, Any
+from typing import List, Union, Optional, AsyncGenerator, Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -25,8 +25,6 @@ from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .platform_metadata import PlatformMetadata
 from .message_session import MessageSession, MessageSesion  # noqa
-
-_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -92,8 +90,10 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.message_str
 
-    def _outline_chain(self, chain: List[BaseMessageComponent]) -> str:
+    def _outline_chain(self, chain: Optional[List[BaseMessageComponent]]) -> str:
         outline = ""
+        if not chain:
+            return outline
         for i in chain:
             if isinstance(i, Plain):
                 outline += i.text
@@ -175,9 +175,7 @@ class AstrMessageEvent(abc.ABC):
         """
         self._extras[key] = value
 
-    def get_extra(
-        self, key: str | None = None, default: _VT = None
-    ) -> dict[str, Any] | _VT:
+    def get_extra(self, key: str | None = None, default=None) -> Any:
         """
         获取额外的信息。
         """
@@ -265,6 +263,9 @@ class AstrMessageEvent(abc.ABC):
         """
         if isinstance(result, str):
             result = MessageEventResult().message(result)
+        # 兼容外部插件或调用方传入的 chain=None 的情况，确保为可迭代列表
+        if isinstance(result, MessageEventResult) and result.chain is None:
+            result.chain = []
         self._result = result
 
     def stop_event(self):

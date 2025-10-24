@@ -19,7 +19,7 @@ from astrbot.core.platform import Platform
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.knowledge_base.kb_manager_lifecycle import KnowledgeBaseManager
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType

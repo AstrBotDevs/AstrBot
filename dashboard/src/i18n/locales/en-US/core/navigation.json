@@ -1,5 +1,5 @@
 {
-  "dashboard": "Dashboard", 
+  "dashboard": "Dashboard",
   "platforms": "Platforms",
   "providers": "Providers",
   "persona": "Persona",
@@ -12,10 +12,12 @@
   "console": "Console",
   "alkaid": "Alkaid Lab",
   "knowledgeBase": "Knowledge Base",
-  "knowledgeBaseBeta": "Knowledge Base (Beta)",
   "about": "About",
   "settings": "Settings",
   "documentation": "Documentation",
   "github": "GitHub",
-  "drag": "Drag"
-} 
+  "drag": "Drag",
+  "groups": {
+    "more": "More Features"
+  }
+}

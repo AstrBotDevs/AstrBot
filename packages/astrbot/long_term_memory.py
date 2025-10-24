@@ -4,7 +4,7 @@ import random
 import astrbot.api.star as star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.platform import MessageType
-from astrbot.api.provider import ProviderRequest
+from astrbot.api.provider import ProviderRequest, Provider
 from astrbot.api.message_components import Plain, Image
 from astrbot import logger
 from collections import defaultdict
@@ -32,6 +32,7 @@ class LongTermMemory:
         image_caption = (
             True
             if cfg["provider_settings"]["default_image_caption_provider_id"]
+            and cfg["provider_ltm_settings"]["image_caption"]
             else False
         )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
@@ -73,6 +74,8 @@ class LongTermMemory:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
+        if not isinstance(provider, Provider):
+            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -122,8 +125,11 @@ class LongTermMemory:
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
                         try:
+                            url = comp.url if comp.url else comp.file
+                            if not url:
+                                raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
-                                comp.url if comp.url else comp.file,
+                                url,
                                 cfg["image_caption_provider_id"],
                                 cfg["image_caption_prompt"],
                             )

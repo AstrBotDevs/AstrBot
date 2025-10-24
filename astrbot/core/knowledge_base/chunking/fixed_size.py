@@ -22,7 +22,7 @@ class FixedSizeChunker(BaseChunker):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    async def chunk(self, text: str) -> list[str]:
+    async def chunk(self, text: str, **kwargs) -> list[str]:
         """固定大小分块
 
         Args:
@@ -31,22 +31,25 @@ class FixedSizeChunker(BaseChunker):
         Returns:
             list[str]: 分块后的文本列表
         """
+        chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
+
         chunks = []
         start = 0
         text_len = len(text)
 
         while start < text_len:
-            end = start + self.chunk_size
+            end = start + chunk_size
             chunk = text[start:end]
 
             if chunk:
                 chunks.append(chunk)
 
             # 移动窗口,保留重叠部分
-            start = end - self.chunk_overlap
+            start = end - chunk_overlap
 
             # 防止无限循环: 如果重叠过大,直接移到end
-            if start >= end or self.chunk_overlap >= self.chunk_size:
+            if start >= end or chunk_overlap >= chunk_size:
                 start = end
 
         return chunks

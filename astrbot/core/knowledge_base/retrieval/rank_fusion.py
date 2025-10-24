@@ -3,11 +3,11 @@
 使用 Reciprocal Rank Fusion (RRF) 算法融合稠密检索和稀疏检索的结果
 """
 
+import json
 from dataclasses import dataclass
-from typing import Dict, List
 
 from astrbot.core.db.vec_db.base import Result
-from astrbot.core.knowledge_base.database import KBDatabase
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseResult
 
 
@@ -16,6 +16,7 @@ class FusedResult:
     """融合后的检索结果"""
 
     chunk_id: str
+    chunk_index: int
     doc_id: str
     kb_id: str
     content: str
@@ -30,7 +31,7 @@ class RankFusion:
     - 使用 Reciprocal Rank Fusion (RRF) 算法
     """
 
-    def __init__(self, kb_db: KBDatabase, k: int = 60):
+    def __init__(self, kb_db: KBSQLiteDatabase, k: int = 60):
         """初始化结果融合器
 
         Args:
@@ -42,10 +43,10 @@ class RankFusion:
 
     async def fuse(
         self,
-        dense_results: List[Result],
-        sparse_results: List[SparseResult],
+        dense_results: list[Result],
+        sparse_results: list[SparseResult],
         top_k: int = 20,
-    ) -> List[FusedResult]:
+    ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果
 
         RRF 公式:
@@ -62,14 +63,14 @@ class RankFusion:
         # 1. 构建排名映射
         dense_ranks = {
             r.data["doc_id"]: (idx + 1) for idx, r in enumerate(dense_results)
-        }
+        }  # 这里的 doc_id 实际上是 chunk_id
         sparse_ranks = {r.chunk_id: (idx + 1) for idx, r in enumerate(sparse_results)}
 
-        # 2. 收集所有唯一的 ID (来自稠密检索的是 vec_doc_id, 稀疏检索的是 chunk_id)
+        # 2. 收集所有唯一的 ID
         # 需要统一为 chunk_id
         all_chunk_ids = set()
-        vec_doc_id_to_dense = {}  # vec_doc_id -> Result
-        chunk_id_to_sparse = {}  # chunk_id -> SparseResult
+        vec_doc_id_to_dense: dict[str, Result] = {}  # vec_doc_id -> Result
+        chunk_id_to_sparse: dict[str, SparseResult] = {}  # chunk_id -> SparseResult
 
         # 处理稀疏检索结果
         for r in sparse_results:
@@ -83,7 +84,7 @@ class RankFusion:
             vec_doc_id_to_dense[vec_doc_id] = r
 
         # 3. 计算 RRF 分数
-        rrf_scores: Dict[str, float] = {}
+        rrf_scores: dict[str, float] = {}
 
         for identifier in all_chunk_ids:
             score = 0.0
@@ -112,6 +113,7 @@ class RankFusion:
                 fused_results.append(
                     FusedResult(
                         chunk_id=sr.chunk_id,
+                        chunk_index=sr.chunk_index,
                         doc_id=sr.doc_id,
                         kb_id=sr.kb_id,
                         content=sr.content,
@@ -120,16 +122,17 @@ class RankFusion:
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
-                chunk = await self.kb_db.get_chunk_by_vec_doc_id(identifier)
-                if chunk:
-                    fused_results.append(
-                        FusedResult(
-                            chunk_id=chunk.chunk_id,
-                            doc_id=chunk.doc_id,
-                            kb_id=chunk.kb_id,
-                            content=chunk.content,
-                            score=rrf_scores[identifier],
-                        )
+                vec_result = vec_doc_id_to_dense[identifier]
+                chunk_md = json.loads(vec_result.data["metadata"])
+                fused_results.append(
+                    FusedResult(
+                        chunk_id=identifier,
+                        chunk_index=chunk_md["chunk_index"],
+                        doc_id=chunk_md["kb_doc_id"],
+                        kb_id=chunk_md["kb_id"],
+                        content=vec_result.data["text"],
+                        score=rrf_scores[identifier],
                     )
+                )
 
         return fused_results

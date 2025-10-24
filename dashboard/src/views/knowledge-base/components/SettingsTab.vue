@@ -34,7 +34,7 @@
           <h3 class="text-h6 mb-4 mt-6">{{ t('settings.retrieval') }}</h3>
 
           <v-row>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="6">
               <v-text-field
                 v-model.number="formData.top_k_dense"
                 :label="t('settings.topKDense')"
@@ -43,7 +43,7 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="6">
               <v-text-field
                 v-model.number="formData.top_k_sparse"
                 :label="t('settings.topKSparse')"
@@ -52,7 +52,7 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <!-- <v-col cols="12" md="4">
               <v-text-field
                 v-model.number="formData.top_m_final"
                 :label="t('settings.topMFinal')"
@@ -60,23 +60,7 @@
                 variant="outlined"
                 density="comfortable"
               />
-            </v-col>
-          </v-row>
-
-          <v-row>
-            <v-col cols="12">
-              <v-checkbox
-                v-model="formData.enable_rerank"
-                :label="t('settings.enableRerank')"
-                :hint="rerankProviders.length === 0 ? '未检测到可用的重排序模型提供商' : '使用重排序模型提高检索质量'"
-                :disabled="rerankProviders.length === 0"
-                color="primary"
-                persistent-hint
-              />
-              <v-alert v-if="formData.enable_rerank && rerankProviders.length === 0" type="warning" variant="tonal" class="mt-2" density="compact">
-                当前没有可用的重排序模型提供商,请先在提供商管理中添加支持 rerank 的模型
-              </v-alert>
-            </v-col>
+            </v-col> -->
           </v-row>
 
           <!-- 模型设置 -->
@@ -93,6 +77,7 @@
                 variant="outlined"
                 density="comfortable"
                 @update:model-value="handleEmbeddingProviderChange"
+                :disabled="true"
               />
             </v-col>
             <v-col cols="12" md="6">
@@ -216,8 +201,6 @@ const formData = ref({
   chunk_overlap: 50,
   top_k_dense: 50,
   top_k_sparse: 50,
-  top_m_final: 5,
-  enable_rerank: false,
   embedding_provider_id: '',
   rerank_provider_id: ''
 })
@@ -230,8 +213,7 @@ watch(() => props.kb, (kb) => {
       chunk_overlap: kb.chunk_overlap || 50,
       top_k_dense: kb.top_k_dense || 50,
       top_k_sparse: kb.top_k_sparse || 50,
-      top_m_final: kb.top_m_final || 5,
-      enable_rerank: kb.enable_rerank === true,
+      // top_m_final: kb.top_m_final || 5,
       embedding_provider_id: kb.embedding_provider_id || '',
       rerank_provider_id: kb.rerank_provider_id || ''
     }
@@ -299,8 +281,7 @@ const saveSettings = async () => {
       chunk_overlap: formData.value.chunk_overlap,
       top_k_dense: formData.value.top_k_dense,
       top_k_sparse: formData.value.top_k_sparse,
-      top_m_final: formData.value.top_m_final,
-      enable_rerank: formData.value.enable_rerank,
+      // top_m_final: formData.value.top_m_final,
       rerank_provider_id: formData.value.rerank_provider_id
     })
 

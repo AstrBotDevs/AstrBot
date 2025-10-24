@@ -17,7 +17,6 @@ import os
 from .event_bus import EventBus
 from . import astrbot_config, html_renderer
 from asyncio import Queue
-from typing import List
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.platform.manager import PlatformManager
@@ -26,15 +25,17 @@ from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core import LogBroker
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core import logger, sp
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.knowledge_base.kb_manager_lifecycle import KnowledgeBaseManager
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 class AstrBotCoreLifecycle:
@@ -85,10 +86,20 @@ class AstrBotCoreLifecycle:
 
         await html_renderer.initialize()
 
+        # 初始化 UMOP 配置路由器
+        self.umop_config_router = UmopConfigRouter(sp=sp)
+
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
-            default_config=self.astrbot_config, sp=sp
+            default_config=self.astrbot_config, ucr=self.umop_config_router, sp=sp
         )
+
+        # 4.5 to 4.6 migration for umop_config_router
+        try:
+            await migrate_45_to_46(self.astrbot_config_mgr, self.umop_config_router)
+        except Exception as e:
+            logger.error(f"Migration from version 4.5 to 4.6 failed: {e!s}")
+            logger.error(traceback.format_exc())
 
         # 初始化事件队列
         self.event_queue = Queue()
@@ -112,9 +123,7 @@ class AstrBotCoreLifecycle:
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
         # 初始化知识库管理器
-        self.kb_manager = KnowledgeBaseManager(
-            self.astrbot_config, self.db, self.provider_manager
-        )
+        self.kb_manager = KnowledgeBaseManager(self.provider_manager)
 
         # 初始化提供给插件的上下文
         self.star_context = Context(
@@ -141,10 +150,6 @@ class AstrBotCoreLifecycle:
 
         await self.kb_manager.initialize()
 
-        # 注册知识库会话生命周期钩子（零侵入级联清理）
-        if self.kb_manager.is_initialized:
-            self.kb_manager.register_session_lifecycle_hooks(self.conversation_manager)
-
         # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
@@ -160,7 +165,7 @@ class AstrBotCoreLifecycle:
         self.start_time = int(time.time())
 
         # 初始化当前任务列表
-        self.curr_tasks: List[asyncio.Task] = []
+        self.curr_tasks: list[asyncio.Task] = []
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
@@ -267,7 +272,7 @@ class AstrBotCoreLifecycle:
             target=self.astrbot_updator._reboot, name="restart", daemon=True
         ).start()
 
-    def load_platform(self) -> List[asyncio.Task]:
+    def load_platform(self) -> list[asyncio.Task]:
         """加载平台实例并返回所有平台实例的异步任务列表"""
         tasks = []
         platform_insts = self.platform_manager.get_insts()

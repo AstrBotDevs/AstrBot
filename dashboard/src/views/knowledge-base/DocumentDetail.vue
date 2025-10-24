@@ -82,10 +82,10 @@
         <v-card-title class="d-flex align-center pa-4">
           <span>{{ t('chunks.title') }}</span>
           <v-chip class="ml-2" size="small" variant="tonal">
-            {{ chunks.length }} {{ t('chunks.title') }}
+            {{ totalChunks }} {{ t('chunks.title') }}
           </v-chip>
           <v-spacer />
-          <v-text-field
+          <!-- <v-text-field
             v-model="searchQuery"
             prepend-inner-icon="mdi-magnify"
             :placeholder="t('chunks.searchPlaceholder')"
@@ -94,7 +94,7 @@
             hide-details
             clearable
             style="max-width: 300px"
-          />
+          /> -->
         </v-card-title>
 
         <v-divider />
@@ -104,7 +104,8 @@
             :headers="headers"
             :items="filteredChunks"
             :loading="loadingChunks"
-            :items-per-page="10"
+            :items-per-page="pageSize"
+            hide-default-footer
           >
             <template #item.chunk_index="{ item }">
               <v-chip size="small" variant="tonal" color="primary">
@@ -132,19 +133,13 @@
                 color="info"
                 @click="viewChunk(item)"
               />
-              <v-btn
-                icon="mdi-pencil"
-                variant="text"
-                size="small"
-                color="primary"
-                @click="editChunk(item)"
-              />
+              <!-- 删除 -->
               <v-btn
                 icon="mdi-delete"
                 variant="text"
                 size="small"
                 color="error"
-                @click="confirmDeleteChunk(item)"
+                @click="deleteChunk(item)"
               />
             </template>
 
@@ -155,6 +150,31 @@
               </div>
             </template>
           </v-data-table>
+          
+
+          <!-- 自定义分页器 -->
+          <div v-if="!searchQuery && totalChunks > 0" class="pa-4 d-flex align-center justify-space-between">
+            <div class="text-caption text-medium-emphasis">
+              {{ t('chunks.showing') }} {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, totalChunks) }} / {{ totalChunks }}
+            </div>
+            <div class="d-flex align-center gap-2">
+              <v-select
+                v-model="pageSize"
+                :items="[10, 25, 50, 100]"
+                density="compact"
+                variant="outlined"
+                hide-details
+                style="width: 100px"
+                @update:model-value="handlePageSizeChange"
+              />
+              <v-pagination
+                v-model="page"
+                :length="Math.ceil(totalChunks / pageSize)"
+                :total-visible="5"
+                @update:model-value="handlePageChange"
+              />
+            </div>
+          </div>
         </v-card-text>
       </v-card>
     </div>
@@ -191,7 +211,7 @@
                 <v-icon>mdi-key</v-icon>
               </template>
               <v-list-item-title>{{ t('view.vecDocId') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ selectedChunk?.vec_doc_id || '-' }}</v-list-item-subtitle>
+              <v-list-item-subtitle>{{ selectedChunk?.chunk_id || '-' }}</v-list-item-subtitle>
             </v-list-item>
           </v-list>
 
@@ -207,71 +227,6 @@
           <v-spacer />
           <v-btn variant="text" @click="showViewDialog = false">
             {{ t('view.close') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 编辑分块对话框 -->
-    <v-dialog v-model="showEditDialog" max-width="800px" persistent scrollable>
-      <v-card>
-        <v-card-title class="pa-4">
-          <span>{{ t('edit.title') }}</span>
-          <v-spacer />
-          <v-btn icon="mdi-close" variant="text" @click="closeEditDialog" />
-        </v-card-title>
-        <v-divider />
-        <v-card-text class="pa-6">
-          <v-textarea
-            v-model="editForm.content"
-            :label="t('edit.content')"
-            variant="outlined"
-            rows="15"
-            auto-grow
-          />
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="closeEditDialog">
-            {{ t('edit.cancel') }}
-          </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            @click="saveChunk"
-            :loading="saving"
-          >
-            {{ t('edit.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- 删除确认对话框 -->
-    <v-dialog v-model="showDeleteDialog" max-width="450px">
-      <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('delete.title') }}</v-card-title>
-        <v-divider />
-        <v-card-text class="pa-6">
-          <p>{{ t('delete.confirmText') }}</p>
-          <v-alert type="warning" variant="tonal" density="compact" class="mt-4">
-            {{ t('delete.warning') }}
-          </v-alert>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="showDeleteDialog = false">
-            {{ t('delete.cancel') }}
-          </v-btn>
-          <v-btn
-            color="error"
-            variant="elevated"
-            @click="deleteChunk"
-            :loading="deleting"
-          >
-            {{ t('delete.confirm') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -299,16 +254,16 @@ const docId = ref(route.params.docId as string)
 // 状态
 const loading = ref(true)
 const loadingChunks = ref(false)
-const saving = ref(false)
-const deleting = ref(false)
 const document = ref<any>({})
 const chunks = ref<any[]>([])
 const searchQuery = ref('')
 const showViewDialog = ref(false)
-const showEditDialog = ref(false)
-const showDeleteDialog = ref(false)
 const selectedChunk = ref<any>(null)
-const deleteTarget = ref<any>(null)
+
+// 分页状态
+const page = ref(1)
+const pageSize = ref(10)
+const totalChunks = ref(0)
 
 const snackbar = ref({
   show: false,
@@ -322,17 +277,12 @@ const showSnackbar = (text: string, color: string = 'success') => {
   snackbar.value.show = true
 }
 
-// 编辑表单
-const editForm = ref({
-  content: ''
-})
-
 // 表格列
 const headers = [
   { title: t('chunks.index'), key: 'chunk_index', width: 100 },
   { title: t('chunks.content'), key: 'content', sortable: false },
   { title: t('chunks.charCount'), key: 'char_count', width: 150 },
-  { title: t('chunks.actions'), key: 'actions', sortable: false, align: 'end', width: 150 }
+  { title: t('chunks.actions'), key: 'actions', sortable: false, width: 150 }
 ]
 
 // 过滤分块
@@ -349,7 +299,7 @@ const loadDocument = async () => {
   loading.value = true
   try {
     const response = await axios.get('/api/kb/document/get', {
-      params: { doc_id: docId.value }
+      params: { doc_id: docId.value, kb_id: kbId.value }
     })
     if (response.data.status === 'ok') {
       document.value = response.data.data
@@ -367,10 +317,16 @@ const loadChunks = async () => {
   loadingChunks.value = true
   try {
     const response = await axios.get('/api/kb/chunk/list', {
-      params: { doc_id: docId.value }
+      params: { 
+        doc_id: docId.value, 
+        kb_id: kbId.value,
+        page: page.value,
+        page_size: pageSize.value
+      }
     })
     if (response.data.status === 'ok') {
       chunks.value = response.data.data.items || []
+      totalChunks.value = response.data.data.total || 0
     }
   } catch (error) {
     console.error('Failed to load chunks:', error)
@@ -380,81 +336,42 @@ const loadChunks = async () => {
   }
 }
 
+// 处理分页变化
+const handlePageChange = (newPage: number) => {
+  page.value = newPage
+  loadChunks()
+}
+
+const handlePageSizeChange = (newPageSize: number) => {
+  pageSize.value = newPageSize
+  page.value = 1
+  loadChunks()
+}
+
 // 查看分块
 const viewChunk = (chunk: any) => {
   selectedChunk.value = chunk
   showViewDialog.value = true
 }
 
-// 编辑分块
-const editChunk = (chunk: any) => {
-  selectedChunk.value = chunk
-  editForm.value.content = chunk.content
-  showEditDialog.value = true
-}
-
-// 关闭编辑对话框
-const closeEditDialog = () => {
-  showEditDialog.value = false
-  selectedChunk.value = null
-  editForm.value.content = ''
-}
-
-// 保存分块
-const saveChunk = async () => {
-  if (!selectedChunk.value) return
-
-  saving.value = true
-  try {
-    const response = await axios.post('/api/kb/chunk/update', {
-      chunk_id: selectedChunk.value.chunk_id,
-      content: editForm.value.content
-    })
-
-    if (response.data.status === 'ok') {
-      showSnackbar(t('edit.saveSuccess'))
-      closeEditDialog()
-      await loadChunks()
-    } else {
-      showSnackbar(response.data.message || t('edit.saveFailed'), 'error')
-    }
-  } catch (error) {
-    console.error('Failed to save chunk:', error)
-    showSnackbar(t('edit.saveFailed'), 'error')
-  } finally {
-    saving.value = false
-  }
-}
-
-// 确认删除分块
-const confirmDeleteChunk = (chunk: any) => {
-  deleteTarget.value = chunk
-  showDeleteDialog.value = true
-}
-
 // 删除分块
-const deleteChunk = async () => {
-  if (!deleteTarget.value) return
-
-  deleting.value = true
+const deleteChunk = async (chunk: any) => {
+  if (!confirm(t('chunks.deleteConfirm'))) return
   try {
     const response = await axios.post('/api/kb/chunk/delete', {
-      chunk_id: deleteTarget.value.chunk_id
+      chunk_id: chunk.chunk_id,
+      doc_id: docId.value,
+      kb_id: kbId.value
     })
-
     if (response.data.status === 'ok') {
-      showSnackbar(t('delete.deleteSuccess'))
-      showDeleteDialog.value = false
-      await loadChunks()
-      await loadDocument()
+      showSnackbar(t('chunks.deleteSuccess'))
+      loadChunks()
     } else {
-      showSnackbar(response.data.message || t('delete.deleteFailed'), 'error')
+      showSnackbar(t('chunks.deleteFailed'), 'error')
     }
   } catch (error) {
     console.error('Failed to delete chunk:', error)
-    showSnackbar(t('delete.deleteFailed'), 'error')
-  } finally {
-    deleting.value = false
+    showSnackbar(t('chunks.deleteFailed'), 'error')
   }
 }
 
@@ -580,6 +497,10 @@ onMounted(() => {
   word-break: break-word;
   line-height: 1.6;
   font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.gap-2 {
+  gap: 8px;
 }
 
 /* 响应式设计 */

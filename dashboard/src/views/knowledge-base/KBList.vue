@@ -6,32 +6,16 @@
         <h1 class="text-h4 mb-2">{{ t('list.title') }}</h1>
         <p class="text-subtitle-1 text-medium-emphasis">{{ t('list.subtitle') }}</p>
       </div>
-      <v-btn
-        icon="mdi-information-outline"
-        variant="text"
-        size="small"
-        color="grey"
-        href="https://astrbot.app/use/knowledge-base.html"
-        target="_blank"
-      />
+      <v-btn icon="mdi-information-outline" variant="text" size="small" color="grey"
+        href="https://astrbot.app/use/knowledge-base.html" target="_blank" />
     </div>
 
     <!-- 操作按钮栏 -->
     <div class="action-bar mb-6">
-      <v-btn
-        prepend-icon="mdi-plus"
-        color="primary"
-        variant="elevated"
-        @click="showCreateDialog = true"
-      >
+      <v-btn prepend-icon="mdi-plus" color="primary" variant="elevated" @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
-      <v-btn
-        prepend-icon="mdi-refresh"
-        variant="tonal"
-        @click="loadKnowledgeBases"
-        :loading="loading"
-      >
+      <v-btn prepend-icon="mdi-refresh" variant="tonal" @click="loadKnowledgeBases" :loading="loading">
         {{ t('list.refresh') }}
       </v-btn>
     </div>
@@ -43,14 +27,8 @@
     </div>
 
     <div v-else-if="kbList.length > 0" class="kb-grid">
-      <v-card
-        v-for="kb in kbList"
-        :key="kb.kb_id"
-        class="kb-card"
-        elevation="2"
-        hover
-        @click="navigateToDetail(kb.kb_id)"
-      >
+      <v-card v-for="kb in kbList" :key="kb.kb_id" class="kb-card" elevation="2" hover
+        @click="navigateToDetail(kb.kb_id)">
         <div class="kb-card-content">
           <div class="kb-emoji">{{ kb.emoji || '📚' }}</div>
           <h3 class="kb-name">{{ kb.kb_name }}</h3>
@@ -68,20 +46,8 @@
           </div>
 
           <div class="kb-actions">
-            <v-btn
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              color="info"
-              @click.stop="editKB(kb)"
-            />
-            <v-btn
-              icon="mdi-delete"
-              size="small"
-              variant="text"
-              color="error"
-              @click.stop="confirmDelete(kb)"
-            />
+            <v-btn icon="mdi-pencil" size="small" variant="text" color="info" @click.stop="editKB(kb)" />
+            <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="confirmDelete(kb)" />
           </div>
         </div>
       </v-card>
@@ -91,14 +57,8 @@
     <div v-else class="empty-state">
       <v-icon size="100" color="grey-lighten-2">mdi-book-open-variant</v-icon>
       <h2 class="mt-4">{{ t('list.empty') }}</h2>
-      <v-btn
-        class="mt-6"
-        prepend-icon="mdi-plus"
-        color="primary"
-        variant="elevated"
-        size="large"
-        @click="showCreateDialog = true"
-      >
+      <v-btn class="mt-6" prepend-icon="mdi-plus" color="primary" variant="elevated" size="large"
+        @click="showCreateDialog = true">
         {{ t('list.create') }}
       </v-btn>
     </div>
@@ -125,35 +85,16 @@
 
           <!-- 表单 -->
           <v-form ref="formRef" @submit.prevent="submitForm">
-            <v-text-field
-              v-model="formData.kb_name"
-              :label="t('create.nameLabel')"
-              :placeholder="t('create.namePlaceholder')"
-              variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]"
-              required
-              class="mb-4"
-            />
+            <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
+              :placeholder="t('create.namePlaceholder')" variant="outlined"
+              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" />
 
-            <v-textarea
-              v-model="formData.description"
-              :label="t('create.descriptionLabel')"
-              :placeholder="t('create.descriptionPlaceholder')"
-              variant="outlined"
-              rows="3"
-              class="mb-4"
-            />
+            <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
+              :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
 
-            <v-select
-              v-model="formData.embedding_provider_id"
-              :items="embeddingProviders"
-              :item-title="item => item.embedding_model || item.id"
-              :item-value="'id'"
-              :label="t('create.embeddingModelLabel')"
-              variant="outlined"
-              class="mb-4"
-              @update:model-value="handleEmbeddingProviderChange"
-            >
+            <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
+              :item-title="item => item.embedding_model || item.id" :item-value="'id'"
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null">
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -166,20 +107,9 @@
               </template>
             </v-select>
 
-            <v-alert type="warning" variant="tonal" density="compact" class="mb-4" v-if="editingKB && showEmbeddingWarning">
-              <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
-            </v-alert>
-
-            <v-select
-              v-model="formData.rerank_provider_id"
-              :items="rerankProviders"
-              :item-title="item => item.rerank_model || item.id"
-              :item-value="'id'"
-              :label="t('create.rerankModelLabel')"
-              variant="outlined"
-              clearable
-              class="mb-2"
-            >
+            <v-select v-model="formData.rerank_provider_id" :items="rerankProviders"
+              :item-title="item => item.rerank_model || item.id" :item-value="'id'"
+              :label="t('create.rerankModelLabel')" variant="outlined" clearable class="mb-2">
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -202,12 +132,7 @@
           <v-btn variant="text" @click="closeCreateDialog">
             {{ t('create.cancel') }}
           </v-btn>
-          <v-btn
-            color="primary"
-            variant="elevated"
-            @click="submitForm"
-            :loading="saving"
-          >
+          <v-btn color="primary" variant="elevated" @click="submitForm" :loading="saving">
             {{ editingKB ? t('edit.submit') : t('create.submit') }}
           </v-btn>
         </v-card-actions>
@@ -223,12 +148,7 @@
           <div v-for="category in emojiCategories" :key="category.key" class="mb-4">
             <p class="text-subtitle-2 mb-2">{{ t(`emoji.categories.${category.key}`) }}</p>
             <div class="emoji-grid">
-              <div
-                v-for="emoji in category.emojis"
-                :key="emoji"
-                class="emoji-item"
-                @click="selectEmoji(emoji)"
-              >
+              <div v-for="emoji in category.emojis" :key="emoji" class="emoji-item" @click="selectEmoji(emoji)">
                 {{ emoji }}
               </div>
             </div>
@@ -261,12 +181,7 @@
           <v-btn variant="text" @click="cancelDelete">
             {{ t('delete.cancel') }}
           </v-btn>
-          <v-btn
-            color="error"
-            variant="elevated"
-            @click="deleteKB"
-            :loading="deleting"
-          >
+          <v-btn color="error" variant="elevated" @click="deleteKB" :loading="deleting">
             {{ t('delete.confirm') }}
           </v-btn>
         </v-card-actions>
@@ -278,38 +193,10 @@
       {{ snackbar.text }}
     </v-snackbar>
 
-    <!-- Embedding Provider 修改确认对话框 -->
-    <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
-      <v-card>
-        <v-card-title class="bg-warning text-white">
-          <v-icon class="mr-2">mdi-alert</v-icon>
-          确认修改嵌入模型
-        </v-card-title>
-        <v-card-text class="pa-6">
-          <v-alert type="warning" variant="tonal" class="mb-4">
-            <strong>警告:</strong> 修改嵌入模型将导致以下影响:
-          </v-alert>
-          <ul class="text-body-2">
-            <li>现有的向量数据将失效</li>
-            <li>检索功能可能无法正常工作</li>
-            <li>建议删除现有文档后重新上传</li>
-            <li>不同嵌入模型生成的向量不兼容</li>
-          </ul>
-          <div class="mt-4 text-body-2">
-            您确定要将嵌入模型从 <strong>{{ originalEmbeddingProvider }}</strong> 修改为 <strong>{{ pendingEmbeddingProvider }}</strong> 吗?
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="cancelEmbeddingChange">
-            取消
-          </v-btn>
-          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
-            确认修改
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <div class="position-absolute" style="bottom: 0px; right: 16px;">
+      <small @click="router.push('/alkaid/knowledge-base')"><a style="text-decoration: underline; cursor: pointer;">切换到旧版知识库</a></small>
+    </div>
+
   </div>
 </template>
 
@@ -437,39 +324,6 @@ const editKB = (kb: any) => {
     rerank_provider_id: kb.rerank_provider_id
   }
   showCreateDialog.value = true
-}
-
-// 处理 embedding provider 变更
-const handleEmbeddingProviderChange = (newValue: string | null) => {
-  // 检测是否修改了embedding provider
-  if (newValue && originalEmbeddingProvider.value && newValue !== originalEmbeddingProvider.value) {
-    // 显示二次确认对话框
-    showEmbeddingWarning.value = true
-    pendingEmbeddingProvider.value = newValue
-    embeddingChangeDialog.value = true
-  } else {
-    showEmbeddingWarning.value = false
-  }
-}
-
-// 确认修改 embedding provider
-const confirmEmbeddingChange = () => {
-  if (pendingEmbeddingProvider.value) {
-    formData.value.embedding_provider_id = pendingEmbeddingProvider.value
-    // 更新原始值,这样下次比较时不会重复弹窗
-    originalEmbeddingProvider.value = pendingEmbeddingProvider.value
-  }
-  embeddingChangeDialog.value = false
-  showEmbeddingWarning.value = true
-}
-
-// 取消修改 embedding provider
-const cancelEmbeddingChange = () => {
-  // 恢复到原始值
-  formData.value.embedding_provider_id = originalEmbeddingProvider.value
-  embeddingChangeDialog.value = false
-  showEmbeddingWarning.value = false
-  pendingEmbeddingProvider.value = null
 }
 
 // 确认删除
@@ -640,13 +494,7 @@ onMounted(() => {
 
 .kb-emoji {
   font-size: 56px;
-  margin-bottom: 16px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  margin-bottom: 8px;
 }
 
 .kb-name {

@@ -6,6 +6,7 @@ from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
 from astrbot.core.config.default import (
+    DEFAULT_CONFIG,
     CONFIG_METADATA_2,
     DEFAULT_VALUE_MAP,
     CONFIG_METADATA_3,
@@ -152,13 +153,19 @@ class ConfigRoute(Route):
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
+        self.ucr = core_lifecycle.umop_config_router
         self.routes = {
             "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
             "/config/abconfs": ("GET", self.get_abconf_list),
             "/config/abconf/delete": ("POST", self.delete_abconf),
             "/config/abconf/update": ("POST", self.update_abconf),
+            "/config/umo_abconf_routes": ("GET", self.get_uc_table),
+            "/config/umo_abconf_route/update_all": ("POST", self.update_ucr_all),
+            "/config/umo_abconf_route/update": ("POST", self.update_ucr),
+            "/config/umo_abconf_route/delete": ("POST", self.delete_ucr),
             "/config/get": ("GET", self.get_configs),
+            "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/platform/new": ("POST", self.post_new_platform),
@@ -174,6 +181,75 @@ class ConfigRoute(Route):
         }
         self.register_routes()
 
+    async def get_uc_table(self):
+        """获取 UMOP 配置路由表"""
+        return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
+
+    async def update_ucr_all(self):
+        """更新 UMOP 配置路由表的全部内容"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        new_routing = post_data.get("routing", None)
+
+        if not new_routing or not isinstance(new_routing, dict):
+            return Response().error("缺少或错误的路由表数据").__dict__
+
+        try:
+            await self.ucr.update_routing_data(new_routing)
+            return Response().ok(message="更新成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+
+    async def update_ucr(self):
+        """更新 UMOP 配置路由表"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        umo = post_data.get("umo", None)
+        conf_id = post_data.get("conf_id", None)
+
+        if not umo or not conf_id:
+            return Response().error("缺少 UMO 或配置文件 ID").__dict__
+
+        try:
+            await self.ucr.update_route(umo, conf_id)
+            return Response().ok(message="更新成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+
+    async def delete_ucr(self):
+        """删除 UMOP 配置路由表中的一项"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        umo = post_data.get("umo", None)
+
+        if not umo:
+            return Response().error("缺少 UMO").__dict__
+
+        try:
+            if umo in self.ucr.umop_to_conf_id:
+                del self.ucr.umop_to_conf_id[umo]
+                await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
+            return Response().ok(message="删除成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除路由表项失败: {str(e)}").__dict__
+
+    async def get_default_config(self):
+        """获取默认配置文件"""
+        return (
+            Response()
+            .ok({"config": DEFAULT_CONFIG, "metadata": CONFIG_METADATA_3})
+            .__dict__
+        )
+
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
         abconf_list = self.acm.get_conf_list()
@@ -184,11 +260,11 @@ class ConfigRoute(Route):
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").__dict__
-        umo_parts = post_data["umo_parts"]
         name = post_data.get("name", None)
+        config = post_data.get("config", DEFAULT_CONFIG)
 
         try:
-            conf_id = self.acm.create_conf(umo_parts=umo_parts, name=name)
+            conf_id = self.acm.create_conf(name=name, config=config)
             return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -250,10 +326,9 @@ class ConfigRoute(Route):
             return Response().error("缺少配置文件 ID").__dict__
 
         name = post_data.get("name")
-        umo_parts = post_data.get("umo_parts")
 
         try:
-            success = self.acm.update_conf_info(conf_id, name=name, umo_parts=umo_parts)
+            success = self.acm.update_conf_info(conf_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
             else:

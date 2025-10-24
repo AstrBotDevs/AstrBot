@@ -40,10 +40,6 @@
           <v-icon start>mdi-magnify</v-icon>
           {{ t('tabs.retrieval') }}
         </v-tab>
-        <v-tab value="sessions">
-          <v-icon start>mdi-account-multiple</v-icon>
-          {{ t('tabs.sessions') }}
-        </v-tab>
         <v-tab value="settings">
           <v-icon start>mdi-cog</v-icon>
           {{ t('tabs.settings') }}
@@ -51,7 +47,7 @@
       </v-tabs>
 
       <!-- 标签页内容 -->
-      <v-window v-model="activeTab">
+      <v-window v-model="activeTab" style="padding: 8px;">
         <!-- 概览 -->
         <v-window-item value="overview">
           <v-row>
@@ -163,12 +159,7 @@
 
         <!-- 知识库检索 -->
         <v-window-item value="retrieval">
-          <RetrievalTab :kb-id="kbId" />
-        </v-window-item>
-
-        <!-- 使用会话 -->
-        <v-window-item value="sessions">
-          <SessionsTab :kb-id="kbId" />
+          <RetrievalTab :kb-id="kbId" :kb-name="kb.kb_name"/>
         </v-window-item>
 
         <!-- 设置 -->
@@ -192,7 +183,6 @@ import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
-import SessionsTab from './components/SessionsTab.vue'
 import SettingsTab from './components/SettingsTab.vue'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -255,7 +245,6 @@ onMounted(() => {
 
 <style scoped>
 .kb-detail-page {
-  padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease;
@@ -329,12 +318,11 @@ onMounted(() => {
   padding: 24px;
   text-align: center;
   border-radius: 12px;
-  background: rgba(var(--v-theme-surface-variant), 0.3);
+  background: rgba(var(--v-theme-surface-variant), 0.1);
   transition: all 0.3s ease;
 }
 
 .stat-box:hover {
-  transform: translateY(-4px);
   background: rgba(var(--v-theme-surface-variant), 0.5);
 }
 
@@ -342,21 +330,15 @@ onMounted(() => {
   font-size: 2rem;
   font-weight: 600;
   margin-top: 8px;
-  color: rgb(var(--v-theme-on-surface));
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
   margin-top: 4px;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .kb-detail-page {
-    padding: 16px;
-  }
-
   .kb-title {
     flex-direction: column;
     align-items: flex-start;

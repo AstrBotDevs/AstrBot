@@ -21,7 +21,11 @@
     "delete": "删除",
     "preview": "预览",
     "search": "搜索分块",
-    "searchPlaceholder": "输入关键词搜索分块内容..."
+    "searchPlaceholder": "输入关键词搜索分块内容...",
+    "showing": "显示",
+    "deleteConfirm": "确定要删除该文本块吗?",
+    "deleteSuccess": "文本块删除成功",
+    "deleteFailed": "文本块删除失败"
   },
   "edit": {
     "title": "编辑分块",

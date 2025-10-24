@@ -499,9 +499,35 @@ class SatoriPlatformAdapter(Platform):
                 }
 
             return None
+        except ET.ParseError as e:
+            logger.warning(f"XML解析失败，使用正则提取: {e}")
+            return await self._extract_quote_with_regex(content)
         except Exception as e:
             logger.error(f"提取<quote>标签时发生错误: {e}")
             return None
+
+    async def _extract_quote_with_regex(self, content: str) -> Optional[dict]:
+        """使用正则表达式提取quote标签信息"""
+        import re
+
+        quote_pattern = r"<quote\s+([^>]*)>(.*?)</quote>"
+        match = re.search(quote_pattern, content, re.DOTALL)
+
+        if not match:
+            return None
+
+        attrs_str = match.group(1)
+        inner_content = match.group(2)
+
+        id_match = re.search(r'id\s*=\s*["\']([^"\']*)["\']', attrs_str)
+        quote_id = id_match.group(1) if id_match else ""
+        content_without_quote = content.replace(match.group(0), "")
+        content_without_quote = content_without_quote.strip()
+
+        return {
+            "quote": {"id": quote_id, "content": inner_content},
+            "content_without_quote": content_without_quote,
+        }
 
     async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
         """转换引用消息"""
@@ -574,7 +600,7 @@ class SatoriPlatformAdapter(Platform):
             root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
-            logger.error(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
+            logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
             # 如果解析失败，将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))

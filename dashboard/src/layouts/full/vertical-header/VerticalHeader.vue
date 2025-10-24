@@ -311,7 +311,7 @@ commonStore.getStartTime();
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs }" @click="$router.push('/about')">
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs }" @click="router.push('/about')">
       <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
