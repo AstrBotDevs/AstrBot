@@ -585,13 +585,7 @@ onMounted(() => {
 
 .kb-emoji {
   font-size: 56px;
-  margin-bottom: 16px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  margin-bottom: 8px;
 }
 
 .kb-name {
