@@ -68,6 +68,7 @@ class SparseRetriever:
             List[SparseResult]: 检索结果列表
         """
         # 1. 获取所有相关块
+        top_k_sparse = 0
         chunks = []
         for kb_id in kb_ids:
             vec_db: FaissVecDB = kb_options.get(kb_id, {}).get("vec_db")
@@ -88,6 +89,7 @@ class SparseRetriever:
                 for doc, chunk_md in zip(result, chunk_mds)
             ]
             chunks.extend(result)
+            top_k_sparse += kb_options.get(kb_id, {}).get("top_k_sparse", 50)
 
         if not chunks:
             return []
@@ -127,4 +129,4 @@ class SparseRetriever:
 
         results.sort(key=lambda x: x.score, reverse=True)
         # return results[: len(results) // len(kb_ids)]
-        return results
+        return results[:top_k_sparse]

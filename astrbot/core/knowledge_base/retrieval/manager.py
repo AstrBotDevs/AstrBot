@@ -3,6 +3,8 @@
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
 
+import time
+
 from dataclasses import dataclass
 from typing import List
 
@@ -104,24 +106,39 @@ class RetrievalManager:
         kb_ids = new_kb_ids
 
         # 1. 稠密检索
+        time_start = time.time()
         dense_results = await self._dense_retrieve(
             query=query,
             kb_ids=kb_ids,
             kb_options=kb_options,
         )
+        time_end = time.time()
+        logger.debug(
+            f"Dense retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(dense_results)} results."
+        )
 
         # 2. 稀疏检索
+        time_start = time.time()
         sparse_results = await self.sparse_retriever.retrieve(
             query=query,
             kb_ids=kb_ids,
             kb_options=kb_options,
         )
+        time_end = time.time()
+        logger.debug(
+            f"Sparse retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(sparse_results)} results."
+        )
 
         # 3. 结果融合
+        time_start = time.time()
         fused_results = await self.rank_fusion.fuse(
             dense_results=dense_results,
             sparse_results=sparse_results,
             top_k=top_k_fusion,
+        )
+        time_end = time.time()
+        logger.debug(
+            f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results."
         )
 
         # 4. 转换为 RetrievalResult (获取元数据)
