@@ -204,6 +204,10 @@ class KnowledgeBaseRoute(Route):
                 "rerank_provider_id": kb.rerank_provider_id,
                 "doc_count": kb.doc_count,
                 "chunk_count": kb.chunk_count,
+                "chunk_size": kb.chunk_size,
+                "chunk_overlap": kb.chunk_overlap,
+                "top_k_dense": kb.top_k_dense,
+                "top_k_sparse": kb.top_k_sparse,
                 "created_at": kb.created_at.isoformat(),
                 "updated_at": kb.updated_at.isoformat(),
             }
