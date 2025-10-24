@@ -212,6 +212,7 @@ class KnowledgeBaseManager:
         self,
         query: str,
         kb_names: list[str],
+        top_k_fusion: int = 20,
         top_m_final: int = 5,
     ) -> dict | None:
         """从指定知识库中检索相关内容"""
@@ -229,6 +230,7 @@ class KnowledgeBaseManager:
             query=query,
             kb_ids=kb_ids,
             kb_id_helper_map=kb_id_helper_map,
+            top_k_fusion=top_k_fusion,
             top_m_final=top_m_final,
         )
         if not results:

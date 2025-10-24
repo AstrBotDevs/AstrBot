@@ -61,6 +61,7 @@ class RetrievalManager:
         query: str,
         kb_ids: List[str],
         kb_id_helper_map: dict[str, KBHelper],
+        top_k_fusion: int = 20,
         top_m_final: int = 5,
     ) -> List[RetrievalResult]:
         """混合检索
@@ -120,7 +121,7 @@ class RetrievalManager:
         fused_results = await self.rank_fusion.fuse(
             dense_results=dense_results,
             sparse_results=sparse_results,
-            top_k=kb_options.get("top_k_fusion", 20),
+            top_k=top_k_fusion,
         )
 
         # 4. 转换为 RetrievalResult (获取元数据)
@@ -209,7 +210,8 @@ class RetrievalManager:
 
         # 按相似度排序并返回 top_k
         all_results.sort(key=lambda x: x.similarity, reverse=True)
-        return all_results[: len(all_results) // len(kb_ids)]
+        # return all_results[: len(all_results) // len(kb_ids)]
+        return all_results
 
     async def _rerank(
         self,

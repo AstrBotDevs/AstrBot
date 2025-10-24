@@ -34,7 +34,7 @@
           <h3 class="text-h6 mb-4 mt-6">{{ t('settings.retrieval') }}</h3>
 
           <v-row>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="6">
               <v-text-field
                 v-model.number="formData.top_k_dense"
                 :label="t('settings.topKDense')"
@@ -43,7 +43,7 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <v-col cols="12" md="6">
               <v-text-field
                 v-model.number="formData.top_k_sparse"
                 :label="t('settings.topKSparse')"
@@ -52,7 +52,7 @@
                 density="comfortable"
               />
             </v-col>
-            <v-col cols="12" md="4">
+            <!-- <v-col cols="12" md="4">
               <v-text-field
                 v-model.number="formData.top_m_final"
                 :label="t('settings.topMFinal')"
@@ -60,7 +60,7 @@
                 variant="outlined"
                 density="comfortable"
               />
-            </v-col>
+            </v-col> -->
           </v-row>
 
           <!-- 模型设置 -->
@@ -213,7 +213,7 @@ watch(() => props.kb, (kb) => {
       chunk_overlap: kb.chunk_overlap || 50,
       top_k_dense: kb.top_k_dense || 50,
       top_k_sparse: kb.top_k_sparse || 50,
-      top_m_final: kb.top_m_final || 5,
+      // top_m_final: kb.top_m_final || 5,
       embedding_provider_id: kb.embedding_provider_id || '',
       rerank_provider_id: kb.rerank_provider_id || ''
     }
@@ -281,7 +281,7 @@ const saveSettings = async () => {
       chunk_overlap: formData.value.chunk_overlap,
       top_k_dense: formData.value.top_k_dense,
       top_k_sparse: formData.value.top_k_sparse,
-      top_m_final: formData.value.top_m_final,
+      // top_m_final: formData.value.top_m_final,
       rerank_provider_id: formData.value.rerank_provider_id
     })
 

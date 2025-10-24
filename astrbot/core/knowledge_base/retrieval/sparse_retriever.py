@@ -124,4 +124,5 @@ class SparseRetriever:
             )
 
         results.sort(key=lambda x: x.score, reverse=True)
-        return results[: len(results) // len(kb_ids)]
+        # return results[: len(results) // len(kb_ids)]
+        return results
