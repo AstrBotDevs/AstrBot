@@ -1,5 +1,4 @@
 import uuid
-import json
 import time
 import numpy as np
 from .document_storage import DocumentStorage
@@ -41,26 +40,18 @@ class FaissVecDB(BaseVecDB):
         """
         插入一条文本和其对应向量，自动生成 ID 并保持一致性。
         """
-        assert self.document_storage.connection is not None, (
-            "Database connection is not initialized."
-        )
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
         vector = await self.embedding_provider.get_embedding(content)
         vector = np.array(vector, dtype=np.float32)
-        async with self.document_storage.connection.cursor() as cursor:
-            await cursor.execute(
-                "INSERT INTO documents (doc_id, text, metadata) VALUES (?, ?, ?)",
-                (str_id, content, json.dumps(metadata)),
-            )
-            await self.document_storage.connection.commit()
-            result = await self.document_storage.get_document_by_doc_id(str_id)
-            int_id = result["id"]
 
-            # 插入向量到 FAISS
-            await self.embedding_storage.insert(vector, int_id)
-            return int_id
+        # 使用 DocumentStorage 的方法插入文档
+        int_id = await self.document_storage.insert_document(str_id, content, metadata)
+
+        # 插入向量到 FAISS
+        await self.embedding_storage.insert(vector, int_id)
+        return int_id
 
     async def insert_batch(
         self,
@@ -78,9 +69,6 @@ class FaissVecDB(BaseVecDB):
         Args:
             progress_callback: 进度回调函数，接收参数 (current, total)
         """
-        assert self.document_storage.connection is not None, (
-            "Database connection is not initialized."
-        )
         metadatas = metadatas or [{} for _ in contents]
         ids = ids or [str(uuid.uuid4()) for _ in contents]
 
@@ -98,23 +86,15 @@ class FaissVecDB(BaseVecDB):
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds."
         )
 
-        int_ids = []
-        async with self.document_storage.connection.cursor() as cursor:
-            for str_id, content, metadata in zip(ids, contents, metadatas):
-                await cursor.execute(
-                    "INSERT INTO documents (doc_id, text, metadata) VALUES (?, ?, ?)",
-                    (str_id, content, json.dumps(metadata)),
-                )
-            await self.document_storage.connection.commit()
+        # 使用 DocumentStorage 的批量插入方法
+        int_ids = await self.document_storage.insert_documents_batch(
+            ids, contents, metadatas
+        )
 
-            for str_id in ids:
-                result = await self.document_storage.get_document_by_doc_id(str_id)
-                int_ids.append(result["id"])
-
-            # 批量插入向量到 FAISS
-            vectors_array = np.array(vectors).astype("float32")
-            await self.embedding_storage.insert_batch(vectors_array, int_ids)
-            return int_ids
+        # 批量插入向量到 FAISS
+        vectors_array = np.array(vectors).astype("float32")
+        await self.embedding_storage.insert_batch(vectors_array, int_ids)
+        return int_ids
 
     async def retrieve(
         self,
@@ -182,19 +162,15 @@ class FaissVecDB(BaseVecDB):
         """
         删除一条文档块（chunk）
         """
-        assert self.document_storage.connection is not None, (
-            "Database connection is not initialized."
-        )
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None
         if int_id is None:
             return
-        await self.document_storage.connection.execute(
-            "DELETE FROM documents WHERE doc_id = ?", (doc_id,)
-        )
+
+        # 使用 DocumentStorage 的删除方法
+        await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
-        await self.document_storage.connection.commit()
 
     async def close(self):
         await self.document_storage.close()
@@ -206,9 +182,6 @@ class FaissVecDB(BaseVecDB):
         Args:
             metadata_filter (dict | None): 元数据过滤器
         """
-        assert self.document_storage.connection is not None, (
-            "Database connection is not initialized."
-        )
         count = await self.document_storage.count_documents(
             metadata_filters=metadata_filter or {}
         )

@@ -5,7 +5,6 @@
 
 import json
 from dataclasses import dataclass
-from typing import Dict, List
 
 from astrbot.core.db.vec_db.base import Result
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
@@ -44,10 +43,10 @@ class RankFusion:
 
     async def fuse(
         self,
-        dense_results: List[Result],
-        sparse_results: List[SparseResult],
+        dense_results: list[Result],
+        sparse_results: list[SparseResult],
         top_k: int = 20,
-    ) -> List[FusedResult]:
+    ) -> list[FusedResult]:
         """融合稠密和稀疏检索结果
 
         RRF 公式:
@@ -85,7 +84,7 @@ class RankFusion:
             vec_doc_id_to_dense[vec_doc_id] = r
 
         # 3. 计算 RRF 分数
-        rrf_scores: Dict[str, float] = {}
+        rrf_scores: dict[str, float] = {}
 
         for identifier in all_chunk_ids:
             score = 0.0
@@ -129,7 +128,7 @@ class RankFusion:
                     FusedResult(
                         chunk_id=identifier,
                         chunk_index=chunk_md["chunk_index"],
-                        doc_id=chunk_md["doc_id"],
+                        doc_id=chunk_md["kb_doc_id"],
                         kb_id=chunk_md["kb_id"],
                         content=vec_result.data["text"],
                         score=rrf_scores[identifier],

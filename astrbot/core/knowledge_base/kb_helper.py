@@ -175,7 +175,7 @@ class KBHelper:
                 metadatas.append(
                     {
                         "kb_id": self.kb.kb_id,
-                        "doc_id": doc_id,
+                        "kb_doc_id": doc_id,
                         "chunk_index": idx,
                     }
                 )
@@ -297,7 +297,7 @@ class KBHelper:
         """获取文档的所有块及其元数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         chunks = await vec_db.document_storage.get_documents(
-            metadata_filters={"doc_id": doc_id}, offset=offset, limit=limit
+            metadata_filters={"kb_doc_id": doc_id}, offset=offset, limit=limit
         )
         result = []
         for chunk in chunks:
@@ -305,7 +305,7 @@ class KBHelper:
             result.append(
                 {
                     "chunk_id": chunk["doc_id"],
-                    "doc_id": chunk_md["doc_id"],
+                    "doc_id": chunk_md["kb_doc_id"],
                     "kb_id": chunk_md["kb_id"],
                     "chunk_index": chunk_md["chunk_index"],
                     "content": chunk["text"],
@@ -317,7 +317,7 @@ class KBHelper:
     async def get_chunk_count_by_doc_id(self, doc_id: str) -> int:
         """获取文档的块数量"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
-        count = await vec_db.count_documents(metadata_filter={"doc_id": doc_id})
+        count = await vec_db.count_documents(metadata_filter={"kb_doc_id": doc_id})
         return count
 
     async def _save_media(

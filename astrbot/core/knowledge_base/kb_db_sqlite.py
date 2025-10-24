@@ -14,8 +14,6 @@ from astrbot.core.knowledge_base.models import (
 )
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
-from typing import Optional
-
 
 class KBSQLiteDatabase:
     def __init__(self, db_path: str = "data/knowledge_base/kb.db") -> None:
@@ -167,14 +165,14 @@ class KBSQLiteDatabase:
         await self.engine.dispose()
         logger.info(f"知识库数据库已关闭: {self.db_path}")
 
-    async def get_kb_by_id(self, kb_id: str) -> Optional[KnowledgeBase]:
+    async def get_kb_by_id(self, kb_id: str) -> KnowledgeBase | None:
         """根据 ID 获取知识库"""
         async with self.get_db() as session:
             stmt = select(KnowledgeBase).where(col(KnowledgeBase.kb_id) == kb_id)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def get_kb_by_name(self, kb_name: str) -> Optional[KnowledgeBase]:
+    async def get_kb_by_name(self, kb_name: str) -> KnowledgeBase | None:
         """根据名称获取知识库"""
         async with self.get_db() as session:
             stmt = select(KnowledgeBase).where(col(KnowledgeBase.kb_name) == kb_name)
@@ -202,7 +200,7 @@ class KBSQLiteDatabase:
 
     # ===== 文档查询 =====
 
-    async def get_document_by_id(self, doc_id: str) -> Optional[KBDocument]:
+    async def get_document_by_id(self, doc_id: str) -> KBDocument | None:
         """根据 ID 获取文档"""
         async with self.get_db() as session:
             stmt = select(KBDocument).where(col(KBDocument.doc_id) == doc_id)
@@ -233,7 +231,7 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar() or 0
 
-    async def get_document_with_metadata(self, doc_id: str) -> Optional[dict]:
+    async def get_document_with_metadata(self, doc_id: str) -> dict | None:
         async with self.get_db() as session:
             stmt = (
                 select(KBDocument, KnowledgeBase)
@@ -262,7 +260,7 @@ class KBSQLiteDatabase:
                 await session.commit()
 
         # 在 vec db 中删除相关向量
-        await vec_db.delete_documents(metadata_filters={"doc_id": doc_id})
+        await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
 
     # ===== 多媒体查询 =====
 
@@ -273,7 +271,7 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_media_by_id(self, media_id: str) -> Optional[KBMedia]:
+    async def get_media_by_id(self, media_id: str) -> KBMedia | None:
         """根据 ID 获取多媒体资源"""
         async with self.get_db() as session:
             stmt = select(KBMedia).where(col(KBMedia.media_id) == media_id)

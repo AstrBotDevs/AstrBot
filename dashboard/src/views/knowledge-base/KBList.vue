@@ -94,8 +94,7 @@
 
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
-              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="true"
-              @update:model-value="handleEmbeddingProviderChange">
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null">
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -325,19 +324,6 @@ const editKB = (kb: any) => {
     rerank_provider_id: kb.rerank_provider_id
   }
   showCreateDialog.value = true
-}
-
-// 处理 embedding provider 变更
-const handleEmbeddingProviderChange = (newValue: string | null) => {
-  // 检测是否修改了embedding provider
-  if (newValue && originalEmbeddingProvider.value && newValue !== originalEmbeddingProvider.value) {
-    // 显示二次确认对话框
-    showEmbeddingWarning.value = true
-    pendingEmbeddingProvider.value = newValue
-    embeddingChangeDialog.value = true
-  } else {
-    showEmbeddingWarning.value = false
-  }
 }
 
 // 确认删除

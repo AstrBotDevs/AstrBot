@@ -7,7 +7,6 @@ import jieba
 import os
 import json
 from dataclasses import dataclass
-from typing import List
 from rank_bm25 import BM25Okapi
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
@@ -44,7 +43,6 @@ class SparseRetriever:
 
         with open(
             os.path.join(os.path.dirname(__file__), "hit_stopwords.txt"),
-            "r",
             encoding="utf-8",
         ) as f:
             self.hit_stopwords = {
@@ -54,9 +52,9 @@ class SparseRetriever:
     async def retrieve(
         self,
         query: str,
-        kb_ids: List[str],
+        kb_ids: list[str],
         kb_options: dict,
-    ) -> List[SparseResult]:
+    ) -> list[SparseResult]:
         """执行稀疏检索
 
         Args:
@@ -82,7 +80,7 @@ class SparseRetriever:
                 {
                     "chunk_id": doc["doc_id"],
                     "chunk_index": chunk_md["chunk_index"],
-                    "doc_id": chunk_md["doc_id"],
+                    "doc_id": chunk_md["kb_doc_id"],
                     "kb_id": kb_id,
                     "text": doc["text"],
                 }

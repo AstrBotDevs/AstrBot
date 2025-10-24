@@ -1,12 +1,11 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
 
-from sqlmodel import Field, SQLModel, Text, UniqueConstraint
+from sqlmodel import Field, SQLModel, Text, UniqueConstraint, MetaData
 
 
 class BaseKBModel(SQLModel, table=False):
-    pass
+    metadata = MetaData()
 
 
 class KnowledgeBase(BaseKBModel, table=True):
@@ -28,17 +27,17 @@ class KnowledgeBase(BaseKBModel, table=True):
         index=True,
     )
     kb_name: str = Field(max_length=100, nullable=False)
-    description: Optional[str] = Field(default=None, sa_type=Text)
-    emoji: Optional[str] = Field(default="📚", max_length=10)
-    embedding_provider_id: Optional[str] = Field(default=None, max_length=100)
-    rerank_provider_id: Optional[str] = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, sa_type=Text)
+    emoji: str | None = Field(default="📚", max_length=10)
+    embedding_provider_id: str | None = Field(default=None, max_length=100)
+    rerank_provider_id: str | None = Field(default=None, max_length=100)
     # 分块配置参数
-    chunk_size: Optional[int] = Field(default=512, nullable=True)
-    chunk_overlap: Optional[int] = Field(default=50, nullable=True)
+    chunk_size: int | None = Field(default=512, nullable=True)
+    chunk_overlap: int | None = Field(default=50, nullable=True)
     # 检索配置参数
-    top_k_dense: Optional[int] = Field(default=50, nullable=True)
-    top_k_sparse: Optional[int] = Field(default=50, nullable=True)
-    top_m_final: Optional[int] = Field(default=5, nullable=True)
+    top_k_dense: int | None = Field(default=50, nullable=True)
+    top_k_sparse: int | None = Field(default=50, nullable=True)
+    top_m_final: int | None = Field(default=5, nullable=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
