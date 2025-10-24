@@ -70,9 +70,13 @@ class FaissVecDB(BaseVecDB):
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
+        progress_callback=None,
     ) -> list[int]:
         """
         批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+
+        Args:
+            progress_callback: 进度回调函数，接收参数 (current, total)
         """
         assert self.document_storage.connection is not None, (
             "Database connection is not initialized."
@@ -87,6 +91,7 @@ class FaissVecDB(BaseVecDB):
             batch_size=batch_size,
             tasks_limit=tasks_limit,
             max_retries=max_retries,
+            progress_callback=progress_callback,
         )
         end = time.time()
         logger.debug(

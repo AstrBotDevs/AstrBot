@@ -106,6 +106,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
+        progress_callback=None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
 
@@ -117,6 +118,12 @@ class KBHelper:
         5. 生成向量并存储
         6. 保存元数据（事务）
         7. 更新统计
+
+        Args:
+            progress_callback: 进度回调函数，接收参数 (stage, current, total)
+                - stage: 当前阶段 ('parsing', 'chunking', 'embedding')
+                - current: 当前进度
+                - total: 总数
         """
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
@@ -127,12 +134,19 @@ class KBHelper:
         #     await f.write(file_content)
 
         try:
+            # 阶段1: 解析文档
+            if progress_callback:
+                await progress_callback("parsing", 0, 100)
+
             parser = self.parsers.get(file_type)
             if not parser:
                 raise ValueError(f"不支持的文件类型: {file_type}")
             parse_result = await parser.parse(file_content, file_name)
             text_content = parse_result.text
             media_items = parse_result.media
+
+            if progress_callback:
+                await progress_callback("parsing", 100, 100)
 
             # 保存媒体文件
             saved_media = []
@@ -147,7 +161,10 @@ class KBHelper:
                 saved_media.append(media)
                 media_paths.append(Path(media.file_path))
 
-            # 分块并生成向量
+            # 阶段2: 分块
+            if progress_callback:
+                await progress_callback("chunking", 0, 100)
+
             chunks_text = await self.chunker.chunk(
                 text_content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
@@ -162,12 +179,22 @@ class KBHelper:
                         "chunk_index": idx,
                     }
                 )
+
+            if progress_callback:
+                await progress_callback("chunking", 100, 100)
+
+            # 阶段3: 生成向量（带进度回调）
+            async def embedding_progress_callback(current, total):
+                if progress_callback:
+                    await progress_callback("embedding", current, total)
+
             await self.vec_db.insert_batch(
                 contents=contents,
                 metadatas=metadatas,
                 batch_size=batch_size,
                 tasks_limit=tasks_limit,
                 max_retries=max_retries,
+                progress_callback=embedding_progress_callback,
             )
 
             # 保存文档的元数据

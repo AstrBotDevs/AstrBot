@@ -4,6 +4,7 @@ import uuid
 import aiofiles
 import os
 import traceback
+import asyncio
 from quart import request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -27,6 +28,8 @@ class KnowledgeBaseRoute(Route):
         self.kb_db = None
         self.session_config_db = None  # 会话配置数据库
         self.retrieval_manager = None
+        self.upload_progress = {}  # 存储上传进度 {task_id: {status, file_index, file_total, stage, current, total}}
+        self.upload_tasks = {}  # 存储后台上传任务 {task_id: {"status", "result", "error"}}
 
         # 注册路由
         self.routes = {
@@ -40,6 +43,7 @@ class KnowledgeBaseRoute(Route):
             # 文档管理
             "/kb/document/list": ("GET", self.list_documents),
             "/kb/document/upload": ("POST", self.upload_document),
+            "/kb/document/upload/progress": ("GET", self.get_upload_progress),
             "/kb/document/get": ("GET", self.get_document),
             "/kb/document/delete": ("POST", self.delete_document),
             # # 块管理
@@ -55,6 +59,112 @@ class KnowledgeBaseRoute(Route):
 
     def _get_kb_manager(self):
         return self.core_lifecycle.kb_manager
+
+    async def _background_upload_task(
+        self,
+        task_id: str,
+        kb_helper,
+        files_to_upload: list,
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ):
+        """后台上传任务"""
+        try:
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "processing",
+                "result": None,
+                "error": None,
+            }
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": len(files_to_upload),
+                "stage": "waiting",
+                "current": 0,
+                "total": 100,
+            }
+
+            uploaded_docs = []
+            failed_docs = []
+
+            for file_idx, file_info in enumerate(files_to_upload):
+                try:
+                    # 更新整体进度
+                    self.upload_progress[task_id].update(
+                        {
+                            "status": "processing",
+                            "file_index": file_idx,
+                            "file_name": file_info["file_name"],
+                            "stage": "parsing",
+                            "current": 0,
+                            "total": 100,
+                        }
+                    )
+
+                    # 创建进度回调函数
+                    async def progress_callback(stage, current, total):
+                        if task_id in self.upload_progress:
+                            self.upload_progress[task_id].update(
+                                {
+                                    "status": "processing",
+                                    "file_index": file_idx,
+                                    "file_name": file_info["file_name"],
+                                    "stage": stage,
+                                    "current": current,
+                                    "total": total,
+                                }
+                            )
+
+                    doc = await kb_helper.upload_document(
+                        file_name=file_info["file_name"],
+                        file_content=file_info["file_content"],
+                        file_type=file_info["file_type"],
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        batch_size=batch_size,
+                        tasks_limit=tasks_limit,
+                        max_retries=max_retries,
+                        progress_callback=progress_callback,
+                    )
+
+                    uploaded_docs.append(doc.model_dump())
+                except Exception as e:
+                    logger.error(f"上传文档 {file_info['file_name']} 失败: {e}")
+                    failed_docs.append(
+                        {"file_name": file_info["file_name"], "error": str(e)}
+                    )
+
+            # 更新任务完成状态
+            result = {
+                "task_id": task_id,
+                "uploaded": uploaded_docs,
+                "failed": failed_docs,
+                "total": len(files_to_upload),
+                "success_count": len(uploaded_docs),
+                "failed_count": len(failed_docs),
+            }
+
+            self.upload_tasks[task_id] = {
+                "status": "completed",
+                "result": result,
+                "error": None,
+            }
+            self.upload_progress[task_id]["status"] = "completed"
+
+        except Exception as e:
+            logger.error(f"后台上传任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self.upload_tasks[task_id] = {
+                "status": "failed",
+                "result": None,
+                "error": str(e),
+            }
+            if task_id in self.upload_progress:
+                self.upload_progress[task_id]["status"] = "failed"
 
     async def list_kbs(self):
         """获取知识库列表
@@ -74,24 +184,7 @@ class KnowledgeBaseRoute(Route):
             # 转换为字典列表
             kb_list = []
             for kb in kbs:
-                kb_dict = {
-                    "kb_id": kb.kb_id,
-                    "kb_name": kb.kb_name,
-                    "description": kb.description,
-                    "emoji": kb.emoji or "📚",
-                    "embedding_provider_id": kb.embedding_provider_id,
-                    "rerank_provider_id": kb.rerank_provider_id,
-                    "doc_count": kb.doc_count,
-                    "chunk_count": kb.chunk_count,
-                    "chunk_size": kb.chunk_size or 512,
-                    "chunk_overlap": kb.chunk_overlap or 50,
-                    "top_k_dense": kb.top_k_dense or 50,
-                    "top_k_sparse": kb.top_k_sparse or 50,
-                    "top_m_final": kb.top_m_final or 5,
-                    "created_at": kb.created_at.isoformat(),
-                    "updated_at": kb.updated_at.isoformat(),
-                }
-                kb_list.append(kb_dict)
+                kb_list.append(kb.model_dump())
 
             return (
                 Response()
@@ -151,25 +244,7 @@ class KnowledgeBaseRoute(Route):
             )
             kb = kb_helper.kb
 
-            kb_dict = {
-                "kb_id": kb.kb_id,
-                "kb_name": kb.kb_name,
-                "description": kb.description,
-                "emoji": kb.emoji or "📚",
-                "embedding_provider_id": kb.embedding_provider_id,
-                "rerank_provider_id": kb.rerank_provider_id,
-                "doc_count": kb.doc_count,
-                "chunk_count": kb.chunk_count,
-                "chunk_size": kb.chunk_size or 512,
-                "chunk_overlap": kb.chunk_overlap or 50,
-                "top_k_dense": kb.top_k_dense or 50,
-                "top_k_sparse": kb.top_k_sparse or 50,
-                "top_m_final": kb.top_m_final or 5,
-                "created_at": kb.created_at.isoformat(),
-                "updated_at": kb.updated_at.isoformat(),
-            }
-
-            return Response().ok(kb_dict, "创建知识库成功").__dict__
+            return Response().ok(kb.model_dump(), "创建知识库成功").__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -195,24 +270,7 @@ class KnowledgeBaseRoute(Route):
                 return Response().error("知识库不存在").__dict__
             kb = kb_helper.kb
 
-            kb_dict = {
-                "kb_id": kb.kb_id,
-                "kb_name": kb.kb_name,
-                "description": kb.description,
-                "emoji": kb.emoji or "📚",
-                "embedding_provider_id": kb.embedding_provider_id,
-                "rerank_provider_id": kb.rerank_provider_id,
-                "doc_count": kb.doc_count,
-                "chunk_count": kb.chunk_count,
-                "chunk_size": kb.chunk_size,
-                "chunk_overlap": kb.chunk_overlap,
-                "top_k_dense": kb.top_k_dense,
-                "top_k_sparse": kb.top_k_sparse,
-                "created_at": kb.created_at.isoformat(),
-                "updated_at": kb.updated_at.isoformat(),
-            }
-
-            return Response().ok(kb_dict).__dict__
+            return Response().ok(kb.model_dump()).__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -293,25 +351,7 @@ class KnowledgeBaseRoute(Route):
                 return Response().error("知识库不存在").__dict__
 
             kb = kb_helper.kb
-
-            kb_dict = {
-                "kb_id": kb.kb_id,
-                "kb_name": kb.kb_name,
-                "description": kb.description,
-                "emoji": kb.emoji or "📚",
-                "embedding_provider_id": kb.embedding_provider_id,
-                "rerank_provider_id": kb.rerank_provider_id,
-                "doc_count": kb.doc_count,
-                "chunk_count": kb.chunk_count,
-                "chunk_size": kb.chunk_size or 512,
-                "chunk_overlap": kb.chunk_overlap or 50,
-                "top_k_dense": kb.top_k_dense or 50,
-                "top_k_sparse": kb.top_k_sparse or 50,
-                "created_at": kb.created_at.isoformat(),
-                "updated_at": kb.updated_at.isoformat(),
-            }
-
-            return Response().ok(kb_dict, "更新知识库成功").__dict__
+            return Response().ok(kb.model_dump(), "更新知识库成功").__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -440,6 +480,9 @@ class KnowledgeBaseRoute(Route):
         - files: 文件数组 (必填)
           - file_name: 文件名 (必填)
           - file_content: base64 编码的文件内容 (必填)
+
+        返回:
+        - task_id: 任务ID，用于查询上传进度和结果
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -520,60 +563,41 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
-            # 上传所有文档
-            uploaded_docs = []
-            failed_docs = []
+            # 生成任务ID
+            task_id = str(uuid.uuid4())
 
-            for file_info in files_to_upload:
-                try:
-                    doc = await kb_helper.upload_document(
-                        file_name=file_info["file_name"],
-                        file_content=file_info["file_content"],
-                        file_type=file_info["file_type"],
-                        chunk_size=chunk_size,
-                        chunk_overlap=chunk_overlap,
-                        batch_size=batch_size,
-                        tasks_limit=tasks_limit,
-                        max_retries=max_retries,
-                    )
-
-                    doc_dict = {
-                        "doc_id": doc.doc_id,
-                        "kb_id": doc.kb_id,
-                        "doc_name": doc.doc_name,
-                        "file_type": doc.file_type,
-                        "file_size": doc.file_size,
-                        "chunk_count": doc.chunk_count,
-                        "media_count": doc.media_count,
-                        "created_at": doc.created_at.isoformat(),
-                        "updated_at": doc.updated_at.isoformat(),
-                    }
-                    uploaded_docs.append(doc_dict)
-                except Exception as e:
-                    logger.error(f"上传文档 {file_info['file_name']} 失败: {e}")
-                    failed_docs.append(
-                        {"file_name": file_info["file_name"], "error": str(e)}
-                    )
-
-            # 返回结果
-            result = {
-                "uploaded": uploaded_docs,
-                "failed": failed_docs,
-                "total": len(files_to_upload),
-                "success_count": len(uploaded_docs),
-                "failed_count": len(failed_docs),
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "pending",
+                "result": None,
+                "error": None,
             }
 
-            if failed_docs:
-                message = (
-                    f"部分文档上传成功 ({len(uploaded_docs)}/{len(files_to_upload)})"
+            # 启动后台任务
+            asyncio.create_task(
+                self._background_upload_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    files_to_upload=files_to_upload,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
                 )
-            else:
-                message = (
-                    f"所有文档上传成功 ({len(uploaded_docs)}/{len(files_to_upload)})"
-                )
+            )
 
-            return Response().ok(result, message).__dict__
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "file_count": len(files_to_upload),
+                        "message": "task created, processing in background",
+                    }
+                )
+                .__dict__
+            )
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -581,6 +605,59 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"上传文档失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"上传文档失败: {str(e)}").__dict__
+
+    async def get_upload_progress(self):
+        """获取上传进度和结果
+
+        Query 参数:
+        - task_id: 任务 ID (必填)
+
+        返回状态:
+        - pending: 任务待处理
+        - processing: 任务处理中
+        - completed: 任务完成
+        - failed: 任务失败
+        """
+        try:
+            task_id = request.args.get("task_id")
+            if not task_id:
+                return Response().error("缺少参数 task_id").__dict__
+
+            # 检查任务是否存在
+            if task_id not in self.upload_tasks:
+                return Response().error("找不到该任务").__dict__
+
+            task_info = self.upload_tasks[task_id]
+            status = task_info["status"]
+
+            # 构建返回数据
+            response_data = {
+                "task_id": task_id,
+                "status": status,
+            }
+
+            # 如果任务正在处理，返回进度信息
+            if status == "processing" and task_id in self.upload_progress:
+                response_data["progress"] = self.upload_progress[task_id]
+
+            # 如果任务完成，返回结果
+            if status == "completed":
+                response_data["result"] = task_info["result"]
+                # 清理已完成的任务
+                # del self.upload_tasks[task_id]
+                # if task_id in self.upload_progress:
+                #     del self.upload_progress[task_id]
+
+            # 如果任务失败，返回错误信息
+            if status == "failed":
+                response_data["error"] = task_info["error"]
+
+            return Response().ok(response_data).__dict__
+
+        except Exception as e:
+            logger.error(f"获取上传进度失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取上传进度失败: {str(e)}").__dict__
 
     async def get_document(self):
         """获取文档详情
@@ -604,20 +681,7 @@ class KnowledgeBaseRoute(Route):
             if not doc:
                 return Response().error("文档不存在").__dict__
 
-            doc_dict = {
-                "doc_id": doc.doc_id,
-                "kb_id": doc.kb_id,
-                "doc_name": doc.doc_name,
-                "file_type": doc.file_type,
-                "file_size": doc.file_size,
-                "file_path": doc.file_path,
-                "chunk_count": doc.chunk_count,
-                "media_count": doc.media_count,
-                "created_at": doc.created_at.isoformat(),
-                "updated_at": doc.updated_at.isoformat(),
-            }
-
-            return Response().ok(doc_dict).__dict__
+            return Response().ok(doc.model_dump()).__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__

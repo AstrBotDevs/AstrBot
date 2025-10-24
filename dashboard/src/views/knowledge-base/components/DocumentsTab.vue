@@ -14,10 +14,23 @@
       <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
-            <v-icon :color="getFileColor(item.file_type)">
+            <v-icon :color="getFileColor(item.file_type)" class="mr-2">
               {{ getFileIcon(item.file_type) }}
             </v-icon>
-            <span class="font-weight-medium">{{ item.doc_name }}</span>
+            <div class="flex-grow-1" style="padding: 4px 0px;">
+              <span class="font-weight-medium">{{ item.doc_name }}</span>
+              <!-- 上传进度 -->
+              <div v-if="item.uploading" class="mt-1">
+                <div class="text-caption text-medium-emphasis mb-1">
+                  {{ getStageText(item.uploadProgress?.stage || 'waiting') }}
+                  <span v-if="item.uploadProgress?.current">
+                    ({{ item.uploadProgress.current }} / {{ item.uploadProgress.total }})
+                  </span>
+                </div>
+                <v-progress-linear :model-value="getUploadPercentage(item)" color="primary" height="4" rounded
+                  striped />
+              </div>
+            </div>
           </div>
         </template>
 
@@ -72,7 +85,8 @@
               <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
             </div>
             <div class="files-list">
-              <div v-for="(file, index) in selectedFiles" :key="index" class="file-item pa-3 mb-2 rounded bg-surface-variant">
+              <div v-for="(file, index) in selectedFiles" :key="index"
+                class="file-item pa-3 mb-2 rounded bg-surface-variant">
                 <div class="d-flex align-center justify-space-between">
                   <div class="d-flex align-center gap-2">
                     <v-icon>{{ getFileIcon(file.name) }}</v-icon>
@@ -95,8 +109,8 @@
             <v-row>
               <v-col cols="12" sm="6">
                 <v-text-field v-model.number="uploadSettings.chunk_size" :label="t('upload.chunkSize')"
-                  :hint="t('upload.chunkSizeHint')" persistent-hint type="number" variant="outlined"
-                  density="compact" :placeholder="props.kb?.chunk_size?.toString() || '512'" />
+                  :hint="t('upload.chunkSizeHint')" persistent-hint type="number" variant="outlined" density="compact"
+                  :placeholder="props.kb?.chunk_size?.toString() || '512'" />
               </v-col>
               <v-col cols="12" sm="6">
                 <v-text-field v-model.number="uploadSettings.chunk_overlap" :label="t('upload.chunkOverlap')"
@@ -110,8 +124,8 @@
             <h3 class="text-h6 mb-4">{{ t('upload.batchSettings') }}</h3>
             <v-row>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')"
-                  hint="每批处理的文本数量" persistent-hint type="number" variant="outlined" density="compact" />
+                <v-text-field v-model.number="uploadSettings.batch_size" :label="t('upload.batchSize')" hint="每批处理的文本数量"
+                  persistent-hint type="number" variant="outlined" density="compact" />
               </v-col>
               <v-col cols="12" sm="4">
                 <v-text-field v-model.number="uploadSettings.tasks_limit" :label="t('upload.tasksLimit')"
@@ -124,13 +138,15 @@
             </v-row>
           </div>
 
+
+
         </v-card-text>
 
         <v-divider />
 
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="closeUploadDialog">
+          <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
             {{ t('upload.cancel') }}
           </v-btn>
           <v-btn color="primary" variant="elevated" @click="uploadDocument" :loading="uploading"
@@ -171,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -198,6 +214,10 @@ const selectedFiles = ref<File[]>([])
 const deleteTarget = ref<any>(null)
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+// 上传进度 - 用于轮询多个任务
+const uploadingTasks = ref<Map<string, any>>(new Map())
+const progressPollingInterval = ref<number | null>(null)
 
 const snackbar = ref({
   show: false,
@@ -300,14 +320,15 @@ const uploadDocument = async () => {
   }
 
   uploading.value = true
+
   try {
     const formData = new FormData()
-    
+
     // 添加所有文件
     selectedFiles.value.forEach((file, index) => {
       formData.append(`file${index}`, file)
     })
-    
+
     formData.append('kb_id', props.kbId)
     if (uploadSettings.value.chunk_size) {
       formData.append('chunk_size', uploadSettings.value.chunk_size.toString())
@@ -325,18 +346,37 @@ const uploadDocument = async () => {
 
     if (response.data.status === 'ok') {
       const result = response.data.data
-      const successCount = result.success_count || 0
-      const failedCount = result.failed_count || 0
-      
-      if (failedCount === 0) {
-        showSnackbar(`成功上传 ${successCount} 个文档`)
-      } else {
-        showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
-      }
-      
+      const taskId = result.task_id
+
+      showSnackbar(`正在后台上传 ${result.file_count} 个文件...`, 'info')
+
+      // 为每个文件添加占位条目到文档列表
+      const uploadingDocs = selectedFiles.value.map((file, index) => ({
+        doc_id: `uploading_${taskId}_${index}`,
+        doc_name: file.name,
+        file_type: file.name.split('.').pop() || '',
+        file_size: file.size,
+        chunk_count: 0,
+        created_at: new Date().toISOString(),
+        uploading: true,
+        taskId: taskId,
+        uploadProgress: {
+          stage: 'waiting',
+          current: 0,
+          total: 100
+        }
+      }))
+
+      // 添加到文档列表顶部
+      documents.value = [...uploadingDocs, ...documents.value]
+
+      // 关闭对话框
       closeUploadDialog()
-      await loadDocuments()
-      emit('refresh')
+
+      // 开始轮询进度
+      if (taskId) {
+        startProgressPolling(taskId)
+      }
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
     }
@@ -348,11 +388,117 @@ const uploadDocument = async () => {
   }
 }
 
+// 开始轮询进度
+const startProgressPolling = (taskId: string) => {
+  // 如果已经在轮询，先停止
+  if (progressPollingInterval.value) {
+    stopProgressPolling()
+  }
+
+  progressPollingInterval.value = window.setInterval(async () => {
+    try {
+      const response = await axios.get('/api/kb/document/upload/progress', {
+        params: { task_id: taskId }
+      })
+
+      if (response.data.status === 'ok') {
+        const data = response.data.data
+        const status = data.status
+
+        if (status === 'processing' && data.progress) {
+          // 更新进度
+          const progress = data.progress
+          const fileIndex = progress.file_index || 0
+
+          // 更新对应文件的进度
+          documents.value = documents.value.map(doc => {
+            if (doc.taskId === taskId) {
+              const docIndex = parseInt(doc.doc_id.split('_').pop() || '0')
+              if (docIndex === fileIndex) {
+                return {
+                  ...doc,
+                  uploadProgress: {
+                    stage: progress.stage || 'waiting',
+                    current: progress.current || 0,
+                    total: progress.total || 100
+                  }
+                }
+              }
+            }
+            return doc
+          })
+        } else if (status === 'completed') {
+          // 任务完成
+          stopProgressPolling()
+
+          const result = data.result
+          const successCount = result?.success_count || 0
+          const failedCount = result?.failed_count || 0
+
+          // 移除上传中的占位文档
+          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
+
+          // 重新加载文档列表
+          await loadDocuments()
+          emit('refresh')
+
+          if (failedCount === 0) {
+            showSnackbar(`成功上传 ${successCount} 个文档`)
+          } else {
+            showSnackbar(`上传完成: ${successCount} 个成功, ${failedCount} 个失败`, 'warning')
+          }
+        } else if (status === 'failed') {
+          // 任务失败
+          stopProgressPolling()
+
+          // 移除上传中的占位文档
+          documents.value = documents.value.filter(doc => doc.taskId !== taskId)
+
+          showSnackbar(`上传失败: ${data.error || '未知错误'}`, 'error')
+        }
+      } else {
+        // 任务不存在，停止轮询
+        stopProgressPolling()
+        documents.value = documents.value.filter(doc => doc.taskId !== taskId)
+      }
+    } catch (error) {
+      console.error('Failed to fetch progress:', error)
+      // 不立即停止，允许重试
+    }
+  }, 500) // 每500ms轮询一次
+}
+
+// 停止轮询进度
+const stopProgressPolling = () => {
+  if (progressPollingInterval.value) {
+    clearInterval(progressPollingInterval.value)
+    progressPollingInterval.value = null
+  }
+}
+
+// 获取上传百分比
+const getUploadPercentage = (item: any) => {
+  if (!item.uploadProgress) return 0
+  const { current, total } = item.uploadProgress
+  if (!total || total === 0) return 0
+  return (current / total) * 100
+}
+
+// 获取阶段文本
+const getStageText = (stage: string) => {
+  const stageMap: Record<string, string> = {
+    'waiting': '等待中...',
+    'parsing': '解析文档...',
+    'chunking': '文本分块...',
+    'embedding': '生成向量...'
+  }
+  return stageMap[stage] || stage
+}
+
 // 关闭上传对话框
 const closeUploadDialog = () => {
   showUploadDialog.value = false
   selectedFiles.value = []
-  // 重置为知识库默认设置
   initUploadSettings()
 }
 
@@ -439,6 +585,10 @@ const formatDate = (dateStr: string) => {
 
 onMounted(() => {
   loadDocuments()
+})
+
+onUnmounted(() => {
+  stopProgressPolling()
 })
 </script>
 

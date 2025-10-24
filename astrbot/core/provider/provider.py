@@ -210,6 +210,7 @@ class EmbeddingProvider(AbstractProvider):
         batch_size: int = 16,
         tasks_limit: int = 3,
         max_retries: int = 3,
+        progress_callback=None,
     ) -> list[list[float]]:
         """批量获取文本的向量，分批处理以节省内存
 
@@ -218,6 +219,7 @@ class EmbeddingProvider(AbstractProvider):
             batch_size: 每批处理的文本数量
             tasks_limit: 并发任务数量限制
             max_retries: 失败时的最大重试次数
+            progress_callback: 进度回调函数，接收参数 (current, total)
 
         Returns:
             向量列表
@@ -225,13 +227,19 @@ class EmbeddingProvider(AbstractProvider):
         semaphore = asyncio.Semaphore(tasks_limit)
         all_embeddings: list[list[float]] = []
         failed_batches: list[tuple[int, list[str]]] = []
+        completed_count = 0
+        total_count = len(texts)
 
         async def process_batch(batch_idx: int, batch_texts: list[str]):
+            nonlocal completed_count
             async with semaphore:
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
                         all_embeddings.extend(batch_embeddings)
+                        completed_count += len(batch_texts)
+                        if progress_callback:
+                            await progress_callback(completed_count, total_count)
                         return
                     except Exception as e:
                         if attempt == max_retries - 1:
