@@ -51,6 +51,7 @@ class EmbeddingStorage:
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}"
             )
         self.index.add_with_ids(vectors, np.array(ids))
+        await self.save_index()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
         """搜索最相似的向量
