@@ -433,14 +433,14 @@ export default {
         tableHeaders() {
             return [
                 { title: this.tm('table.headers.title'), key: 'title', sortable: true },
-                { title: '会话 ID', key: 'cid', sortable: true, width: '100px' },
+                { title: this.tm('table.headers.cid'), key: 'cid', sortable: true, width: '100px' },
                 {
-                    title: this.tm('table.headers.sessionId'),
+                    title: this.tm('table.headers.umo'),
                     align: 'center',
                     children: [
                         { title: this.tm('table.headers.platform'), key: 'platform', sortable: true, width: '120px' },
                         { title: this.tm('table.headers.type'), key: 'messageType', sortable: true, width: '100px' },
-                        { title: '用户 ID', key: 'sessionId', sortable: true, width: '100px' },
+                        { title: this.tm('table.headers.sessionId'), key: 'sessionId', sortable: true, width: '100px' },
                     ],
                 },
                 { title: this.tm('table.headers.createdAt'), key: 'created_at', sortable: true, width: '180px' },

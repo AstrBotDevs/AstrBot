@@ -60,10 +60,10 @@
                       <p>使用 /sid 指令可查看会话 ID。</p>
                       <p>会话信息：</p>
                       <ul>
-                        <li>平台: {{ item.platform }}</li>
-                        <li v-if="item.user_name">用户: {{ item.user_name }}</li>
+                        <li>机器人 ID: {{ item.platform }}</li>
                         <li v-if="item.message_type">消息类型: {{ item.message_type }}</li>
                         <li v-if="item.session_raw_name">会话 ID: {{ item.session_raw_name }}</li>
+                        <li v-if="item.user_name">用户: {{ item.user_name }}</li>
                       </ul>
                     </div>
                   </v-tooltip>

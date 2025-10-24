@@ -1,9 +1,7 @@
 import astrbot.core.message.components as Comp
 import os
-from typing import List
 from .. import Provider
 from ..entities import LLMResponse
-from ..func_tool_manager import FuncCall
 from ..register import register_provider_adapter
 from astrbot.core.utils.dify_api_client import DifyAPIClient
 from astrbot.core.utils.io import download_image_by_url, download_file
@@ -55,11 +53,11 @@ class ProviderDify(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
         tool_calls_result=None,
         model=None,
         **kwargs,
@@ -223,7 +221,7 @@ class ProviderDify(Provider):
             # Chat
             return MessageChain(chain=[Comp.Plain(chunk)])
 
-        async def parse_file(item: dict) -> Comp:
+        async def parse_file(item: dict):
             match item["type"]:
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])

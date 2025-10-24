@@ -103,8 +103,6 @@
           </v-btn>
         </v-card-title>
 
-        <v-divider></v-divider>
-
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showStatus">
             <v-card-text class="px-4 py-3">
@@ -157,8 +155,6 @@
             <v-icon>{{ showConsole ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
         </v-card-title>
-
-        <v-divider></v-divider>
 
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showConsole">
@@ -234,7 +230,7 @@
           确认保存
         </v-card-title>
         <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          您没有填写 API Key，确定要保存吗？这可能会导致该服务提供商无法正常工作。
+          您没有填写 API Key，确定要保存吗？这可能会导致该模型无法正常工作。
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>

@@ -1,7 +1,7 @@
 {
-  "dashboard": "统计",
-  "platforms": "消息平台",
-  "providers": "服务提供商",
+  "dashboard": "数据统计",
+  "platforms": "机器人",
+  "providers": "模型提供商",
   "persona": "人格设定",
   "toolUse": "MCP",
   "extension": "插件",
@@ -16,5 +16,8 @@
   "settings": "设置",
   "documentation": "官方文档",
   "github": "GitHub",
-  "drag": "拖拽"
-} 
+  "drag": "拖拽",
+  "groups": {
+    "more": "更多功能"
+  }
+}
