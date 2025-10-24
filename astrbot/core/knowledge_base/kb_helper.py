@@ -118,9 +118,9 @@ class KBHelper:
         media_paths: list[Path] = []
         vec_doc_ids = []
 
-        file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(file_content)
+        # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
+        # async with aiofiles.open(file_path, "wb") as f:
+        #     await f.write(file_content)
 
         try:
             parser = self.parsers.get(file_type)
@@ -164,7 +164,8 @@ class KBHelper:
                 doc_name=file_name,
                 file_type=file_type,
                 file_size=len(file_content),
-                file_path=str(file_path),
+                # file_path=str(file_path),
+                file_path="",
                 chunk_count=len(chunks_text),
                 media_count=0,
             )
@@ -183,8 +184,8 @@ class KBHelper:
             return doc
         except Exception as e:
             logger.error(f"上传文档失败: {e}")
-            if file_path.exists():
-                file_path.unlink()
+            # if file_path.exists():
+            #     file_path.unlink()
 
             for media_path in media_paths:
                 try:

@@ -85,7 +85,7 @@
             {{ totalChunks }} {{ t('chunks.title') }}
           </v-chip>
           <v-spacer />
-          <v-text-field
+          <!-- <v-text-field
             v-model="searchQuery"
             prepend-inner-icon="mdi-magnify"
             :placeholder="t('chunks.searchPlaceholder')"
@@ -94,7 +94,7 @@
             hide-details
             clearable
             style="max-width: 300px"
-          />
+          /> -->
         </v-card-title>
 
         <v-divider />
