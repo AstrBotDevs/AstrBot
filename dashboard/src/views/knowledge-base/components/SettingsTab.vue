@@ -63,22 +63,6 @@
             </v-col>
           </v-row>
 
-          <v-row>
-            <v-col cols="12">
-              <v-checkbox
-                v-model="formData.enable_rerank"
-                :label="t('settings.enableRerank')"
-                :hint="rerankProviders.length === 0 ? '未检测到可用的重排序模型提供商' : '使用重排序模型提高检索质量'"
-                :disabled="rerankProviders.length === 0"
-                color="primary"
-                persistent-hint
-              />
-              <v-alert v-if="formData.enable_rerank && rerankProviders.length === 0" type="warning" variant="tonal" class="mt-2" density="compact">
-                当前没有可用的重排序模型提供商,请先在提供商管理中添加支持 rerank 的模型
-              </v-alert>
-            </v-col>
-          </v-row>
-
           <!-- 模型设置 -->
           <h3 class="text-h6 mb-4 mt-6">{{ t('settings.embeddingProvider') }}</h3>
 
@@ -216,8 +200,6 @@ const formData = ref({
   chunk_overlap: 50,
   top_k_dense: 50,
   top_k_sparse: 50,
-  top_m_final: 5,
-  enable_rerank: false,
   embedding_provider_id: '',
   rerank_provider_id: ''
 })
@@ -231,7 +213,6 @@ watch(() => props.kb, (kb) => {
       top_k_dense: kb.top_k_dense || 50,
       top_k_sparse: kb.top_k_sparse || 50,
       top_m_final: kb.top_m_final || 5,
-      enable_rerank: kb.enable_rerank === true,
       embedding_provider_id: kb.embedding_provider_id || '',
       rerank_provider_id: kb.rerank_provider_id || ''
     }
@@ -300,7 +281,6 @@ const saveSettings = async () => {
       top_k_dense: formData.value.top_k_dense,
       top_k_sparse: formData.value.top_k_sparse,
       top_m_final: formData.value.top_m_final,
-      enable_rerank: formData.value.enable_rerank,
       rerank_provider_id: formData.value.rerank_provider_id
     })
 

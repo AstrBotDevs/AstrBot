@@ -207,6 +207,8 @@ class KnowledgeBaseManager:
             await session.commit()
             await session.refresh(kb)
 
+        return kb_helper
+
     async def retrieve(
         self,
         query: str,
