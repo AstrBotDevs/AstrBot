@@ -248,6 +248,7 @@ class KnowledgeBaseManager:
                 "chunk_index": r.metadata.get("chunk_index", 0),
                 "content": r.content,
                 "score": r.score,
+                "char_count": r.metadata.get("char_count", 0),
             }
             for r in results
         ]

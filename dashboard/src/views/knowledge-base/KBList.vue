@@ -152,6 +152,7 @@
               :label="t('create.embeddingModelLabel')"
               variant="outlined"
               class="mb-4"
+              :disabled="true"
               @update:model-value="handleEmbeddingProviderChange"
             >
               <template #item="{ props, item }">
@@ -165,10 +166,6 @@
                 </v-list-item>
               </template>
             </v-select>
-
-            <v-alert type="warning" variant="tonal" density="compact" class="mb-4" v-if="editingKB && showEmbeddingWarning">
-              <strong>注意:</strong> 修改嵌入模型会导致现有的向量数据失效,建议重新上传文档。不同的嵌入模型生成的向量不兼容,可能导致检索结果不准确。
-            </v-alert>
 
             <v-select
               v-model="formData.rerank_provider_id"
@@ -278,38 +275,6 @@
       {{ snackbar.text }}
     </v-snackbar>
 
-    <!-- Embedding Provider 修改确认对话框 -->
-    <v-dialog v-model="embeddingChangeDialog" max-width="500px" persistent>
-      <v-card>
-        <v-card-title class="bg-warning text-white">
-          <v-icon class="mr-2">mdi-alert</v-icon>
-          确认修改嵌入模型
-        </v-card-title>
-        <v-card-text class="pa-6">
-          <v-alert type="warning" variant="tonal" class="mb-4">
-            <strong>警告:</strong> 修改嵌入模型将导致以下影响:
-          </v-alert>
-          <ul class="text-body-2">
-            <li>现有的向量数据将失效</li>
-            <li>检索功能可能无法正常工作</li>
-            <li>建议删除现有文档后重新上传</li>
-            <li>不同嵌入模型生成的向量不兼容</li>
-          </ul>
-          <div class="mt-4 text-body-2">
-            您确定要将嵌入模型从 <strong>{{ originalEmbeddingProvider }}</strong> 修改为 <strong>{{ pendingEmbeddingProvider }}</strong> 吗?
-          </div>
-        </v-card-text>
-        <v-card-actions class="pa-4">
-          <v-spacer />
-          <v-btn variant="text" @click="cancelEmbeddingChange">
-            取消
-          </v-btn>
-          <v-btn color="warning" variant="elevated" @click="confirmEmbeddingChange">
-            确认修改
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
@@ -450,26 +415,6 @@ const handleEmbeddingProviderChange = (newValue: string | null) => {
   } else {
     showEmbeddingWarning.value = false
   }
-}
-
-// 确认修改 embedding provider
-const confirmEmbeddingChange = () => {
-  if (pendingEmbeddingProvider.value) {
-    formData.value.embedding_provider_id = pendingEmbeddingProvider.value
-    // 更新原始值,这样下次比较时不会重复弹窗
-    originalEmbeddingProvider.value = pendingEmbeddingProvider.value
-  }
-  embeddingChangeDialog.value = false
-  showEmbeddingWarning.value = true
-}
-
-// 取消修改 embedding provider
-const cancelEmbeddingChange = () => {
-  // 恢复到原始值
-  formData.value.embedding_provider_id = originalEmbeddingProvider.value
-  embeddingChangeDialog.value = false
-  showEmbeddingWarning.value = false
-  pendingEmbeddingProvider.value = null
 }
 
 // 确认删除

@@ -9,6 +9,7 @@ from quart import request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .route import Route, Response, RouteContext
+from ..utils import generate_tsne_visualization
 
 
 class KnowledgeBaseRoute(Route):
@@ -294,7 +295,6 @@ class KnowledgeBaseRoute(Route):
         - top_k_dense: 密集检索数量 (可选)
         - top_k_sparse: 稀疏检索数量 (可选)
         - top_m_final: 最终返回数量 (可选)
-        - enable_rerank: 是否启用Rerank (可选)
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -811,7 +811,7 @@ class KnowledgeBaseRoute(Route):
         - query: 查询文本 (必填)
         - kb_ids: 知识库 ID 列表 (必填)
         - top_k: 返回结果数量 (可选, 默认 5)
-        - enable_rerank: 是否启用Rerank (可选, 默认使用知识库配置)
+        - debug: 是否启用调试模式，返回 t-SNE 可视化图片 (可选, 默认 False)
         """
         try:
             kb_manager = self._get_kb_manager()
@@ -819,6 +819,7 @@ class KnowledgeBaseRoute(Route):
 
             query = data.get("query")
             kb_names = data.get("kb_names")
+            debug = data.get("debug", False)
 
             if not query:
                 return Response().error("缺少参数 query").__dict__
@@ -836,11 +837,26 @@ class KnowledgeBaseRoute(Route):
             if results:
                 result_list = results["results"]
 
-            return (
-                Response()
-                .ok({"results": result_list, "total": len(result_list), "query": query})
-                .__dict__
-            )
+            response_data = {
+                "results": result_list,
+                "total": len(result_list),
+                "query": query,
+            }
+
+            # Debug 模式：生成 t-SNE 可视化
+            if debug:
+                try:
+                    img_base64 = await generate_tsne_visualization(
+                        query, kb_names, kb_manager
+                    )
+                    if img_base64:
+                        response_data["visualization"] = img_base64
+                except Exception as e:
+                    logger.error(f"生成 t-SNE 可视化失败: {e}")
+                    logger.error(traceback.format_exc())
+                    response_data["visualization_error"] = str(e)
+
+            return Response().ok(response_data).__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__

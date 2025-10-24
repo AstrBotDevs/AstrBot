@@ -245,7 +245,6 @@ onMounted(() => {
 
 <style scoped>
 .kb-detail-page {
-  padding: 24px;
   max-width: 1400px;
   margin: 0 auto;
   animation: fadeIn 0.3s ease;
@@ -340,10 +339,6 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .kb-detail-page {
-    padding: 16px;
-  }
-
   .kb-title {
     flex-direction: column;
     align-items: flex-start;
