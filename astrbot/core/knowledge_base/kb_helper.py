@@ -180,7 +180,8 @@ class KBHelper:
 
             vec_db: FaissVecDB = self.vec_db  # type: ignore
             await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
-
+            await self.refresh_kb()
+            await self.refresh_document(doc_id)
             return doc
         except Exception as e:
             logger.error(f"上传文档失败: {e}")
