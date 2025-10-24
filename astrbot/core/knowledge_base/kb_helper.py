@@ -206,6 +206,26 @@ class KBHelper:
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
 
+    async def delete_document(self, doc_id: str):
+        """删除单个文档及其相关数据"""
+        await self.kb_db.delete_document_by_id(
+            doc_id=doc_id,
+            vec_db=self.vec_db,  # type: ignore
+        )
+        await self.kb_db.update_kb_stats(
+            kb_id=self.kb.kb_id,
+            vec_db=self.vec_db,  # type: ignore
+        )
+
+    async def delete_chunk(self, chunk_id: str):
+        """删除单个文本块及其相关数据"""
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        await vec_db.delete(chunk_id)
+        await self.kb_db.update_kb_stats(
+            kb_id=self.kb.kb_id,
+            vec_db=self.vec_db,  # type: ignore
+        )
+
     async def get_chunks_by_doc_id(
         self, doc_id: str, offset: int = 0, limit: int = 100
     ) -> list[dict]:
@@ -228,6 +248,12 @@ class KBHelper:
                 }
             )
         return result
+
+    async def get_chunk_count_by_doc_id(self, doc_id: str) -> int:
+        """获取文档的块数量"""
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        count = await vec_db.count_documents(metadata_filter={"doc_id": doc_id})
+        return count
 
     async def _save_media(
         self,

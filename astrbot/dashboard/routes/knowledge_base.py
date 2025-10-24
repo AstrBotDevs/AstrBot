@@ -30,8 +30,6 @@ class KnowledgeBaseRoute(Route):
 
         # 注册路由
         self.routes = {
-            # 系统管理
-            # "/kb/status": ("GET", self.get_kb_status),
             # 知识库管理
             "/kb/list": ("GET", self.list_kbs),
             "/kb/create": ("POST", self.create_kb),
@@ -43,11 +41,10 @@ class KnowledgeBaseRoute(Route):
             "/kb/document/list": ("GET", self.list_documents),
             "/kb/document/upload": ("POST", self.upload_document),
             "/kb/document/get": ("GET", self.get_document),
-            # "/kb/document/delete": ("POST", self.delete_document),
+            "/kb/document/delete": ("POST", self.delete_document),
             # # 块管理
             "/kb/chunk/list": ("GET", self.list_chunks),
-            # "/kb/chunk/get": ("GET", self.get_chunk),
-            # "/kb/chunk/delete": ("POST", self.delete_chunk),
+            "/kb/chunk/delete": ("POST", self.delete_chunk),
             # # 多媒体管理
             # "/kb/media/list": ("GET", self.list_media),
             # "/kb/media/delete": ("POST", self.delete_media),
@@ -579,6 +576,70 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取文档详情失败: {str(e)}").__dict__
 
+    async def delete_document(self):
+        """删除文档
+
+        Body:
+        - kb_id: 知识库 ID (必填)
+        - doc_id: 文档 ID (必填)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            doc_id = data.get("doc_id")
+            if not doc_id:
+                return Response().error("缺少参数 doc_id").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            await kb_helper.delete_document(doc_id)
+            return Response().ok(message="删除文档成功").__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"删除文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除文档失败: {str(e)}").__dict__
+
+    async def delete_chunk(self):
+        """删除文本块
+
+        Body:
+        - kb_id: 知识库 ID (必填)
+        - chunk_id: 块 ID (必填)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+            chunk_id = data.get("chunk_id")
+            if not chunk_id:
+                return Response().error("缺少参数 chunk_id").__dict__
+
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            await kb_helper.delete_chunk(chunk_id)
+            return Response().ok(message="删除文本块成功").__dict__
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"删除文本块失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除文本块失败: {str(e)}").__dict__
+
     async def list_chunks(self):
         """获取块列表
 
@@ -612,6 +673,7 @@ class KnowledgeBaseRoute(Route):
                         "items": chunk_list,
                         "page": page,
                         "page_size": page_size,
+                        "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
                     }
                 )
                 .__dict__

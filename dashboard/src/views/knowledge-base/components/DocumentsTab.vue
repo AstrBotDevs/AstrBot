@@ -357,7 +357,8 @@ const deleteDocument = async () => {
   deleting.value = true
   try {
     const response = await axios.post('/api/kb/document/delete', {
-      doc_id: deleteTarget.value.doc_id
+      doc_id: deleteTarget.value.doc_id,
+      kb_id: props.kbId
     })
 
     if (response.data.status === 'ok') {

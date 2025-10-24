@@ -190,8 +190,7 @@ class KnowledgeBaseManager:
             kb.emoji = emoji
         if embedding_provider_id is not None:
             kb.embedding_provider_id = embedding_provider_id
-        if rerank_provider_id is not None:
-            kb.rerank_provider_id = rerank_provider_id
+        kb.rerank_provider_id = rerank_provider_id  # 允许设置为 None
         if chunk_size is not None:
             kb.chunk_size = chunk_size
         if chunk_overlap is not None:

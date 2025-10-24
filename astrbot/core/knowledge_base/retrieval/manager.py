@@ -94,6 +94,7 @@ class RetrievalManager:
                     "top_k_sparse": kb.top_k_sparse or 50,
                     "top_m_final": kb.top_m_final or 5,
                     "vec_db": kb_helper.vec_db,
+                    "rerank_provider_id": kb.rerank_provider_id,
                 }
                 new_kb_ids.append(kb_id)
             else:
@@ -147,7 +148,13 @@ class RetrievalManager:
         first_rerank = None
         for kb_id in kb_ids:
             vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
-            if vec_db and vec_db.rerank_provider:
+            rerank_pi = kb_options[kb_id]["rerank_provider_id"]
+            if (
+                vec_db
+                and vec_db.rerank_provider
+                and rerank_pi
+                and rerank_pi == vec_db.rerank_provider.meta().id
+            ):
                 first_rerank = vec_db.rerank_provider
                 break
         if first_rerank and retrieval_results:

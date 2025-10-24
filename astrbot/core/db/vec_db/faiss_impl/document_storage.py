@@ -14,6 +14,8 @@ class DocumentStorage:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         if not os.path.exists(self.db_path):
             await self.connect()
+            if not self.connection:
+                raise RuntimeError("Failed to connect to the database.")
             async with self.connection.cursor() as cursor:
                 with open(self.sqlite_init_path, "r", encoding="utf-8") as f:
                     sql_script = f.read()
@@ -30,8 +32,8 @@ class DocumentStorage:
         self,
         metadata_filters: dict,
         ids: list | None = None,
-        offset: int = 0,
-        limit: int = 100,
+        offset: int | None = 0,
+        limit: int | None = 100,
     ) -> list[dict]:
         """Retrieve documents by metadata filters and ids.
 
@@ -41,6 +43,7 @@ class DocumentStorage:
         Returns:
             list: The list of document IDs(primary key, not doc_id) that match the filters.
         """
+        assert self.connection is not None, "Database connection is not initialized."
         # metadata filter -> SQL WHERE clause
         where_clauses = []
         values = []
@@ -55,8 +58,13 @@ class DocumentStorage:
 
         result = []
         async with self.connection.cursor() as cursor:
-            sql = f"SELECT * FROM documents WHERE {where_sql} ORDER BY id LIMIT ? OFFSET ?"
-            values.extend([limit, offset])
+            sql = f"SELECT * FROM documents WHERE {where_sql}"
+            if limit is not None:
+                sql += " LIMIT ?"
+                values.append(limit)
+            if offset is not None:
+                sql += " OFFSET ?"
+                values.append(offset)
 
             await cursor.execute(sql, values)
             for row in await cursor.fetchall():
@@ -72,6 +80,7 @@ class DocumentStorage:
         Returns:
             dict: The document data.
         """
+        assert self.connection is not None, "Database connection is not initialized."
         async with self.connection.cursor() as cursor:
             await cursor.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,))
             row = await cursor.fetchone()
@@ -87,11 +96,53 @@ class DocumentStorage:
             doc_id (str): The doc_id.
             new_text (str): The new text to update the document with.
         """
+        assert self.connection is not None, "Database connection is not initialized."
         async with self.connection.cursor() as cursor:
             await cursor.execute(
                 "UPDATE documents SET text = ? WHERE doc_id = ?", (new_text, doc_id)
             )
             await self.connection.commit()
+
+    async def delete_documents(self, metadata_filters: dict):
+        """Delete documents by their metadata filters.
+
+        Args:
+            metadata_filters (dict): The metadata filters to apply.
+        """
+        assert self.connection is not None, "Database connection is not initialized."
+        async with self.connection.cursor() as cursor:
+            where_clauses = []
+            values = []
+            for key, val in metadata_filters.items():
+                where_clauses.append(f"json_extract(metadata, '$.{key}') = ?")
+                values.append(val)
+            where_sql = " AND ".join(where_clauses) or "1=1"
+            await cursor.execute(f"DELETE FROM documents WHERE {where_sql}", values)
+            await self.connection.commit()
+
+    async def count_documents(self, metadata_filters: dict | None = None) -> int:
+        """Count documents in the database.
+
+        Args:
+            metadata_filters (dict | None): Metadata filters to apply.
+
+        Returns:
+            int: The count of documents.
+        """
+        assert self.connection is not None, "Database connection is not initialized."
+        async with self.connection.cursor() as cursor:
+            sql = "SELECT COUNT(*) FROM documents"
+            values = []
+            if metadata_filters:
+                where_clauses = []
+                for key, val in metadata_filters.items():
+                    where_clauses.append(f"json_extract(metadata, '$.{key}') = ?")
+                    values.append(val)
+                where_sql = " AND ".join(where_clauses)
+                sql += f" WHERE {where_sql}"
+            await cursor.execute(sql, values)
+            count = await cursor.fetchone()
+            return count[0] if count else 0
 
     async def get_user_ids(self) -> list[str]:
         """Retrieve all user IDs from the documents table.
@@ -99,6 +150,7 @@ class DocumentStorage:
         Returns:
             list: A list of user IDs.
         """
+        assert self.connection is not None, "Database connection is not initialized."
         async with self.connection.cursor() as cursor:
             await cursor.execute("SELECT DISTINCT user_id FROM documents")
             rows = await cursor.fetchall()

@@ -133,6 +133,14 @@
                 color="info"
                 @click="viewChunk(item)"
               />
+              <!-- 删除 -->
+              <v-btn
+                icon="mdi-delete"
+                variant="text"
+                size="small"
+                color="error"
+                @click="deleteChunk(item)"
+              />
             </template>
 
             <template #no-data>
@@ -318,7 +326,7 @@ const loadChunks = async () => {
     })
     if (response.data.status === 'ok') {
       chunks.value = response.data.data.items || []
-      totalChunks.value = response.data.data.items.length
+      totalChunks.value = response.data.data.total || 0
     }
   } catch (error) {
     console.error('Failed to load chunks:', error)
@@ -344,6 +352,27 @@ const handlePageSizeChange = (newPageSize: number) => {
 const viewChunk = (chunk: any) => {
   selectedChunk.value = chunk
   showViewDialog.value = true
+}
+
+// 删除分块
+const deleteChunk = async (chunk: any) => {
+  if (!confirm(t('chunks.deleteConfirm'))) return
+  try {
+    const response = await axios.post('/api/kb/chunk/delete', {
+      chunk_id: chunk.chunk_id,
+      doc_id: docId.value,
+      kb_id: kbId.value
+    })
+    if (response.data.status === 'ok') {
+      showSnackbar(t('chunks.deleteSuccess'))
+      loadChunks()
+    } else {
+      showSnackbar(t('chunks.deleteFailed'), 'error')
+    }
+  } catch (error) {
+    console.error('Failed to delete chunk:', error)
+    showSnackbar(t('chunks.deleteFailed'), 'error')
+  }
 }
 
 // 工具函数

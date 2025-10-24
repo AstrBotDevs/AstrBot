@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from sqlmodel import SQLModel, col, desc
-from sqlalchemy import text, func, select, update
+from sqlalchemy import text, func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core import logger
@@ -249,6 +249,19 @@ class KBSQLiteDatabase:
                 "document": row[0],
                 "knowledge_base": row[1],
             }
+
+    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB):
+        """删除单个文档及其相关数据"""
+        # 在知识库表中删除
+        async with self.get_db() as session:
+            async with session.begin():
+                # 删除文档记录
+                delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
+                await session.execute(delete_stmt)
+                await session.commit()
+
+        # 在 vec db 中删除相关向量
+        await vec_db.delete_documents(metadata_filters={"doc_id": doc_id})
 
     # ===== 多媒体查询 =====
 

@@ -39,6 +39,9 @@ class FaissVecDB(BaseVecDB):
         """
         插入一条文本和其对应向量，自动生成 ID 并保持一致性。
         """
+        assert self.document_storage.connection is not None, (
+            "Database connection is not initialized."
+        )
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
@@ -119,23 +122,49 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: int):
+    async def delete(self, doc_id: str):
         """
-        删除一条文档
+        删除一条文档块（chunk）
         """
+        assert self.document_storage.connection is not None, (
+            "Database connection is not initialized."
+        )
+        # 获得对应的 int id
+        result = await self.document_storage.get_document_by_doc_id(doc_id)
+        int_id = result["id"] if result else None
+        if int_id is None:
+            return
         await self.document_storage.connection.execute(
             "DELETE FROM documents WHERE doc_id = ?", (doc_id,)
         )
+        await self.embedding_storage.delete([int_id])
         await self.document_storage.connection.commit()
 
     async def close(self):
         await self.document_storage.close()
 
-    async def count_documents(self) -> int:
+    async def count_documents(self, metadata_filter: dict | None = None) -> int:
         """
         计算文档数量
+
+        Args:
+            metadata_filter (dict | None): 元数据过滤器
         """
-        async with self.document_storage.connection.cursor() as cursor:
-            await cursor.execute("SELECT COUNT(*) FROM documents")
-            count = await cursor.fetchone()
-            return count[0] if count else 0
+        assert self.document_storage.connection is not None, (
+            "Database connection is not initialized."
+        )
+        count = await self.document_storage.count_documents(
+            metadata_filters=metadata_filter or {}
+        )
+        return count
+
+    async def delete_documents(self, metadata_filters: dict):
+        """
+        根据元数据过滤器删除文档
+        """
+        docs = await self.document_storage.get_documents(
+            metadata_filters=metadata_filters, offset=None, limit=None
+        )
+        doc_ids: list[int] = [doc["id"] for doc in docs]
+        await self.embedding_storage.delete(doc_ids)
+        await self.document_storage.delete_documents(metadata_filters=metadata_filters)
