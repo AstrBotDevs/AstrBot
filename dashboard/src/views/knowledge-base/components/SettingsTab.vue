@@ -77,6 +77,7 @@
                 variant="outlined"
                 density="comfortable"
                 @update:model-value="handleEmbeddingProviderChange"
+                :disabled="true"
               />
             </v-col>
             <v-col cols="12" md="6">
