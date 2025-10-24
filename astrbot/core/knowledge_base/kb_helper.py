@@ -15,6 +15,7 @@ from astrbot.core import logger
 
 class KBHelper:
     vec_db: BaseVecDB
+    kb: KnowledgeBase
 
     def __init__(
         self,
@@ -216,8 +217,9 @@ class KBHelper:
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
         )
+        await self.refresh_kb()
 
-    async def delete_chunk(self, chunk_id: str):
+    async def delete_chunk(self, chunk_id: str, doc_id: str):
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         await vec_db.delete(chunk_id)
@@ -225,6 +227,27 @@ class KBHelper:
             kb_id=self.kb.kb_id,
             vec_db=self.vec_db,  # type: ignore
         )
+        await self.refresh_kb()
+        await self.refresh_document(doc_id)
+
+    async def refresh_kb(self):
+        if self.kb:
+            kb = await self.kb_db.get_kb_by_id(self.kb.kb_id)
+            if kb:
+                self.kb = kb
+
+    async def refresh_document(self, doc_id: str) -> None:
+        """更新文档的元数据"""
+        doc = await self.get_document(doc_id)
+        if not doc:
+            raise ValueError(f"无法找到 ID 为 {doc_id} 的文档")
+        chunk_count = await self.get_chunk_count_by_doc_id(doc_id)
+        doc.chunk_count = chunk_count
+        async with self.kb_db.get_db() as session:
+            async with session.begin():
+                session.add(doc)
+                await session.commit()
+            await session.refresh(doc)
 
     async def get_chunks_by_doc_id(
         self, doc_id: str, offset: int = 0, limit: int = 100

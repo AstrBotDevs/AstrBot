@@ -625,12 +625,15 @@ class KnowledgeBaseRoute(Route):
             chunk_id = data.get("chunk_id")
             if not chunk_id:
                 return Response().error("缺少参数 chunk_id").__dict__
+            doc_id = data.get("doc_id")
+            if not doc_id:
+                return Response().error("缺少参数 doc_id").__dict__
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
-            await kb_helper.delete_chunk(chunk_id)
+            await kb_helper.delete_chunk(chunk_id, doc_id)
             return Response().ok(message="删除文本块成功").__dict__
 
         except ValueError as e:

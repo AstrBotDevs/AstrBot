@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from sqlmodel import SQLModel, col, desc
+from sqlmodel import col, desc
 from sqlalchemy import text, func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core import logger
 from astrbot.core.knowledge_base.models import (
+    BaseKBModel,
     KBDocument,
     KBMedia,
     KnowledgeBase,
@@ -61,7 +62,7 @@ class KBSQLiteDatabase:
         """初始化数据库,创建表并配置 SQLite 参数"""
         async with self.engine.begin() as conn:
             # 创建所有知识库相关表
-            await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.run_sync(BaseKBModel.metadata.create_all)
 
             # 配置 SQLite 性能优化参数
             await conn.execute(text("PRAGMA journal_mode=WAL"))
