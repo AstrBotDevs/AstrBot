@@ -983,7 +983,7 @@ class KnowledgeBaseRoute(Route):
                     .__dict__
                 )
             else:
-                logger.error(f"[KB配置] 配置保存失败，验证不匹配")
+                logger.error("[KB配置] 配置保存失败，验证不匹配")
                 return Response().error("配置保存失败").__dict__
 
         except Exception as e:
