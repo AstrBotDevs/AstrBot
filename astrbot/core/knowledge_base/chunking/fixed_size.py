@@ -3,7 +3,7 @@
 按照固定的字符数将文本分块,支持重叠区域。
 """
 
-from astrbot.core.knowledge_base.chunking.base import BaseChunker
+from .base import BaseChunker
 
 
 class FixedSizeChunker(BaseChunker):
@@ -27,6 +27,8 @@ class FixedSizeChunker(BaseChunker):
 
         Args:
             text: 输入文本
+            chunk_size: 每个文本块的最大大小
+            chunk_overlap: 每个文本块之间的重叠部分大小
 
         Returns:
             list[str]: 分块后的文本列表

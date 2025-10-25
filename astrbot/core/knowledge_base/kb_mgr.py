@@ -10,7 +10,9 @@ from .kb_db_sqlite import KBSQLiteDatabase
 
 from .parsers.text_parser import TextParser
 from .parsers.pdf_parser import PDFParser
-from .chunking.fixed_size import FixedSizeChunker
+
+# from .chunking.fixed_size import FixedSizeChunker
+from .chunking.recursive import RecursiveCharacterChunker
 from .kb_helper import KBHelper
 
 from .models import KnowledgeBase
@@ -25,7 +27,7 @@ PARSERS = {
     "markdown": TextParser(),
     "pdf": PDFParser(),
 }
-CHUNKER = FixedSizeChunker()
+CHUNKER = RecursiveCharacterChunker()
 
 
 class KnowledgeBaseManager:
