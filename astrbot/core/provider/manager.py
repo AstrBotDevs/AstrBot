@@ -1,6 +1,5 @@
 import asyncio
 import traceback
-from typing import List
 
 from astrbot.core import logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -28,7 +27,7 @@ class ProviderManager:
         self.persona_mgr = persona_mgr
         self.acm = acm
         config = acm.confs["default"]
-        self.providers_config: List = config["provider"]
+        self.providers_config: list = config["provider"]
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
@@ -36,15 +35,15 @@ class ProviderManager:
         # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
         self.default_persona_name = persona_mgr.default_persona
 
-        self.provider_insts: List[Provider] = []
+        self.provider_insts: list[Provider] = []
         """加载的 Provider 的实例"""
-        self.stt_provider_insts: List[STTProvider] = []
+        self.stt_provider_insts: list[STTProvider] = []
         """加载的 Speech To Text Provider 的实例"""
-        self.tts_provider_insts: List[TTSProvider] = []
+        self.tts_provider_insts: list[TTSProvider] = []
         """加载的 Text To Speech Provider 的实例"""
-        self.embedding_provider_insts: List[EmbeddingProvider] = []
+        self.embedding_provider_insts: list[EmbeddingProvider] = []
         """加载的 Embedding Provider 的实例"""
-        self.rerank_provider_insts: List[RerankProvider] = []
+        self.rerank_provider_insts: list[RerankProvider] = []
         """加载的 Rerank Provider 的实例"""
         self.inst_map: dict[
             str,
@@ -175,7 +174,11 @@ class ProviderManager:
     async def initialize(self):
         # 逐个初始化提供商
         for provider_config in self.providers_config:
-            await self.load_provider(provider_config)
+            try:
+                await self.load_provider(provider_config)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                logger.error(e)
 
         # 设置默认提供商
         selected_provider_id = sp.get(
@@ -404,8 +407,10 @@ class ProviderManager:
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
-            logger.error(traceback.format_exc())
             logger.error(
+                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}"
+            )
+            raise Exception(
                 f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}"
             )
 

@@ -32,7 +32,6 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.model = provider_config.get(
             "embedding_model", "gemini-embedding-exp-03-07"
         )
-        self.dimension = provider_config.get("embedding_dimensions", 768)
 
     async def get_embedding(self, text: str) -> list[float]:
         """
@@ -60,4 +59,4 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     def get_dim(self) -> int:
         """获取向量的维度"""
-        return self.dimension
+        return self.provider_config.get("embedding_dimensions", 768)

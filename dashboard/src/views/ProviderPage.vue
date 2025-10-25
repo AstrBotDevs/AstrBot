@@ -12,7 +12,8 @@
           </p>
         </div>
         <div>
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true" rounded="xl" size="x-large">
+          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true"
+            rounded="xl" size="x-large">
             {{ tm('providers.addProvider') }}
           </v-btn>
         </div>
@@ -56,30 +57,16 @@
 
         <v-row v-else>
           <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card
-              :item="provider"
-              title-field="id"
-              enabled-field="enable"
-              :loading="isProviderTesting(provider.id)"
-              @toggle-enabled="providerStatusChange"
-              :bglogo="getProviderIcon(provider.provider)"
-              @delete="deleteProvider"
-              @edit="configExistingProvider"
-              @copy="copyProvider"
-              :show-copy-button="true">
-               <template #actions="{ item }">
-                 <v-btn
-                   style="z-index: 100000;"
-                   variant="tonal"
-                   color="info"
-                   rounded="xl"
-                   size="small"
-                   :loading="isProviderTesting(item.id)"
-                   @click="testSingleProvider(item)"
-                 >
-                   {{ tm('availability.test') }}
-                 </v-btn>
-               </template>
+            <item-card :item="provider" title-field="id" enabled-field="enable"
+              :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+              :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+              @copy="copyProvider" :show-copy-button="true">
+              <template #actions="{ item }">
+                <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                  :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                  {{ tm('availability.test') }}
+                </v-btn>
+              </template>
               <template v-slot:details="{ item }">
               </template>
             </item-card>
@@ -115,16 +102,12 @@
                   <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
                     <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
                       <v-card-item>
-                        <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
-                        <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
-                        <v-progress-circular
-                          v-else-if="status.status === 'pending'"
-                          indeterminate
-                          color="primary"
-                          size="20"
-                          width="2"
-                          class="me-2"
-                        ></v-progress-circular>
+                        <v-icon v-if="status.status === 'available'" color="success"
+                          class="me-2">mdi-check-circle</v-icon>
+                        <v-icon v-else-if="status.status === 'unavailable'" color="error"
+                          class="me-2">mdi-alert-circle</v-icon>
+                        <v-progress-circular v-else-if="status.status === 'pending'" indeterminate color="primary"
+                          size="20" width="2" class="me-2"></v-progress-circular>
 
                         <span class="font-weight-bold">{{ status.id }}</span>
 
@@ -165,22 +148,16 @@
     </v-container>
 
     <!-- 添加提供商对话框 -->
-    <AddNewProvider 
-      v-model:show="showAddProviderDialog"
-      :metadata="metadata"
-      @select-template="selectProviderTemplate"
-    />
+    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="metadata"
+      @select-template="selectProviderTemplate" />
 
     <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') +  ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
+      <v-card
+        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
         <v-card-text class="py-4">
-          <AstrBotConfig
-            :iterable="newSelectedProviderConfig"
-            :metadata="metadata['provider_group']?.metadata"
-            metadataKey="provider"
-            :is-editing="updatingMode"
-          />
+          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="metadata['provider_group']?.metadata"
+            metadataKey="provider" :is-editing="updatingMode" />
         </v-card-text>
 
         <v-divider></v-divider>
@@ -467,7 +444,7 @@ export default {
           for (let key in source) {
             if (source.hasOwnProperty(key)) {
               if (typeof source[key] === 'object' && source[key] !== null) {
-                target[key] = Array.isArray(source[key]) ? [...source[key]] : {...source[key]};
+                target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] };
               } else {
                 target[key] = source[key];
               }
@@ -528,7 +505,14 @@ export default {
             id: this.newSelectedProviderName,
             config: this.newSelectedProviderConfig
           });
+          if (res.data.status === 'error') {
+            this.showError(res.data.message || "更新失败!");
+            return
+          }
           this.showSuccess(res.data.message || "更新成功!");
+          if (wasUpdating) {
+            this.updatingMode = false;
+          }
         } else {
           // 检查 ID 是否已存在
           const existingProvider = this.config_data.provider?.find(p => p.id === this.newSelectedProviderConfig.id);
@@ -541,17 +525,18 @@ export default {
           }
 
           const res = await axios.post('/api/config/provider/new', this.newSelectedProviderConfig);
+          if (res.data.status === 'error') {
+            this.showError(res.data.message || "添加失败!");
+            return
+          }
           this.showSuccess(res.data.message || "添加成功!");
         }
         this.showProviderCfg = false;
-        this.getConfig();
       } catch (err) {
         this.showError(err.response?.data?.message || err.message);
       } finally {
         this.loading = false;
-        if (wasUpdating) {
-          this.updatingMode = false;
-        }
+        this.getConfig();
       }
     },
 
@@ -607,6 +592,10 @@ export default {
         id: provider.id,
         config: provider
       }).then((res) => {
+        if (res.data.status === 'error') {
+          this.showError(res.data.message)
+          return
+        }
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.success.statusUpdate);
       }).catch((err) => {

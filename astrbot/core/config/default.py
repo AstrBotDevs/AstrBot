@@ -1417,6 +1417,7 @@ CONFIG_METADATA_2 = {
                         "description": "嵌入维度",
                         "type": "int",
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
+                        "_special": "get_embedding_dim",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
