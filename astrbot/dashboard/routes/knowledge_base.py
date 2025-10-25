@@ -873,10 +873,10 @@ class KnowledgeBaseRoute(Route):
 
     async def get_session_kb_config(self):
         """获取会话的知识库配置
-        
+
         Query 参数:
         - session_id: 会话 ID (必填)
-        
+
         返回:
         - kb_ids: 知识库 ID 列表
         - top_k: 返回结果数量
@@ -884,34 +884,30 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             from astrbot.core import sp
-            
+
             session_id = request.args.get("session_id")
-            
+
             if not session_id:
                 return Response().error("缺少参数 session_id").__dict__
-            
+
             # 从 SharedPreferences 获取配置
             config = await sp.session_get(session_id, "kb_config", default={})
-            
+
             logger.debug(f"[KB配置] 读取到配置: session_id={session_id}")
-            
+
             # 如果没有配置，返回默认值
             if not config:
-                config = {
-                    "kb_ids": [],
-                    "top_k": 5,
-                    "enable_rerank": True
-                }
-            
+                config = {"kb_ids": [], "top_k": 5, "enable_rerank": True}
+
             return Response().ok(config).__dict__
-            
+
         except Exception as e:
             logger.error(f"[KB配置] 获取配置时出错: {e}", exc_info=True)
             return Response().error(f"获取会话知识库配置失败: {str(e)}").__dict__
 
     async def set_session_kb_config(self):
         """设置会话的知识库配置
-        
+
         Body:
         - scope: 配置范围 (目前只支持 "session")
         - scope_id: 会话 ID (必填)
@@ -921,25 +917,25 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             from astrbot.core import sp
-            
+
             data = await request.json
-            
+
             scope = data.get("scope")
             scope_id = data.get("scope_id")
             kb_ids = data.get("kb_ids", [])
             top_k = data.get("top_k", 5)
             enable_rerank = data.get("enable_rerank", True)
-            
+
             # 验证参数
             if scope != "session":
                 return Response().error("目前仅支持 session 范围的配置").__dict__
-            
+
             if not scope_id:
                 return Response().error("缺少参数 scope_id").__dict__
-            
+
             if not isinstance(kb_ids, list):
                 return Response().error("kb_ids 必须是列表").__dict__
-            
+
             # 验证知识库是否存在
             kb_mgr = self._get_kb_manager()
             invalid_ids = []
@@ -951,72 +947,76 @@ class KnowledgeBaseRoute(Route):
                 else:
                     invalid_ids.append(kb_id)
                     logger.warning(f"[KB配置] 知识库不存在: {kb_id}")
-            
+
             if invalid_ids:
                 logger.warning(f"[KB配置] 以下知识库ID无效: {invalid_ids}")
-            
+
             # 允许保存空列表，表示明确不使用任何知识库
             if kb_ids and not valid_ids:
                 # 只有当用户提供了 kb_ids 但全部无效时才报错
                 return Response().error(f"所有提供的知识库ID都无效: {kb_ids}").__dict__
-            
+
             # 如果 kb_ids 为空列表，表示用户想清空配置
             if not kb_ids:
                 valid_ids = []
-            
+
             # 构建配置对象（只保存有效的ID）
             config = {
                 "kb_ids": valid_ids,
                 "top_k": top_k,
-                "enable_rerank": enable_rerank
+                "enable_rerank": enable_rerank,
             }
-            
+
             # 保存到 SharedPreferences
             await sp.session_put(scope_id, "kb_config", config)
-            
+
             # 立即验证是否保存成功
             verify_config = await sp.session_get(scope_id, "kb_config", default={})
-            
+
             if verify_config == config:
-                return Response().ok(
-                    {"valid_ids": valid_ids, "invalid_ids": invalid_ids},
-                    "保存知识库配置成功"
-                ).__dict__
+                return (
+                    Response()
+                    .ok(
+                        {"valid_ids": valid_ids, "invalid_ids": invalid_ids},
+                        "保存知识库配置成功",
+                    )
+                    .__dict__
+                )
             else:
                 logger.error(f"[KB配置] 配置保存失败，验证不匹配")
                 return Response().error("配置保存失败").__dict__
-            
+
         except Exception as e:
             logger.error(f"[KB配置] 设置配置时出错: {e}", exc_info=True)
             return Response().error(f"设置会话知识库配置失败: {str(e)}").__dict__
 
     async def delete_session_kb_config(self):
         """删除会话的知识库配置
-        
+
         Body:
         - scope: 配置范围 (目前只支持 "session")
         - scope_id: 会话 ID (必填)
         """
         try:
             from astrbot.core import sp
-            
+
             data = await request.json
-            
+
             scope = data.get("scope")
             scope_id = data.get("scope_id")
-            
+
             # 验证参数
             if scope != "session":
                 return Response().error("目前仅支持 session 范围的配置").__dict__
-            
+
             if not scope_id:
                 return Response().error("缺少参数 scope_id").__dict__
-            
+
             # 从 SharedPreferences 删除配置
             await sp.session_remove(scope_id, "kb_config")
-            
+
             return Response().ok(message="删除知识库配置成功").__dict__
-            
+
         except Exception as e:
             logger.error(f"删除会话知识库配置失败: {e}")
             logger.error(traceback.format_exc())

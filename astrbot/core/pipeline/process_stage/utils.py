@@ -25,14 +25,14 @@ async def inject_kb_context(
     if session_config and "kb_ids" in session_config:
         # 使用会话级配置
         kb_ids = session_config.get("kb_ids", [])
-        
+
         # 如果配置为空列表，明确表示不使用知识库
         if not kb_ids:
             logger.info(f"[KB注入] 会话 {umo} 已配置为不使用知识库")
             return
-        
+
         top_k = session_config.get("top_k", 5)
-        
+
         # 将 kb_ids 转换为 kb_names
         kb_names = []
         invalid_kb_ids = []
@@ -43,14 +43,18 @@ async def inject_kb_context(
             else:
                 logger.warning(f"[KB注入] 知识库不存在或未加载: {kb_id}")
                 invalid_kb_ids.append(kb_id)
-        
+
         if invalid_kb_ids:
-            logger.warning(f"[KB注入] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}")
-        
+            logger.warning(
+                f"[KB注入] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}"
+            )
+
         if not kb_names:
-            logger.warning(f"[KB注入] 会话 {umo} 配置的所有知识库都无效，跳过知识库上下文注入")
+            logger.warning(
+                f"[KB注入] 会话 {umo} 配置的所有知识库都无效，跳过知识库上下文注入"
+            )
             return
-            
+
         logger.debug(f"[KB注入] 使用会话级配置，知识库数量: {len(kb_names)}")
     else:
         # 回退到全局配置
