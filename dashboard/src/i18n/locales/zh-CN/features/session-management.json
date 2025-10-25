@@ -93,6 +93,9 @@
     "clearFailed": "清除知识库配置失败",
     "clearConfirm": "确定要清除此会话的知识库配置吗?"
   },
+  "list": {
+    "documents": "篇文档"
+  },
   "deleteConfirm": {
     "message": "确定要删除会话 {sessionName} 吗？",
     "warning": "此操作将永久删除本次会话的「全部对话记录」与「偏好设置」（插件对会话的关联数据除外），且无法恢复。确认继续？"

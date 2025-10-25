@@ -344,12 +344,12 @@
       </v-dialog>
 
       <!-- 知识库配置对话框 -->
-      <v-dialog v-model="kbDialog" max-width="800" min-height="60%">
+      <v-dialog v-model="kbDialog" max-width="800" min-height="60%" @update:model-value="(val) => { if (!val) closeKBDialog(); }">
         <v-card v-if="selectedSessionForKB">
           <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
             <span>{{ tm('knowledgeBase.title') }} - {{ selectedSessionForKB.session_name }}</span>
             <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="kbDialog = false">
+            <v-btn icon variant="text" color="white" @click="closeKBDialog()">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>
@@ -360,39 +360,41 @@
                 {{ tm('knowledgeBase.description') }}
               </v-alert>
 
-              <!-- 知识库选择 -->
-              <v-select
-                v-model="sessionKBConfig.kb_ids"
-                :items="availableKBs"
-                item-title="kb_name"
-                item-value="kb_id"
-                :label="tm('knowledgeBase.selectKB')"
-                multiple
-                chips
-                closable-chips
-                variant="outlined"
-                class="mb-4"
-                :hint="tm('knowledgeBase.selectMultiple')"
-                persistent-hint
-              >
-                <template v-slot:chip="{ item }">
-                  <v-chip>
-                    <span class="mr-1">{{ item.raw.emoji }}</span>
-                    {{ item.raw.kb_name }}
-                  </v-chip>
-                </template>
-                <template v-slot:item="{ item, props }">
-                  <v-list-item v-bind="props">
-                    <template v-slot:prepend>
-                      <span style="font-size: 20px; margin-right: 8px;">{{ item.raw.emoji }}</span>
-                    </template>
-                    <v-list-item-title>{{ item.raw.kb_name }}</v-list-item-title>
-                    <v-list-item-subtitle>
-                      {{ item.raw.description || tm('knowledgeBase.noKBDesc') }} - {{ item.raw.doc_count }} {{ tm('list.documents', { count: item.raw.doc_count }) }}
-                    </v-list-item-subtitle>
-                  </v-list-item>
-                </template>
-              </v-select>
+              <!-- 知识库选择区域 -->
+              <div class="mb-4">
+                <div class="text-subtitle-2 mb-2">{{ tm('knowledgeBase.selectKB') }}</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div v-if="availableKBs.length === 0" class="text-body-2 text-medium-emphasis">
+                    {{ tm('knowledgeBase.noKBAvailable') || '暂无可用知识库' }}
+                  </div>
+                  <div v-else>
+                    <v-checkbox
+                      v-for="kb in availableKBs"
+                      :key="kb.kb_id"
+                      :value="kb.kb_id"
+                      v-model="sessionKBConfig.kb_ids"
+                      hide-details
+                      density="compact"
+                      class="mb-1"
+                    >
+                      <template v-slot:label>
+                        <div class="d-flex align-center">
+                          <span style="font-size: 18px; margin-right: 8px;">{{ kb.emoji }}</span>
+                          <div>
+                            <div class="text-body-2">{{ kb.kb_name }}</div>
+                            <div class="text-caption text-medium-emphasis">
+                              {{ kb.description || tm('knowledgeBase.noKBDesc') }} - {{ kb.doc_count }} {{ tm('list.documents', { count: kb.doc_count }) }}
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </v-checkbox>
+                  </div>
+                </v-card>
+                <div class="text-caption text-medium-emphasis mt-2">
+                  {{ tm('knowledgeBase.selectMultiple') }}
+                </div>
+              </div>
 
               <!-- 高级配置 -->
               <v-expansion-panels class="mb-4">
@@ -450,7 +452,7 @@
               {{ tm('knowledgeBase.clearConfig') }}
             </v-btn>
             <v-spacer />
-            <v-btn variant="text" @click="kbDialog = false" :disabled="savingKBConfig">
+            <v-btn variant="text" @click="closeKBDialog()" :disabled="savingKBConfig">
               {{ tm('knowledgeBase.cancel') }}
             </v-btn>
             <v-btn color="primary" variant="tonal" @click="saveKBConfig" :loading="savingKBConfig">
@@ -1107,6 +1109,14 @@ export default {
     // 知识库配置相关方法
     async openKBManager(session) {
       this.selectedSessionForKB = session;
+      
+      // ✅ 先重置配置为默认值，避免数据残留
+      this.sessionKBConfig = {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true
+      };
+      
       this.kbDialog = true;
       this.loadingKBConfig = true;
 
@@ -1124,13 +1134,20 @@ export default {
 
         if (configResponse.data.status === 'ok') {
           const config = configResponse.data.data;
+          
+          // 初始化配置
           this.sessionKBConfig = {
-            kb_ids: config.kb_ids || [],
+            kb_ids: [],
             top_k: config.top_k || 5,
             enable_rerank: config.enable_rerank !== false
           };
+
+          // 如果有配置的 kb_ids，进行清理后赋值
+          if (config.kb_ids && Array.isArray(config.kb_ids)) {
+            this.sessionKBConfig.kb_ids = config.kb_ids.filter(id => id != null && id !== '');
+          }
         } else {
-          // 如果没有配置,使用默认值
+          // 保持默认值（已在开头设置）
           this.sessionKBConfig = {
             kb_ids: [],
             top_k: 5,
@@ -1148,19 +1165,33 @@ export default {
     async saveKBConfig() {
       if (!this.selectedSessionForKB) return;
 
+      // 确保 kb_ids 是一个干净的数组
+      const cleanKbIds = Array.isArray(this.sessionKBConfig.kb_ids)
+        ? this.sessionKBConfig.kb_ids.filter(id => id != null && id !== '')
+        : [];
+
       this.savingKBConfig = true;
       try {
-        const response = await axios.post('/api/kb/session/config/set', {
+        const payload = {
           scope: 'session',
           scope_id: this.selectedSessionForKB.session_id,
-          kb_ids: this.sessionKBConfig.kb_ids,
+          kb_ids: cleanKbIds,  // 使用清理后的数组
           top_k: this.sessionKBConfig.top_k,
           enable_rerank: this.sessionKBConfig.enable_rerank
-        });
+        };
+        
+        const response = await axios.post('/api/kb/session/config/set', payload);
 
         if (response.data.status === 'ok') {
           this.showSuccess(this.tm('knowledgeBase.saveSuccess'));
           this.kbDialog = false;
+          // ✅ 保存成功后清理数据
+          this.sessionKBConfig = {
+            kb_ids: [],
+            top_k: 5,
+            enable_rerank: true
+          };
+          this.selectedSessionForKB = null;
         } else {
           this.showError(response.data.message || this.tm('knowledgeBase.saveFailed'));
         }
@@ -1170,6 +1201,19 @@ export default {
       } finally {
         this.savingKBConfig = false;
       }
+    },
+
+    // 关闭知识库配置对话框并清理数据
+    closeKBDialog() {
+      this.kbDialog = false;
+      // 清理数据，避免下次打开时出现旧数据
+      this.sessionKBConfig = {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true
+      };
+      this.selectedSessionForKB = null;
+      this.availableKBs = [];
     },
 
     async clearKBConfig() {
@@ -1213,7 +1257,7 @@ export default {
 
 <style scoped>
 
-.v-data-table>>>.v-data-table__td {
+.v-data-table :deep(.v-data-table__td) {
   padding: 8px 16px !important;
   vertical-align: middle !important;
 }

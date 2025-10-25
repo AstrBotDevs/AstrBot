@@ -93,6 +93,9 @@
     "clearFailed": "Failed to clear knowledge base configuration",
     "clearConfirm": "Are you sure you want to clear the knowledge base configuration for this session?"
   },
+  "list": {
+    "documents": "documents"
+  },
   "deleteConfirm": {
     "message": "Are you sure you want to delete session {sessionName}?",
     "warning": "This action will permanently delete all chat history and preference settings for this session (except for data linked via plugins), and this cannot be undone. Continue?"
