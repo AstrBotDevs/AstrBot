@@ -87,14 +87,14 @@
           <v-form ref="formRef" @submit.prevent="submitForm">
             <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
               :placeholder="t('create.namePlaceholder')" variant="outlined"
-              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" />
+              :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" hint="后续如修改知识库名称，需重新在配置文件更新。" persistent-hint />
 
             <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
               :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
 
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
-              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null">
+              :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null" hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
@@ -118,10 +118,6 @@
                 </v-list-item>
               </template>
             </v-select>
-
-            <v-alert type="info" variant="tonal" density="compact" class="mt-4">
-              {{ t('create.tips') }}
-            </v-alert>
           </v-form>
         </v-card-text>
 

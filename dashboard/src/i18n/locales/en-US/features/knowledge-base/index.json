@@ -30,7 +30,6 @@
     "rerankModelLabel": "Rerank Model (Optional)",
     "providerInfo": "Provider: {id} | Dimensions: {dimensions}",
     "rerankProviderInfo": "Provider: {id}",
-    "tips": "Tip: Once you select an embedding model, do not modify the model or vector dimensions, as this will severely affect recall rate.",
     "cancel": "Cancel",
     "submit": "Create",
     "nameRequired": "Please enter knowledge base name"

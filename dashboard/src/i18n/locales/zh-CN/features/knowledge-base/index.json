@@ -30,7 +30,6 @@
     "rerankModelLabel": "重排序模型 (Rerank Model, 可选)",
     "providerInfo": "提供商: {id} | 维度: {dimensions}",
     "rerankProviderInfo": "提供商: {id}",
-    "tips": "提示: 一旦选择了嵌入模型,请不要修改该提供商的模型或向量维度,否则将严重影响召回率。",
     "cancel": "取消",
     "submit": "创建",
     "nameRequired": "请输入知识库名称"
