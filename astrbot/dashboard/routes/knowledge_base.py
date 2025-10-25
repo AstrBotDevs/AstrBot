@@ -10,6 +10,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from .route import Route, Response, RouteContext
 from ..utils import generate_tsne_visualization
+from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
 
 class KnowledgeBaseRoute(Route):
@@ -234,6 +235,47 @@ class KnowledgeBaseRoute(Route):
             top_k_dense = data.get("top_k_dense")
             top_k_sparse = data.get("top_k_sparse")
             top_m_final = data.get("top_m_final")
+
+            # pre-check embedding dim
+            if not embedding_provider_id:
+                return Response().error("缺少参数 embedding_provider_id").__dict__
+            prv = await kb_manager.provider_manager.get_provider_by_id(
+                embedding_provider_id
+            )  # type: ignore
+            if not prv or not isinstance(prv, EmbeddingProvider):
+                return (
+                    Response().error(f"嵌入模型不存在或类型错误({type(prv)})").__dict__
+                )
+            try:
+                vec = await prv.get_embedding("astrbot")
+                if len(vec) != prv.get_dim():
+                    raise ValueError(
+                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}"
+                    )
+            except Exception as e:
+                return Response().error(f"测试嵌入模型失败: {str(e)}").__dict__
+            # pre-check rerank
+            if rerank_provider_id:
+                rerank_prv: RerankProvider = (
+                    await kb_manager.provider_manager.get_provider_by_id(
+                        rerank_provider_id
+                    )
+                )  # type: ignore
+                if not rerank_prv:
+                    return Response().error("重排序模型不存在").__dict__
+                # 检查重排序模型可用性
+                try:
+                    res = await rerank_prv.rerank(
+                        query="astrbot", documents=["astrbot knowledge base"]
+                    )
+                    if not res:
+                        raise ValueError("重排序模型返回结果异常")
+                except Exception as e:
+                    return (
+                        Response()
+                        .error(f"测试重排序模型失败: {str(e)}，请检查控制台日志输出。")
+                        .__dict__
+                    )
 
             kb_helper = await kb_manager.create_kb(
                 kb_name=kb_name,

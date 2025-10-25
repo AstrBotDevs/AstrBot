@@ -66,7 +66,7 @@
     <!-- 创建/编辑对话框 -->
     <v-dialog v-model="showCreateDialog" max-width="600px" persistent>
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="d-flex align-center">
           <span class="text-h5">{{ editingKB ? t('edit.title') : t('create.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeCreateDialog" />
@@ -566,7 +566,7 @@ onMounted(() => {
   cursor: pointer;
   transition: transform 0.2s ease;
   display: inline-block;
-  padding: 16px;
+  padding: 0px 16px;
   border-radius: 12px;
   background: rgba(var(--v-theme-primary), 0.05);
 }
