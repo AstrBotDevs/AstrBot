@@ -73,10 +73,12 @@
             @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
             <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
             <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-            <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
+            <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf, .docx,
+              .xls, .xlsx</p>
             <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
             <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-            <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf" @change="handleFileSelect" />
+            <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
+              @change="handleFileSelect" />
           </div>
 
           <div v-if="selectedFiles.length > 0" class="mt-4">

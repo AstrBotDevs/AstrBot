@@ -8,9 +8,6 @@ from .retrieval.sparse_retriever import SparseRetriever
 from .retrieval.rank_fusion import RankFusion
 from .kb_db_sqlite import KBSQLiteDatabase
 
-from .parsers.text_parser import TextParser
-from .parsers.pdf_parser import PDFParser
-
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_helper import KBHelper
@@ -21,12 +18,6 @@ from .models import KnowledgeBase
 FILES_PATH = "data/knowledge_base"
 DB_PATH = Path(FILES_PATH) / "kb.db"
 """Knowledge Base storage root directory"""
-PARSERS = {
-    "txt": TextParser(),
-    "md": TextParser(),
-    "markdown": TextParser(),
-    "pdf": PDFParser(),
-}
 CHUNKER = RecursiveCharacterChunker()
 
 
@@ -85,7 +76,6 @@ class KnowledgeBaseManager:
                 provider_manager=self.provider_manager,
                 kb_root_dir=FILES_PATH,
                 chunker=CHUNKER,
-                parsers=PARSERS,
             )
             await kb_helper.initialize()
             self.kb_insts[record.kb_id] = kb_helper
@@ -127,7 +117,6 @@ class KnowledgeBaseManager:
                 provider_manager=self.provider_manager,
                 kb_root_dir=FILES_PATH,
                 chunker=CHUNKER,
-                parsers=PARSERS,
             )
             await kb_helper.initialize()
         self.kb_insts[kb.kb_id] = kb_helper

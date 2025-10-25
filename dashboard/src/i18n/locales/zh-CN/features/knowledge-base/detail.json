@@ -46,7 +46,7 @@
     "title": "上传文档",
     "selectFile": "选择文件",
     "dropzone": "拖放文件到这里或点击选择",
-    "supportedFormats": "支持的格式: TXT, PDF, Markdown",
+    "supportedFormats": "支持的格式: ",
     "maxSize": "最大文件大小: 128MB",
     "chunkSettings": "分块设置",
     "batchSettings": "批处理设置",
