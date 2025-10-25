@@ -1,4 +1,3 @@
-import typing
 import traceback
 import os
 import inspect
@@ -45,9 +44,7 @@ def try_cast(value: str, type_: str):
             return None
 
 
-def validate_config(
-    data, schema: dict, is_core: bool
-) -> typing.Tuple[typing.List[str], typing.Dict]:
+def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path=""):
@@ -178,6 +175,7 @@ class ConfigRoute(Route):
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
+            "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
         }
         self.register_routes()
 
@@ -601,6 +599,61 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
+    async def get_embedding_dim(self):
+        """获取嵌入模型的维度"""
+        post_data = await request.json
+        provider_config = post_data.get("provider_config", None)
+        if not provider_config:
+            return Response().error("缺少参数 provider_config").__dict__
+
+        try:
+            # 动态导入 EmbeddingProvider
+            from astrbot.core.provider.provider import EmbeddingProvider
+            from astrbot.core.provider.register import provider_cls_map
+
+            # 获取 provider 类型
+            provider_type = provider_config.get("type", None)
+            if not provider_type:
+                return Response().error("provider_config 缺少 type 字段").__dict__
+
+            # 获取对应的 provider 类
+            if provider_type not in provider_cls_map:
+                return (
+                    Response()
+                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .__dict__
+                )
+
+            provider_metadata = provider_cls_map[provider_type]
+            cls_type = provider_metadata.cls_type
+
+            if not cls_type:
+                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+
+            # 实例化 provider
+            inst = cls_type(provider_config, {})
+
+            # 检查是否是 EmbeddingProvider
+            if not isinstance(inst, EmbeddingProvider):
+                return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
+
+            # 初始化
+            if getattr(inst, "initialize", None):
+                await inst.initialize()
+
+            # 获取嵌入向量维度
+            vec = await inst.get_embedding("echo")
+            dim = len(vec)
+
+            logger.info(
+                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}"
+            )
+
+            return Response().ok({"embedding_dimensions": dim}).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取嵌入维度失败: {str(e)}").__dict__
+
     async def get_platform_list(self):
         """获取所有平台的列表"""
         platform_list = []
@@ -797,7 +850,7 @@ class ConfigRoute(Route):
             logger.warning(
                 f"Failed to import required modules for platform {platform.name}: {e}"
             )
-        except (OSError, IOError) as e:
+        except OSError as e:
             logger.warning(f"File system error for platform {platform.name} logo: {e}")
         except Exception as e:
             logger.warning(

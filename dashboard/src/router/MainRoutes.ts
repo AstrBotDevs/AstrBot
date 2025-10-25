@@ -66,6 +66,37 @@ const MainRoutes = {
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
     },
+    {
+      name: 'NativeKnowledgeBase',
+      path: '/knowledge-base',
+      component: () => import('@/views/knowledge-base/index.vue'),
+      children: [
+        {
+          path: '',
+          name: 'NativeKBList',
+          component: () => import('@/views/knowledge-base/KBList.vue')
+        },
+        {
+          path: ':kbId',
+          name: 'NativeKBDetail',
+          component: () => import('@/views/knowledge-base/KBDetail.vue'),
+          props: true
+        },
+        {
+          path: ':kbId/document/:docId',
+          name: 'NativeDocumentDetail',
+          component: () => import('@/views/knowledge-base/DocumentDetail.vue'),
+          props: true
+        }
+      ]
+    },
+
+    // 旧版本的知识库路由
+    {
+      name: 'KnowledgeBase',
+      path: '/alkaid/knowledge-base',
+      component: () => import('@/views/alkaid/KnowledgeBase.vue'),
+    },
     // {
     //   name: 'Alkaid',
     //   path: '/alkaid',
@@ -88,11 +119,6 @@ const MainRoutes = {
     //     }
     //   ]
     // },
-    {
-      name: 'KnowledgeBase',
-      path: '/alkaid/knowledge-base',
-      component: () => import('@/views/alkaid/KnowledgeBase.vue')
-    },
     {
       name: 'Chat',
       path: '/chat',

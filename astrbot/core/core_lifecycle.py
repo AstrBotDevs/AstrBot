@@ -17,7 +17,6 @@ import os
 from .event_bus import EventBus
 from . import astrbot_config, html_renderer
 from asyncio import Queue
-from typing import List
 from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
 from astrbot.core.star import PluginManager
 from astrbot.core.platform.manager import PlatformManager
@@ -36,6 +35,7 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.star.star_handler import star_handlers_registry, EventType
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
 class AstrBotCoreLifecycle:
@@ -122,6 +122,9 @@ class AstrBotCoreLifecycle:
         # 初始化平台消息历史管理器
         self.platform_message_history_manager = PlatformMessageHistoryManager(self.db)
 
+        # 初始化知识库管理器
+        self.kb_manager = KnowledgeBaseManager(self.provider_manager)
+
         # 初始化提供给插件的上下文
         self.star_context = Context(
             self.event_queue,
@@ -133,6 +136,7 @@ class AstrBotCoreLifecycle:
             self.platform_message_history_manager,
             self.persona_mgr,
             self.astrbot_config_mgr,
+            self.kb_manager,
         )
 
         # 初始化插件管理器
@@ -144,8 +148,9 @@ class AstrBotCoreLifecycle:
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()
 
-        # 初始化消息事件流水线调度器
+        await self.kb_manager.initialize()
 
+        # 初始化消息事件流水线调度器
         self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
 
         # 初始化更新器
@@ -160,7 +165,7 @@ class AstrBotCoreLifecycle:
         self.start_time = int(time.time())
 
         # 初始化当前任务列表
-        self.curr_tasks: List[asyncio.Task] = []
+        self.curr_tasks: list[asyncio.Task] = []
 
         # 根据配置实例化各个平台适配器
         await self.platform_manager.initialize()
@@ -245,6 +250,7 @@ class AstrBotCoreLifecycle:
 
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
+        await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
 
         # 再次遍历curr_tasks等待每个任务真正结束
@@ -260,12 +266,13 @@ class AstrBotCoreLifecycle:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
+        await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
             target=self.astrbot_updator._reboot, name="restart", daemon=True
         ).start()
 
-    def load_platform(self) -> List[asyncio.Task]:
+    def load_platform(self) -> list[asyncio.Task]:
         """加载平台实例并返回所有平台实例的异步任务列表"""
         tasks = []
         platform_insts = self.platform_manager.get_insts()

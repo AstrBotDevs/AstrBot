@@ -7,7 +7,7 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 
 import json
 from astrbot.core import sp
-from typing import Dict, List
+from typing import Dict, List, Callable, Awaitable
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 
@@ -19,6 +19,38 @@ class ConversationManager:
         self.session_conversations: Dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
+
+        # 会话删除回调函数列表（用于级联清理，如知识库配置）
+        self._on_session_deleted_callbacks: List[Callable[[str], Awaitable[None]]] = []
+
+    def register_on_session_deleted(
+        self, callback: Callable[[str], Awaitable[None]]
+    ) -> None:
+        """注册会话删除回调函数
+
+        其他模块可以注册回调来响应会话删除事件，实现级联清理。
+        例如：知识库模块可以注册回调来清理会话的知识库配置。
+
+        Args:
+            callback: 回调函数，接收会话ID (unified_msg_origin) 作为参数
+        """
+        self._on_session_deleted_callbacks.append(callback)
+
+    async def _trigger_session_deleted(self, unified_msg_origin: str) -> None:
+        """触发会话删除回调
+
+        Args:
+            unified_msg_origin: 会话ID
+        """
+        for callback in self._on_session_deleted_callbacks:
+            try:
+                await callback(unified_msg_origin)
+            except Exception as e:
+                from astrbot.core import logger
+
+                logger.error(
+                    f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}"
+                )
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
         """将 ConversationV2 对象转换为 Conversation 对象"""
@@ -105,6 +137,9 @@ class ConversationManager:
         await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
         self.session_conversations.pop(unified_msg_origin, None)
         await sp.session_remove(unified_msg_origin, "sel_conv_id")
+
+        # 触发会话删除回调（级联清理）
+        await self._trigger_session_deleted(unified_msg_origin)
 
     async def get_curr_conversation_id(self, unified_msg_origin: str) -> str | None:
         """获取会话当前的对话 ID

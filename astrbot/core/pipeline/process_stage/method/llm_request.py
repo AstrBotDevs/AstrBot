@@ -7,7 +7,7 @@ import copy
 import json
 import traceback
 from datetime import timedelta
-from typing import AsyncGenerator, Union
+from collections.abc import AsyncGenerator
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core import logger
 from astrbot.core.message.components import Image
@@ -33,6 +33,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
+from ..utils import inject_kb_context
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -367,7 +368,7 @@ class LLMRequestSubStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
@@ -418,6 +419,14 @@ class LLMRequestSubStage(Stage):
 
         if not req.prompt and not req.image_urls:
             return
+
+        # 应用知识库
+        try:
+            await inject_kb_context(
+                umo=event.unified_msg_origin, p_ctx=self.ctx, req=req
+            )
+        except Exception as e:
+            logger.error(f"调用知识库时遇到问题: {e}")
 
         # 执行请求 LLM 前事件钩子。
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):

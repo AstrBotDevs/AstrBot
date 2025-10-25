@@ -51,6 +51,10 @@ dependencies = [
     "wechatpy>=1.8.18",
     "audioop-lts ; python_full_version >= '3.13'",
     "click>=8.2.1",
+    "pypdf>=6.1.1",
+    "aiofiles>=25.1.0",
+    "rank-bm25>=0.2.2",
+    "jieba>=0.42.1",
 ]
 
 [project.scripts]

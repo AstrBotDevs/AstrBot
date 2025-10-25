@@ -134,8 +134,11 @@ DEFAULT_CONFIG = {
     "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # 默认知识库名称
+    "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
+    "kb_names": [],  # 默认知识库名称列表
+    "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
+    "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
 }
 
 
@@ -1414,6 +1417,7 @@ CONFIG_METADATA_2 = {
                         "description": "嵌入维度",
                         "type": "int",
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
+                        "_special": "get_embedding_dim",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
@@ -2061,6 +2065,9 @@ CONFIG_METADATA_2 = {
             "default_kb_collection": {
                 "type": "string",
             },
+            "kb_names": {"type": "list", "items": {"type": "string"}},
+            "kb_fusion_top_k": {"type": "int", "default": 20},
+            "kb_final_top_k": {"type": "int", "default": 5},
         },
     },
 }
@@ -2139,10 +2146,22 @@ CONFIG_METADATA_3 = {
                 "description": "知识库",
                 "type": "object",
                 "items": {
-                    "default_kb_collection": {
-                        "description": "默认使用的知识库",
-                        "type": "string",
+                    "kb_names": {
+                        "description": "知识库列表",
+                        "type": "list",
+                        "items": {"type": "string"},
                         "_special": "select_knowledgebase",
+                        "hint": "支持多选",
+                    },
+                    "kb_fusion_top_k": {
+                        "description": "融合检索结果数",
+                        "type": "int",
+                        "hint": "多个知识库检索结果融合后的返回结果数量",
+                    },
+                    "kb_final_top_k": {
+                        "description": "最终返回结果数",
+                        "type": "int",
+                        "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
                 },
             },

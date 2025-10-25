@@ -1,11 +1,12 @@
 import uuid
-import json
+import time
 import numpy as np
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
 from ..base import Result, BaseVecDB
 from astrbot.core.provider.provider import EmbeddingProvider
 from astrbot.core.provider.provider import RerankProvider
+from astrbot import logger
 
 
 class FaissVecDB(BaseVecDB):
@@ -44,18 +45,56 @@ class FaissVecDB(BaseVecDB):
 
         vector = await self.embedding_provider.get_embedding(content)
         vector = np.array(vector, dtype=np.float32)
-        async with self.document_storage.connection.cursor() as cursor:
-            await cursor.execute(
-                "INSERT INTO documents (doc_id, text, metadata) VALUES (?, ?, ?)",
-                (str_id, content, json.dumps(metadata)),
-            )
-            await self.document_storage.connection.commit()
-            result = await self.document_storage.get_document_by_doc_id(str_id)
-            int_id = result["id"]
 
-            # 插入向量到 FAISS
-            await self.embedding_storage.insert(vector, int_id)
-            return int_id
+        # 使用 DocumentStorage 的方法插入文档
+        int_id = await self.document_storage.insert_document(str_id, content, metadata)
+
+        # 插入向量到 FAISS
+        await self.embedding_storage.insert(vector, int_id)
+        return int_id
+
+    async def insert_batch(
+        self,
+        contents: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> list[int]:
+        """
+        批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+
+        Args:
+            progress_callback: 进度回调函数，接收参数 (current, total)
+        """
+        metadatas = metadatas or [{} for _ in contents]
+        ids = ids or [str(uuid.uuid4()) for _ in contents]
+
+        start = time.time()
+        logger.debug(f"Generating embeddings for {len(contents)} contents...")
+        vectors = await self.embedding_provider.get_embeddings_batch(
+            contents,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+        )
+        end = time.time()
+        logger.debug(
+            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds."
+        )
+
+        # 使用 DocumentStorage 的批量插入方法
+        int_ids = await self.document_storage.insert_documents_batch(
+            ids, contents, metadatas
+        )
+
+        # 批量插入向量到 FAISS
+        vectors_array = np.array(vectors).astype("float32")
+        await self.embedding_storage.insert_batch(vectors_array, int_ids)
+        return int_ids
 
     async def retrieve(
         self,
@@ -119,23 +158,42 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: int):
+    async def delete(self, doc_id: str):
         """
-        删除一条文档
+        删除一条文档块（chunk）
         """
-        await self.document_storage.connection.execute(
-            "DELETE FROM documents WHERE doc_id = ?", (doc_id,)
-        )
-        await self.document_storage.connection.commit()
+        # 获得对应的 int id
+        result = await self.document_storage.get_document_by_doc_id(doc_id)
+        int_id = result["id"] if result else None
+        if int_id is None:
+            return
+
+        # 使用 DocumentStorage 的删除方法
+        await self.document_storage.delete_document_by_doc_id(doc_id)
+        await self.embedding_storage.delete([int_id])
 
     async def close(self):
         await self.document_storage.close()
 
-    async def count_documents(self) -> int:
+    async def count_documents(self, metadata_filter: dict | None = None) -> int:
         """
         计算文档数量
+
+        Args:
+            metadata_filter (dict | None): 元数据过滤器
         """
-        async with self.document_storage.connection.cursor() as cursor:
-            await cursor.execute("SELECT COUNT(*) FROM documents")
-            count = await cursor.fetchone()
-            return count[0] if count else 0
+        count = await self.document_storage.count_documents(
+            metadata_filters=metadata_filter or {}
+        )
+        return count
+
+    async def delete_documents(self, metadata_filters: dict):
+        """
+        根据元数据过滤器删除文档
+        """
+        docs = await self.document_storage.get_documents(
+            metadata_filters=metadata_filters, offset=None, limit=None
+        )
+        doc_ids: list[int] = [doc["id"] for doc in docs]
+        await self.embedding_storage.delete(doc_ids)
+        await self.document_storage.delete_documents(metadata_filters=metadata_filters)

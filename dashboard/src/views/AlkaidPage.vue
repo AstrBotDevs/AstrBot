@@ -7,9 +7,9 @@
           <small style="color: #a3a3a3;">{{ tm('page.subtitle') }}</small>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
           <v-btn size="large" :variant="isActive('knowledge-base') ? 'flat' : 'tonal'"
-            :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg" 
+            :color="isActive('knowledge-base') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('knowledge-base')">
             <v-icon start>mdi-text-box-search</v-icon>
             {{ tm('page.navigation.knowledgeBase') }}
@@ -21,7 +21,7 @@
             {{ tm('page.navigation.longTermMemory') }}
           </v-btn>
           <v-btn size="large" :variant="isActive('other') ? 'flat' : 'tonal'"
-            :color="isActive('other') ? '#9b72cb' : ''" rounded="lg" 
+            :color="isActive('other') ? '#9b72cb' : ''" rounded="lg"
             @click="navigateTo('other')">
             <v-icon start>mdi-tools</v-icon>
             {{ tm('page.navigation.other') }}
