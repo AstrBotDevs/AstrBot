@@ -85,12 +85,12 @@ class KBHelper:
         return vec_db
 
     async def delete_vec_db(self):
+        """删除知识库的向量数据库和所有相关文件"""
+        import shutil
+
         await self.terminate()
         if self.kb_dir.exists():
-            for item in self.kb_dir.iterdir():
-                if item.is_file():
-                    item.unlink()
-            self.kb_dir.rmdir()
+            shutil.rmtree(self.kb_dir)
 
     async def terminate(self):
         if self.vec_db:

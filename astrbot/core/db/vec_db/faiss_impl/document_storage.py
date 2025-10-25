@@ -7,6 +7,7 @@ from sqlalchemy import Text, Column
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Field, SQLModel, select, col, func, text, MetaData
+from astrbot.core import logger
 
 
 class BaseDocModel(SQLModel, table=False):
@@ -113,7 +114,11 @@ class DocumentStorage:
         Returns:
             list: The list of documents that match the filters.
         """
-        assert self.engine is not None, "Database connection is not initialized."
+        if self.engine is None:
+            logger.warning(
+                "Database connection is not initialized, returning empty result"
+            )
+            return []
 
         async with self.get_session() as session:
             query = select(Document)
@@ -261,7 +266,11 @@ class DocumentStorage:
         Args:
             metadata_filters (dict): The metadata filters to apply.
         """
-        assert self.engine is not None, "Database connection is not initialized."
+        if self.engine is None:
+            logger.warning(
+                "Database connection is not initialized, skipping delete operation"
+            )
+            return
 
         async with self.get_session() as session:
             async with session.begin():
@@ -287,7 +296,9 @@ class DocumentStorage:
         Returns:
             int: The count of documents.
         """
-        assert self.engine is not None, "Database connection is not initialized."
+        if self.engine is None:
+            logger.warning("Database connection is not initialized, returning 0")
+            return 0
 
         async with self.get_session() as session:
             query = select(func.count(col(Document.id)))

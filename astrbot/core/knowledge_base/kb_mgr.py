@@ -277,3 +277,20 @@ class KnowledgeBaseManager:
             lines.append("")
 
         return "\n".join(lines)
+
+    async def terminate(self):
+        """终止所有知识库实例,关闭数据库连接"""
+        for kb_id, kb_helper in self.kb_insts.items():
+            try:
+                await kb_helper.terminate()
+            except Exception as e:
+                logger.error(f"关闭知识库 {kb_id} 失败: {e}")
+
+        self.kb_insts.clear()
+
+        # 关闭元数据数据库
+        if hasattr(self, "kb_db") and self.kb_db:
+            try:
+                await self.kb_db.close()
+            except Exception as e:
+                logger.error(f"关闭知识库元数据数据库失败: {e}")
