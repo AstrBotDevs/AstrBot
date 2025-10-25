@@ -8,7 +8,7 @@ from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.provider.manager import ProviderManager
-from .parsers.base import BaseParser
+from .parsers.util import select_parser
 from .chunking.base import BaseChunker
 from astrbot.core import logger
 
@@ -24,13 +24,11 @@ class KBHelper:
         provider_manager: ProviderManager,
         kb_root_dir: str,
         chunker: BaseChunker,
-        parsers: dict[str, BaseParser],
     ):
         self.kb_db = kb_db
         self.kb = kb
         self.prov_mgr = provider_manager
         self.kb_root_dir = kb_root_dir
-        self.parsers = parsers
         self.chunker = chunker
 
         self.kb_dir = Path(self.kb_root_dir) / self.kb.kb_id
@@ -138,9 +136,7 @@ class KBHelper:
             if progress_callback:
                 await progress_callback("parsing", 0, 100)
 
-            parser = self.parsers.get(file_type)
-            if not parser:
-                raise ValueError(f"不支持的文件类型: {file_type}")
+            parser = await select_parser(f".{file_type}")
             parse_result = await parser.parse(file_content, file_name)
             text_content = parse_result.text
             media_items = parse_result.media

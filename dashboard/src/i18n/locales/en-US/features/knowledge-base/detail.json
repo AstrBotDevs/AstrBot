@@ -45,7 +45,7 @@
     "title": "Upload Document",
     "selectFile": "Select File",
     "dropzone": "Drop files here or click to select",
-    "supportedFormats": "Supported formats: TXT, PDF, Markdown",
+    "supportedFormats": "Supported formats: ",
     "maxSize": "Max file size: 128MB",
     "chunkSettings": "Chunk Settings",
     "batchSettings": "Batch Settings",
