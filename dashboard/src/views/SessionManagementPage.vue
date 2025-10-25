@@ -367,7 +367,7 @@
                   <div v-if="availableKBs.length === 0" class="text-body-2 text-medium-emphasis">
                     {{ tm('knowledgeBase.noKBAvailable') || '暂无可用知识库' }}
                   </div>
-                  <div v-else>
+                  <div v-else class="kb-selector-list">
                     <v-checkbox
                       v-for="kb in availableKBs"
                       :key="kb.kb_id"
@@ -1260,6 +1260,38 @@ export default {
 .v-data-table :deep(.v-data-table__td) {
   padding: 8px 16px !important;
   vertical-align: middle !important;
+}
+
+/* 知识库选择列表滚动条样式 */
+.kb-selector-list {
+  max-height: 150px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* 自定义滚动条样式 - Webkit浏览器 */
+.kb-selector-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.kb-selector-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.kb-selector-list::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.kb-selector-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Firefox滚动条样式 */
+.kb-selector-list {
+  scrollbar-width: thin;
+  scrollbar-color: #888 #f1f1f1;
 }
 
 </style>
