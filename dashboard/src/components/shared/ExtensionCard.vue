@@ -168,7 +168,7 @@ const viewReadme = () => {
             {{ extension.author }} / {{ extension.name }}
           </div>
           <p class="text-h3 font-weight-black extension-title" :class="{ 'text-h4': $vuetify.display.xs }">
-            <span class="extension-title__text">{{ extension.display_name || extension.name }}</span>
+            <span class="extension-title__text">{{ extension.display_name?.length ? extension.display_name : extension.name }}</span>
             <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
               <template v-slot:activator="{ props: tooltipProps }">
                 <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
