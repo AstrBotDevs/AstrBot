@@ -56,6 +56,12 @@ class StarMetadata:
     star_handler_full_names: list[str] = field(default_factory=list)
     """注册的 Handler 的全名列表"""
 
+    display_name: str | None = None
+    """用于展示的插件名称"""
+
+    logo_path: str | None = None
+    """插件 Logo 的路径"""
+
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 

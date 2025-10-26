@@ -42,7 +42,7 @@ const PurpleTheme: ThemeTypes = {
     preBg: 'rgb(249, 249, 249)',
     code: 'rgb(13, 13, 13)',
     chatMessageBubble: '#e7ebf4',
-    mcpCardBg: '#f7f2f9',
+    mcpCardBg: '#ecf2faff',
   }
 };
 

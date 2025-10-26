@@ -8,7 +8,7 @@ import ssl
 import certifi
 
 from .route import Route, Response, RouteContext
-from astrbot.core import logger
+from astrbot.core import logger, file_token_service
 from quart import request
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -53,6 +53,8 @@ class PluginRoute(Route):
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
         }
+
+        self._logo_cache = {}
 
     async def reload_plugins(self):
         if DEMO_MODE:
@@ -147,7 +149,7 @@ class PluginRoute(Route):
                 return False
 
             # 加载缓存文件
-            with open(cache_file, "r", encoding="utf-8") as f:
+            with open(cache_file, encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             cached_md5 = cache_data.get("md5")
@@ -197,7 +199,7 @@ class PluginRoute(Route):
         """加载本地缓存的插件市场数据"""
         try:
             if os.path.exists(cache_file):
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, encoding="utf-8") as f:
                     cache_data = json.load(f)
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
@@ -209,7 +211,7 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str = None):
+    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -227,12 +229,27 @@ class PluginRoute(Route):
         except Exception as e:
             logger.warning(f"保存插件市场缓存失败: {e}")
 
+    async def get_plugin_logo_token(self, logo_path: str):
+        try:
+            if token := self._logo_cache.get(logo_path):
+                if not await file_token_service.check_token_expired(token):
+                    return self._logo_cache[logo_path]
+            token = await file_token_service.register_file(logo_path, timeout=300)
+            self._logo_cache[logo_path] = token
+            return token
+        except Exception as e:
+            logger.warning(f"获取插件 Logo 失败: {e}")
+            return None
+
     async def get_plugins(self):
         _plugin_resp = []
         plugin_name = request.args.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
             if plugin_name and plugin.name != plugin_name:
                 continue
+            logo_url = None
+            if plugin.logo_path:
+                logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
                 "repo": "" if plugin.repo is None else plugin.repo,
@@ -245,6 +262,8 @@ class PluginRoute(Route):
                 "handlers": await self.get_plugin_handlers_info(
                     plugin.star_handler_full_names
                 ),
+                "display_name": plugin.display_name,
+                "logo": f"/api/file/{logo_url}" if logo_url else None,
             }
             _plugin_resp.append(_t)
         return (
@@ -469,7 +488,7 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, "r", encoding="utf-8") as f:
+            with open(readme_path, encoding="utf-8") as f:
                 readme_content = f.read()
 
             return (

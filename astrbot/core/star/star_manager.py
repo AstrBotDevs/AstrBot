@@ -57,6 +57,7 @@ class PluginManager:
         )
         """保留插件的路径。在 packages 目录下"""
         self.conf_schema_fname = "_conf_schema.json"
+        self.logo_fname = "logo.png"
         """插件配置 Schema 文件名"""
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
@@ -200,7 +201,7 @@ class PluginManager:
 
         if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
             with open(
-                os.path.join(plugin_path, "metadata.yaml"), "r", encoding="utf-8"
+                os.path.join(plugin_path, "metadata.yaml"), encoding="utf-8"
             ) as f:
                 metadata = yaml.safe_load(f)
         elif plugin_obj and hasattr(plugin_obj, "info"):
@@ -226,6 +227,7 @@ class PluginManager:
                 desc=metadata["desc"],
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
+                display_name=metadata.get("display_name", None),
             )
 
         return metadata
@@ -407,13 +409,14 @@ class PluginManager:
                 )
                 if os.path.exists(plugin_schema_path):
                     # 加载插件配置
-                    with open(plugin_schema_path, "r", encoding="utf-8") as f:
+                    with open(plugin_schema_path, encoding="utf-8") as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
                                 self.plugin_config_path, f"{root_dir_name}_config.json"
                             ),
                             schema=json.loads(f.read()),
                         )
+                logo_path = os.path.join(plugin_dir_path, self.logo_fname)
 
                 if path in star_map:
                     # 通过 __init__subclass__ 注册插件
@@ -430,6 +433,7 @@ class PluginManager:
                             metadata.desc = metadata_yaml.desc
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
+                            metadata.display_name = metadata_yaml.display_name
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {str(e)}。使用默认元数据。"
@@ -540,9 +544,11 @@ class PluginManager:
                 if metadata.module_path in inactivated_plugins:
                     metadata.activated = False
 
-                assert metadata.module_path is not None, (
-                    f"插件 {metadata.name} 的模块路径为空。"
-                )
+                # Plugin logo path
+                if os.path.exists(logo_path):
+                    metadata.logo_path = logo_path
+
+                assert metadata.module_path, f"插件 {metadata.name} 模块路径为空"
 
                 full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(
@@ -642,7 +648,7 @@ class PluginManager:
 
             if os.path.exists(readme_path):
                 try:
-                    with open(readme_path, "r", encoding="utf-8") as f:
+                    with open(readme_path, encoding="utf-8") as f:
                         readme_content = f.read()
                 except Exception as e:
                     logger.warning(
@@ -857,7 +863,7 @@ class PluginManager:
 
         if os.path.exists(readme_path):
             try:
-                with open(readme_path, "r", encoding="utf-8") as f:
+                with open(readme_path, encoding="utf-8") as f:
                     readme_content = f.read()
             except Exception as e:
                 logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")

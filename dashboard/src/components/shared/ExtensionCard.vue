@@ -84,20 +84,17 @@ const viewReadme = () => {
 </script>
 
 <template>
-  <v-card class="mx-auto d-flex flex-column" elevation="2" :style="{
+  <v-card class="mx-auto d-flex flex-column" elevation="0" :style="{
     position: 'relative',
     backgroundColor: useCustomizerStore().uiTheme === 'PurpleTheme' ? marketMode ? '#f8f0dd' : '#ffffff' : '#282833',
     color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'
   }">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; gap: 16px; width: 100%;">
-
-      <div v-if="extension?.icon">
-        <v-avatar size="65">
-          <v-img :src="extension.icon" :alt="extension.name" cover></v-img>
-        </v-avatar>
+      <div v-if="extension?.logo">
+        <img :src="extension.logo" :alt="extension.name" cover width="100"/>
       </div>
 
-      <div style="width: 100%;">
+      <div style="overflow-x: auto;">
         <!-- Top-right three-dot menu -->
         <div style="position: absolute; right: 8px; top: 8px; z-index: 5;">
           <v-menu offset-y>
@@ -170,8 +167,8 @@ const viewReadme = () => {
             style="color: gray; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 84px;">
             {{ extension.author }} / {{ extension.name }}
           </div>
-          <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
-            {{ extension.name }}
+          <p class="text-h3 font-weight-black extension-title" :class="{ 'text-h4': $vuetify.display.xs }">
+            <span class="extension-title__text">{{ extension.display_name?.length ? extension.display_name : extension.name }}</span>
             <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
               <template v-slot:activator="{ props: tooltipProps }">
                 <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
@@ -195,7 +192,7 @@ const viewReadme = () => {
               <v-icon icon="mdi-arrow-up-bold" start></v-icon>
               {{ extension.online_version }}
             </v-chip>
-            <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length">
+            <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length" @click="viewHandlers" style="cursor: pointer;">
               <v-icon icon="mdi-cogs" start></v-icon>
               {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
             </v-chip>
@@ -205,7 +202,7 @@ const viewReadme = () => {
             </v-chip>
           </div>
 
-          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 60px;">
+          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 80px; font-size: 90%;">
             {{ extension.desc }}
           </div>
         </div>
@@ -221,6 +218,19 @@ const viewReadme = () => {
   display: flex;
   align-items: center;
   margin-left: 12px;
+}
+
+.extension-title {
+  display: flex;
+  align-items: center;
+}
+
+.extension-title__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-top: 6px
 }
 
 @media (max-width: 600px) {
