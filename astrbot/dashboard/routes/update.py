@@ -73,7 +73,7 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        "dashboard_has_new_version": dv and dv != f"v{VERSION}",
+                        "dashboard_has_new_version": bool(dv and dv != f"v{VERSION}"),
                     },
                 ).__dict__
         except Exception as e:
