@@ -2,7 +2,7 @@
   <v-dialog v-model="showDialog" max-width="800px" height="90%" @after-enter="prepareData">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
-      <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
+  <v-card-text ref="dialogScrollContainer" class="pa-4 ml-2" style="overflow-y: auto;">
         <div class="d-flex align-start" style="width: 100%;">
           <div>
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
@@ -74,7 +74,7 @@
                 <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
               </div>
               <div>
-                <v-btn variant="plain" icon @click="showConfigSection = !showConfigSection" class="mt-2">
+                <v-btn variant="plain" icon @click="toggleConfigSection" class="mt-2">
                   <v-icon>{{ showConfigSection ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                 </v-btn>
               </div>
@@ -490,6 +490,11 @@ export default {
     showConfigSection(newValue) {
       if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
         this.getConfigForPreview(this.selectedAbConfId);
+      }
+      if (newValue) {
+        this.$nextTick(() => {
+          this.scrollDialogToBottom();
+        });
       }
     },
     // 监听编辑模式变化，自动展开配置文件部分
@@ -923,6 +928,9 @@ export default {
     toggleEditMode() {
       this.isEditingRoutes = !this.isEditingRoutes;
     },
+    toggleConfigSection() {
+      this.showConfigSection = !this.showConfigSection;
+    },
 
     // 根据配置文件ID获取名称
     getConfigName(configId) {
@@ -959,6 +967,19 @@ export default {
       this.getConfigForPreview(this.selectedAbConfId);
       if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
         this.getPlatformConfigs(this.updatingPlatformConfig.id);
+      }
+    },
+    scrollDialogToBottom() {
+      const containerRef = this.$refs.dialogScrollContainer;
+      const el = containerRef?.$el || containerRef;
+      if (!el) {
+        return;
+      }
+      const scrollOptions = { top: el.scrollHeight, behavior: 'smooth' };
+      if (typeof el.scrollTo === 'function') {
+        el.scrollTo(scrollOptions);
+      } else {
+        el.scrollTop = el.scrollHeight;
       }
     }
 
