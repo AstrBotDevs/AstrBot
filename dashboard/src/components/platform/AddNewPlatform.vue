@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="800px" height="90%">
+  <v-dialog v-model="showDialog" max-width="800px" height="90%" @after-enter="prepareData">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
       <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
@@ -145,32 +145,38 @@
                       添加路由规则
                     </v-btn>
                   </div>
-                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small" @click="toggleEditMode">
+                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small"
+                    @click="toggleEditMode">
                     <v-icon start>{{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
                     {{ isEditingRoutes ? '查看' : '编辑' }}
                   </v-btn>
                 </div>
 
                 <v-data-table :headers="routeTableHeaders" :items="platformRoutes" item-value="umop"
-                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
-                  
+                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2"
+                  variant="outlined">
+
                   <template v-slot:item.source="{ item }">
                     <div class="d-flex align-center" style="min-width: 250px;">
-                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions" item-title="label" item-value="value"
-                        variant="outlined" density="compact" hide-details style="max-width: 120px;" class="mr-2">
+                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions"
+                        item-title="label" item-value="value" variant="outlined" density="compact" hide-details
+                        style="max-width: 120px;" class="mr-2">
                       </v-select>
                       <span v-else class="mr-2">{{ getMessageTypeLabel(item.messageType) }}</span>
                       <span class="mx-1">:</span>
-                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact" hide-details
-                        placeholder="会话ID或*" style="max-width: 120px;">
+                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact"
+                        hide-details placeholder="会话ID或*" style="max-width: 120px;">
                       </v-text-field>
                       <span v-else>{{ item.sessionId === '*' ? '全部会话' : item.sessionId }}</span>
                     </div>
                   </template>
 
                   <template v-slot:item.configId="{ item }">
-                    <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList" item-title="name" item-value="id"
-                      variant="outlined" density="compact" hide-details style="min-width: 200px;">
+                    <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList" item-title="name"
+                      item-value="id" variant="outlined" density="compact" style="min-width: 200px;"
+                      :hide-details="configInfoList.findIndex(c => c.id === item.configId) !== -1"
+                      :error="configInfoList.findIndex(c => c.id === item.configId) === -1"
+                      :error-messages="configInfoList.findIndex(c => c.id === item.configId) === -1 ? '配置文件不存在' : ''">
                     </v-select>
                     <span v-else>{{ getConfigName(item.configId) }}</span>
                   </template>
@@ -180,7 +186,8 @@
                       <v-btn icon size="x-small" variant="text" @click="moveRouteUp(index)" :disabled="index === 0">
                         <v-icon>mdi-arrow-up</v-icon>
                       </v-btn>
-                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)" :disabled="index === platformRoutes.length - 1">
+                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)"
+                        :disabled="index === platformRoutes.length - 1">
                         <v-icon>mdi-arrow-down</v-icon>
                       </v-btn>
                       <v-btn icon size="x-small" variant="text" color="error" @click="deleteRoute(index)">
@@ -191,7 +198,8 @@
                   </template>
 
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。</small>
+                <small class="ml-2 mt-2 d-block">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话
+                  ID。全部不匹配时将使用默认配置文件。</small>
               </div>
             </div>
 
@@ -674,7 +682,7 @@ export default {
 
         const newConfigId = createRes.data.data.conf_id;
         console.log(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
-        
+
         return newConfigId;
       } catch (err) {
         console.error('创建新配置文件失败:', err);
@@ -754,7 +762,7 @@ export default {
         }
 
         this.platformRoutes = routes;
-        
+
         // 如果没有路由，添加一个默认的空路由供用户编辑
         if (this.platformRoutes.length === 0) {
           this.platformRoutes.push({
@@ -833,7 +841,7 @@ export default {
           const messageType = route.messageType === '*' ? '*' : route.messageType;
           const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
           const newUmop = `${platformId}:${messageType}:${sessionId}`;
-          
+
           if (route.configId) {
             fullRoutingTable[newUmop] = route.configId;
           }
@@ -882,16 +890,17 @@ export default {
     toggleShowConfigSection() {
       this.showConfigSection = false;
       this.showConfigSection = true;
+    },
+
+    prepareData() {
+      this.getConfigInfoList();
+      this.getConfigForPreview(this.selectedAbConfId);
+      if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
+        this.getPlatformConfigs(this.updatingPlatformConfig.id);
+      }
     }
 
   },
-  mounted() {
-    this.getConfigInfoList();
-    this.getConfigForPreview(this.selectedAbConfId);
-    if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
-      this.getPlatformConfigs(this.updatingPlatformConfig.id);
-    }
-  }
 }
 </script>
 
