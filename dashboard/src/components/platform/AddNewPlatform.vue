@@ -110,7 +110,7 @@
                 </v-radio-group>
 
                 <!-- 现有配置文件预览区域 -->
-                <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
+                <!-- <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
                   <div v-if="configPreviewLoading" class="d-flex justify-center py-4">
                     <v-progress-circular indeterminate color="primary"></v-progress-circular>
                   </div>
@@ -123,8 +123,7 @@
                     <v-icon>mdi-information-outline</v-icon>
                     <p class="mt-2">无法加载配置文件预览</p>
                   </div>
-                </div>
-
+                </div> -->
 
                 <!-- 新配置文件编辑区域 -->
                 <div v-if="aBConfigRadioVal === '1'" class="mt-4">
