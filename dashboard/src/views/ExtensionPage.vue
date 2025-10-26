@@ -543,9 +543,9 @@ onMounted(async () => {
 <template>
   <v-row>
     <v-col cols="12" md="12">
-      <v-card variant="flat" style="background-color: transparent;">
+      <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
-        <v-card-text>
+        <v-card-text style="padding: 0px 12px;">
           <!-- 标签栏和搜索栏 - 响应式布局 -->
           <div class="mb-4 d-flex flex-wrap">
             <!-- 标签栏 -->
