@@ -212,7 +212,7 @@
                   </template>
 
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话
+                <small class="ml-2 mt-2 d-block" style="color: grey">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话
                   ID。全部不匹配时将使用默认配置文件。</small>
               </div>
             </div>
