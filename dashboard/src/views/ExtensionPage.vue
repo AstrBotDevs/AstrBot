@@ -210,7 +210,6 @@ const checkUpdate = () => {
     } else {
       extension.has_update = false;
     }
-    extension.logo = matchedPlugin?.logo;
   });
 };
 
@@ -647,7 +646,7 @@ onMounted(async () => {
                           <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
                           <div v-if="item.reserved" class="d-flex align-center mt-1">
                             <v-chip color="primary" size="x-small" class="font-weight-medium">{{ tm('status.system')
-                            }}</v-chip>
+                              }}</v-chip>
                           </div>
                         </div>
                       </div>
@@ -807,13 +806,16 @@ onMounted(async () => {
                       <img v-if="item.logo" :src="item.logo"
                         style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                         alt="logo">
-                      <span v-if="item?.repo"><a :href="item?.repo"
-                          style="color: var(--v-theme-primaryText, #000); text-decoration:none">{{
-                            showPluginFullName ? item.name : item.trimmedName }}</a></span>
-                      <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
+                      <a :href="item?.repo" style="color: var(--v-theme-primaryText, #000); 
+                          text-decoration:none">
+                          <div v-if="item.display_name">
+                            <span class="d-block">{{ item.display_name }}</span>
+                            <small style="color: grey; font-size: 60%;">({{ item.name }})</small>
+                          </div>
+                          <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
+                      </a>
                     </div>
                   </template>
-
                   <template v-slot:item.desc="{ item }">
                     <small>
                       {{ item.desc }}
@@ -863,7 +865,7 @@ onMounted(async () => {
     <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
       <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo')
-          }}</a></small>
+      }}</a></small>
     </v-col>
   </v-row>
 
@@ -944,7 +946,7 @@ onMounted(async () => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="blue-darken-1" variant="text" @click="showPluginInfoDialog = false">{{ tm('buttons.close')
-        }}</v-btn>
+          }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

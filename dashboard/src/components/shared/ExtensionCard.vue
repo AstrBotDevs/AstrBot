@@ -90,10 +90,9 @@ const viewReadme = () => {
     color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'
   }">
     <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; gap: 16px; width: 100%;">
-
-      <div v-if="extension?.icon">
+      <div v-if="extension?.logo">
         <v-avatar size="65">
-          <v-img :src="extension.icon" :alt="extension.name" cover></v-img>
+          <v-img :src="extension.logo" :alt="extension.name" cover></v-img>
         </v-avatar>
       </div>
 
@@ -171,7 +170,7 @@ const viewReadme = () => {
             {{ extension.author }} / {{ extension.name }}
           </div>
           <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">
-            {{ extension.name }}
+            {{ extension.display_name || extension.name }}
             <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
               <template v-slot:activator="{ props: tooltipProps }">
                 <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
