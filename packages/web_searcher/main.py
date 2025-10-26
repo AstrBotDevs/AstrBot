@@ -10,7 +10,6 @@ from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from .engines import SearchResult
 from .engines.bing import Bing
 from .engines.sogo import Sogo
-from .engines.google import Google
 from readability import Document
 from bs4 import BeautifulSoup
 from .engines import HEADERS, USER_AGENTS
@@ -46,12 +45,6 @@ class Main(star.Star):
 
         self.bing_search = Bing()
         self.sogo_search = Sogo()
-        self.google = None
-        try:
-            self.google = Google()
-        except Exception as e:
-            logger.error(f"google search init error: {e}, disable google search")
-
         self.baidu_initialized = False
 
     async def _tidy_text(self, text: str) -> str:
@@ -95,17 +88,10 @@ class Main(star.Star):
         self, query, num_results: int = 5
     ) -> list[SearchResult]:
         results = []
-        if self.google:
-            try:
-                results = await self.google.search(query, num_results)
-            except Exception as e:
-                logger.error(f"google search error: {e}, try the next one...")
-        if len(results) == 0:
-            logger.debug("search google failed")
-            try:
-                results = await self.bing_search.search(query, num_results)
-            except Exception as e:
-                logger.error(f"bing search error: {e}, try the next one...")
+        try:
+            results = await self.bing_search.search(query, num_results)
+        except Exception as e:
+            logger.error(f"bing search error: {e}, try the next one...")
         if len(results) == 0:
             logger.debug("search bing failed")
             try:
