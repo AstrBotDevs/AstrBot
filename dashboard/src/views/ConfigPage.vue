@@ -8,7 +8,7 @@
       <div class="d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
         <div class="d-flex flex-row align-center" style="gap: 12px;">
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name"
+          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" label="选择配置文件" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
@@ -27,24 +27,26 @@
         </v-btn-toggle>
       </div>
 
-      <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear>
+      <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
-      <div v-if="(selectedConfigID || isSystemConfig) && fetched" style="width: 100%;">
-        <!-- 可视化编辑 -->
-        <AstrBotCoreConfigWrapper 
-          :metadata="metadata" 
-          :config_data="config_data"
-        />
+      <v-slide-y-transition mode="out-in">
+        <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
+          <!-- 可视化编辑 -->
+          <AstrBotCoreConfigWrapper 
+            :metadata="metadata" 
+            :config_data="config_data"
+          />
 
-        <v-btn icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
-          color="darkprimary" @click="updateConfig">
-        </v-btn>
+          <v-btn icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+            color="darkprimary" @click="updateConfig">
+          </v-btn>
 
-        <v-btn icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
-          @click="configToString(); codeEditorDialog = true">
-        </v-btn>
+          <v-btn icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+            @click="configToString(); codeEditorDialog = true">
+          </v-btn>
 
-      </div>
+        </div>
+      </v-slide-y-transition>
 
     </div>
   </div>
@@ -150,6 +152,12 @@ export default {
     VueMonacoEditor,
     WaitingForRestart
   },
+  props: {
+    initialConfigId: {
+      type: String,
+      default: null
+    }
+  },
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/config');
@@ -187,8 +195,16 @@ export default {
     },
   },
   watch: {
-    config_data_str: function (val) {
+    config_data_str(val) {
       this.config_data_has_changed = true;
+    },
+    initialConfigId(newVal) {
+      if (!newVal) {
+        return;
+      }
+      if (this.selectedConfigID !== newVal) {
+        this.getConfigInfoList(newVal);
+      }
     }
   },
   data() {
@@ -207,6 +223,7 @@ export default {
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
+  configContentKey: 0,
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
@@ -224,7 +241,8 @@ export default {
     }
   },
   mounted() {
-    this.getConfigInfoList("default");
+    const targetConfigId = this.initialConfigId || 'default';
+    this.getConfigInfoList(targetConfigId);
     // 初始化配置类型状态
     this.configType = this.isSystemConfig ? 'system' : 'normal';
   },
@@ -235,12 +253,20 @@ export default {
         this.configInfoList = res.data.data.info_list;
 
         if (abconf_id) {
+          let matched = false;
           for (let i = 0; i < this.configInfoList.length; i++) {
             if (this.configInfoList[i].id === abconf_id) {
-              this.selectedConfigID = this.configInfoList[i].id
+              this.selectedConfigID = this.configInfoList[i].id;
               this.getConfig(abconf_id);
+              matched = true;
               break;
             }
+          }
+
+          if (!matched && this.configInfoList.length) {
+            // 当找不到目标配置时，默认展示列表中的第一个配置
+            this.selectedConfigID = this.configInfoList[0].id;
+            this.getConfig(this.selectedConfigID);
           }
         }
       }).catch((err) => {
@@ -265,6 +291,7 @@ export default {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
+        this.configContentKey += 1;
       }).catch((err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
