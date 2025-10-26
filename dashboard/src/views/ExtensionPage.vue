@@ -543,7 +543,7 @@ onMounted(async () => {
 <template>
   <v-row>
     <v-col cols="12" md="12">
-      <v-card variant="flat">
+      <v-card variant="flat" style="background-color: transparent;">
         <!-- 标签页 -->
         <v-card-text>
           <!-- 标签栏和搜索栏 - 响应式布局 -->
@@ -750,7 +750,7 @@ onMounted(async () => {
                 <v-row>
                   <v-col cols="12" md="6" lg="6" v-for="extension in filteredPlugins" :key="extension.name"
                     class="pb-4">
-                    <ExtensionCard :extension="extension" class="rounded-lg"
+                    <ExtensionCard :extension="extension" class="rounded-lg" style="background-color: rgb(var(--v-theme-mcpCardBg));"
                       @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
                       @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
                       @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
@@ -797,7 +797,7 @@ onMounted(async () => {
               </div>
 
               <v-col cols="12" md="12" style="padding: 0px;">
-                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
+                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" style="border-radius: 10px;"
                   :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys"
                   :custom-filter="marketCustomFilter">
                   <template v-slot:item.name="{ item }">
