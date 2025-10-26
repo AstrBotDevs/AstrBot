@@ -93,8 +93,7 @@ const viewReadme = () => {
 
       <div v-if="extension?.icon">
         <v-avatar size="65">
-          <v-img :src="extension.icon"
-            :alt="extension.name" cover></v-img>
+          <v-img :src="extension.icon" :alt="extension.name" cover></v-img>
         </v-avatar>
       </div>
 
@@ -103,6 +102,10 @@ const viewReadme = () => {
         <div style="position: absolute; right: 8px; top: 8px; z-index: 5;">
           <v-menu offset-y>
             <template v-slot:activator="{ props: menuProps }">
+              <v-btn icon variant="text" aria-label="more" v-if="extension?.repo" :href="extension?.repo"
+                target="_blank">
+                <v-icon icon="mdi-github"></v-icon>
+              </v-btn>
               <v-btn v-bind="menuProps" icon variant="text" aria-label="more">
                 <v-icon icon="mdi-dots-vertical"></v-icon>
               </v-btn>
@@ -148,7 +151,7 @@ const viewReadme = () => {
 
                 <v-list-item @click="viewHandlers">
                   <v-list-item-title>{{ tm('card.actions.viewHandlers') }} ({{ extension.handlers.length
-                    }})</v-list-item-title>
+                  }})</v-list-item-title>
                 </v-list-item>
 
                 <v-list-item @click="updateExtension" :disabled="!extension?.has_update">
@@ -163,7 +166,8 @@ const viewReadme = () => {
 
         <div style="width: 100%; margin-bottom: 24px;">
           <!-- 最多一行 -->
-          <div class="text-caption" style="color: gray; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 36px;">
+          <div class="text-caption"
+            style="color: gray; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 84px;">
             {{ extension.author }} / {{ extension.name }}
           </div>
           <p class="text-h3 font-weight-black" :class="{ 'text-h4': $vuetify.display.xs }">

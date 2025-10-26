@@ -647,7 +647,7 @@ onMounted(async () => {
                           <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
                           <div v-if="item.reserved" class="d-flex align-center mt-1">
                             <v-chip color="primary" size="x-small" class="font-weight-medium">{{ tm('status.system')
-                              }}</v-chip>
+                            }}</v-chip>
                           </div>
                         </div>
                       </div>
@@ -799,7 +799,8 @@ onMounted(async () => {
 
               <v-col cols="12" md="12" style="padding: 0px;">
                 <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
-                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys" :custom-filter="marketCustomFilter">
+                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys"
+                  :custom-filter="marketCustomFilter">
                   <template v-slot:item.name="{ item }">
                     <div class="d-flex align-center"
                       style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
@@ -814,9 +815,9 @@ onMounted(async () => {
                   </template>
 
                   <template v-slot:item.desc="{ item }">
-                    <div style="font-size: 13px;">
+                    <small>
                       {{ item.desc }}
-                    </div>
+                    </small>
                   </template>
                   <template v-slot:item.author="{ item }">
                     <div style="font-size: 12px;">
@@ -828,7 +829,7 @@ onMounted(async () => {
                     <span>{{ item.stars }}</span>
                   </template>
                   <template v-slot:item.updated_at="{ item }">
-                    <span>{{ new Date(item.updated_at).toLocaleString() }}</span>
+                    <small>{{ new Date(item.updated_at).toLocaleString() }}</small>
                   </template>
                   <template v-slot:item.tags="{ item }">
                     <span v-if="item.tags.length === 0">-</span>
@@ -837,13 +838,13 @@ onMounted(async () => {
                       {{ tag }}</v-chip>
                   </template>
                   <template v-slot:item.actions="{ item }">
-                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
+                    <v-btn class="text-none mr-2" size="x-small" icon variant="text"
+                      @click="open(item.repo)"><v-icon>mdi-github</v-icon></v-btn>
+                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" icon variant="text"
                       @click="handleInstallPlugin(item)">
                       <v-icon>mdi-download</v-icon></v-btn>
-                    <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
+                    <v-btn v-else class="text-none mr-2" size="x-small" icon variant="text"
                       disabled><v-icon>mdi-check</v-icon></v-btn>
-                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border
-                      @click="open(item.repo)"><v-icon>mdi-help</v-icon></v-btn>
                   </template>
                 </v-data-table>
               </v-col>
@@ -861,7 +862,8 @@ onMounted(async () => {
 
     <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
-      <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo') }}</a></small>
+      <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo')
+          }}</a></small>
     </v-col>
   </v-row>
 
@@ -942,7 +944,7 @@ onMounted(async () => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="blue-darken-1" variant="text" @click="showPluginInfoDialog = false">{{ tm('buttons.close')
-          }}</v-btn>
+        }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
