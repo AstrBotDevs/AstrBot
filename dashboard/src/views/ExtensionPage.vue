@@ -861,7 +861,7 @@ onMounted(async () => {
 
     <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
-      <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">{{ tm('market.submitRepo') }}</a></small>
+      <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo') }}</a></small>
     </v-col>
   </v-row>
 

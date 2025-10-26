@@ -10,16 +10,16 @@ _✨ Easy-to-use Multi-platform LLM Chatbot & Development Framework ✨_
 
 <a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot)](https://github.com/Soulter/AstrBot/releases/latest)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/AstrBotDevs/AstrBot)](https://github.com/AstrBotDevs/AstrBot/releases/latest)
 <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
-<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg"/></a>
+<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot"/></a>
 <a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="Static Badge" src="https://img.shields.io/badge/QQ群-630166526-purple"></a>
 [![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
 ![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B6%88%E6%81%AF%E4%B8%8A%E8%A1%8C%E9%87%8F&cacheSeconds=3600)
-[![codecov](https://codecov.io/gh/Soulter/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/Soulter/AstrBot)
+[![codecov](https://codecov.io/gh/AstrBotDevs/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/AstrBotDevs/AstrBot)
 
 <a href="https://astrbot.app/">Documentation</a> ｜
-<a href="https://github.com/Soulter/AstrBot/issues">Issue Tracking</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracking</a>
 </div>
 
 AstrBot is a loosely coupled, asynchronous chatbot and development framework that supports multi-platform deployment, featuring an easy-to-use plugin system and comprehensive Large Language Model (LLM) integration capabilities.
@@ -49,7 +49,7 @@ Requires Python (>3.10). See docs: [Windows Installer Guide](https://astrbot.app
 
 #### Replit Deployment
 
-[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 #### CasaOS Deployment
 
@@ -67,8 +67,8 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | QQ (Official Bot)                                              | ✔      | Private/Group chats | Text, Images        |
 | QQ (OneBot)                                                    | ✔      | Private/Group chats | Text, Images, Voice |
 | WeChat (Personal)                                              | ✔      | Private/Group chats | Text, Images, Voice |
-| [Telegram](https://github.com/Soulter/astrbot_plugin_telegram) | ✔      | Private/Group chats | Text, Images        |
-| [WeChat Work](https://github.com/Soulter/astrbot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
+| [Telegram](https://github.com/AstrBotDevs/AstrBot_plugin_telegram) | ✔      | Private/Group chats | Text, Images        |
+| [WeChat Work](https://github.com/AstrBotDevs/AstrBot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
 | Feishu                                                         | ✔      | Group chats         | Text, Images        |
 | WeChat Open Platform                                           | 🚧      | Planned             | -                   |
 | Discord                                                        | 🚧      | Planned             | -                   |
@@ -157,7 +157,7 @@ _✨ Built-in Web Chat Interface ✨_
 
 <div align="center">
     
-[![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=AstrBotDevs/AstrBot&type=Date)](https://star-history.com/#AstrBotDevs/AstrBot&Date)
 
 </div>
 
@@ -169,7 +169,7 @@ _✨ Built-in Web Chat Interface ✨_
 
 <!-- ## ✨ ATRI [Beta]
 
-Available as plugin: [astrbot_plugin_atri](https://github.com/Soulter/astrbot_plugin_atri)
+Available as plugin: [astrbot_plugin_atri](https://github.com/AstrBotDevs/AstrBot_plugin_atri)
 
 1. Qwen1.5-7B-Chat Lora model fine-tuned with ATRI character data
 2. Long-term memory
