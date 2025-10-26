@@ -213,7 +213,7 @@ async def get_dashboard_version():
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")
         if os.path.exists(version_file):
-            with open(version_file) as f:
+            with open(version_file, encoding="utf-8") as f:
                 v = f.read().strip()
                 return v
     return None
