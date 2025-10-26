@@ -37,7 +37,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 ):
                     click.echo("正在安装管理面板...")
                     await download_dashboard(
-                        path="data",
+                        path="data/dashboard.zip",
                         extract_path=str(astrbot_root),
                         version=f"v{VERSION}",
                         latest=False,

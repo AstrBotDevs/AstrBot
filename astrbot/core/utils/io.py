@@ -226,12 +226,11 @@ async def download_dashboard(
     """下载管理面板文件"""
 
     if path is None:
-        _path = Path(get_astrbot_data_path()).absolute() 
+        zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
     else:
-        _path = Path(path).absolute()
+        zip_path = Path(path).absolute()
 
-    zip_path = _path / "dashboard.zip"
-    version_file = _path / "dist" / "assets" / "version"
+    version_file = zip_path.parent / "dist" / "assets" / "version"
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
