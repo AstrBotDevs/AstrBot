@@ -173,12 +173,10 @@
 
                   <template v-slot:item.configId="{ item }">
                     <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList" item-title="name"
-                      item-value="id" variant="outlined" density="compact" style="min-width: 200px;"
-                      :hide-details="configInfoList.findIndex(c => c.id === item.configId) !== -1"
-                      :error="configInfoList.findIndex(c => c.id === item.configId) === -1"
-                      :error-messages="configInfoList.findIndex(c => c.id === item.configId) === -1 ? '配置文件不存在' : ''">
+                      item-value="id" variant="outlined" density="compact" style="min-width: 200px;" hide-details>
                     </v-select>
                     <span v-else>{{ getConfigName(item.configId) }}</span>
+                    <small v-if="configInfoList.findIndex(c => c.id === item.configId) === -1" style="color: red;" class="ml-2">配置文件不存在</small>
                   </template>
 
                   <template v-slot:item.actions="{ item, index }">
