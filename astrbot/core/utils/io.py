@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import ssl
 import shutil
 import socket
@@ -150,7 +151,7 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if show_progress:
-                            elapsed_time = time.time() - start_time
+                            elapsed_time = time.time() - start_time if time.time() - start_time > 0 else 1
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
@@ -221,10 +222,16 @@ async def download_dashboard(
     latest: bool = True,
     version: str | None = None,
     proxy: str | None = None,
-):
+) -> None:
     """下载管理面板文件"""
+
     if path is None:
-        path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
+        _path = Path(get_astrbot_data_path()).absolute() 
+    else:
+        _path = Path(path).absolute()
+
+    zip_path = _path / "dashboard.zip"
+    version_file = _path / "dist" / "assets" / "version"
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
@@ -233,7 +240,7 @@ async def download_dashboard(
             f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}"
         )
         try:
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(dashboard_release_url, str(zip_path), show_progress=True)
         except BaseException as _:
             if latest:
                 dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
@@ -241,12 +248,21 @@ async def download_dashboard(
                 dashboard_release_url = f"https://github.com/Soulter/AstrBot/releases/download/{version}/dist.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(dashboard_release_url, str(zip_path), show_progress=True)
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        await download_file(url, path, show_progress=True)
-    with zipfile.ZipFile(path, "r") as z:
+        await download_file(url, str(zip_path), show_progress=True)
+    with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)
+
+    if version_file.exists():
+        return
+
+    # 写入dist/version
+    # https://github.com/AstrBotDevs/AstrBot/pull/3106
+    # 实际上压根没有dist/version文件，这里需要写入
+    with version_file.open("w") as f:
+        f.write(f"{version}")

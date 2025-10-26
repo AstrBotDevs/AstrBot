@@ -89,6 +89,7 @@ target-version = "py310"
 
 [dependency-groups]
 dev = [
+    "commitizen>=4.9.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
