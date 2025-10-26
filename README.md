@@ -24,12 +24,12 @@
 
 <br>
 
-<a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
-<a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
-<a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
 AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架。
@@ -72,7 +72,7 @@ AstrBot 已由雨云官方上架至云应用平台，可一键部署。
 
 社区贡献的部署方式。
 
-[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 #### Windows 一键安装器部署
 
@@ -210,7 +210,7 @@ uv run main.py
 AstrBot 使用 `ruff` 进行代码格式化和检查。
 
 ```bash
-git clone https://github.com/Soulter/AstrBot
+git clone https://github.com/AstrBotDevs/AstrBot
 pip install pre-commit
 pre-commit install
 ```

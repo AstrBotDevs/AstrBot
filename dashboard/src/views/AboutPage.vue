@@ -5,11 +5,11 @@
                 <h1 class="font-weight-bold">{{ tm('hero.title') }}</h1>
                 <p class="text-subtitle-1" style="color: var(--v-theme-secondaryText);">{{ tm('hero.subtitle') }}</p>
                 <div style="margin-top: 20px; display: flex; justify-content: center;">
-                    <v-btn @click="open('https://github.com/Soulter/AstrBot')" color="primary" variant="tonal"
+                    <v-btn @click="open('https://github.com/AstrBotDevs/AstrBot')" color="primary" variant="tonal"
                         prepend-icon="mdi-star">
                         {{ tm('hero.starButton') }}
                     </v-btn>
-                    <v-btn class="ml-4" @click="open('https://github.com/Soulter/AstrBot/issues')" color="secondary"
+                    <v-btn class="ml-4" @click="open('https://github.com/AstrBotDevs/AstrBot/issues')" color="secondary"
                         variant="tonal" prepend-icon="mdi-comment-question">
                         {{ tm('hero.issueButton') }}
                     </v-btn>
