@@ -52,17 +52,10 @@ class UpdateRoute(Route):
 
         try:
             dv = await get_dashboard_version()
-            # WebUI 版本独立于核心版本：不再用 dv 与 v{VERSION} 比较，避免误报
             if type_ == "dashboard":
                 return (
                     Response()
-                    .ok(
-                        {
-                            "has_new_version": False,
-                            "current_version": dv,
-                            "installed": bool(dv),
-                        }
-                    )
+                    .ok({"has_new_version": dv != f"v{VERSION}", "current_version": dv})
                     .__dict__
                 )
             else:
@@ -74,8 +67,7 @@ class UpdateRoute(Route):
                         "version": f"v{VERSION}",
                         "has_new_version": ret is not None,
                         "dashboard_version": dv,
-                        # dv正常获取则不会提示需要更新
-                        "dashboard_has_new_version": not bool(dv),
+                        "dashboard_has_new_version": bool(dv and dv != f"v{VERSION}"),
                     },
                 ).__dict__
         except Exception as e:

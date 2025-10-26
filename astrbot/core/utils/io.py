@@ -233,8 +233,6 @@ async def download_dashboard(
     else:
         zip_path = Path(path).absolute()
 
-    version_file = zip_path.parent / "dist" / "assets" / "version"
-
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
@@ -263,12 +261,3 @@ async def download_dashboard(
         await download_file(url, str(zip_path), show_progress=True)
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)
-
-    if version_file.exists():
-        return
-
-    # 写入dist/version
-    # https://github.com/AstrBotDevs/AstrBot/pull/3106
-    # 实际上压根没有dist/version文件，这里需要写入
-    with version_file.open("w") as f:
-        f.write(f"{version}")
