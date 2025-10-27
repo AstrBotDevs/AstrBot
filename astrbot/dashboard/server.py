@@ -72,6 +72,7 @@ class AstrBotDashboard:
         )
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
+        self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -177,6 +178,11 @@ class AstrBotDashboard:
         else:
             port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
         host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
+        enable = self.core_lifecycle.astrbot_config["dashboard"].get("enable", True)
+
+        if not enable:
+            logger.info("WebUI 已被禁用")
+            return
 
         logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
 

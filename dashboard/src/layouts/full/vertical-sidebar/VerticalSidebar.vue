@@ -11,8 +11,13 @@ const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
 
 const showIframe = ref(false);
+const starCount = ref(null);
 
-// 默认桌面端 iframe 样式
+const sidebarWidth = ref(235);
+const minSidebarWidth = 200;
+const maxSidebarWidth = 300;
+const isResizing = ref(false);
+
 const iframeStyle = ref({
   position: 'fixed',
   bottom: '16px',
@@ -29,14 +34,13 @@ const iframeStyle = ref({
   boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
 });
 
-// 如果为移动端，则采用百分比尺寸，并设置初始位置
 if (window.innerWidth < 768) {
   iframeStyle.value = {
     position: 'fixed',
     top: '10%',
     left: '0%',
     width: '100%',
-    height: '50%',
+    height: '80%',
     minWidth: '300px',
     minHeight: '200px',
     background: 'white',
@@ -46,7 +50,6 @@ if (window.innerWidth < 768) {
     borderRadius: '12px',
     boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
   };
-  // 移动端默认关闭侧边栏
   customizer.Sidebar_drawer = false;
 }
 
@@ -74,12 +77,10 @@ function openIframeLink(url) {
   }
 }
 
-// 拖拽相关变量与函数
 let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 
-// 辅助函数：限制数值在一定范围内
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -91,7 +92,6 @@ function startDrag(clientX, clientY) {
   offsetX = clientX - rect.left;
   offsetY = clientY - rect.top;
   document.body.style.userSelect = 'none';
-  // 绑定全局鼠标和触摸事件
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup', onMouseUp);
   document.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -149,6 +149,53 @@ function endDrag() {
   document.removeEventListener('touchend', onTouchEnd);
 }
 
+function startSidebarResize(event) {
+  isResizing.value = true;
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'ew-resize';
+  
+  const startX = event.clientX;
+  const startWidth = sidebarWidth.value;
+  
+  function onMouseMoveResize(event) {
+    if (!isResizing.value) return;
+    
+    const deltaX = event.clientX - startX;
+    const newWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, startWidth + deltaX));
+    sidebarWidth.value = newWidth;
+  }
+  
+  function onMouseUpResize() {
+    isResizing.value = false;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    document.removeEventListener('mousemove', onMouseMoveResize);
+    document.removeEventListener('mouseup', onMouseUpResize);
+  }
+  
+  document.addEventListener('mousemove', onMouseMoveResize);
+  document.addEventListener('mouseup', onMouseUpResize);
+}
+
+function formatNumber(num) {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+async function fetchStarCount() {
+  try {
+    const response = await fetch('https://cloud.astrbot.app/api/v1/github/repo-info');
+    const data = await response.json();
+    if (data.data && data.data.stargazers_count) {
+      starCount.value = data.data.stargazers_count;
+      console.debug('Fetched star count:', starCount.value);
+    }
+  } catch (error) {
+    console.debug('Failed to fetch star count:', error);
+  }
+}
+
+fetchStarCount();
+
 </script>
 
 <template>
@@ -159,7 +206,7 @@ function endDrag() {
     rail-width="80"
     app
     class="leftSidebar"
-    width="220"
+    :width="sidebarWidth"
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
@@ -177,8 +224,23 @@ function endDrag() {
         </v-btn>
         <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
           {{ t('core.navigation.github') }}
+           <v-chip
+            v-if="starCount"
+            size="x-small"
+            variant="outlined"
+            class="ml-2"
+            style="font-weight: normal;"
+          >{{ formatNumber(starCount) }}</v-chip>
         </v-btn>
       </div>
+    </div>
+    
+    <div 
+      v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
+      class="sidebar-resize-handle"
+      @mousedown="startSidebarResize"
+      :class="{ 'resizing': isResizing }"
+    >
     </div>
   </v-navigation-drawer>
   
@@ -187,14 +249,13 @@ function endDrag() {
     id="draggable-iframe"
     :style="iframeStyle"
   >
-    <!-- 拖拽头部：支持鼠标和触摸 -->
+
     <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
       <div style="display: flex; align-items: center;">
         <v-icon icon="mdi-cursor-move" />
         <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
       </div>
       <div style="display: flex; gap: 8px;">
-        <!-- 跳转按钮 -->
         <v-btn
           icon
           @click.stop="openIframeLink('https://astrbot.app')"
@@ -203,7 +264,6 @@ function endDrag() {
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
-        <!-- 关闭按钮 -->
         <v-btn
           icon
           @click.stop="toggleIframe"
@@ -214,10 +274,53 @@ function endDrag() {
         </v-btn>
       </div>
     </div>
-    <!-- iframe 区域 -->
     <iframe
       src="https://astrbot.app"
       style="width: 100%; height: calc(100% - 56px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
     ></iframe>
   </div>
 </template>
+
+<style scoped>
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: transparent;
+  cursor: ew-resize;
+  user-select: none;
+  z-index: 1000;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.resizing {
+  background: rgba(var(--v-theme-primary), 0.3);
+}
+
+.sidebar-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 30px;
+  background: rgba(var(--v-theme-on-surface), 0.3);
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.resizing::before {
+  opacity: 1;
+}
+
+/* 确保侧边栏容器支持相对定位 */
+.leftSidebar .v-navigation-drawer__content {
+  position: relative;
+}
+</style>

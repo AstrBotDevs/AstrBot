@@ -12,7 +12,8 @@
           </p>
         </div>
         <div>
-          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true" rounded="xl" size="x-large">
+          <v-btn color="primary" prepend-icon="mdi-plus" variant="tonal" @click="showAddProviderDialog = true"
+            rounded="xl" size="x-large">
             {{ tm('providers.addProvider') }}
           </v-btn>
         </div>
@@ -56,16 +57,16 @@
 
         <v-row v-else>
           <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card
-              :item="provider"
-              title-field="id"
-              enabled-field="enable"
-              @toggle-enabled="providerStatusChange"
-              :bglogo="getProviderIcon(provider.provider)"
-              @delete="deleteProvider"
-              @edit="configExistingProvider"
-              @copy="copyProvider"
-              :show-copy-button="true">
+            <item-card :item="provider" title-field="id" enabled-field="enable"
+              :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+              :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+              @copy="copyProvider" :show-copy-button="true">
+              <template #actions="{ item }">
+                <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                  :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                  {{ tm('availability.test') }}
+                </v-btn>
+              </template>
               <template v-slot:details="{ item }">
               </template>
             </item-card>
@@ -79,7 +80,7 @@
           <v-icon class="me-2">mdi-heart-pulse</v-icon>
           <span class="text-h4">{{ tm('availability.title') }}</span>
           <v-spacer></v-spacer>
-          <v-btn color="primary" variant="tonal" :loading="loadingStatus" @click="fetchProviderStatus">
+          <v-btn color="primary" variant="tonal" :loading="testingProviders.length > 0" @click="fetchProviderStatus">
             <v-icon left>mdi-refresh</v-icon>
             {{ tm('availability.refresh') }}
           </v-btn>
@@ -88,8 +89,6 @@
             <v-icon>{{ showStatus ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </v-btn>
         </v-card-title>
-
-        <v-divider></v-divider>
 
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showStatus">
@@ -103,16 +102,12 @@
                   <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
                     <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
                       <v-card-item>
-                        <v-icon v-if="status.status === 'available'" color="success" class="me-2">mdi-check-circle</v-icon>
-                        <v-icon v-else-if="status.status === 'unavailable'" color="error" class="me-2">mdi-alert-circle</v-icon>
-                        <v-progress-circular
-                          v-else-if="status.status === 'pending'"
-                          indeterminate
-                          color="primary"
-                          size="20"
-                          width="2"
-                          class="me-2"
-                        ></v-progress-circular>
+                        <v-icon v-if="status.status === 'available'" color="success"
+                          class="me-2">mdi-check-circle</v-icon>
+                        <v-icon v-else-if="status.status === 'unavailable'" color="error"
+                          class="me-2">mdi-alert-circle</v-icon>
+                        <v-progress-circular v-else-if="status.status === 'pending'" indeterminate color="primary"
+                          size="20" width="2" class="me-2"></v-progress-circular>
 
                         <span class="font-weight-bold">{{ status.id }}</span>
 
@@ -144,8 +139,6 @@
           </v-btn>
         </v-card-title>
 
-        <v-divider></v-divider>
-
         <v-expand-transition>
           <v-card-text class="pa-0" v-if="showConsole">
             <ConsoleDisplayer style="background-color: #1e1e1e; height: 300px; border-radius: 0"></ConsoleDisplayer>
@@ -155,93 +148,16 @@
     </v-container>
 
     <!-- 添加提供商对话框 -->
-    <v-dialog v-model="showAddProviderDialog" max-width="1100px" min-height="95%">
-      <v-card class="provider-selection-dialog">
-        <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-          <v-icon color="white" class="me-2">mdi-plus-circle</v-icon>
-          <span>{{ tm('dialogs.addProvider.title') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn icon variant="text" color="white" @click="showAddProviderDialog = false">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-card-text class="pa-4" style="overflow-y: auto;">
-          <v-tabs v-model="activeProviderTab" grow slider-color="primary" bg-color="background">
-            <v-tab value="chat_completion" class="font-weight-medium px-3">
-              <v-icon start>mdi-message-text</v-icon>
-              {{ tm('dialogs.addProvider.tabs.basic') }}
-            </v-tab>
-            <v-tab value="speech_to_text" class="font-weight-medium px-3">
-              <v-icon start>mdi-microphone-message</v-icon>
-              {{ tm('dialogs.addProvider.tabs.speechToText') }}
-            </v-tab>
-            <v-tab value="text_to_speech" class="font-weight-medium px-3">
-              <v-icon start>mdi-volume-high</v-icon>
-              {{ tm('dialogs.addProvider.tabs.textToSpeech') }}
-            </v-tab>
-            <v-tab value="embedding" class="font-weight-medium px-3">
-              <v-icon start>mdi-code-json</v-icon>
-              {{ tm('dialogs.addProvider.tabs.embedding') }}
-            </v-tab>
-            <v-tab value="rerank" class="font-weight-medium px-3">
-              <v-icon start>mdi-compare-vertical</v-icon>
-              {{ tm('dialogs.addProvider.tabs.rerank') }}
-            </v-tab>
-          </v-tabs>
-
-          <v-window v-model="activeProviderTab" class="mt-4">
-            <v-window-item v-for="tabType in ['chat_completion', 'speech_to_text', 'text_to_speech', 'embedding', 'rerank']"
-                          :key="tabType"
-                          :value="tabType">
-              <v-row class="mt-1">
-                <v-col v-for="(template, name) in getTemplatesByType(tabType)"
-                      :key="name"
-                      cols="12" sm="6" md="4">
-                  <v-card variant="outlined" hover class="provider-card" @click="selectProviderTemplate(name)">
-                    <div class="provider-card-content">
-                      <div class="provider-card-text">
-                        <v-card-title class="provider-card-title">接入 {{ name }}</v-card-title>
-                        <v-card-text class="text-caption text-medium-emphasis provider-card-description">
-                          {{ getProviderDescription(template, name) }}
-                        </v-card-text>
-                      </div>
-                      <div class="provider-card-logo">
-                        <img :src="getProviderIcon(template.provider)" v-if="getProviderIcon(template.provider)" class="provider-logo-img">
-                        <div v-else class="provider-logo-fallback">
-                          {{ name[0].toUpperCase() }}
-                        </div>
-                      </div>
-                    </div>
-                  </v-card>
-                </v-col>
-                <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
-                  <v-alert type="info" variant="tonal">
-                    {{ tm('dialogs.addProvider.noTemplates', { type: getTabTypeName(tabType) }) }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-            </v-window-item>
-          </v-window>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
+    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="metadata"
+      @select-template="selectProviderTemplate" />
 
     <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ updatingMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          <span>{{ updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') }} {{ newSelectedProviderName }} {{ tm('dialogs.config.provider') }}</span>
-        </v-card-title>
-
+      <v-card
+        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
         <v-card-text class="py-4">
-          <AstrBotConfig
-            :iterable="newSelectedProviderConfig"
-            :metadata="metadata['provider_group']?.metadata"
-            metadataKey="provider"
-            :is-editing="updatingMode"
-          />
+          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="metadata['provider_group']?.metadata"
+            metadataKey="provider" :is-editing="updatingMode" />
         </v-card-text>
 
         <v-divider></v-divider>
@@ -291,7 +207,7 @@
           确认保存
         </v-card-title>
         <v-card-text class="py-4 text-body-1 text-medium-emphasis">
-          您没有填写 API Key，确定要保存吗？这可能会导致该服务提供商无法正常工作。
+          您没有填写 API Key，确定要保存吗？这可能会导致该模型无法正常工作。
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -309,7 +225,9 @@ import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import AddNewProvider from '@/components/provider/AddNewProvider.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { getProviderIcon } from '@/utils/providerUtils';
 
 export default {
   name: 'ProviderPage',
@@ -317,7 +235,8 @@ export default {
     AstrBotConfig,
     WaitingForRestart,
     ConsoleDisplayer,
-    ItemCard
+    ItemCard,
+    AddNewProvider
   },
   setup() {
     const { tm } = useModuleI18n('features/provider');
@@ -356,11 +275,10 @@ export default {
 
       // 供应商状态相关
       providerStatuses: [],
-      loadingStatus: false,
+      testingProviders: [], // 存储正在测试的 provider ID
 
       // 新增提供商对话框相关
       showAddProviderDialog: false,
-      activeProviderTab: 'chat_completion',
 
       // 添加提供商类型分类
       activeProviderTypeTab: 'all',
@@ -372,6 +290,7 @@ export default {
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
         "dify": "chat_completion",
+        "coze": "chat_completion",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",
@@ -427,7 +346,8 @@ export default {
           statusUpdate: this.tm('messages.success.statusUpdate'),
         },
         error: {
-          fetchStatus: this.tm('messages.error.fetchStatus')
+          fetchStatus: this.tm('messages.error.fetchStatus'),
+          testError: this.tm('messages.error.testError')
         },
         confirm: {
           delete: this.tm('messages.confirm.delete')
@@ -436,6 +356,9 @@ export default {
           available: this.tm('availability.available'),
           unavailable: this.tm('availability.unavailable'),
           pending: this.tm('availability.pending')
+        },
+        availability: {
+          test: this.tm('availability.test')
         }
       };
     },
@@ -474,6 +397,9 @@ export default {
       });
     },
 
+    // 从工具函数导入
+    getProviderIcon,
+
     // 获取空列表文本
     getEmptyText() {
       if (this.activeProviderTypeTab === 'all') {
@@ -483,61 +409,9 @@ export default {
       }
     },
 
-    // 按提供商类型获取模板列表
-    getTemplatesByType(type) {
-      const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
-      const filtered = {};
-
-      for (const [name, template] of Object.entries(templates)) {
-        if (template.provider_type === type) {
-          filtered[name] = template;
-        }
-      }
-
-      return filtered;
-    },
-
-    // 获取提供商类型对应的图标
-    getProviderIcon(type) {
-      const icons = {
-        'openai': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openai.svg',
-        'azure': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/azure.svg',
-        'xai': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/xai.svg',
-        'anthropic': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/anthropic.svg',
-        'ollama': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ollama.svg',
-        'google': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/gemini-color.svg',
-        'deepseek': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/deepseek.svg',
-        'modelscope': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/modelscope.svg',
-        'zhipu': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/zhipu.svg',
-        'siliconflow': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/siliconcloud.svg',
-        'moonshot': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/kimi.svg',
-        'ppio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ppio.svg',
-        'dify': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/dify-color.svg',
-        'dashscope': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/alibabacloud-color.svg',
-        'fastgpt': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fastgpt-color.svg',
-        'lm_studio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/lmstudio.svg',
-        'fishaudio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/fishaudio.svg',
-        'minimax': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/minimax.svg',
-        '302ai': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302-color.svg',
-        'microsoft': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/microsoft.svg',
-        'vllm': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/vllm.svg',
-      };
-      return icons[type] || '';
-    },
-
     // 获取Tab类型的中文名称
     getTabTypeName(tabType) {
       return this.messages.tabTypes[tabType] || tabType;
-    },
-
-    // 获取提供商简介
-    getProviderDescription(template, name) {
-      if (name == 'OpenAI') {
-        return this.tm('providers.description.openai', { type: template.type });
-      } else if (name == 'vLLM Rerank') {
-        return this.tm('providers.description.vllm_rerank', { type: template.type });
-      }
-      return this.tm('providers.description.default', { type: template.type });
     },
 
     // 选择提供商模板
@@ -548,7 +422,6 @@ export default {
       this.newSelectedProviderConfig = JSON.parse(JSON.stringify(
         this.metadata['provider_group']?.metadata?.provider?.config_template[name] || {}
       ));
-      this.showAddProviderDialog = false;
     },
 
     configExistingProvider(provider) {
@@ -571,7 +444,7 @@ export default {
           for (let key in source) {
             if (source.hasOwnProperty(key)) {
               if (typeof source[key] === 'object' && source[key] !== null) {
-                target[key] = Array.isArray(source[key]) ? [...source[key]] : {...source[key]};
+                target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] };
               } else {
                 target[key] = source[key];
               }
@@ -632,7 +505,14 @@ export default {
             id: this.newSelectedProviderName,
             config: this.newSelectedProviderConfig
           });
+          if (res.data.status === 'error') {
+            this.showError(res.data.message || "更新失败!");
+            return
+          }
           this.showSuccess(res.data.message || "更新成功!");
+          if (wasUpdating) {
+            this.updatingMode = false;
+          }
         } else {
           // 检查 ID 是否已存在
           const existingProvider = this.config_data.provider?.find(p => p.id === this.newSelectedProviderConfig.id);
@@ -645,17 +525,18 @@ export default {
           }
 
           const res = await axios.post('/api/config/provider/new', this.newSelectedProviderConfig);
+          if (res.data.status === 'error') {
+            this.showError(res.data.message || "添加失败!");
+            return
+          }
           this.showSuccess(res.data.message || "添加成功!");
         }
         this.showProviderCfg = false;
-        this.getConfig();
       } catch (err) {
         this.showError(err.response?.data?.message || err.message);
       } finally {
         this.loading = false;
-        if (wasUpdating) {
-          this.updatingMode = false;
-        }
+        this.getConfig();
       }
     },
 
@@ -711,6 +592,10 @@ export default {
         id: provider.id,
         config: provider
       }).then((res) => {
+        if (res.data.status === 'error') {
+          this.showError(res.data.message)
+          return
+        }
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.success.statusUpdate);
       }).catch((err) => {
@@ -733,70 +618,107 @@ export default {
 
     // 获取供应商状态
     async fetchProviderStatus() {
-      if (this.loadingStatus) return;
+      if (this.testingProviders.length > 0) return;
 
-      this.loadingStatus = true;
       this.showStatus = true; // 自动展开状态部分
 
-      // 1. 立即初始化UI为pending状态
-      this.providerStatuses = this.config_data.provider.map(p => ({
-        id: p.id,
-        name: p.id,
-        status: 'pending',
-        error: null
-      }));
+      const providersToTest = this.config_data.provider.filter(p => p.enable);
+      if (providersToTest.length === 0) return;
+
+      // 1. 初始化UI为pending状态，并将所有待测试的 provider ID 加入 loading 列表
+      this.providerStatuses = providersToTest.map(p => {
+        this.testingProviders.push(p.id);
+        return { id: p.id, name: p.id, status: 'pending', error: null };
+      });
 
       // 2. 为每个provider创建一个并发的测试请求
-      const promises = this.config_data.provider.map(p => {
-        if (!p.enable) {
-          const index = this.providerStatuses.findIndex(s => s.id === p.id);
-          if (index !== -1) {
-            const disabledStatus = {
-              ...this.providerStatuses[index],
-              status: 'unavailable',
-              error: '该提供商未被用户启用'
-            };
-            this.providerStatuses.splice(index, 1, disabledStatus);
-          }
-          return Promise.resolve();
-        }
-
-        return axios.get(`/api/config/provider/check_one?id=${p.id}`)
+      const promises = providersToTest.map(p =>
+        axios.get(`/api/config/provider/check_one?id=${p.id}`)
           .then(res => {
             if (res.data && res.data.status === 'ok') {
-              // 成功，更新对应的provider状态
               const index = this.providerStatuses.findIndex(s => s.id === p.id);
-              if (index !== -1) {
-                this.providerStatuses.splice(index, 1, res.data.data);
-              }
+              if (index !== -1) this.providerStatuses.splice(index, 1, res.data.data);
             } else {
-              // 接口返回了业务错误
               throw new Error(res.data?.message || `Failed to check status for ${p.id}`);
             }
           })
           .catch(err => {
-            // 网络错误或业务错误
             const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
             const index = this.providerStatuses.findIndex(s => s.id === p.id);
             if (index !== -1) {
-              const failedStatus = {
-                ...this.providerStatuses[index],
-                status: 'unavailable',
-                error: errorMessage
-              };
+              const failedStatus = { ...this.providerStatuses[index], status: 'unavailable', error: errorMessage };
               this.providerStatuses.splice(index, 1, failedStatus);
             }
-            // 可以在这里选择性地向上抛出错误，以便Promise.allSettled知道
-            return Promise.reject(errorMessage);
-          });
-      });
+            return Promise.reject(errorMessage); // Propagate error for Promise.allSettled
+          })
+      );
 
-      // 3. 等待所有请求完成（无论成功或失败）
+      // 3. 等待所有请求完成
       try {
         await Promise.allSettled(promises);
       } finally {
-        // 4. 关闭全局加载状态
-        this.loadingStatus = false;
+        // 4. 关闭所有加载状态
+        this.testingProviders = [];
+      }
+    },
+
+    isProviderTesting(providerId) {
+      return this.testingProviders.includes(providerId);
+    },
+
+    async testSingleProvider(provider) {
+      if (this.isProviderTesting(provider.id)) return;
+
+      this.testingProviders.push(provider.id);
+      this.showStatus = true; // 自动展开状态部分
+
+      // 更新UI为pending状态
+      const statusIndex = this.providerStatuses.findIndex(s => s.id === provider.id);
+      const pendingStatus = {
+        id: provider.id,
+        name: provider.id,
+        status: 'pending',
+        error: null
+      };
+      if (statusIndex !== -1) {
+        this.providerStatuses.splice(statusIndex, 1, pendingStatus);
+      } else {
+        this.providerStatuses.unshift(pendingStatus);
+      }
+
+      try {
+        if (!provider.enable) {
+          throw new Error('该提供商未被用户启用');
+        }
+
+        const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
+        if (res.data && res.data.status === 'ok') {
+          const index = this.providerStatuses.findIndex(s => s.id === provider.id);
+          if (index !== -1) {
+            this.providerStatuses.splice(index, 1, res.data.data);
+          }
+        } else {
+          throw new Error(res.data?.message || `Failed to check status for ${provider.id}`);
+        }
+      } catch (err) {
+        const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+        const index = this.providerStatuses.findIndex(s => s.id === provider.id);
+        const failedStatus = {
+          id: provider.id,
+          name: provider.id,
+          status: 'unavailable',
+          error: errorMessage
+        };
+        if (index !== -1) {
+          this.providerStatuses.splice(index, 1, failedStatus);
+        }
+        // 不再显示全局的错误提示，因为卡片本身会显示错误信息
+        // this.showError(this.tm('messages.error.testError', { id: provider.id, error: errorMessage }));
+      } finally {
+        const index = this.testingProviders.indexOf(provider.id);
+        if (index > -1) {
+          this.testingProviders.splice(index, 1);
+        }
       }
     },
 
@@ -852,89 +774,6 @@ export default {
 .provider-page {
   padding: 20px;
   padding-top: 8px;
-}
-
-.provider-card {
-  transition: all 0.3s ease;
-  height: 100%;
-  cursor: pointer;
-  overflow: hidden;
-  position: relative;
-}
-
-.provider-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 25px 0 rgba(0, 0, 0, 0.05);
-  border-color: var(--v-primary-base);
-}
-
-.provider-card-content {
-  display: flex;
-  align-items: center;
-  height: 100px;
-  padding: 16px;
-  position: relative;
-  z-index: 2;
-}
-
-.provider-card-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.provider-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  padding: 0;
-}
-
-.provider-card-description {
-  padding: 0;
-  margin: 0;
-}
-
-.provider-card-logo {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.provider-logo-img {
-  width: 60px;
-  height: 60px;
-  opacity: 0.6;
-  object-fit: contain;
-}
-
-.provider-logo-fallback {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--v-primary-base);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  opacity: 0.3;
-}
-
-.v-tabs {
-  border-radius: 8px;
-}
-
-.v-window {
-  border-radius: 4px;
 }
 
 .status-card {

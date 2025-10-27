@@ -82,6 +82,10 @@ class PlatformManager:
                     from .sources.wecom.wecom_adapter import (
                         WecomPlatformAdapter,  # noqa: F401
                     )
+                case "wecom_ai_bot":
+                    from .sources.wecom_ai_bot.wecomai_adapter import (
+                        WecomAIBotAdapter,  # noqa: F401
+                    )
                 case "weixin_official_account":
                     from .sources.weixin_official_account.weixin_offacc_adapter import (
                         WeixinOfficialAccountPlatformAdapter,  # noqa: F401
@@ -89,6 +93,10 @@ class PlatformManager:
                 case "discord":
                     from .sources.discord.discord_platform_adapter import (
                         DiscordPlatformAdapter,  # noqa: F401
+                    )
+                case "misskey":
+                    from .sources.misskey.misskey_adapter import (
+                        MisskeyPlatformAdapter,  # noqa: F401
                     )
                 case "slack":
                     from .sources.slack.slack_adapter import SlackAdapter  # noqa: F401

@@ -10,7 +10,7 @@ from anthropic.types import Message
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.api.provider import Provider
 from astrbot import logger
-from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.func_tool_manager import ToolSet
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse
 from typing import AsyncGenerator
@@ -33,7 +33,7 @@ class ProviderAnthropic(Provider):
         )
 
         self.chosen_api_key: str = ""
-        self.api_keys: List = provider_config.get("key", [])
+        self.api_keys: List = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
@@ -70,9 +70,13 @@ class ProviderAnthropic(Provider):
                             {
                                 "type": "tool_use",
                                 "name": tool_call["function"]["name"],
-                                "input": json.loads(tool_call["function"]["arguments"])
-                                if isinstance(tool_call["function"]["arguments"], str)
-                                else tool_call["function"]["arguments"],
+                                "input": (
+                                    json.loads(tool_call["function"]["arguments"])
+                                    if isinstance(
+                                        tool_call["function"]["arguments"], str
+                                    )
+                                    else tool_call["function"]["arguments"]
+                                ),
                                 "id": tool_call["id"],
                             }
                         )
@@ -100,7 +104,7 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
-    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -131,7 +135,7 @@ class ProviderAnthropic(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: FuncCall
+        self, payloads: dict, tools: ToolSet | None
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -322,7 +326,7 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: List[str] | None = None):
         """组装上下文，支持文本和图片"""
         if not image_urls:
             return {"role": "user", "content": text}
@@ -355,9 +359,11 @@ class ProviderAnthropic(Provider):
                     "source": {
                         "type": "base64",
                         "media_type": mime_type,
-                        "data": image_data.split("base64,")[1]
-                        if "base64," in image_data
-                        else image_data,
+                        "data": (
+                            image_data.split("base64,")[1]
+                            if "base64," in image_data
+                            else image_data
+                        ),
                     },
                 }
             )

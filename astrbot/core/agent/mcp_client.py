@@ -40,8 +40,15 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     timeout = cfg.get("timeout", 10)
 
     try:
+        if "transport" in cfg:
+            transport_type = cfg["transport"]
+        elif "type" in cfg:
+            transport_type = cfg["type"]
+        else:
+            raise Exception("MCP 连接配置缺少 transport 或 type 字段")
+
         async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
+            if transport_type == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
                     "method": "initialize",
@@ -92,7 +99,7 @@ class MCPClient:
         self.session: Optional[mcp.ClientSession] = None
         self.exit_stack = AsyncExitStack()
 
-        self.name = None
+        self.name: str | None = None
         self.active: bool = True
         self.tools: list[mcp.Tool] = []
         self.server_errlogs: list[str] = []
@@ -121,7 +128,14 @@ class MCPClient:
             if not success:
                 raise Exception(error_msg)
 
-            if cfg.get("transport") != "streamable_http":
+            if "transport" in cfg:
+                transport_type = cfg["transport"]
+            elif "type" in cfg:
+                transport_type = cfg["type"]
+            else:
+                raise Exception("MCP 连接配置缺少 transport 或 type 字段")
+
+            if transport_type != "streamable_http":
                 # SSE transport method
                 self._streams_context = sse_client(
                     url=cfg["url"],
@@ -134,7 +148,7 @@ class MCPClient:
                 )
 
                 # Create a new client session
-                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 20))
+                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         *streams,
@@ -159,7 +173,7 @@ class MCPClient:
                 )
 
                 # Create a new client session
-                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 20))
+                read_timeout = timedelta(seconds=cfg.get("session_read_timeout", 60))
                 self.session = await self.exit_stack.enter_async_context(
                     mcp.ClientSession(
                         read_stream=read_s,
@@ -198,6 +212,8 @@ class MCPClient:
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
+        if not self.session:
+            raise Exception("MCP Client is not initialized")
         response = await self.session.list_tools()
         self.tools = response.tools
         return response

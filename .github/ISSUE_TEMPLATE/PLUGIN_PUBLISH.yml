@@ -16,7 +16,7 @@ body:
 
         请将插件信息填写到下方的 JSON 代码块中。其中 `tags`（插件标签）和 `social_link`（社交链接）选填。
 
-        不熟悉 JSON ？现在可以从 [这里](https://plugins.astrbot.app/#/submit) 获取你的 JSON 啦！获取到了记得复制粘贴过来哦！
+        不熟悉 JSON ？可以从 [此处](https://plugins.astrbot.app/submit) 生成 JSON ，生成后记得复制粘贴过来.
 
   - type: textarea
     id: plugin-info

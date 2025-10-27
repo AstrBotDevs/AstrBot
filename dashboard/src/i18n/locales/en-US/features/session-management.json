@@ -7,7 +7,8 @@
     "apply": "Apply Batch Settings",
     "editName": "Edit Session Name",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "delete": "Delete"
   },
   "sessions": {
     "activeSessions": "Active Sessions",
@@ -29,7 +30,9 @@
       "ttsProvider": "TTS Provider",
       "llmStatus": "LLM Status",
       "ttsStatus": "TTS Status",
-      "pluginManagement": "Plugin Management"
+      "knowledgeBase": "Knowledge Base",
+      "pluginManagement": "Plugin Management",
+      "actions": "Actions"
     }
   },
   "status": {
@@ -65,6 +68,38 @@
     "fullSessionId": "Full Session ID",
     "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
   },
+  "knowledgeBase": {
+    "title": "Knowledge Base Configuration",
+    "configure": "Configure",
+    "selectKB": "Select Knowledge Bases",
+    "selectMultiple": "You can select multiple knowledge bases",
+    "noKBAvailable": "No knowledge bases available",
+    "noKBDesc": "No knowledge bases have been created yet",
+    "createKB": "Create Knowledge Base",
+    "advancedSettings": "Advanced Settings",
+    "topK": "Result Count",
+    "topKHint": "Number of results to retrieve from knowledge base",
+    "enableRerank": "Enable Reranking",
+    "enableRerankHint": "Use reranking model to improve retrieval quality",
+    "clearConfig": "Clear Configuration",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading knowledge base configuration...",
+    "description": "Configure knowledge bases for this session. The session will use configured knowledge bases to enhance conversation context.",
+    "saveSuccess": "Knowledge base configuration saved successfully",
+    "saveFailed": "Failed to save knowledge base configuration",
+    "loadFailed": "Failed to load knowledge base configuration",
+    "clearSuccess": "Knowledge base configuration cleared",
+    "clearFailed": "Failed to clear knowledge base configuration",
+    "clearConfirm": "Are you sure you want to clear the knowledge base configuration for this session?"
+  },
+  "list": {
+    "documents": "documents"
+  },
+  "deleteConfirm": {
+    "message": "Are you sure you want to delete session {sessionName}?",
+    "warning": "This action will permanently delete all chat history and preference settings for this session (except for data linked via plugins), and this cannot be undone. Continue?"
+  },
   "messages": {
     "refreshSuccess": "Session list refreshed",
     "personaUpdateSuccess": "Persona updated successfully",
@@ -82,6 +117,8 @@
     "pluginStatusSuccess": "Plugin {name} {status}",
     "pluginStatusError": "Failed to update plugin status",
     "nameUpdateSuccess": "Session name updated successfully",
-    "nameUpdateError": "Failed to update session name"
+    "nameUpdateError": "Failed to update session name",
+    "deleteSuccess": "Session deleted successfully",
+    "deleteError": "Failed to delete session"
   }
 }

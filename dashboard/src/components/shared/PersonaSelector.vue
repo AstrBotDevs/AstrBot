@@ -18,7 +18,7 @@
         选择人格
       </v-card-title>
       
-      <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
+      <v-card-text class="pa-2" style="max-height: 400px; overflow-y: auto;">
         <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
         
         <v-list v-if="!loading && personaList.length > 0" density="compact">
@@ -48,6 +48,9 @@
       </v-card-text>
       
       <v-card-actions class="pa-4">
+        <v-btn variant="text" color="primary" prepend-icon="mdi-plus" @click="openCreatePersona">
+          创建新人格
+        </v-btn>
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelSelection">取消</v-btn>
         <v-btn 
@@ -59,11 +62,22 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- 创建人格对话框 -->
+  <PersonaForm 
+    v-model="showCreateDialog"
+    :editing-persona="null"
+    :mcp-servers="mcpServers"
+    :available-tools="availableTools"
+    :loading-tools="loadingTools"
+    @saved="handlePersonaCreated"
+    @error="handleError" />
 </template>
 
 <script setup>
 import { ref, watch } from 'vue'
 import axios from 'axios'
+import PersonaForm from './PersonaForm.vue'
 
 const props = defineProps({
   modelValue: {
@@ -82,6 +96,7 @@ const dialog = ref(false)
 const personaList = ref([])
 const loading = ref(false)
 const selectedPersona = ref('')
+const showCreateDialog = ref(false)
 
 // 监听 modelValue 变化，同步到 selectedPersona
 watch(() => props.modelValue, (newValue) => {
@@ -134,6 +149,21 @@ function confirmSelection() {
 function cancelSelection() {
   selectedPersona.value = props.modelValue || ''
   dialog.value = false
+}
+
+function openCreatePersona() {
+  showCreateDialog.value = true
+}
+
+async function handlePersonaCreated(message) {
+  console.log('人格创建成功:', message)
+  showCreateDialog.value = false
+  // 刷新人格列表
+  await loadPersonas()
+}
+
+function handleError(error) {
+  console.error('创建人格失败:', error)
 }
 </script>
 

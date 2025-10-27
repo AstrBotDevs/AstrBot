@@ -6,7 +6,9 @@ import asyncio
 import copy
 import json
 import traceback
-from typing import AsyncGenerator, Union
+from datetime import timedelta
+from collections.abc import AsyncGenerator
+from astrbot.core.conversation_mgr import Conversation
 from astrbot.core import logger
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -31,6 +33,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
+from ..utils import inject_kb_context
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -42,7 +45,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]
-AgentRunner = ToolLoopAgentRunner[AgentContextWrapper]
+AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -100,7 +103,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         request = ProviderRequest(
             prompt=input_,
-            system_prompt=tool.description,
+            system_prompt=tool.description or "",
             image_urls=[],  # 暂时不传递原始 agent 的上下文
             contexts=[],  # 暂时不传递原始 agent 的上下文
             func_tool=toolset,
@@ -133,6 +136,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         if agent_runner.done():
             llm_response = agent_runner.get_final_llm_resp()
+
+            if not llm_response:
+                text_content = mcp.types.TextContent(
+                    type="text",
+                    text=f"error when deligate task to {tool.agent.name}",
+                )
+                yield mcp.types.CallToolResult(content=[text_content])
+                return
+
             logger.debug(
                 f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}"
             )
@@ -148,7 +160,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
             yield mcp.types.CallToolResult(content=[text_content])
         else:
-            yield mcp.types.TextContent(
+            text_content = mcp.types.TextContent(
                 type="text",
                 text=f"error when deligate task to {tool.agent.name}",
             )
@@ -175,21 +187,33 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             handler=awaitable,
             **tool_args,
         )
-        async for resp in wrapper:
-            if resp is not None:
-                if isinstance(resp, mcp.types.CallToolResult):
-                    yield resp
+        # async for resp in wrapper:
+        while True:
+            try:
+                resp = await asyncio.wait_for(
+                    anext(wrapper),
+                    timeout=run_context.context.tool_call_timeout,
+                )
+                if resp is not None:
+                    if isinstance(resp, mcp.types.CallToolResult):
+                        yield resp
+                    else:
+                        text_content = mcp.types.TextContent(
+                            type="text",
+                            text=str(resp),
+                        )
+                        yield mcp.types.CallToolResult(content=[text_content])
                 else:
-                    text_content = mcp.types.TextContent(
-                        type="text",
-                        text=str(resp),
-                    )
-                    yield mcp.types.CallToolResult(content=[text_content])
-            else:
-                # NOTE: Tool 在这里直接请求发送消息给用户
-                # TODO: 是否需要判断 event.get_result() 是否为空?
-                # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                yield None
+                    # NOTE: Tool 在这里直接请求发送消息给用户
+                    # TODO: 是否需要判断 event.get_result() 是否为空?
+                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                    yield None
+            except asyncio.TimeoutError:
+                raise Exception(
+                    f"tool {tool.name} execution timeout after {run_context.context.tool_call_timeout} seconds."
+                )
+            except StopAsyncIteration:
+                break
 
     @classmethod
     async def _execute_mcp(
@@ -200,16 +224,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         if not tool.mcp_client:
             raise ValueError("MCP client is not available for MCP function tools.")
-        res = await tool.mcp_client.session.call_tool(
+
+        session = tool.mcp_client.session
+        if not session:
+            raise ValueError("MCP session is not available for MCP function tools.")
+        res = await session.call_tool(
             name=tool.name,
             arguments=tool_args,
+            read_timeout_seconds=timedelta(
+                seconds=run_context.context.tool_call_timeout
+            ),
         )
         if not res:
             return
         yield res
 
 
-class MainAgentHooks(BaseAgentRunHooks[AgentContextWrapper]):
+class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
@@ -271,19 +302,12 @@ async def run_agent(
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            astr_event.set_result(
-                MessageEventResult().message(
-                    f"AstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
-                )
-            )
+            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {str(e)}\n\n请在控制台查看和分享错误详情。\n"
+            if agent_runner.streaming:
+                yield MessageChain().message(err_msg)
+            else:
+                astr_event.set_result(MessageEventResult().message(err_msg))
             return
-        asyncio.create_task(
-            Metric.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            )
-        )
 
 
 class LLMRequestSubStage(Stage):
@@ -300,6 +324,7 @@ class LLMRequestSubStage(Stage):
         )
         self.streaming_response: bool = settings["streaming_response"]
         self.max_step: int = settings.get("max_agent_step", 30)
+        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -313,7 +338,7 @@ class LLMRequestSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-    def _select_provider(self, event: AstrMessageEvent) -> Provider | None:
+    def _select_provider(self, event: AstrMessageEvent):
         """选择使用的 LLM 提供商"""
         sel_provider = event.get_extra("selected_provider")
         _ctx = self.ctx.plugin_manager.context
@@ -325,7 +350,7 @@ class LLMRequestSubStage(Stage):
 
         return _ctx.get_using_provider(umo=event.unified_msg_origin)
 
-    async def _get_session_conv(self, event: AstrMessageEvent):
+    async def _get_session_conv(self, event: AstrMessageEvent) -> Conversation:
         umo = event.unified_msg_origin
         conv_mgr = self.conv_manager
 
@@ -337,11 +362,13 @@ class LLMRequestSubStage(Stage):
         if not conversation:
             cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
             conversation = await conv_mgr.get_conversation(umo, cid)
+        if not conversation:
+            raise RuntimeError("无法创建新的对话。")
         return conversation
 
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
@@ -355,6 +382,9 @@ class LLMRequestSubStage(Stage):
 
         provider = self._select_provider(event)
         if provider is None:
+            return
+        if not isinstance(provider, Provider):
+            logger.error(f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。")
             return
 
         if event.get_extra("provider_request"):
@@ -389,6 +419,14 @@ class LLMRequestSubStage(Stage):
 
         if not req.prompt and not req.image_urls:
             return
+
+        # 应用知识库
+        try:
+            await inject_kb_context(
+                umo=event.unified_msg_origin, p_ctx=self.ctx, req=req
+            )
+        except Exception as e:
+            logger.error(f"调用知识库时遇到问题: {e}")
 
         # 执行请求 LLM 前事件钩子。
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
@@ -444,12 +482,18 @@ class LLMRequestSubStage(Stage):
         if event.plugins_name is not None and req.func_tool:
             new_tool_set = ToolSet()
             for tool in req.func_tool.tools:
-                plugin = star_map.get(tool.handler_module_path)
+                mp = tool.handler_module_path
+                if not mp:
+                    continue
+                plugin = star_map.get(mp)
                 if not plugin:
                     continue
                 if plugin.name in event.plugins_name or plugin.reserved:
                     new_tool_set.add_tool(tool)
             req.func_tool = new_tool_set
+
+        # 备份 req.contexts
+        backup_contexts = copy.deepcopy(req.contexts)
 
         # run agent
         agent_runner = AgentRunner()
@@ -461,6 +505,7 @@ class LLMRequestSubStage(Stage):
             first_provider_request=req,
             curr_provider_request=req,
             streaming=self.streaming_response,
+            tool_call_timeout=self.tool_call_timeout,
         )
         await agent_runner.reset(
             provider=provider,
@@ -487,8 +532,10 @@ class LLMRequestSubStage(Stage):
                         chain = (
                             MessageChain().message(final_llm_resp.completion_text).chain
                         )
-                    else:
+                    elif final_llm_resp.result_chain:
                         chain = final_llm_resp.result_chain.chain
+                    else:
+                        chain = MessageChain().chain
                     event.set_result(
                         MessageEventResult(
                             chain=chain,
@@ -499,16 +546,29 @@ class LLMRequestSubStage(Stage):
             async for _ in run_agent(agent_runner, self.max_step, self.show_tool_use):
                 yield
 
+        # 恢复备份的 contexts
+        req.contexts = backup_contexts
+
         await self._save_to_history(event, req, agent_runner.get_final_llm_resp())
 
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":
             asyncio.create_task(self._handle_webchat(event, req, provider))
 
+        asyncio.create_task(
+            Metric.upload(
+                llm_tick=1,
+                model_name=agent_runner.provider.get_model(),
+                provider_type=agent_runner.provider.meta().type,
+            )
+        )
+
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
+        if not req.conversation:
+            return
         conversation = await self.conv_manager.get_conversation(
             event.unified_msg_origin, req.conversation.cid
         )
@@ -517,7 +577,23 @@ class LLMRequestSubStage(Stage):
             latest_pair = messages[-2:]
             if not latest_pair:
                 return
-            cleaned_text = "User: " + latest_pair[0].get("content", "").strip()
+            content = latest_pair[0].get("content", "")
+            if isinstance(content, list):
+                # 多模态
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif item.get("type") == "image":
+                            text_parts.append("[图片]")
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                cleaned_text = "User: " + " ".join(text_parts).strip()
+            elif isinstance(content, str):
+                cleaned_text = "User: " + content.strip()
+            else:
+                return
             logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
             llm_resp = await prov.text_chat(
                 system_prompt="You are expert in summarizing user's query.",

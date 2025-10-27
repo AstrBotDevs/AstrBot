@@ -99,7 +99,7 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = f"https://github.com/Soulter/AstrBot/archive/{version}.zip"
+            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
         if proxy:

@@ -4,7 +4,7 @@ import re
 import hashlib
 import uuid
 
-from typing import List, Union, Optional, AsyncGenerator
+from typing import List, Union, Optional, AsyncGenerator, Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -49,7 +49,7 @@ class AstrMessageEvent(abc.ABC):
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
-        self._extras = {}
+        self._extras: dict[str, Any] = {}
         self.session = MessageSesion(
             platform_name=platform_meta.id,
             message_type=message_obj.type,
@@ -57,7 +57,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self.unified_msg_origin = str(self.session)
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
-        self._result: MessageEventResult = None
+        self._result: MessageEventResult | None = None
         """消息事件的结果"""
 
         self._has_send_oper = False
@@ -90,8 +90,10 @@ class AstrMessageEvent(abc.ABC):
         """
         return self.message_str
 
-    def _outline_chain(self, chain: List[BaseMessageComponent]) -> str:
+    def _outline_chain(self, chain: Optional[List[BaseMessageComponent]]) -> str:
         outline = ""
+        if not chain:
+            return outline
         for i in chain:
             if isinstance(i, Plain):
                 outline += i.text
@@ -173,13 +175,13 @@ class AstrMessageEvent(abc.ABC):
         """
         self._extras[key] = value
 
-    def get_extra(self, key=None):
+    def get_extra(self, key: str | None = None, default=None) -> Any:
         """
         获取额外的信息。
         """
         if key is None:
             return self._extras
-        return self._extras.get(key, None)
+        return self._extras.get(key, default)
 
     def clear_extra(self):
         """
@@ -261,6 +263,9 @@ class AstrMessageEvent(abc.ABC):
         """
         if isinstance(result, str):
             result = MessageEventResult().message(result)
+        # 兼容外部插件或调用方传入的 chain=None 的情况，确保为可迭代列表
+        if isinstance(result, MessageEventResult) and result.chain is None:
+            result.chain = []
         self._result = result
 
     def stop_event(self):
@@ -411,6 +416,16 @@ class AstrMessageEvent(abc.ABC):
             )
         )
         self._has_send_oper = True
+
+    async def react(self, emoji: str):
+        """
+        对消息添加表情回应。
+
+        默认实现为发送一条包含该表情的消息。
+        注意：此实现并不一定符合所有平台的原生“表情回应”行为。
+        如需支持平台原生的消息反应功能，请在对应平台的子类中重写本方法。
+        """
+        await self.send(MessageChain([Plain(emoji)]))
 
     async def get_group(self, group_id: str = None, **kwargs) -> Optional[Group]:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。

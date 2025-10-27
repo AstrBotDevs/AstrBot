@@ -5,6 +5,7 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
+import { pinyin } from 'pinyin-pro';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
@@ -64,6 +65,32 @@ const showPluginFullName = ref(false);
 const marketSearch = ref("");
 const filterKeys = ['name', 'desc', 'author'];
 const refreshingMarket = ref(false);
+
+// 插件市场拼音搜索
+const normalizeStr = (s) => (s ?? '').toString().toLowerCase().trim();
+const toPinyinText = (s) => pinyin(s ?? '', { toneType: 'none' }).toLowerCase().replace(/\s+/g, '');
+const toInitials = (s) => pinyin(s ?? '', { pattern: 'first', toneType: 'none' }).toLowerCase().replace(/\s+/g, '');
+const marketCustomFilter = (value, query, item) => {
+  const q = normalizeStr(query);
+  if (!q) return true;
+
+  const candidates = new Set();
+  if (value != null) candidates.add(String(value));
+  if (item?.name) candidates.add(String(item.name));
+  if (item?.trimmedName) candidates.add(String(item.trimmedName));
+  if (item?.desc) candidates.add(String(item.desc));
+  if (item?.author) candidates.add(String(item.author));
+
+  for (const v of candidates) {
+    const nv = normalizeStr(v);
+    if (nv.includes(q)) return true;
+    const pv = toPinyinText(v);
+    if (pv.includes(q)) return true;
+    const iv = toInitials(v);
+    if (iv.includes(q)) return true;
+  }
+  return false;
+};
 
 const plugin_handler_info_headers = computed(() => [
   { title: tm('table.headers.eventType'), key: 'event_type_h' },
@@ -183,7 +210,6 @@ const checkUpdate = () => {
     } else {
       extension.has_update = false;
     }
-    extension.logo = matchedPlugin?.logo;
   });
 };
 
@@ -470,7 +496,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
-    
+
     toast(tm('messages.refreshSuccess'), "success");
   } catch (err) {
     toast(tm('messages.refreshFailed') + " " + err, "error");
@@ -517,28 +543,13 @@ onMounted(async () => {
 <template>
   <v-row>
     <v-col cols="12" md="12">
-      <v-card variant="flat">
-        <v-card-item>
-          <template v-slot:prepend>
-            <div class="plugin-page-icon d-flex justify-center align-center rounded-lg mr-4">
-              <v-icon size="36" color="primary">mdi-puzzle</v-icon>
-            </div>
-          </template>
-          <v-card-title class="text-h4 font-weight-bold">
-            {{ tm('title') }}
-          </v-card-title>
-          <v-card-subtitle class="text-subtitle-1 mt-1 text-medium-emphasis">
-            {{ tm('subtitle') }}
-          </v-card-subtitle>
-        </v-card-item>
-
+      <v-card variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
-        <v-card-text>
-
+        <v-card-text style="padding: 0px 12px;">
           <!-- 标签栏和搜索栏 - 响应式布局 -->
-          <div class="mb-4">
+          <div class="mb-4 d-flex flex-wrap">
             <!-- 标签栏 -->
-            <v-tabs v-model="activeTab" color="primary" class="mb-3">
+            <v-tabs v-model="activeTab" color="primary">
               <v-tab value="installed">
                 <v-icon class="mr-2">mdi-puzzle</v-icon>
                 {{ tm('tabs.installed') }}
@@ -550,17 +561,16 @@ onMounted(async () => {
             </v-tabs>
 
             <!-- 搜索栏 - 在移动端时独占一行 -->
-            <v-row class="mb-2">
-              <v-col cols="12" sm="6" md="4" lg="3">
-                <v-text-field v-if="activeTab == 'market'" v-model="marketSearch" density="compact"
-                  :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat
-                  hide-details single-line>
-                </v-text-field>
-                <v-text-field v-else v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
-                  prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details single-line>
-                </v-text-field>
-              </v-col>
-            </v-row>
+            <div style="flex-grow: 1; min-width: 250px; max-width: 400px; margin-left: auto; margin-top: 8px;">
+              <v-text-field v-if="activeTab == 'market'" v-model="marketSearch" density="compact"
+                :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat
+                hide-details single-line>
+              </v-text-field>
+              <v-text-field v-else v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
+                prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details single-line>
+              </v-text-field>
+            </div>
+
           </div>
 
 
@@ -738,9 +748,9 @@ onMounted(async () => {
                 </v-row>
 
                 <v-row>
-                  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
+                  <v-col cols="12" md="6" lg="6" v-for="extension in filteredPlugins" :key="extension.name"
                     class="pb-4">
-                    <ExtensionCard :extension="extension" class="h-120 rounded-lg"
+                    <ExtensionCard :extension="extension" class="rounded-lg" style="background-color: rgb(var(--v-theme-mcpCardBg));"
                       @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
                       @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
                       @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
@@ -776,41 +786,40 @@ onMounted(async () => {
               <div class="d-flex align-center mb-2" style="justify-content: space-between;">
                 <h2>{{ tm('market.allPlugins') }}</h2>
                 <div class="d-flex align-center">
-                  <v-btn 
-                    variant="tonal" 
-                    size="small" 
-                    @click="refreshPluginMarket" 
-                    :loading="refreshingMarket"
-                    class="mr-2"
-                  >
+                  <v-btn variant="tonal" size="small" @click="refreshPluginMarket" :loading="refreshingMarket"
+                    class="mr-2">
                     <v-icon>mdi-refresh</v-icon>
                     {{ tm('buttons.refresh') }}
                   </v-btn>
-                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details density="compact"
-                    style="margin-left: 12px" />
+                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
+                    density="compact" style="margin-left: 12px" />
                 </div>
               </div>
 
               <v-col cols="12" md="12" style="padding: 0px;">
-                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name"
-                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys">
+                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" style="border-radius: 10px;"
+                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys"
+                  :custom-filter="marketCustomFilter">
                   <template v-slot:item.name="{ item }">
                     <div class="d-flex align-center"
                       style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
                       <img v-if="item.logo" :src="item.logo"
                         style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
                         alt="logo">
-                      <span v-if="item?.repo"><a :href="item?.repo"
-                          style="color: var(--v-theme-primaryText, #000); text-decoration:none">{{
-                            showPluginFullName ? item.name : item.trimmedName }}</a></span>
-                      <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
+                      <a :href="item?.repo" style="color: var(--v-theme-primaryText, #000); 
+                          text-decoration:none">
+                          <div v-if="item.display_name">
+                            <span class="d-block">{{ item.display_name }}</span>
+                            <small style="color: grey; font-size: 60%;">({{ item.name }})</small>
+                          </div>
+                          <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
+                      </a>
                     </div>
                   </template>
-
                   <template v-slot:item.desc="{ item }">
-                    <div style="font-size: 13px;">
+                    <small>
                       {{ item.desc }}
-                    </div>
+                    </small>
                   </template>
                   <template v-slot:item.author="{ item }">
                     <div style="font-size: 12px;">
@@ -822,22 +831,22 @@ onMounted(async () => {
                     <span>{{ item.stars }}</span>
                   </template>
                   <template v-slot:item.updated_at="{ item }">
-                    <span>{{ new Date(item.updated_at).toLocaleString() }}</span>
+                    <small>{{ new Date(item.updated_at).toLocaleString() }}</small>
                   </template>
                   <template v-slot:item.tags="{ item }">
                     <span v-if="item.tags.length === 0">-</span>
                     <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'"
-                      size="x-small" v-show="tag !== 'danger'">
+                      size="x-small" v-show="tag !== 'danger'" class="ma-1">
                       {{ tag }}</v-chip>
                   </template>
                   <template v-slot:item.actions="{ item }">
-                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" variant="flat"
+                    <v-btn class="text-none mr-2" size="x-small" icon variant="text"
+                      @click="open(item.repo)"><v-icon>mdi-github</v-icon></v-btn>
+                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" icon variant="text"
                       @click="handleInstallPlugin(item)">
                       <v-icon>mdi-download</v-icon></v-btn>
-                    <v-btn v-else class="text-none mr-2" size="x-small" variant="flat" border
+                    <v-btn v-else class="text-none mr-2" size="x-small" icon variant="text"
                       disabled><v-icon>mdi-check</v-icon></v-btn>
-                    <v-btn class="text-none mr-2" size="x-small" variant="flat" border
-                      @click="open(item.repo)"><v-icon>mdi-help</v-icon></v-btn>
                   </template>
                 </v-data-table>
               </v-col>
@@ -855,7 +864,8 @@ onMounted(async () => {
 
     <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
-      <small> <a href="https://github.com/Soulter/AstrBot_Plugins_Collection">{{ tm('market.submitRepo') }}</a></small>
+      <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo')
+      }}</a></small>
     </v-col>
   </v-row>
 
