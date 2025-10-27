@@ -1264,6 +1264,7 @@ CONFIG_METADATA_2 = {
                         "provider": "xinference",
                         "provider_type": "rerank",
                         "enable": True,
+                        "rerank_api_key": "",
                         "rerank_api_base": "http://127.0.0.1:9997",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
