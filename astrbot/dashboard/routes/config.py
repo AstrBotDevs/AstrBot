@@ -1,4 +1,3 @@
-import typing
 import traceback
 import os
 import inspect
@@ -6,6 +5,7 @@ from .route import Route, Response, RouteContext
 from astrbot.core.provider.entities import ProviderType
 from quart import request
 from astrbot.core.config.default import (
+    DEFAULT_CONFIG,
     CONFIG_METADATA_2,
     DEFAULT_VALUE_MAP,
     CONFIG_METADATA_3,
@@ -44,9 +44,7 @@ def try_cast(value: str, type_: str):
             return None
 
 
-def validate_config(
-    data, schema: dict, is_core: bool
-) -> typing.Tuple[typing.List[str], typing.Dict]:
+def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
     def validate(data: dict, metadata: dict = schema, path=""):
@@ -152,13 +150,19 @@ class ConfigRoute(Route):
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
+        self.ucr = core_lifecycle.umop_config_router
         self.routes = {
             "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
             "/config/abconfs": ("GET", self.get_abconf_list),
             "/config/abconf/delete": ("POST", self.delete_abconf),
             "/config/abconf/update": ("POST", self.update_abconf),
+            "/config/umo_abconf_routes": ("GET", self.get_uc_table),
+            "/config/umo_abconf_route/update_all": ("POST", self.update_ucr_all),
+            "/config/umo_abconf_route/update": ("POST", self.update_ucr),
+            "/config/umo_abconf_route/delete": ("POST", self.delete_ucr),
             "/config/get": ("GET", self.get_configs),
+            "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/platform/new": ("POST", self.post_new_platform),
@@ -171,8 +175,78 @@ class ConfigRoute(Route):
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
+            "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
         }
         self.register_routes()
+
+    async def get_uc_table(self):
+        """获取 UMOP 配置路由表"""
+        return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
+
+    async def update_ucr_all(self):
+        """更新 UMOP 配置路由表的全部内容"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        new_routing = post_data.get("routing", None)
+
+        if not new_routing or not isinstance(new_routing, dict):
+            return Response().error("缺少或错误的路由表数据").__dict__
+
+        try:
+            await self.ucr.update_routing_data(new_routing)
+            return Response().ok(message="更新成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+
+    async def update_ucr(self):
+        """更新 UMOP 配置路由表"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        umo = post_data.get("umo", None)
+        conf_id = post_data.get("conf_id", None)
+
+        if not umo or not conf_id:
+            return Response().error("缺少 UMO 或配置文件 ID").__dict__
+
+        try:
+            await self.ucr.update_route(umo, conf_id)
+            return Response().ok(message="更新成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+
+    async def delete_ucr(self):
+        """删除 UMOP 配置路由表中的一项"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        umo = post_data.get("umo", None)
+
+        if not umo:
+            return Response().error("缺少 UMO").__dict__
+
+        try:
+            if umo in self.ucr.umop_to_conf_id:
+                del self.ucr.umop_to_conf_id[umo]
+                await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
+            return Response().ok(message="删除成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除路由表项失败: {str(e)}").__dict__
+
+    async def get_default_config(self):
+        """获取默认配置文件"""
+        return (
+            Response()
+            .ok({"config": DEFAULT_CONFIG, "metadata": CONFIG_METADATA_3})
+            .__dict__
+        )
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
@@ -184,11 +258,11 @@ class ConfigRoute(Route):
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").__dict__
-        umo_parts = post_data["umo_parts"]
         name = post_data.get("name", None)
+        config = post_data.get("config", DEFAULT_CONFIG)
 
         try:
-            conf_id = self.acm.create_conf(umo_parts=umo_parts, name=name)
+            conf_id = self.acm.create_conf(name=name, config=config)
             return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -250,10 +324,9 @@ class ConfigRoute(Route):
             return Response().error("缺少配置文件 ID").__dict__
 
         name = post_data.get("name")
-        umo_parts = post_data.get("umo_parts")
 
         try:
-            success = self.acm.update_conf_info(conf_id, name=name, umo_parts=umo_parts)
+            success = self.acm.update_conf_info(conf_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
             else:
@@ -526,6 +599,61 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
+    async def get_embedding_dim(self):
+        """获取嵌入模型的维度"""
+        post_data = await request.json
+        provider_config = post_data.get("provider_config", None)
+        if not provider_config:
+            return Response().error("缺少参数 provider_config").__dict__
+
+        try:
+            # 动态导入 EmbeddingProvider
+            from astrbot.core.provider.provider import EmbeddingProvider
+            from astrbot.core.provider.register import provider_cls_map
+
+            # 获取 provider 类型
+            provider_type = provider_config.get("type", None)
+            if not provider_type:
+                return Response().error("provider_config 缺少 type 字段").__dict__
+
+            # 获取对应的 provider 类
+            if provider_type not in provider_cls_map:
+                return (
+                    Response()
+                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .__dict__
+                )
+
+            provider_metadata = provider_cls_map[provider_type]
+            cls_type = provider_metadata.cls_type
+
+            if not cls_type:
+                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+
+            # 实例化 provider
+            inst = cls_type(provider_config, {})
+
+            # 检查是否是 EmbeddingProvider
+            if not isinstance(inst, EmbeddingProvider):
+                return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
+
+            # 初始化
+            if getattr(inst, "initialize", None):
+                await inst.initialize()
+
+            # 获取嵌入向量维度
+            vec = await inst.get_embedding("echo")
+            dim = len(vec)
+
+            logger.info(
+                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}"
+            )
+
+            return Response().ok({"embedding_dimensions": dim}).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取嵌入维度失败: {str(e)}").__dict__
+
     async def get_platform_list(self):
         """获取所有平台的列表"""
         platform_list = []
@@ -722,7 +850,7 @@ class ConfigRoute(Route):
             logger.warning(
                 f"Failed to import required modules for platform {platform.name}: {e}"
             )
-        except (OSError, IOError) as e:
+        except OSError as e:
             logger.warning(f"File system error for platform {platform.name} logo: {e}")
         except Exception as e:
             logger.warning(

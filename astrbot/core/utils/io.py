@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import ssl
 import shutil
 import socket
@@ -12,7 +13,6 @@ import logging
 
 import certifi
 
-from typing import Union
 
 from PIL import Image
 from .astrbot_path import get_astrbot_data_path
@@ -52,7 +52,7 @@ def port_checker(port: int, host: str = "localhost"):
         return False
 
 
-def save_temp_img(img: Union[Image.Image, str]) -> str:
+def save_temp_img(img: Image.Image | str) -> str:
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     # 获得文件创建时间，清除超过 12 小时的
     try:
@@ -150,7 +150,11 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if show_progress:
-                            elapsed_time = time.time() - start_time
+                            elapsed_time = (
+                                time.time() - start_time
+                                if time.time() - start_time > 0
+                                else 1
+                            )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
@@ -209,7 +213,7 @@ async def get_dashboard_version():
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with open(version_file, encoding="utf-8") as f:
                 v = f.read().strip()
                 return v
     return None
@@ -221,10 +225,13 @@ async def download_dashboard(
     latest: bool = True,
     version: str | None = None,
     proxy: str | None = None,
-):
+) -> None:
     """下载管理面板文件"""
+
     if path is None:
-        path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
+        zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
+    else:
+        zip_path = Path(path).absolute()
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
@@ -233,20 +240,24 @@ async def download_dashboard(
             f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}"
         )
         try:
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(
+                dashboard_release_url, str(zip_path), show_progress=True
+            )
         except BaseException as _:
             if latest:
-                dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
             else:
-                dashboard_release_url = f"https://github.com/Soulter/AstrBot/releases/download/{version}/dist.zip"
+                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(
+                dashboard_release_url, str(zip_path), show_progress=True
+            )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        await download_file(url, path, show_progress=True)
-    with zipfile.ZipFile(path, "r") as z:
+        await download_file(url, str(zip_path), show_progress=True)
+    with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

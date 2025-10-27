@@ -7,7 +7,7 @@ import copy
 import json
 import traceback
 from datetime import timedelta
-from typing import AsyncGenerator, Union
+from collections.abc import AsyncGenerator
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core import logger
 from astrbot.core.message.components import Image
@@ -33,6 +33,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
+from ..utils import inject_kb_context
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -44,7 +45,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]
-AgentRunner = ToolLoopAgentRunner[AgentContextWrapper]
+AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -102,7 +103,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         request = ProviderRequest(
             prompt=input_,
-            system_prompt=tool.description,
+            system_prompt=tool.description or "",
             image_urls=[],  # 暂时不传递原始 agent 的上下文
             contexts=[],  # 暂时不传递原始 agent 的上下文
             func_tool=toolset,
@@ -239,7 +240,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         yield res
 
 
-class MainAgentHooks(BaseAgentRunHooks[AgentContextWrapper]):
+class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
@@ -337,7 +338,7 @@ class LLMRequestSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-    def _select_provider(self, event: AstrMessageEvent) -> Provider | None:
+    def _select_provider(self, event: AstrMessageEvent):
         """选择使用的 LLM 提供商"""
         sel_provider = event.get_extra("selected_provider")
         _ctx = self.ctx.plugin_manager.context
@@ -367,7 +368,7 @@ class LLMRequestSubStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent, _nested: bool = False
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
@@ -381,6 +382,9 @@ class LLMRequestSubStage(Stage):
 
         provider = self._select_provider(event)
         if provider is None:
+            return
+        if not isinstance(provider, Provider):
+            logger.error(f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。")
             return
 
         if event.get_extra("provider_request"):
@@ -415,6 +419,14 @@ class LLMRequestSubStage(Stage):
 
         if not req.prompt and not req.image_urls:
             return
+
+        # 应用知识库
+        try:
+            await inject_kb_context(
+                umo=event.unified_msg_origin, p_ctx=self.ctx, req=req
+            )
+        except Exception as e:
+            logger.error(f"调用知识库时遇到问题: {e}")
 
         # 执行请求 LLM 前事件钩子。
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
@@ -480,6 +492,9 @@ class LLMRequestSubStage(Stage):
                     new_tool_set.add_tool(tool)
             req.func_tool = new_tool_set
 
+        # 备份 req.contexts
+        backup_contexts = copy.deepcopy(req.contexts)
+
         # run agent
         agent_runner = AgentRunner()
         logger.debug(
@@ -517,8 +532,10 @@ class LLMRequestSubStage(Stage):
                         chain = (
                             MessageChain().message(final_llm_resp.completion_text).chain
                         )
-                    else:
+                    elif final_llm_resp.result_chain:
                         chain = final_llm_resp.result_chain.chain
+                    else:
+                        chain = MessageChain().chain
                     event.set_result(
                         MessageEventResult(
                             chain=chain,
@@ -528,6 +545,9 @@ class LLMRequestSubStage(Stage):
         else:
             async for _ in run_agent(agent_runner, self.max_step, self.show_tool_use):
                 yield
+
+        # 恢复备份的 contexts
+        req.contexts = backup_contexts
 
         await self._save_to_history(event, req, agent_runner.get_final_llm_resp())
 
@@ -547,6 +567,8 @@ class LLMRequestSubStage(Stage):
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
+        if not req.conversation:
+            return
         conversation = await self.conv_manager.get_conversation(
             event.unified_msg_origin, req.conversation.cid
         )

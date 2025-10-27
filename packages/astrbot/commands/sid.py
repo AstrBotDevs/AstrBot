@@ -11,19 +11,26 @@ class SIDCommand:
         self.context = context
 
     async def sid(self, event: AstrMessageEvent):
-        """获取会话 ID 和 管理员 ID"""
+        """获取消息来源信息"""
         sid = event.unified_msg_origin
         user_id = str(event.get_sender_id())
-        ret = f"""SID: {sid} 此 ID 可用于设置会话白名单。
-/wl <SID> 添加白名单, /dwl <SID> 删除白名单。
-
-UID: {user_id} 此 ID 可用于设置管理员。
-/op <UID> 授权管理员, /deop <UID> 取消管理员。"""
+        umo_platform = event.session.platform_id
+        umo_msg_type = event.session.message_type.value
+        umo_session_id = event.session.session_id
+        ret = (
+            f"UMO: 「{sid}」 此值可用于设置白名单。\n"
+            f"UID: 「{user_id}」 此值可用于设置管理员。\n"
+            f"消息会话来源信息:\n"
+            f"  机器人 ID: 「{umo_platform}」\n"
+            f"  消息类型: 「{umo_msg_type}」\n"
+            f"  会话 ID: 「{umo_session_id}」\n"
+            f"消息来源可用于配置机器人的配置文件路由。"
+        )
 
         if (
             self.context.get_config()["platform_settings"]["unique_session"]
             and event.get_group_id()
         ):
-            ret += f"\n\n当前处于独立会话模式, 此群 ID: {event.get_group_id()}, 也可将此 ID 加入白名单来放行整个群聊。"
+            ret += f"\n\n当前处于独立会话模式, 此群 ID: 「{event.get_group_id()}」, 也可将此 ID 加入白名单来放行整个群聊。"
 
         event.set_result(MessageEventResult().message(ret).use_t2i(False))

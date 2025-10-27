@@ -6,7 +6,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.3.5"
+VERSION = "4.5.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -134,8 +134,11 @@ DEFAULT_CONFIG = {
     "persona": [],  # deprecated
     "timezone": "Asia/Shanghai",
     "callback_api_base": "",
-    "default_kb_collection": "",  # 默认知识库名称
+    "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
+    "kb_names": [],  # 默认知识库名称列表
+    "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
+    "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
 }
 
 
@@ -166,7 +169,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "QQ 个人号(aiocqhttp)": {
+                    "QQ 个人号(OneBot v11)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -174,7 +177,7 @@ CONFIG_METADATA_2 = {
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
                     },
-                    "微信个人号(WeChatPadPro)": {
+                    "WeChatPadPro": {
                         "id": "wechatpadpro",
                         "type": "wechatpadpro",
                         "enable": False,
@@ -301,8 +304,26 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
+                    # "WebChat": {
+                    #     "id": "webchat",
+                    #     "type": "webchat",
+                    #     "enable": False,
+                    #     "webchat_link_path": "",
+                    #     "webchat_present_type": "fullscreen",
+                    # },
                 },
                 "items": {
+                    # "webchat_link_path": {
+                    #     "description": "链接路径",
+                    #     "_special": "webchat_link_path",
+                    #     "type": "string",
+                    # },
+                    # "webchat_present_type": {
+                    #     "_special": "webchat_present_type",
+                    #     "description": "展现形式",
+                    #     "type": "string",
+                    #     "options": ["fullscreen", "embedded"],
+                    # },
                     "satori_api_base_url": {
                         "description": "Satori API 终结点",
                         "type": "string",
@@ -491,19 +512,18 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
                     },
                     "ws_reverse_host": {
-                        "description": "反向 Websocket 主机地址(AstrBot 为服务器端)",
+                        "description": "反向 Websocket 主机",
                         "type": "string",
-                        "hint": "aiocqhttp 适配器的反向 Websocket 服务器 IP 地址，不包含端口号。",
+                        "hint": "AstrBot 将作为服务器端。",
                     },
                     "ws_reverse_port": {
                         "description": "反向 Websocket 端口",
                         "type": "int",
-                        "hint": "aiocqhttp 适配器的反向 Websocket 端口。",
                     },
                     "ws_reverse_token": {
                         "description": "反向 Websocket Token",
                         "type": "string",
-                        "hint": "aiocqhttp 适配器的反向 Websocket Token。未设置则不启用 Token 验证。",
+                        "hint": "反向 Websocket Token。未设置则不启用 Token 验证。",
                     },
                     "wecom_ai_bot_name": {
                         "description": "企业微信智能机器人的名字",
@@ -1397,6 +1417,7 @@ CONFIG_METADATA_2 = {
                         "description": "嵌入维度",
                         "type": "int",
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
+                        "_special": "get_embedding_dim",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
@@ -2044,6 +2065,9 @@ CONFIG_METADATA_2 = {
             "default_kb_collection": {
                 "type": "string",
             },
+            "kb_names": {"type": "list", "items": {"type": "string"}},
+            "kb_fusion_top_k": {"type": "int", "default": 20},
+            "kb_final_top_k": {"type": "int", "default": 5},
         },
     },
 }
@@ -2122,10 +2146,22 @@ CONFIG_METADATA_3 = {
                 "description": "知识库",
                 "type": "object",
                 "items": {
-                    "default_kb_collection": {
-                        "description": "默认使用的知识库",
-                        "type": "string",
+                    "kb_names": {
+                        "description": "知识库列表",
+                        "type": "list",
+                        "items": {"type": "string"},
                         "_special": "select_knowledgebase",
+                        "hint": "支持多选",
+                    },
+                    "kb_fusion_top_k": {
+                        "description": "融合检索结果数",
+                        "type": "int",
+                        "hint": "多个知识库检索结果融合后的返回结果数量",
+                    },
+                    "kb_final_top_k": {
+                        "description": "最终返回结果数",
+                        "type": "int",
+                        "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
                 },
             },
@@ -2219,7 +2255,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
-                        "hint": "例子: 如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
+                        "hint": "如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",

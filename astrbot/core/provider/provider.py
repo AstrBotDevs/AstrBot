@@ -1,4 +1,5 @@
 import abc
+import asyncio
 from typing import List
 from typing import AsyncGenerator
 from astrbot.core.agent.tool import ToolSet
@@ -202,6 +203,72 @@ class EmbeddingProvider(AbstractProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         ...
+
+    async def get_embeddings_batch(
+        self,
+        texts: list[str],
+        batch_size: int = 16,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> list[list[float]]:
+        """批量获取文本的向量，分批处理以节省内存
+
+        Args:
+            texts: 文本列表
+            batch_size: 每批处理的文本数量
+            tasks_limit: 并发任务数量限制
+            max_retries: 失败时的最大重试次数
+            progress_callback: 进度回调函数，接收参数 (current, total)
+
+        Returns:
+            向量列表
+        """
+        semaphore = asyncio.Semaphore(tasks_limit)
+        all_embeddings: list[list[float]] = []
+        failed_batches: list[tuple[int, list[str]]] = []
+        completed_count = 0
+        total_count = len(texts)
+
+        async def process_batch(batch_idx: int, batch_texts: list[str]):
+            nonlocal completed_count
+            async with semaphore:
+                for attempt in range(max_retries):
+                    try:
+                        batch_embeddings = await self.get_embeddings(batch_texts)
+                        all_embeddings.extend(batch_embeddings)
+                        completed_count += len(batch_texts)
+                        if progress_callback:
+                            await progress_callback(completed_count, total_count)
+                        return
+                    except Exception as e:
+                        if attempt == max_retries - 1:
+                            # 最后一次重试失败，记录失败的批次
+                            failed_batches.append((batch_idx, batch_texts))
+                            raise Exception(
+                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {str(e)}"
+                            )
+                        # 等待一段时间后重试，使用指数退避
+                        await asyncio.sleep(2**attempt)
+
+        tasks = []
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+            batch_idx = i // batch_size
+            tasks.append(process_batch(batch_idx, batch_texts))
+
+        # 收集所有任务的结果，包括失败的任务
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 检查是否有失败的任务
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            error_msg = (
+                f"有 {len(errors)} 个批次处理失败: {'; '.join(str(e) for e in errors)}"
+            )
+            raise Exception(error_msg)
+
+        return all_embeddings
 
 
 class RerankProvider(AbstractProvider):

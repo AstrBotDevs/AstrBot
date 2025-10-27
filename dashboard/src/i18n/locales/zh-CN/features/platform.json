@@ -1,9 +1,9 @@
 {
-  "title": "平台适配器管理",
-  "subtitle": "管理机器人的平台适配器，连接到不同的聊天平台",
+  "title": "机器人",
+  "subtitle": "管理平台适配器实例，连接到不同的消息平台",
   "adapters": "平台适配器",
-  "addAdapter": "新增适配器",
-  "emptyText": "暂无平台适配器，点击 新增适配器 添加",
+  "addAdapter": "创建机器人",
+  "emptyText": "暂无平台适配器，点击 创建机器人 添加",
   "details": {
     "adapterType": "适配器类型",
     "token": "Token",
@@ -17,11 +17,11 @@
   "dialog": {
     "add": "新增",
     "edit": "编辑",
-    "adapter": "平台适配器",
+    "adapter": "机器人",
     "refresh": "刷新",
     "cancel": "取消",
     "save": "保存",
-    "addPlatform": "添加平台适配器",
+    "addPlatform": "创建机器人",
     "connectTitle": "接入 {name}",
     "viewTutorial": "查看接入教程",
     "noTemplates": "暂无平台模板",

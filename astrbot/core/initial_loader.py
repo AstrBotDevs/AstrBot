@@ -41,10 +41,13 @@ class InitialLoader:
         self.dashboard_server = AstrBotDashboard(
             core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event, webui_dir
         )
-        task = asyncio.gather(
-            core_task, self.dashboard_server.run()
-        )  # 启动核心任务和仪表板服务器
 
+        coro = self.dashboard_server.run()
+        if coro:
+            # 启动核心任务和仪表板服务器
+            task = asyncio.gather(core_task, coro)
+        else:
+            task = core_task
         try:
             await task  # 整个AstrBot在这里运行
         except asyncio.CancelledError:

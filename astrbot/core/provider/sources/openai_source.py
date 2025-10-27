@@ -16,7 +16,7 @@ from astrbot.core.message.message_event_result import MessageChain
 
 from astrbot.api.provider import Provider
 from astrbot import logger
-from astrbot.core.provider.func_tool_manager import FuncCall
+from astrbot.core.provider.func_tool_manager import ToolSet
 from typing import List, AsyncGenerator
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
@@ -49,7 +49,7 @@ class ProviderOpenAIOfficial(Provider):
             self.client = AsyncAzureOpenAI(
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
-                base_url=provider_config.get("api_base", None),
+                base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
             )
         else:
@@ -79,7 +79,7 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
-    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: ToolSet) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -126,7 +126,7 @@ class ProviderOpenAIOfficial(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: FuncCall
+        self, payloads: dict, tools: ToolSet
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -183,9 +183,7 @@ class ProviderOpenAIOfficial(Provider):
 
         yield llm_response
 
-    async def parse_openai_completion(
-        self, completion: ChatCompletion, tools: FuncCall
-    ):
+    async def parse_openai_completion(self, completion: ChatCompletion, tools: ToolSet):
         """解析 OpenAI 的 ChatCompletion 响应"""
         llm_response = LLMResponse("assistant")
 
@@ -208,7 +206,10 @@ class ProviderOpenAIOfficial(Provider):
                     # workaround for #1359
                     tool_call = json.loads(tool_call)
                 for tool in tools.func_list:
-                    if tool.name == tool_call.function.name:
+                    if (
+                        tool_call.type == "function"
+                        and tool.name == tool_call.function.name
+                    ):
                         # workaround for #1454
                         if isinstance(tool_call.function.arguments, str):
                             args = json.loads(tool_call.function.arguments)
@@ -277,7 +278,7 @@ class ProviderOpenAIOfficial(Provider):
         e: Exception,
         payloads: dict,
         context_query: list,
-        func_tool: FuncCall,
+        func_tool: ToolSet,
         chosen_key: str,
         available_api_keys: List[str],
         retry_cnt: int,
@@ -420,7 +421,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1:
+        if retry_cnt == max_retries - 1 or llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
@@ -430,10 +431,10 @@ class ProviderOpenAIOfficial(Provider):
     async def text_chat_stream(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = [],
-        func_tool: FuncCall = None,
-        contexts=[],
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
@@ -526,7 +527,9 @@ class ProviderOpenAIOfficial(Provider):
     def set_key(self, key):
         self.client.api_key = key
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None) -> dict:
+    async def assemble_context(
+        self, text: str, image_urls: List[str] | None = None
+    ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
             user_content = {
