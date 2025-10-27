@@ -29,7 +29,7 @@ class XinferenceRerankProvider(RerankProvider):
         else:
             logger.info("Xinference Rerank: No API key provided.")
             self.client = Client(self.base_url)
-            
+
         self.model_uid = None
 
         running_models = self.client.list_models()
@@ -38,7 +38,7 @@ class XinferenceRerankProvider(RerankProvider):
                 logger.info(f"Model '{self.model_name}' is already running with UID: {uid}")
                 self.model_uid = uid
                 break
-        
+
         if self.model_uid is None:
             logger.info(f"Launching {self.model_name} model...")
             self.model_uid = self.client.launch_model(
@@ -46,14 +46,14 @@ class XinferenceRerankProvider(RerankProvider):
                 model_type="rerank"
             )
             logger.info("Model launched.")
-        
+
         self.model = self.client.get_model(self.model_uid)
 
 
     async def rerank(
         self, query: str, documents: list[str], top_n: int | None = None
     ) -> list[RerankResult]:
-        
+
         try:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
