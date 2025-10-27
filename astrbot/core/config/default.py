@@ -1258,6 +1258,16 @@ CONFIG_METADATA_2 = {
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                     },
+                    "Xinference Rerank": {
+                        "id": "xinference_rerank",
+                        "type": "xinference_rerank",
+                        "provider": "xinference",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_base": "http://127.0.0.1:9997",
+                        "rerank_model": "BAAI/bge-reranker-base",
+                        "timeout": 20,
+                    },
                 },
                 "items": {
                     "rerank_api_base": {

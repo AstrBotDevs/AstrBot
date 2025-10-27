@@ -55,6 +55,7 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "jieba>=0.42.1",
     "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
+    "xinference-client",
 ]
 
 [project.scripts]
