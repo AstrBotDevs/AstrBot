@@ -15,7 +15,7 @@ class QQOfficialWebhook:
         self.appid = config["appid"]
         self.secret = config["secret"]
         self.port = config.get("port", 6196)
-        self.is_sandbox = config.get("is_sandbox", False)
+        self.is_sandbox = config.get("is_sandbox", "false").lower() == "true"
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
 
         if isinstance(self.port, str):
@@ -26,9 +26,7 @@ class QQOfficialWebhook:
         self.token = Token(self.appid, self.secret)
 
         self.server = quart.Quart(__name__)
-        self.server.add_url_rule(
-            "/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"]
-        )
+        self.server.add_url_rule("/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"])
         self.client = botpy_client
         self.event_queue = event_queue
         self.shutdown_event = asyncio.Event()
@@ -61,9 +59,7 @@ class QQOfficialWebhook:
     async def webhook_validation(self, validation_payload: dict):
         seed = await self.repeat_seed(self.secret)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
-        msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token", ""
-        )
+        msg = validation_payload.get("event_ts", "") + validation_payload.get("plain_token", "")
         # sign
         signature = private_key.sign(msg.encode()).hex()
         response = {
@@ -98,9 +94,7 @@ class QQOfficialWebhook:
         return {"opcode": 12}
 
     async def start_polling(self):
-        logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。"
-        )
+        logger.info(f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。")
         await self.server.run_task(
             host=self.callback_server_host,
             port=self.port,
