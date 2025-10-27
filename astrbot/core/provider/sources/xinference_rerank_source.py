@@ -16,7 +16,6 @@ class XinferenceRerankProvider(RerankProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
-        self.auth_key = provider_config.get("rerank_api_key", "")
         self.base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8000")
         self.base_url = self.base_url.rstrip("/")
         self.timeout = provider_config.get("timeout", 20)
@@ -31,29 +30,34 @@ class XinferenceRerankProvider(RerankProvider):
             self.client = Client(self.base_url)
 
         self.model_uid = None
+        try:
+            running_models = self.client.list_models()
+            for uid, model_spec in running_models.items():
+                if model_spec.get("model_name") == self.model_name:
+                    logger.info(
+                        f"Model '{self.model_name}' is already running with UID: {uid}"
+                    )
+                    self.model_uid = uid
+                    break
 
-        running_models = self.client.list_models()
-        for uid, model_spec in running_models.items():
-            if model_spec.get("model_name") == self.model_name:
-                logger.info(f"Model '{self.model_name}' is already running with UID: {uid}")
-                self.model_uid = uid
-                break
+            if self.model_uid is None:
+                logger.info(f"Launching {self.model_name} model...")
+                self.model_uid = self.client.launch_model(
+                    model_name=self.model_name, model_type="rerank"
+                )
+                logger.info("Model launched.")
 
-        if self.model_uid is None:
-            logger.info(f"Launching {self.model_name} model...")
-            self.model_uid = self.client.launch_model(
-                model_name=self.model_name,
-                model_type="rerank"
+            self.model = self.client.get_model(self.model_uid)
+        except Exception as e:
+            logger.error(f"Failed to initialize Xinference model: {e}")
+            logger.debug(
+                f"Xinference initialization failed with exception: {e}", exc_info=True
             )
-            logger.info("Model launched.")
-
-        self.model = self.client.get_model(self.model_uid)
-
+            self.model = None
 
     async def rerank(
         self, query: str, documents: list[str], top_n: int | None = None
     ) -> list[RerankResult]:
-
         try:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
@@ -62,9 +66,7 @@ class XinferenceRerankProvider(RerankProvider):
             results = response.get("results", [])
 
             if not results:
-                logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response}"
-                )
+                logger.warning(f"Rerank API 返回了空的列表数据。原始响应: {response}")
 
             return [
                 RerankResult(
