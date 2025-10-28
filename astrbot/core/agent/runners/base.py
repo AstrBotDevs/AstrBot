@@ -26,7 +26,7 @@ class BaseAgentRunner(T.Generic[TContext]):
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        **kwargs: T.Any,
+        **kwargs: T.Any,  # noqa: ANN401
     ) -> None:
         """
         Reset the agent to its initial state.
