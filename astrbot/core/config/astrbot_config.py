@@ -22,14 +22,19 @@ class AstrBotConfig(dict):
     - 如果传入了 schema，将会通过 schema 解析出 default_config，此时传入的 default_config 会被忽略。
     """
 
+    # Class-level 属性注解，帮助类型检查器正确推断实例属性类型
+    config_path: str
+    default_config: dict
+    schema: dict | None
+    first_deploy: bool | None
+
     def __init__(
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
-        schema: dict = None,
-    ):
+        schema: dict | None = None,
+    ) -> None:
         super().__init__()
-
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
@@ -60,7 +65,7 @@ class AstrBotConfig(dict):
         """将 Schema 转换成 Config"""
         conf = {}
 
-        def _parse_schema(schema: dict, conf: dict):
+        def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
@@ -81,7 +86,9 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
+    def check_config_integrity(
+        self, refer_conf: dict, conf: dict, path: str = ""
+    ) -> bool:
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
@@ -139,7 +146,7 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict = None):
+    def save_config(self, replace_config: dict | None = None) -> None:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
@@ -149,20 +156,20 @@ class AstrBotConfig(dict):
         with open(self.config_path, "w", encoding="utf-8-sig") as f:
             json.dump(self, f, indent=2, ensure_ascii=False)
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> object:
         try:
             return self[item]
         except KeyError:
             return None
 
-    def __delattr__(self, key):
+    def __delattr__(self, key: str) -> None:
         try:
             del self[key]
             self.save_config()
         except KeyError:
             raise AttributeError(f"没有找到 Key: '{key}'")
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key: str, value: object) -> None:
         self[key] = value
 
     def check_exist(self) -> bool:
