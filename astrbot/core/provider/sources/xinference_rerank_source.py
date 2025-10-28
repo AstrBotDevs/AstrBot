@@ -1,4 +1,3 @@
-import asyncio
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
