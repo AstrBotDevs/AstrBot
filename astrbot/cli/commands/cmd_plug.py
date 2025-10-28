@@ -86,7 +86,7 @@ def new(name: str):
         f.write(f"# {name}\n\n{desc}\n\n# 支持\n\n[帮助文档](https://astrbot.app)\n")
 
     # 重写 main.py
-    with open(plug_path / "main.py", "r", encoding="utf-8") as f:
+    with open(plug_path / "main.py", encoding="utf-8") as f:
         content = f.read()
 
     new_content = content.replace(

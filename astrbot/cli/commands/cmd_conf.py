@@ -2,7 +2,9 @@ import json
 import click
 import hashlib
 import zoneinfo
-from typing import Any, Callable
+from typing import Any
+
+from collections.abc import Callable
 from ..utils import get_astrbot_root, check_astrbot_root
 
 
