@@ -1262,6 +1262,18 @@ CONFIG_METADATA_2 = {
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                     },
+                    "Xinference Rerank": {
+                        "id": "xinference_rerank",
+                        "type": "xinference_rerank",
+                        "provider": "xinference",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:9997",
+                        "rerank_model": "BAAI/bge-reranker-base",
+                        "timeout": 20,
+                        "launch_model_if_not_running": False,
+                    },
                 },
                 "items": {
                     "rerank_api_base": {
@@ -1277,6 +1289,11 @@ CONFIG_METADATA_2 = {
                     "rerank_model": {
                         "description": "重排序模型名称",
                         "type": "string",
+                    },
+                    "launch_model_if_not_running": {
+                        "description": "模型未运行时自动启动",
+                        "type": "bool",
+                        "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。",
                     },
                     "modalities": {
                         "description": "模型能力",

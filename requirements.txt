@@ -49,3 +49,4 @@ aiofiles
 rank-bm25
 jieba
 markitdown-no-magika[docx,xls,xlsx]
+xinference-client
