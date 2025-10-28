@@ -3,6 +3,7 @@
 按照固定的字符数将文本分块,支持重叠区域。
 """
 
+from typing import Any
 from .base import BaseChunker
 
 
@@ -12,7 +13,7 @@ class FixedSizeChunker(BaseChunker):
     按照固定的字符数分块,并支持块之间的重叠。
     """
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50) -> None:
         """初始化分块器
 
         Args:
@@ -22,7 +23,7 @@ class FixedSizeChunker(BaseChunker):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    async def chunk(self, text: str, **kwargs) -> list[str]:
+    async def chunk(self, text: str, **kwargs: Any) -> list[str]:  # noqa:ANN401
         """固定大小分块
 
         Args:

@@ -44,7 +44,7 @@ class RetrievalManager:
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBSQLiteDatabase,
-    ):
+    ) -> None:
         """初始化检索管理器
 
         Args:
@@ -189,7 +189,7 @@ class RetrievalManager:
         query: str,
         kb_ids: list[str],
         kb_options: dict,
-    ):
+    ) -> list[Result]:
         """稠密检索 (向量相似度)
 
         为每个知识库使用独立的向量数据库进行检索,然后合并结果。
