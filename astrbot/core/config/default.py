@@ -165,7 +165,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "appid": "",
                         "secret": "",
-                        "is_sandbox": "false",
+                        "is_sandbox": False,
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
@@ -324,6 +324,10 @@ CONFIG_METADATA_2 = {
                     #     "type": "string",
                     #     "options": ["fullscreen", "embedded"],
                     # },
+                    "is_sandbox": {
+                        "description": "沙箱模式",
+                        "type": "bool",
+                    },
                     "satori_api_base_url": {
                         "description": "Satori API 终结点",
                         "type": "string",
