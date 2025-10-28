@@ -37,7 +37,7 @@ class FunctionTool:
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description}, active={self.active}, origin={self.origin})"
 
-    def __dict__(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """将 FunctionTool 转换为字典格式"""
         return {
             "name": self.name,
