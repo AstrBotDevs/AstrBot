@@ -50,7 +50,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Login to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
@@ -138,7 +138,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Login to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
