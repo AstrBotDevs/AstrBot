@@ -16,7 +16,7 @@ class SharedPreferences:
     def _load_preferences(self):
         if os.path.exists(self.path):
             try:
-                with open(self.path, "r") as f:
+                with open(self.path) as f:
                     return json.load(f)
             except json.JSONDecodeError:
                 os.remove(self.path)

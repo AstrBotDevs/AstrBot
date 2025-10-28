@@ -1,7 +1,7 @@
 import sqlite3
 import time
 from astrbot.core.db.po import Platform, Stats
-from typing import Tuple, List, Dict, Any
+from typing import Any
 from dataclasses import dataclass
 
 
@@ -126,7 +126,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: Tuple = None):
+    def _exec_sql(self, sql: str, params: tuple = None):
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -257,7 +257,7 @@ class SQLiteDatabase:
             (user_id, cid, history, updated_at, created_at),
         )
 
-    def get_conversations(self, user_id: str) -> Tuple:
+    def get_conversations(self, user_id: str) -> tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -320,7 +320,7 @@ class SQLiteDatabase:
 
     def get_all_conversations(
         self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页，按更新时间降序排序"""
         try:
             c = self.conn.cursor()
@@ -381,12 +381,12 @@ class SQLiteDatabase:
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
+        platforms: list[str] = None,
+        message_types: list[str] = None,
         search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        exclude_ids: list[str] = None,
+        exclude_platforms: list[str] = None,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表"""
         try:
             c = self.conn.cursor()
