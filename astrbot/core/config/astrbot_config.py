@@ -3,7 +3,6 @@ import json
 import logging
 import enum
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
-from typing import Dict
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -45,7 +44,7 @@ class AstrBotConfig(dict):
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
                 object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
-        with open(config_path, "r", encoding="utf-8-sig") as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             conf = json.loads(conf_str)
 
@@ -82,7 +81,7 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: Dict, conf: Dict, path=""):
+    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
@@ -140,7 +139,7 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: Dict = None):
+    def save_config(self, replace_config: dict = None):
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
