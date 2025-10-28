@@ -101,8 +101,11 @@ class DingtalkPlatformAdapter(Platform):
 
         if abm.type == MessageType.GROUP_MESSAGE:
             if message.is_in_at_list:
-                for i in message.at_users:
-                    abm.message.append(At(qq=i.dingtalk_id))
+                if message.at_users is not None:
+                    for i in message.at_users:
+                        abm.message.append(At(qq=i.dingtalk_id))
+                else:
+                    abm.message.append(At(qq=abm.self_id))
             abm.group_id = message.conversation_id
             if self.unique_session:
                 abm.session_id = abm.sender.user_id
