@@ -1,5 +1,7 @@
 import asyncio
-from xinference_client import RESTfulClient as Client
+from xinference_client.client.restful.async_restful_client import (
+    AsyncClient as Client,
+)
 from astrbot import logger
 from ..provider import RerankProvider
 from ..register import register_provider_adapter
@@ -21,7 +23,11 @@ class XinferenceRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 20)
         self.model_name = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
         self.api_key = provider_config.get("rerank_api_key")
+        self.client = None
+        self.model = None
+        self.model_uid = None
 
+    async def initialize(self):
         if self.api_key:
             logger.info("Xinference Rerank: Using API key for authentication.")
             self.client = Client(self.base_url, api_key=self.api_key)
@@ -29,9 +35,8 @@ class XinferenceRerankProvider(RerankProvider):
             logger.info("Xinference Rerank: No API key provided.")
             self.client = Client(self.base_url)
 
-        self.model_uid = None
         try:
-            running_models = self.client.list_models()
+            running_models = await self.client.list_models()
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
@@ -42,12 +47,12 @@ class XinferenceRerankProvider(RerankProvider):
 
             if self.model_uid is None:
                 logger.info(f"Launching {self.model_name} model...")
-                self.model_uid = self.client.launch_model(
+                self.model_uid = await self.client.launch_model(
                     model_name=self.model_name, model_type="rerank"
                 )
                 logger.info("Model launched.")
 
-            self.model = self.client.get_model(self.model_uid)
+            self.model = await self.client.get_model(self.model_uid)
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
@@ -58,15 +63,18 @@ class XinferenceRerankProvider(RerankProvider):
     async def rerank(
         self, query: str, documents: list[str], top_n: int | None = None
     ) -> list[RerankResult]:
+        if not self.model:
+            logger.error("Xinference rerank model is not initialized.")
+            return []
         try:
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None, self.model.rerank, documents, query, top_n
-            )
+            response = await self.model.rerank(documents, query, top_n)
             results = response.get("results", [])
+            logger.debug(f"Rerank API response: {response}")
 
             if not results:
-                logger.warning(f"Rerank API 返回了空的列表数据。原始响应: {response}")
+                logger.warning(
+                    f"Rerank API returned an empty list. Original response: {response}"
+                )
 
             return [
                 RerankResult(
@@ -82,4 +90,5 @@ class XinferenceRerankProvider(RerankProvider):
 
     async def terminate(self) -> None:
         """关闭客户端会话"""
-        pass
+        if self.client:
+            await self.client.close()
