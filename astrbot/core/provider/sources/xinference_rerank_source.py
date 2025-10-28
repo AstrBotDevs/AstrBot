@@ -23,6 +23,9 @@ class XinferenceRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 20)
         self.model_name = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
         self.api_key = provider_config.get("rerank_api_key")
+        self.launch_model_if_not_running = provider_config.get(
+            "launch_model_if_not_running", False
+        )
         self.client = None
         self.model = None
         self.model_uid = None
@@ -46,13 +49,21 @@ class XinferenceRerankProvider(RerankProvider):
                     break
 
             if self.model_uid is None:
-                logger.info(f"Launching {self.model_name} model...")
-                self.model_uid = await self.client.launch_model(
-                    model_name=self.model_name, model_type="rerank"
-                )
-                logger.info("Model launched.")
+                if self.launch_model_if_not_running:
+                    logger.info(f"Launching {self.model_name} model...")
+                    self.model_uid = await self.client.launch_model(
+                        model_name=self.model_name, model_type="rerank"
+                    )
+                    logger.info("Model launched.")
+                else:
+                    logger.warning(
+                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available."
+                    )
+                    return
 
-            self.model = await self.client.get_model(self.model_uid)
+            if self.model_uid:
+                self.model = await self.client.get_model(self.model_uid)
+
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
@@ -91,4 +102,8 @@ class XinferenceRerankProvider(RerankProvider):
     async def terminate(self) -> None:
         """关闭客户端会话"""
         if self.client:
-            await self.client.close()
+            logger.info("Closing Xinference rerank client...")
+            try:
+                await self.client.close()
+            except Exception as e:
+                logger.error(f"Failed to close Xinference client: {e}", exc_info=True)
