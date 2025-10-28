@@ -37,7 +37,7 @@ def get_platform_type(
 
 async def migration_conversation_table(
     db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
-):
+) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
     )
@@ -91,7 +91,7 @@ async def migration_conversation_table(
 
 async def migration_platform_table(
     db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
-):
+) -> None:
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
     )
@@ -166,7 +166,7 @@ async def migration_platform_table(
 
 async def migration_webchat_data(
     db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
-):
+) -> None:
     """迁移 WebChat 的历史记录到新的 PlatformMessageHistory 表中"""
     db_helper_v3 = SQLiteV3DatabaseV3(
         db_path=DB_PATH.replace("data_v4.db", "data_v3.db")
@@ -219,7 +219,7 @@ async def migration_webchat_data(
 
 async def migration_persona_data(
     db_helper: BaseDatabase, astrbot_config: AstrBotConfig
-):
+) -> None:
     """
     迁移 Persona 数据到新的表中。
     旧的 Persona 数据存储在 preference 中，新的 Persona 数据存储在 persona 表中。
@@ -261,7 +261,7 @@ async def migration_persona_data(
 
 async def migration_preferences(
     db_helper: BaseDatabase, platform_id_map: dict[str, dict[str, str]]
-):
+) -> None:
     # 1. global scope migration
     keys = [
         "inactivated_llm_tools",
