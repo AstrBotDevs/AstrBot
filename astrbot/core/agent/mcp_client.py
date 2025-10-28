@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import timedelta
-from typing import Optional
 from contextlib import AsyncExitStack
 from astrbot import logger
 from astrbot.core.utils.log_pipe import LogPipe
@@ -96,7 +95,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class MCPClient:
     def __init__(self):
         # Initialize session and client objects
-        self.session: Optional[mcp.ClientSession] = None
+        self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
         self.name: str | None = None

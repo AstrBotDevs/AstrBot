@@ -1,5 +1,7 @@
 import mcp
-from typing import Any, Generic, AsyncGenerator
+from typing import Any, Generic
+
+from collections.abc import AsyncGenerator
 from .run_context import TContext, ContextWrapper
 from .tool import FunctionTool
 
