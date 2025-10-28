@@ -202,13 +202,22 @@ const viewReadme = () => {
             </v-chip>
           </div>
 
-          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 80px; font-size: 90%;">
+          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 70px; font-size: 90%;">
             {{ extension.desc }}
           </div>
         </div>
       </div>
 
     </v-card-text>
+
+    <v-card-actions class="extension-actions">
+      <v-btn color="primary" size="small" @click="viewReadme">
+        {{ tm('buttons.viewDocs') }}
+      </v-btn>
+      <v-btn v-if="!marketMode" color="primary"  size="small" @click="configure">
+        {{ tm('card.actions.pluginConfig') }}
+      </v-btn>
+    </v-card-actions>
   </v-card>
 
 </template>
@@ -237,5 +246,10 @@ const viewReadme = () => {
   .extension-image-container {
     margin-left: 8px;
   }
+}
+
+.extension-actions {
+  margin-top: auto;
+  gap: 8px;
 }
 </style>

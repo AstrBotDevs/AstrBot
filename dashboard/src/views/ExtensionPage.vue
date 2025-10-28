@@ -740,7 +740,7 @@ onMounted(async () => {
               <!-- 卡片视图 -->
               <div v-else>
                 <v-row v-if="filteredPlugins.length === 0" class="text-center">
-                  <v-col cols="12" class="pa-8">
+                  <v-col cols="12" class="pa-2">
                     <v-icon size="64" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
                     <div class="text-h5 mb-2">{{ tm('empty.noPlugins') }}</div>
                     <div class="text-body-1 mb-4">{{ tm('empty.noPluginsDesc') }}</div>
@@ -748,8 +748,8 @@ onMounted(async () => {
                 </v-row>
 
                 <v-row>
-                  <v-col cols="12" md="6" lg="6" v-for="extension in filteredPlugins" :key="extension.name"
-                    class="pb-4">
+                  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
+                    class="pb-2">
                     <ExtensionCard :extension="extension" class="rounded-lg" style="background-color: rgb(var(--v-theme-mcpCardBg));"
                       @configure="openExtensionConfig(extension.name)" @uninstall="uninstallExtension(extension.name)"
                       @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
