@@ -16,7 +16,7 @@ from ..utils import (
 
 
 @click.group()
-def plug():
+def plug() -> None:
     """插件管理"""
     pass
 
@@ -30,7 +30,11 @@ def _get_data_path() -> Path:
     return (base / "data").resolve()
 
 
-def display_plugins(plugins, title=None, color=None):
+def display_plugins(
+    plugins: list[dict],
+    title: str | None = None,
+    color: int | tuple[int, int, int] | str | None = None,
+) -> None:
     if title:
         click.echo(click.style(title, fg=color, bold=True))
 
@@ -47,7 +51,7 @@ def display_plugins(plugins, title=None, color=None):
 
 @plug.command()
 @click.argument("name")
-def new(name: str):
+def new(name: str) -> None:
     """创建新插件"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins" / name
@@ -102,7 +106,7 @@ def new(name: str):
 
 @plug.command()
 @click.option("--all", "-a", is_flag=True, help="列出未安装的插件")
-def list(all: bool):
+def list(all: bool) -> None:
     """列出插件"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
@@ -143,7 +147,7 @@ def list(all: bool):
 @plug.command()
 @click.argument("name")
 @click.option("--proxy", help="代理服务器地址")
-def install(name: str, proxy: str | None):
+def install(name: str, proxy: str | None) -> None:
     """安装插件"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
@@ -166,7 +170,7 @@ def install(name: str, proxy: str | None):
 
 @plug.command()
 @click.argument("name")
-def remove(name: str):
+def remove(name: str) -> None:
     """卸载插件"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
@@ -189,7 +193,7 @@ def remove(name: str):
 @plug.command()
 @click.argument("name", required=False)
 @click.option("--proxy", help="Github代理地址")
-def update(name: str, proxy: str | None):
+def update(name: str, proxy: str | None) -> None:
     """更新插件"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
@@ -227,7 +231,7 @@ def update(name: str, proxy: str | None):
 
 @plug.command()
 @click.argument("query")
-def search(query: str):
+def search(query: str) -> None:
     """搜索插件"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")

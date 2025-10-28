@@ -102,7 +102,7 @@ def _save_config(config: dict[str, Any]) -> None:
     )
 
 
-def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
+def _set_nested_item(obj: dict[str, Any], path: str, value: object) -> None:
     """设置嵌套字典中的值"""
     parts = path.split(".")
     for part in parts[:-1]:
@@ -116,7 +116,7 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
     obj[parts[-1]] = value
 
 
-def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
+def _get_nested_item(obj: dict[str, Any], path: str) -> object:
     """获取嵌套字典中的值"""
     parts = path.split(".")
     for part in parts:
@@ -125,7 +125,7 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 
 @click.group(name="conf")
-def conf():
+def conf() -> None:
     """配置管理命令
 
     支持的配置项:
@@ -148,7 +148,7 @@ def conf():
 @conf.command(name="set")
 @click.argument("key")
 @click.argument("value")
-def set_config(key: str, value: str):
+def set_config(key: str, value: str) -> None:
     """设置配置项的值"""
     if key not in CONFIG_VALIDATORS.keys():
         raise click.ClickException(f"不支持的配置项: {key}")
@@ -177,7 +177,7 @@ def set_config(key: str, value: str):
 
 @conf.command(name="get")
 @click.argument("key", required=False)
-def get_config(key: str = None):
+def get_config(key: str | None = None) -> None:
     """获取配置项的值，不提供key则显示所有可配置项"""
     config = _load_config()
 
