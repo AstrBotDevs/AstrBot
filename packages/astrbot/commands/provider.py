@@ -159,7 +159,11 @@ class ProviderCommands:
                         message.set_result(
                             MessageEventResult().message("切换模型未知错误: " + str(e))
                         )
-                    message.set_result(MessageEventResult().message("切换模型成功。"))
+                    message.set_result(
+                        MessageEventResult().message(
+                            f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]"
+                        )
+                    )
             else:
                 prov.set_model(idx_or_name)
                 message.set_result(
