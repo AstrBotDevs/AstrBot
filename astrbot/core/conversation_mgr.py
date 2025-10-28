@@ -6,6 +6,7 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 """
 
 import json
+from typing import Any
 from astrbot.core import sp
 
 from collections.abc import Callable, Awaitable
@@ -16,7 +17,7 @@ from astrbot.core.db.po import Conversation, ConversationV2
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
-    def __init__(self, db_helper: BaseDatabase):
+    def __init__(self, db_helper: BaseDatabase) -> None:
         self.session_conversations: dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
@@ -101,7 +102,9 @@ class ConversationManager:
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
         return conv.conversation_id
 
-    async def switch_conversation(self, unified_msg_origin: str, conversation_id: str):
+    async def switch_conversation(
+        self, unified_msg_origin: str, conversation_id: str
+    ) -> None:
         """切换会话的对话
 
         Args:
@@ -113,7 +116,7 @@ class ConversationManager:
 
     async def delete_conversation(
         self, unified_msg_origin: str, conversation_id: str | None = None
-    ):
+    ) -> None:
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
 
         Args:
@@ -129,7 +132,7 @@ class ConversationManager:
                 self.session_conversations.pop(unified_msg_origin, None)
                 await sp.session_remove(unified_msg_origin, "sel_conv_id")
 
-    async def delete_conversations_by_user_id(self, unified_msg_origin: str):
+    async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
 
         Args:
@@ -207,7 +210,7 @@ class ConversationManager:
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs,
+        **kwargs: Any,  # noqa: ANN401
     ) -> tuple[list[Conversation], int]:
         """获取过滤后的对话列表
 
@@ -239,7 +242,7 @@ class ConversationManager:
         history: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
-    ):
+    ) -> None:
         """更新会话的对话
 
         Args:
@@ -260,7 +263,7 @@ class ConversationManager:
 
     async def update_conversation_title(
         self, unified_msg_origin: str, title: str, conversation_id: str | None = None
-    ):
+    ) -> None:
         """更新会话的对话标题
 
         Args:
@@ -281,7 +284,7 @@ class ConversationManager:
         unified_msg_origin: str,
         persona_id: str,
         conversation_id: str | None = None,
-    ):
+    ) -> None:
         """更新会话的对话 Persona ID
 
         Args:
@@ -298,8 +301,12 @@ class ConversationManager:
         )
 
     async def get_human_readable_context(
-        self, unified_msg_origin, conversation_id, page=1, page_size=10
-    ):
+        self,
+        unified_msg_origin: str,
+        conversation_id: str,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[list[str], int]:
         """获取人类可读的上下文
 
         Args:
