@@ -7,7 +7,8 @@ AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json �
 
 import json
 from astrbot.core import sp
-from typing import Dict, List, Callable, Awaitable
+
+from collections.abc import Callable, Awaitable
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 
@@ -16,12 +17,12 @@ class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase):
-        self.session_conversations: Dict[str, str] = {}
+        self.session_conversations: dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
-        self._on_session_deleted_callbacks: List[Callable[[str], Awaitable[None]]] = []
+        self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
 
     def register_on_session_deleted(
         self, callback: Callable[[str], Awaitable[None]]
@@ -182,7 +183,7 @@ class ConversationManager:
 
     async def get_conversations(
         self, unified_msg_origin: str | None = None, platform_id: str | None = None
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """获取对话列表
 
         Args:
