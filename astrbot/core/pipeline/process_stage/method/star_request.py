@@ -4,7 +4,9 @@
 
 from ...context import PipelineContext, call_handler
 from ..stage import Stage
-from typing import Dict, Any, List, AsyncGenerator, Union
+from typing import Any
+
+from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core import logger
@@ -22,11 +24,11 @@ class StarRequestSubStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
-        activated_handlers: List[StarHandlerMetadata] = event.get_extra(
+    ) -> None | AsyncGenerator[None, None]:
+        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers"
         )
-        handlers_parsed_params: Dict[str, Dict[str, Any]] = event.get_extra(
+        handlers_parsed_params: dict[str, dict[str, Any]] = event.get_extra(
             "handlers_parsed_params"
         )
         if not handlers_parsed_params:

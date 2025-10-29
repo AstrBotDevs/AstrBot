@@ -2,7 +2,8 @@ import random
 import asyncio
 import math
 import astrbot.core.message.components as Comp
-from typing import Union, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..stage import register_stage, Stage
 from ..context import PipelineContext, call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -151,7 +152,7 @@ class RespondStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
         if result is None:
             return

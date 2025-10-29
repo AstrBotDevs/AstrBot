@@ -1,4 +1,4 @@
-from typing import Union, AsyncGenerator
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -20,7 +20,7 @@ class ContentSafetyCheckStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent, check_text: str | None = None
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()
         ok, info = self.strategy_selector.check(text)

@@ -1,11 +1,10 @@
 from . import ContentSafetyStrategy
-from typing import List, Tuple
 from astrbot import logger
 
 
 class StrategySelector:
     def __init__(self, config: dict) -> None:
-        self.enabled_strategies: List[ContentSafetyStrategy] = []
+        self.enabled_strategies: list[ContentSafetyStrategy] = []
         if config["internal_keywords"]["enable"]:
             from .keywords import KeywordsStrategy
 
@@ -26,7 +25,7 @@ class StrategySelector:
                 )
             )
 
-    def check(self, content: str) -> Tuple[bool, str]:
+    def check(self, content: str) -> tuple[bool, str]:
         for strategy in self.enabled_strategies:
             ok, info = strategy.check(content)
             if not ok:

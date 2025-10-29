@@ -1,10 +1,11 @@
 from __future__ import annotations
 import abc
-from typing import List, AsyncGenerator, Union, Type
+
+from collections.abc import AsyncGenerator
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from .context import PipelineContext
 
-registered_stages: List[Type[Stage]] = []  # 维护了所有已注册的 Stage 实现类类型
+registered_stages: list[type[Stage]] = []  # 维护了所有已注册的 Stage 实现类类型
 
 
 def register_stage(cls):
@@ -26,9 +27,7 @@ class Stage(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    async def process(self, event: AstrMessageEvent) -> None | AsyncGenerator[None]:
         """处理事件
 
         Args:

@@ -1,4 +1,4 @@
-from typing import List, Union, AsyncGenerator
+from collections.abc import AsyncGenerator
 from ..stage import Stage, register_stage
 from ..context import PipelineContext
 from .method.llm_request import LLMRequestSubStage
@@ -23,9 +23,9 @@ class ProcessStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
-        activated_handlers: List[StarHandlerMetadata] = event.get_extra(
+        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers"
         )
         # 有插件 Handler 被激活
