@@ -259,6 +259,10 @@ class ProviderManager:
                     from .sources.whisper_selfhosted_source import (
                         ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
                     )
+                case "xinference_stt":
+                    from .sources.xinference_stt_provider import (
+                        ProviderXinferenceSTT as ProviderXinferenceSTT,
+                    )
                 case "openai_tts_api":
                     from .sources.openai_tts_api_source import (
                         ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
