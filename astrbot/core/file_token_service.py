@@ -23,7 +23,12 @@ class FileTokenService:
         for token in expired_tokens:
             self.staged_files.pop(token, None)
 
-    async def register_file(self, file_path: str, timeout: float = None) -> str:
+    async def check_token_expired(self, file_token: str) -> bool:
+        async with self.lock:
+            await self._cleanup_expired_tokens()
+            return file_token not in self.staged_files
+
+    async def register_file(self, file_path: str, timeout: float | None = None) -> str:
         """向令牌服务注册一个文件。
 
         Args:

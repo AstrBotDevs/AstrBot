@@ -1,3 +1,4 @@
+import copy
 import astrbot.api.star as star
 import builtins
 import datetime
@@ -41,7 +42,7 @@ class ProcessLLMRequest:
         if persona:
             if prompt := persona["prompt"]:
                 req.system_prompt += prompt
-            if begin_dialogs := persona["_begin_dialogs_processed"]:
+            if begin_dialogs := copy.deepcopy(persona["_begin_dialogs_processed"]):
                 req.contexts[:0] = begin_dialogs
 
         # tools select

@@ -3,7 +3,7 @@ import base64
 import json
 import logging
 import random
-from typing import Optional
+from typing import Optional, List
 from collections.abc import AsyncGenerator
 
 from google import genai
@@ -60,7 +60,7 @@ class ProviderGoogleGenAI(Provider):
             provider_settings,
             default_persona,
         )
-        self.api_keys: list = provider_config.get("key", [])
+        self.api_keys: List = super().get_keys()
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.timeout: int = int(provider_config.get("timeout", 180))
 
@@ -218,19 +218,21 @@ class ProviderGoogleGenAI(Provider):
             response_modalities=modalities,
             tools=tool_list,
             safety_settings=self.safety_settings if self.safety_settings else None,
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=min(
-                    int(
-                        self.provider_config.get("gm_thinking_config", {}).get(
-                            "budget", 0
-                        )
+            thinking_config=(
+                types.ThinkingConfig(
+                    thinking_budget=min(
+                        int(
+                            self.provider_config.get("gm_thinking_config", {}).get(
+                                "budget", 0
+                            )
+                        ),
+                        24576,
                     ),
-                    24576,
-                ),
-            )
-            if "gemini-2.5-flash" in self.get_model()
-            and hasattr(types.ThinkingConfig, "thinking_budget")
-            else None,
+                )
+                if "gemini-2.5-flash" in self.get_model()
+                and hasattr(types.ThinkingConfig, "thinking_budget")
+                else None
+            ),
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),
@@ -274,9 +276,11 @@ class ProviderGoogleGenAI(Provider):
             if role == "user":
                 if isinstance(content, list):
                     parts = [
-                        types.Part.from_text(text=item["text"] or " ")
-                        if item["type"] == "text"
-                        else process_image_url(item["image_url"])
+                        (
+                            types.Part.from_text(text=item["text"] or " ")
+                            if item["type"] == "text"
+                            else process_image_url(item["image_url"])
+                        )
                         for item in content
                     ]
                 else:

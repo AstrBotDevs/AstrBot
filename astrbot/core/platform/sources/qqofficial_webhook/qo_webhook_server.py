@@ -15,12 +15,13 @@ class QQOfficialWebhook:
         self.appid = config["appid"]
         self.secret = config["secret"]
         self.port = config.get("port", 6196)
+        self.is_sandbox = config.get("is_sandbox", False)
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
 
         if isinstance(self.port, str):
             self.port = int(self.port)
 
-        self.http: BotHttp = BotHttp(timeout=300)
+        self.http: BotHttp = BotHttp(timeout=300, is_sandbox=self.is_sandbox)
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
 

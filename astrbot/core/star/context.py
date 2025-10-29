@@ -19,6 +19,7 @@ from astrbot.core.platform import Platform
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from .star import star_registry, StarMetadata, star_map
 from .star_handler import star_handlers_registry, StarHandlerMetadata, EventType
@@ -55,6 +56,7 @@ class Context:
         message_history_manager: PlatformMessageHistoryManager,
         persona_manager: PersonaManager,
         astrbot_config_mgr: AstrBotConfigManager,
+        knowledge_base_manager: KnowledgeBaseManager,
     ):
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -68,6 +70,7 @@ class Context:
         self.message_history_manager = message_history_manager
         self.persona_manager = persona_manager
         self.astrbot_config_mgr = astrbot_config_mgr
+        self.kb_manager = knowledge_base_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata | None:
         """根据插件名获取插件的 Metadata"""

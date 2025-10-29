@@ -32,6 +32,12 @@ class SQLiteDatabase(BaseDatabase):
         """Initialize the database by creating tables if they do not exist."""
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL"))
+            await conn.execute(text("PRAGMA cache_size=20000"))
+            await conn.execute(text("PRAGMA temp_store=MEMORY"))
+            await conn.execute(text("PRAGMA mmap_size=134217728"))
+            await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 
     # ====
@@ -160,6 +166,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(ConversationV2.title).ilike(f"%{search_query}%"),
                         col(ConversationV2.content).ilike(f"%{search_query}%"),
                         col(ConversationV2.user_id).ilike(f"%{search_query}%"),
+                        col(ConversationV2.conversation_id).ilike(f"%{search_query}%"),
                     )
                 )
             if "message_types" in kwargs and len(kwargs["message_types"]) > 0:

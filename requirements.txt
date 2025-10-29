@@ -44,3 +44,9 @@ sqlmodel
 deprecated
 sqlalchemy[asyncio]
 audioop-lts; python_version>='3.13'
+pypdf
+aiofiles
+rank-bm25
+jieba
+markitdown-no-magika[docx,xls,xlsx]
+xinference-client

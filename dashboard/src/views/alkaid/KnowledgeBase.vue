@@ -1,6 +1,11 @@
 <template>
     <div class="flex-grow-1" style="display: flex; flex-direction: column; height: 100%;">
         <div style="flex-grow: 1; width: 100%; border: 1px solid #eee; border-radius: 8px; padding: 16px">
+            <v-banner lines="one">
+                <template v-slot:text>
+                    建议您更换使用新版知识库功能。
+                </template>
+            </v-banner>
             <!-- knowledge card -->
             <div v-if="!installed" class="d-flex align-center justify-center flex-column"
                 style="flex-grow: 1; width: 100%; height: 100%;">
@@ -105,9 +110,9 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
-                    }}</v-btn>
+                        }}</v-btn>
                     <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
-                    }}</v-btn>
+                        }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -132,7 +137,7 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn color="primary" variant="text" @click="showEmojiPicker = false">{{ tm('emojiPicker.close')
-                    }}</v-btn>
+                        }}</v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
@@ -159,8 +164,8 @@
                     <v-chip v-if="currentKB.rerank_provider_id" color="tertiary" variant="tonal" size="small"
                         rounded="sm">
                         <v-icon start size="small">mdi-sort-variant</v-icon>
-                        重排序模型: {{ rerankProviderConfigs.
-                            find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置' }}
+                        重排序模型: {{rerankProviderConfigs.
+                            find(provider => provider.id === currentKB.rerank_provider_id)?.rerank_model || '未设置'}}
                     </v-chip>
                     <small style="margin-left: 8px;">💡 使用方式: 在聊天页中输入 "/kb use {{ currentKB.collection_name }}"</small>
                 </div>
@@ -411,7 +416,7 @@
                     <v-spacer></v-spacer>
                     <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
                         tm('deleteDialog.cancel')
-                    }}</v-btn>
+                        }}</v-btn>
                     <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
                         tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
@@ -603,6 +608,7 @@ export default {
                 .then(response => {
                     if (response.data.status !== 'ok' || response.data.data.length === 0) {
                         this.showSnackbar(this.tm('messages.pluginNotAvailable'), 'error');
+                        this.installed = false;
                         return
                     }
                     if (!response.data.data[0].activated) {

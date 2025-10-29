@@ -200,9 +200,49 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 func_tool = req.func_tool.get_func(func_tool_name)
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
+                if not func_tool:
+                    logger.warning(f"未找到指定的工具: {func_tool_name}，将跳过。")
+                    tool_call_result_blocks.append(
+                        ToolCallMessageSegment(
+                            role="tool",
+                            tool_call_id=func_tool_id,
+                            content=f"error: 未找到工具 {func_tool_name}",
+                        )
+                    )
+                    continue
+
+                valid_params = {}  # 参数过滤：只传递函数实际需要的参数
+
+                # 获取实际的 handler 函数
+                if func_tool.handler:
+                    logger.debug(
+                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}"
+                    )
+                    if func_tool.parameters and func_tool.parameters.get("properties"):
+                        expected_params = set(func_tool.parameters["properties"].keys())
+
+                        valid_params = {
+                            k: v
+                            for k, v in func_tool_args.items()
+                            if k in expected_params
+                        }
+
+                    # 记录被忽略的参数
+                    ignored_params = set(func_tool_args.keys()) - set(
+                        valid_params.keys()
+                    )
+                    if ignored_params:
+                        logger.warning(
+                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}"
+                        )
+                else:
+                    # 如果没有 handler（如 MCP 工具），使用所有参数
+                    valid_params = func_tool_args
+                    logger.warning(f"工具 {func_tool_name} 没有 handler，使用所有参数")
+
                 try:
                     await self.agent_hooks.on_tool_start(
-                        self.run_context, func_tool, func_tool_args
+                        self.run_context, func_tool, valid_params
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
@@ -210,9 +250,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
-                    **func_tool_args,
+                    **valid_params,  # 只传递有效的参数
                 )
-                async for resp in executor:
+
+                _final_resp: CallToolResult | None = None
+                async for resp in executor:  # type: ignore
                     if isinstance(resp, CallToolResult):
                         res = resp
                         content = res.content
@@ -267,13 +309,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     chain=res.chain, type="tool_direct_result"
                                 )
                     else:
+                        # 不应该出现其他类型
                         logger.warning(
                             f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
                         )
 
                 try:
                     await self.agent_hooks.on_tool_end(
-                        self.run_context, func_tool, func_tool_args, None
+                        self.run_context, func_tool, func_tool_args, _final_resp
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)

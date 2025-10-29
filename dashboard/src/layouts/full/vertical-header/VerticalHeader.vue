@@ -191,7 +191,7 @@ function getReleases() {
 
 function getDevCommits() {
   let proxy = localStorage.getItem('selectedGitHubProxy') || '';
-  const originalUrl = "https://api.github.com/repos/Soulter/AstrBot/commits";
+  const originalUrl = "https://api.github.com/repos/AstrBotDevs/AstrBot/commits";
   let commits_url = originalUrl;
   if (proxy !== '') {
     proxy = proxy.endsWith('/') ? proxy : proxy + '/';
@@ -311,7 +311,7 @@ commonStore.getStartTime();
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs }" @click="$router.push('/about')">
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs }" @click="router.push('/about')">
       <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
@@ -397,7 +397,7 @@ commonStore.getStartTime();
                     <strong>{{ t('core.header.updateDialog.preReleaseWarning.title') }}</strong>
                     <br>
                     {{ t('core.header.updateDialog.preReleaseWarning.description') }}
-                    <a href="https://github.com/Soulter/AstrBot/issues" target="_blank" class="text-decoration-none">
+                    <a href="https://github.com/AstrBotDevs/AstrBot/issues" target="_blank" class="text-decoration-none">
                       {{ t('core.header.updateDialog.preReleaseWarning.issueLink') }}
                     </a>
                   </div>
@@ -456,7 +456,7 @@ commonStore.getStartTime();
             <div class="mb-4">
               <small>{{ t('core.header.updateDialog.manualInput.hint') }}</small>
               <br>
-              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>{{
+              <a href="https://github.com/AstrBotDevs/AstrBot/commits/master"><small>{{
                 t('core.header.updateDialog.manualInput.linkText') }}</small></a>
             </div>
             <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">

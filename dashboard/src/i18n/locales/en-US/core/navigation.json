@@ -1,5 +1,5 @@
 {
-  "dashboard": "Dashboard", 
+  "dashboard": "Dashboard",
   "platforms": "Platforms",
   "providers": "Providers",
   "persona": "Persona",
@@ -16,5 +16,8 @@
   "settings": "Settings",
   "documentation": "Documentation",
   "github": "GitHub",
-  "drag": "Drag"
-} 
+  "drag": "Drag",
+  "groups": {
+    "more": "More Features"
+  }
+}

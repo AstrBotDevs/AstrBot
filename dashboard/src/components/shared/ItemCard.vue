@@ -27,7 +27,9 @@
       <v-btn
         variant="outlined"
         color="error"
+        size="small"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('delete', item)"
       >
         {{ t('core.common.itemCard.delete') }}
@@ -35,7 +37,9 @@
       <v-btn
         variant="tonal"
         color="primary"
+        size="small"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('edit', item)"
       >
         {{ t('core.common.itemCard.edit') }}
@@ -44,11 +48,14 @@
         v-if="showCopyButton"
         variant="tonal"
         color="secondary"
+        size="small"
         rounded="xl"
+        :disabled="loading"
         @click="$emit('copy', item)"
       >
         {{ t('core.common.itemCard.copy') }}
       </v-btn>
+      <slot name="actions" :item="item"></slot>
       <v-spacer></v-spacer>
     </v-card-actions>
 
@@ -120,7 +127,6 @@ export default {
   transition: all 0.3s ease;
   overflow: hidden;
   min-height: 220px;
-  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
