@@ -257,7 +257,7 @@ class Context:
         return False
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
-        """添加一个 LLM 工具。"""
+        """添加 LLM 工具。"""
         for tool in tools:
             self.provider_manager.llm_tools.func_list.append(tool)
 
