@@ -9,7 +9,7 @@ from sqlmodel import (
     UniqueConstraint,
     Field,
 )
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 
 class PlatformStat(SQLModel, table=True):
@@ -50,14 +50,14 @@ class ConversationV2(SQLModel, table=True):
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
-    content: Optional[list] = Field(default=None, sa_type=JSON)
+    content: list | None = Field(default=None, sa_type=JSON)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    title: Optional[str] = Field(default=None, max_length=255)
-    persona_id: Optional[str] = Field(default=None)
+    title: str | None = Field(default=None, max_length=255)
+    persona_id: str | None = Field(default=None)
 
     __table_args__ = (
         UniqueConstraint(
@@ -80,9 +80,9 @@ class Persona(SQLModel, table=True):
     )
     persona_id: str = Field(max_length=255, nullable=False)
     system_prompt: str = Field(sa_type=Text, nullable=False)
-    begin_dialogs: Optional[list] = Field(default=None, sa_type=JSON)
+    begin_dialogs: list | None = Field(default=None, sa_type=JSON)
     """a list of strings, each representing a dialog to start with"""
-    tools: Optional[list] = Field(default=None, sa_type=JSON)
+    tools: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
@@ -142,10 +142,8 @@ class PlatformMessageHistory(SQLModel, table=True):
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
-    sender_id: Optional[str] = Field(default=None)  # ID of the sender in the platform
-    sender_name: Optional[str] = Field(
-        default=None
-    )  # Name of the sender in the platform
+    sender_id: str | None = Field(default=None)  # ID of the sender in the platform
+    sender_name: str | None = Field(default=None)  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
