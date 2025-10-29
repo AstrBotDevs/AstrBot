@@ -35,7 +35,7 @@ class RespondStage(Stage):
         Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
     }
 
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
         self.platform_settings: dict = self.config.get("platform_settings", {})
@@ -93,7 +93,7 @@ class RespondStage(Stage):
             # random
             return random.uniform(self.interval[0], self.interval[1])
 
-    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
+    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
         Args:
@@ -135,7 +135,7 @@ class RespondStage(Stage):
         raw_chain: list[BaseMessageComponent],
         extract_types: set[ComponentType],
         modify_raw_chain: bool = True,
-    ):
+    ) -> list[BaseMessageComponent]:
         extracted = []
         if modify_raw_chain:
             remaining = []

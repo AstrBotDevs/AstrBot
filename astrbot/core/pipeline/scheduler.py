@@ -9,21 +9,23 @@ from astrbot.core import logger
 class PipelineScheduler:
     """管道调度器，负责调度各个阶段的执行"""
 
-    def __init__(self, context: PipelineContext):
+    def __init__(self, context: PipelineContext) -> None:
         registered_stages.sort(
             key=lambda x: STAGES_ORDER.index(x.__name__)
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
         self.stages = []  # 存储阶段实例
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
         for stage_cls in registered_stages:
             stage_instance = stage_cls()  # 创建实例
             await stage_instance.initialize(self.ctx)
             self.stages.append(stage_instance)
 
-    async def _process_stages(self, event: AstrMessageEvent, from_stage=0):
+    async def _process_stages(
+        self, event: AstrMessageEvent, from_stage: int = 0
+    ) -> None:
         """依次执行各个阶段
 
         Args:
@@ -65,7 +67,7 @@ class PipelineScheduler:
                     logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
                     break
 
-    async def execute(self, event: AstrMessageEvent):
+    async def execute(self, event: AstrMessageEvent) -> None:
         """执行 pipeline
 
         Args:

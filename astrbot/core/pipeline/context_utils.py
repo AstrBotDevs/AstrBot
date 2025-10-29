@@ -11,8 +11,8 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 async def call_handler(
     event: AstrMessageEvent,
     handler: T.Callable[..., T.Awaitable[T.Any]],
-    *args,
-    **kwargs,
+    *args: T.Any,  # noqa: ANN401
+    **kwargs: T.Any,  # noqa: ANN401
 ) -> T.AsyncGenerator[T.Any, None]:
     """执行事件处理函数并处理其返回结果
 
@@ -73,8 +73,8 @@ async def call_handler(
 async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
-    *args,
-    **kwargs,
+    *args: T.Any,  # noqa: ANN401
+    **kwargs: T.Any,  # noqa: ANN401
 ) -> bool:
     """调用事件钩子函数
 

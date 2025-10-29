@@ -19,7 +19,7 @@ from ..stage import Stage, register_stage, registered_stages
 
 @register_stage
 class ResultDecorateStage(Stage):
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.reply_prefix = ctx.astrbot_config["platform_settings"]["reply_prefix"]
         self.reply_with_mention = ctx.astrbot_config["platform_settings"][
