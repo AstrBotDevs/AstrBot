@@ -1,6 +1,8 @@
 import enum
 
-from typing import List, Optional, Union, AsyncGenerator
+from typing import Optional
+
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from astrbot.core.message.components import (
     BaseMessageComponent,
@@ -22,12 +24,12 @@ class MessageChain:
         `use_t2i_` (bool): 用于标记是否使用文本转图片服务。默认为 None，即跟随用户的设置。当设置为 True 时，将会使用文本转图片服务。
     """
 
-    chain: List[BaseMessageComponent] = field(default_factory=list)
-    use_t2i_: Optional[bool] = None  # None 为跟随用户设置
-    type: Optional[str] = None
+    chain: list[BaseMessageComponent] = field(default_factory=list)
+    use_t2i_: bool | None = None  # None 为跟随用户设置
+    type: str | None = None
     """消息链承载的消息的类型。可选，用于让消息平台区分不同业务场景的消息链。"""
 
-    def message(self, message: str):
+    def message(self, message: str) -> "MessageChain":
         """添加一条文本消息到消息链 `chain` 中。
 
         Example:
@@ -39,7 +41,7 @@ class MessageChain:
         self.chain.append(Plain(message))
         return self
 
-    def at(self, name: str, qq: Union[str, int]):
+    def at(self, name: str, qq: str | int) -> "MessageChain":
         """添加一条 At 消息到消息链 `chain` 中。
 
         Example:
@@ -51,7 +53,7 @@ class MessageChain:
         self.chain.append(At(name=name, qq=qq))
         return self
 
-    def at_all(self):
+    def at_all(self) -> "MessageChain":
         """添加一条 AtAll 消息到消息链 `chain` 中。
 
         Example:
@@ -64,7 +66,7 @@ class MessageChain:
         return self
 
     @deprecated("请使用 message 方法代替。")
-    def error(self, message: str):
+    def error(self, message: str) -> "MessageChain":
         """添加一条错误消息到消息链 `chain` 中
 
         Example:
@@ -75,7 +77,7 @@ class MessageChain:
         self.chain.append(Plain(message))
         return self
 
-    def url_image(self, url: str):
+    def url_image(self, url: str) -> "MessageChain":
         """添加一条图片消息（https 链接）到消息链 `chain` 中。
 
         Note:
@@ -89,7 +91,7 @@ class MessageChain:
         self.chain.append(Image.fromURL(url))
         return self
 
-    def file_image(self, path: str):
+    def file_image(self, path: str) -> "MessageChain":
         """添加一条图片消息（本地文件路径）到消息链 `chain` 中。
 
         Note:
@@ -100,7 +102,7 @@ class MessageChain:
         self.chain.append(Image.fromFileSystem(path))
         return self
 
-    def base64_image(self, base64_str: str):
+    def base64_image(self, base64_str: str) -> "MessageChain":
         """添加一条图片消息（base64 编码字符串）到消息链 `chain` 中。
         Example:
 
@@ -109,7 +111,7 @@ class MessageChain:
         self.chain.append(Image.fromBase64(base64_str))
         return self
 
-    def use_t2i(self, use_t2i: bool):
+    def use_t2i(self, use_t2i: bool) -> "MessageChain":
         """设置是否使用文本转图片服务。
 
         Args:
@@ -122,10 +124,10 @@ class MessageChain:
         """获取纯文本消息。这个方法将获取 chain 中所有 Plain 组件的文本并拼接成一条消息。空格分隔。"""
         return " ".join([comp.text for comp in self.chain if isinstance(comp, Plain)])
 
-    def squash_plain(self):
+    def squash_plain(self) -> Optional["MessageChain"]:
         """将消息链中的所有 Plain 消息段聚合到第一个 Plain 消息段中。"""
         if not self.chain:
-            return
+            return None
 
         new_chain = []
         first_plain = None
@@ -183,15 +185,15 @@ class MessageEventResult(MessageChain):
         `result_type` (EventResultType): 事件处理的结果类型。
     """
 
-    result_type: Optional[EventResultType] = field(
+    result_type: EventResultType | None = field(
         default_factory=lambda: EventResultType.CONTINUE
     )
 
-    result_content_type: Optional[ResultContentType] = field(
+    result_content_type: ResultContentType | None = field(
         default_factory=lambda: ResultContentType.GENERAL_RESULT
     )
 
-    async_stream: Optional[AsyncGenerator] = None
+    async_stream: AsyncGenerator | None = None
     """异步流"""
 
     def stop_event(self) -> "MessageEventResult":
