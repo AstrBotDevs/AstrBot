@@ -1,6 +1,7 @@
 import asyncio
 import re
-from typing import AsyncGenerator, Dict, List
+
+from collections.abc import AsyncGenerator
 from aiocqhttp import CQHttp, Event
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
@@ -198,7 +199,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             group_id=group_id,
         )
 
-        members: List[Dict] = await self.bot.call_action(
+        members: list[dict] = await self.bot.call_action(
             "get_group_member_list",
             group_id=group_id,
         )

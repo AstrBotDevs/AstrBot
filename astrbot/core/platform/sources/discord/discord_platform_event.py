@@ -3,7 +3,6 @@ import discord
 import base64
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
 import sys
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -41,7 +40,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: DiscordBotClient,
-        interaction_followup_webhook: Optional[discord.Webhook] = None,
+        interaction_followup_webhook: discord.Webhook | None = None,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
@@ -98,7 +97,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def _get_channel(self) -> Optional[discord.abc.Messageable]:
+    async def _get_channel(self) -> discord.abc.Messageable | None:
         """获取当前事件对应的频道对象"""
         try:
             channel_id = int(self.session_id)
@@ -112,7 +111,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
     async def _parse_to_discord(
         self,
         message: MessageChain,
-    ) -> tuple[str, list[discord.File], Optional[discord.ui.View], list[discord.Embed]]:
+    ) -> tuple[str, list[discord.File], discord.ui.View | None, list[discord.Embed]]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
         content = ""
         files = []

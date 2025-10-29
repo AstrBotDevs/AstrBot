@@ -3,7 +3,9 @@ import asyncio
 import logging
 import uuid
 import itertools
-from typing import Awaitable, Any
+from typing import Any
+
+from collections.abc import Awaitable
 from aiocqhttp import CQHttp, Event
 from astrbot.api.platform import (
     Platform,

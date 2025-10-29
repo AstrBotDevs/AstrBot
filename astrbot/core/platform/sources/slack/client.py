@@ -3,7 +3,8 @@ import hmac
 import hashlib
 import asyncio
 import logging
-from typing import Callable, Optional
+
+from collections.abc import Callable
 from quart import Quart, request, Response
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
@@ -22,7 +23,7 @@ class SlackWebhookClient:
         host: str = "0.0.0.0",
         port: int = 3000,
         path: str = "/slack/events",
-        event_handler: Optional[Callable] = None,
+        event_handler: Callable | None = None,
     ):
         self.web_client = web_client
         self.signing_secret = signing_secret
@@ -119,7 +120,7 @@ class SlackSocketClient:
         self,
         web_client: AsyncWebClient,
         app_token: str,
-        event_handler: Optional[Callable] = None,
+        event_handler: Callable | None = None,
     ):
         self.web_client = web_client
         self.app_token = app_token

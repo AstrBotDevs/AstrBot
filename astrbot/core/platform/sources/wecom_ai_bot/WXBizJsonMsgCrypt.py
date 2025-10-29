@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- encoding:utf-8 -*-
 
 """对企业微信发送给企业后台的消息加解密示例代码.
 @copyright: Copyright (c) 1998-2020 Tencent Inc.
@@ -136,7 +135,7 @@ class PKCS7Encoder:
         return decrypted[:-pad]
 
 
-class Prpcrypt(object):
+class Prpcrypt:
     """提供接收和推送给企业微信消息的加解密接口"""
 
     def __init__(self, key):
@@ -210,7 +209,7 @@ class Prpcrypt(object):
         return str(random.randint(1000000000000000, 9999999999999999)).encode()
 
 
-class WXBizJsonMsgCrypt(object):
+class WXBizJsonMsgCrypt:
     # 构造函数
     def __init__(self, sToken, sEncodingAESKey, sReceiveId):
         try:

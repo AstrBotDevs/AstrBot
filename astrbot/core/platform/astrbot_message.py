@@ -1,5 +1,4 @@
 import time
-from typing import List
 from dataclasses import dataclass
 from astrbot.core.message.components import BaseMessageComponent
 from .message_type import MessageType
@@ -28,9 +27,9 @@ class Group:
     """群头像"""
     group_owner: str = None
     """群主 id"""
-    group_admins: List[str] = None
+    group_admins: list[str] = None
     """群管理员 id"""
-    members: List[MessageMember] = None
+    members: list[MessageMember] = None
     """所有群成员"""
 
     def __str__(self):
@@ -57,7 +56,7 @@ class AstrBotMessage:
     message_id: str  # 消息id
     group: Group  # 群组
     sender: MessageMember  # 发送者
-    message: List[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
+    message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
     raw_message: object
     timestamp: int  # 消息时间戳

@@ -3,7 +3,6 @@ import json
 import time
 import websockets
 from websockets.asyncio.client import connect
-from typing import Optional
 from aiohttp import ClientSession, ClientTimeout
 from websockets.asyncio.client import ClientConnection
 from astrbot.api import logger
@@ -57,12 +56,12 @@ class SatoriPlatformAdapter(Platform):
             id=self.config["id"],
         )
 
-        self.ws: Optional[ClientConnection] = None
-        self.session: Optional[ClientSession] = None
+        self.ws: ClientConnection | None = None
+        self.session: ClientSession | None = None
         self.sequence = 0
         self.logins = []
         self.running = False
-        self.heartbeat_task: Optional[asyncio.Task] = None
+        self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
 
     async def send_by_session(
@@ -295,10 +294,10 @@ class SatoriPlatformAdapter(Platform):
         message: dict,
         user: dict,
         channel: dict,
-        guild: Optional[dict],
+        guild: dict | None,
         login: dict,
-        timestamp: Optional[int] = None,
-    ) -> Optional[AstrBotMessage]:
+        timestamp: int | None = None,
+    ) -> AstrBotMessage | None:
         try:
             abm = AstrBotMessage()
             abm.message_id = message.get("id", "")
@@ -438,7 +437,7 @@ class SatoriPlatformAdapter(Platform):
 
         return prefixes
 
-    async def _extract_quote_element(self, content: str) -> Optional[dict]:
+    async def _extract_quote_element(self, content: str) -> dict | None:
         """提取<quote>标签信息"""
         try:
             # 处理命名空间前缀问题
@@ -506,7 +505,7 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"提取<quote>标签时发生错误: {e}")
             return None
 
-    async def _extract_quote_with_regex(self, content: str) -> Optional[dict]:
+    async def _extract_quote_with_regex(self, content: str) -> dict | None:
         """使用正则表达式提取quote标签信息"""
         import re
 
@@ -529,7 +528,7 @@ class SatoriPlatformAdapter(Platform):
             "content_without_quote": content_without_quote,
         }
 
-    async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
+    async def _convert_quote_message(self, quote: dict) -> AstrBotMessage | None:
         """转换引用消息"""
         try:
             quote_abm = AstrBotMessage()

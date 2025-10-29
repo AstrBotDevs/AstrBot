@@ -1,6 +1,8 @@
 import asyncio
 import random
-from typing import Dict, Any, Optional, Awaitable, List
+from typing import Any
+
+from collections.abc import Awaitable
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
@@ -87,7 +89,7 @@ class MisskeyPlatformAdapter(Platform):
 
         self.unique_session = platform_settings["unique_session"]
 
-        self.api: Optional[MisskeyAPI] = None
+        self.api: MisskeyAPI | None = None
         self._running = False
         self.client_self_id = ""
         self._bot_username = ""
@@ -168,7 +170,7 @@ class MisskeyPlatformAdapter(Platform):
             from .misskey_utils import extract_user_id_from_session_id
 
             user_id = extract_user_id_from_session_id(session_id)
-            payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
+            payload: dict[str, Any] = {"toUserId": user_id, "text": text}
             await self.api.send_message(payload)
         elif session_id and is_valid_room_session_id(session_id):
             from .misskey_utils import extract_room_id_from_session_id
@@ -180,7 +182,7 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _process_poll_data(
-        self, message: AstrBotMessage, poll: Dict[str, Any], message_parts: List[str]
+        self, message: AstrBotMessage, poll: dict[str, Any], message_parts: list[str]
     ):
         """处理投票数据，将其添加到消息中"""
         try:
@@ -196,7 +198,7 @@ class MisskeyPlatformAdapter(Platform):
             message.message.append(Comp.Plain(poll_text))
             message_parts.append(poll_text)
 
-    def _extract_additional_fields(self, session, message_chain) -> Dict[str, Any]:
+    def _extract_additional_fields(self, session, message_chain) -> dict[str, Any]:
         """从会话和消息链中提取额外字段"""
         fields = {"cw": None, "poll": None, "renote_id": None, "channel_id": None}
 
@@ -267,7 +269,7 @@ class MisskeyPlatformAdapter(Platform):
                 await asyncio.sleep(sleep_time)
                 backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
 
-    async def _handle_notification(self, data: Dict[str, Any]):
+    async def _handle_notification(self, data: dict[str, Any]):
         try:
             notification_type = data.get("type")
             logger.debug(
@@ -291,7 +293,7 @@ class MisskeyPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Misskey] 处理通知失败: {e}")
 
-    async def _handle_chat_message(self, data: Dict[str, Any]):
+    async def _handle_chat_message(self, data: dict[str, Any]):
         try:
             sender_id = str(
                 data.get("fromUserId", "") or data.get("fromUser", {}).get("id", "")
@@ -326,13 +328,13 @@ class MisskeyPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Misskey] 处理聊天消息失败: {e}")
 
-    async def _debug_handler(self, data: Dict[str, Any]):
+    async def _debug_handler(self, data: dict[str, Any]):
         event_type = data.get("type", "unknown")
         logger.debug(
             f"[Misskey] 收到未处理事件: type={event_type}, channel={data.get('channel', 'unknown')}"
         )
 
-    def _is_bot_mentioned(self, note: Dict[str, Any]) -> bool:
+    def _is_bot_mentioned(self, note: dict[str, Any]) -> bool:
         text = note.get("text", "")
         if not text:
             return False
@@ -400,8 +402,8 @@ class MisskeyPlatformAdapter(Platform):
             if len(text) > self.max_message_length:
                 text = text[: self.max_message_length] + "..."
 
-            file_ids: List[str] = []
-            fallback_urls: List[str] = []
+            file_ids: list[str] = []
+            fallback_urls: list[str] = []
 
             if not self.enable_file_upload:
                 return await self._send_text_only_message(
@@ -417,7 +419,7 @@ class MisskeyPlatformAdapter(Platform):
             upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
             sem = asyncio.Semaphore(upload_concurrency)
 
-            async def _upload_comp(comp) -> Optional[object]:
+            async def _upload_comp(comp) -> object | None:
                 """组件上传函数：处理 URL（下载后上传）或本地文件（直接上传）"""
                 from .misskey_utils import (
                     resolve_component_url_or_path,
@@ -540,7 +542,7 @@ class MisskeyPlatformAdapter(Platform):
                 if fallback_urls:
                     appended = "\n" + "\n".join(fallback_urls)
                     text = (text or "") + appended
-                payload: Dict[str, Any] = {"toRoomId": room_id, "text": text}
+                payload: dict[str, Any] = {"toRoomId": room_id, "text": text}
                 if file_ids:
                     payload["fileIds"] = file_ids
                 await self.api.send_room_message(payload)
@@ -555,7 +557,7 @@ class MisskeyPlatformAdapter(Platform):
                     if fallback_urls:
                         appended = "\n" + "\n".join(fallback_urls)
                         text = (text or "") + appended
-                    payload: Dict[str, Any] = {"toUserId": user_id, "text": text}
+                    payload: dict[str, Any] = {"toUserId": user_id, "text": text}
                     if file_ids:
                         # 聊天消息只支持单个文件，使用 fileId 而不是 fileIds
                         payload["fileId"] = file_ids[0]
@@ -610,7 +612,7 @@ class MisskeyPlatformAdapter(Platform):
 
         return await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+    async def convert_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=False)
         message = create_base_message(
@@ -652,7 +654,7 @@ class MisskeyPlatformAdapter(Platform):
         )
         return message
 
-    async def convert_chat_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+    async def convert_chat_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 聊天消息数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=True)
         message = create_base_message(
@@ -676,7 +678,7 @@ class MisskeyPlatformAdapter(Platform):
         message.message_str = raw_text if raw_text else ""
         return message
 
-    async def convert_room_message(self, raw_data: Dict[str, Any]) -> AstrBotMessage:
+    async def convert_room_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 群聊消息数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=True)
         room_id = raw_data.get("toRoomId", "")

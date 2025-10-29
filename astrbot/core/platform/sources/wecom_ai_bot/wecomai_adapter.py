@@ -9,7 +9,9 @@ import asyncio
 import uuid
 import hashlib
 import base64
-from typing import Awaitable, Any, Dict, Optional, Callable
+from typing import Any
+
+from collections.abc import Awaitable, Callable
 
 
 from astrbot.api.platform import (
@@ -151,8 +153,8 @@ class WecomAIBotAdapter(Platform):
             logger.error(f"处理队列消息时发生异常: {e}")
 
     async def _process_message(
-        self, message_data: Dict[str, Any], callback_params: Dict[str, str]
-    ) -> Optional[str]:
+        self, message_data: dict[str, Any], callback_params: dict[str, str]
+    ) -> str | None:
         """处理接收到的消息
 
         Args:
@@ -278,15 +280,15 @@ class WecomAIBotAdapter(Platform):
                     return None
             pass
 
-    def _extract_session_id(self, message_data: Dict[str, Any]) -> str:
+    def _extract_session_id(self, message_data: dict[str, Any]) -> str:
         """从消息数据中提取会话ID"""
         user_id = message_data.get("from", {}).get("userid", "default_user")
         return format_session_id("wecomai", user_id)
 
     async def _enqueue_message(
         self,
-        message_data: Dict[str, Any],
-        callback_params: Dict[str, str],
+        message_data: dict[str, Any],
+        callback_params: dict[str, str],
         stream_id: str,
         session_id: str,
     ):

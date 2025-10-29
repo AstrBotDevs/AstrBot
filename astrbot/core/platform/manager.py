@@ -2,7 +2,6 @@ import traceback
 import asyncio
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from .platform import Platform
-from typing import List
 from asyncio import Queue
 from .register import platform_cls_map
 from astrbot.core import logger
@@ -12,7 +11,7 @@ from .sources.webchat.webchat_adapter import WebChatAdapter
 
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue):
-        self.platform_insts: List[Platform] = []
+        self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
         self._inst_map = {}

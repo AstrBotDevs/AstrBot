@@ -1,5 +1,4 @@
 import discord
-from typing import List
 from astrbot.api.message_components import BaseMessageComponent
 
 
@@ -18,7 +17,7 @@ class DiscordEmbed(BaseMessageComponent):
         thumbnail: str = None,
         image: str = None,
         footer: str = None,
-        fields: List[dict] = None,
+        fields: list[dict] = None,
     ):
         self.title = title
         self.description = description
@@ -96,7 +95,7 @@ class DiscordView(BaseMessageComponent):
     type: str = "discord_view"
 
     def __init__(
-        self, components: List[BaseMessageComponent] = None, timeout: float = None
+        self, components: list[BaseMessageComponent] = None, timeout: float = None
     ):
         self.components = components or []
         self.timeout = timeout

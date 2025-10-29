@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import PlatformMetadata, AstrBotMessage

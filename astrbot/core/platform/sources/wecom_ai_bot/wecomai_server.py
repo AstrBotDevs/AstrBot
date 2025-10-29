@@ -4,7 +4,9 @@
 """
 
 import asyncio
-from typing import Dict, Any, Optional, Callable
+from typing import Any
+
+from collections.abc import Callable
 
 import quart
 from astrbot.api import logger
@@ -21,9 +23,8 @@ class WecomAIBotServer:
         host: str,
         port: int,
         api_client: WecomAIBotAPIClient,
-        message_handler: Optional[
-            Callable[[Dict[str, Any], Dict[str, str]], Any]
-        ] = None,
+        message_handler: None
+        | (Callable[[dict[str, Any], dict[str, str]], Any]) = None,
     ):
         """初始化服务器
 

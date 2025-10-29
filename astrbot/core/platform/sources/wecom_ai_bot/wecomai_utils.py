@@ -10,7 +10,7 @@ import base64
 import aiohttp
 import asyncio
 from Crypto.Cipher import AES
-from typing import Any, Tuple
+from typing import Any
 from astrbot.api import logger
 
 
@@ -91,7 +91,7 @@ def format_session_id(session_type: str, session_id: str) -> str:
     return f"wecom_ai_bot_{session_type}_{session_id}"
 
 
-def parse_session_id(formatted_session_id: str) -> Tuple[str, str]:
+def parse_session_id(formatted_session_id: str) -> tuple[str, str]:
     """解析格式化的会话 ID
 
     Args:
@@ -145,7 +145,7 @@ def format_error_response(error_code: int, error_msg: str) -> str:
 
 async def process_encrypted_image(
     image_url: str, aes_key_base64: str
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """下载并解密加密图片
 
     Args:

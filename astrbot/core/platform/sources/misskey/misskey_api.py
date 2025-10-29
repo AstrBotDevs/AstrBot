@@ -1,7 +1,9 @@
 import json
 import random
 import asyncio
-from typing import Any, Optional, Dict, List, Callable, Awaitable
+from typing import Any
+
+from collections.abc import Callable, Awaitable
 import uuid
 
 try:
@@ -54,11 +56,11 @@ class StreamingClient:
     def __init__(self, instance_url: str, access_token: str):
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
-        self.websocket: Optional[Any] = None
+        self.websocket: Any | None = None
         self.is_connected = False
-        self.message_handlers: Dict[str, Callable] = {}
-        self.channels: Dict[str, str] = {}
-        self.desired_channels: Dict[str, Optional[Dict]] = {}
+        self.message_handlers: dict[str, Callable] = {}
+        self.channels: dict[str, str] = {}
+        self.desired_channels: dict[str, dict | None] = {}
         self._running = False
         self._last_pong = None
 
@@ -104,7 +106,7 @@ class StreamingClient:
         logger.info("[Misskey WebSocket] 连接已断开")
 
     async def subscribe_channel(
-        self, channel_type: str, params: Optional[Dict] = None
+        self, channel_type: str, params: dict | None = None
     ) -> str:
         if not self.is_connected or not self.websocket:
             raise WebSocketError("WebSocket 未连接")
@@ -136,7 +138,7 @@ class StreamingClient:
             self.desired_channels.pop(channel_type, None)
 
     def add_message_handler(
-        self, event_type: str, handler: Callable[[Dict], Awaitable[None]]
+        self, event_type: str, handler: Callable[[dict], Awaitable[None]]
     ):
         self.message_handlers[event_type] = handler
 
@@ -188,11 +190,11 @@ class StreamingClient:
             except Exception:
                 pass
 
-    async def _handle_message(self, data: Dict[str, Any]):
+    async def _handle_message(self, data: dict[str, Any]):
         message_type = data.get("type")
         body = data.get("body", {})
 
-        def _build_channel_summary(message_type: Optional[str], body: Any) -> str:
+        def _build_channel_summary(message_type: str | None, body: Any) -> str:
             try:
                 if not isinstance(body, dict):
                     return f"[Misskey WebSocket] 收到消息类型: {message_type}"
@@ -334,12 +336,12 @@ class MisskeyAPI:
         allow_insecure_downloads: bool = False,
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
-        max_download_bytes: Optional[int] = None,
+        max_download_bytes: int | None = None,
     ):
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
-        self._session: Optional[aiohttp.ClientSession] = None
-        self.streaming: Optional[StreamingClient] = None
+        self._session: aiohttp.ClientSession | None = None
+        self.streaming: StreamingClient | None = None
         # download options
         self.allow_insecure_downloads = allow_insecure_downloads
         self.download_timeout = download_timeout
@@ -456,7 +458,7 @@ class MisskeyAPI:
         retryable_exceptions=(APIConnectionError, APIRateLimitError),
     )
     async def _make_request(
-        self, endpoint: str, data: Optional[Dict[str, Any]] = None
+        self, endpoint: str, data: dict[str, Any] | None = None
     ) -> Any:
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
@@ -472,24 +474,24 @@ class MisskeyAPI:
 
     async def create_note(
         self,
-        text: Optional[str] = None,
+        text: str | None = None,
         visibility: str = "public",
-        reply_id: Optional[str] = None,
-        visible_user_ids: Optional[List[str]] = None,
-        file_ids: Optional[List[str]] = None,
+        reply_id: str | None = None,
+        visible_user_ids: list[str] | None = None,
+        file_ids: list[str] | None = None,
         local_only: bool = False,
-        cw: Optional[str] = None,
-        poll: Optional[Dict[str, Any]] = None,
-        renote_id: Optional[str] = None,
-        channel_id: Optional[str] = None,
-        reaction_acceptance: Optional[str] = None,
-        no_extract_mentions: Optional[bool] = None,
-        no_extract_hashtags: Optional[bool] = None,
-        no_extract_emojis: Optional[bool] = None,
-        media_ids: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        cw: str | None = None,
+        poll: dict[str, Any] | None = None,
+        renote_id: str | None = None,
+        channel_id: str | None = None,
+        reaction_acceptance: str | None = None,
+        no_extract_mentions: bool | None = None,
+        no_extract_hashtags: bool | None = None,
+        no_extract_emojis: bool | None = None,
+        media_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Create a note (wrapper for notes/create). All additional fields are optional and passed through to the API."""
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
 
         if text is not None:
             data["text"] = text
@@ -537,9 +539,9 @@ class MisskeyAPI:
     async def upload_file(
         self,
         file_path: str,
-        name: Optional[str] = None,
-        folder_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        name: str | None = None,
+        folder_id: str | None = None,
+    ) -> dict[str, Any]:
         """Upload a file to Misskey drive/files/create and return a dict containing id and raw result."""
         if not file_path:
             raise APIError("No file path provided for upload")
@@ -574,7 +576,7 @@ class MisskeyAPI:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e
 
-    async def find_files_by_hash(self, md5_hash: str) -> List[Dict[str, Any]]:
+    async def find_files_by_hash(self, md5_hash: str) -> list[dict[str, Any]]:
         """Find files by MD5 hash"""
         if not md5_hash:
             raise APIError("No MD5 hash provided for find-by-hash")
@@ -593,13 +595,13 @@ class MisskeyAPI:
             raise
 
     async def find_files_by_name(
-        self, name: str, folder_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, name: str, folder_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Find files by name"""
         if not name:
             raise APIError("No name provided for find")
 
-        data: Dict[str, Any] = {"name": name}
+        data: dict[str, Any] = {"name": name}
         if folder_id:
             data["folderId"] = folder_id
 
@@ -617,11 +619,11 @@ class MisskeyAPI:
     async def find_files(
         self,
         limit: int = 10,
-        folder_id: Optional[str] = None,
-        type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        folder_id: str | None = None,
+        type: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List files with optional filters"""
-        data: Dict[str, Any] = {"limit": limit}
+        data: dict[str, Any] = {"limit": limit}
         if folder_id is not None:
             data["folderId"] = folder_id
         if type is not None:
@@ -642,7 +644,7 @@ class MisskeyAPI:
 
     async def _download_with_existing_session(
         self, url: str, ssl_verify: bool = True
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """使用现有会话下载文件"""
         if not (hasattr(self, "session") and self.session):
             raise APIConnectionError("No existing session available")
@@ -656,7 +658,7 @@ class MisskeyAPI:
 
     async def _download_with_temp_session(
         self, url: str, ssl_verify: bool = True
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         """使用临时会话下载文件"""
         connector = aiohttp.TCPConnector(ssl=ssl_verify)
         async with aiohttp.ClientSession(connector=connector) as temp_session:
@@ -670,11 +672,11 @@ class MisskeyAPI:
     async def upload_and_find_file(
         self,
         url: str,
-        name: Optional[str] = None,
-        folder_id: Optional[str] = None,
+        name: str | None = None,
+        folder_id: str | None = None,
         max_wait_time: float = 30.0,
         check_interval: float = 2.0,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         简化的文件上传：尝试 URL 上传，失败则下载后本地上传
 
@@ -732,13 +734,13 @@ class MisskeyAPI:
 
         return None
 
-    async def get_current_user(self) -> Dict[str, Any]:
+    async def get_current_user(self) -> dict[str, Any]:
         """获取当前用户信息"""
         return await self._make_request("i", {})
 
     async def send_message(
-        self, user_id_or_payload: Any, text: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, user_id_or_payload: Any, text: str | None = None
+    ) -> dict[str, Any]:
         """发送聊天消息。
 
         Accepts either (user_id: str, text: str) or a single dict payload prepared by caller.
@@ -754,8 +756,8 @@ class MisskeyAPI:
         return result
 
     async def send_room_message(
-        self, room_id_or_payload: Any, text: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, room_id_or_payload: Any, text: str | None = None
+    ) -> dict[str, Any]:
         """发送房间消息。
 
         Accepts either (room_id: str, text: str) or a single dict payload.
@@ -771,10 +773,10 @@ class MisskeyAPI:
         return result
 
     async def get_messages(
-        self, user_id: str, limit: int = 10, since_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, user_id: str, limit: int = 10, since_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """获取聊天消息历史"""
-        data: Dict[str, Any] = {"userId": user_id, "limit": limit}
+        data: dict[str, Any] = {"userId": user_id, "limit": limit}
         if since_id:
             data["sinceId"] = since_id
 
@@ -785,10 +787,10 @@ class MisskeyAPI:
         return []
 
     async def get_mentions(
-        self, limit: int = 10, since_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, limit: int = 10, since_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """获取提及通知"""
-        data: Dict[str, Any] = {"limit": limit}
+        data: dict[str, Any] = {"limit": limit}
         if since_id:
             data["sinceId"] = since_id
         data["includeTypes"] = ["mention", "reply", "quote"]
@@ -806,11 +808,11 @@ class MisskeyAPI:
         self,
         message_type: str,
         target_id: str,
-        text: Optional[str] = None,
-        media_urls: Optional[List[str]] = None,
-        local_files: Optional[List[str]] = None,
+        text: str | None = None,
+        media_urls: list[str] | None = None,
+        local_files: list[str] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         通用消息发送函数：统一处理文本+媒体发送
 
@@ -846,7 +848,7 @@ class MisskeyAPI:
             message_type, target_id, text, file_ids, **kwargs
         )
 
-    async def _process_media_urls(self, urls: List[str]) -> List[str]:
+    async def _process_media_urls(self, urls: list[str]) -> list[str]:
         """处理远程媒体文件URL列表，返回文件ID列表"""
         file_ids = []
         for url in urls:
@@ -863,7 +865,7 @@ class MisskeyAPI:
                 continue
         return file_ids
 
-    async def _process_local_files(self, file_paths: List[str]) -> List[str]:
+    async def _process_local_files(self, file_paths: list[str]) -> list[str]:
         """处理本地文件路径列表，返回文件ID列表"""
         file_ids = []
         for file_path in file_paths:
@@ -883,10 +885,10 @@ class MisskeyAPI:
         self,
         message_type: str,
         target_id: str,
-        text: Optional[str],
-        file_ids: List[str],
+        text: str | None,
+        file_ids: list[str],
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """根据消息类型分发到对应的发送方法"""
         if message_type == "chat":
             # 聊天消息使用 fileId (单数)

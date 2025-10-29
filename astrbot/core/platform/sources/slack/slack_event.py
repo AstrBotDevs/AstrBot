@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (

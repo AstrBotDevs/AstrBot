@@ -16,7 +16,6 @@ from botpy.http import Route
 from astrbot.api import logger
 from botpy.types.message import Media
 from botpy.types import message
-from typing import Optional
 import random
 import uuid
 import os
@@ -196,7 +195,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
     async def upload_group_and_c2c_record(
         self, file_source: str, file_type: int, srv_send_msg: bool = False, **kwargs
-    ) -> Optional[Media]:
+    ) -> Media | None:
         """
         上传媒体文件
         """

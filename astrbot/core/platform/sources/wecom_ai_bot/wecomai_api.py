@@ -6,7 +6,7 @@
 import json
 import base64
 import hashlib
-from typing import Dict, Any, Optional, Tuple, Union
+from typing import Any
 from Crypto.Cipher import AES
 import aiohttp
 
@@ -31,7 +31,7 @@ class WecomAIBotAPIClient:
 
     async def decrypt_message(
         self, encrypted_data: bytes, msg_signature: str, timestamp: str, nonce: str
-    ) -> Tuple[int, Optional[Dict[str, Any]]]:
+    ) -> tuple[int, dict[str, Any] | None]:
         """解密企业微信消息
 
         Args:
@@ -71,7 +71,7 @@ class WecomAIBotAPIClient:
 
     async def encrypt_message(
         self, plain_message: str, nonce: str, timestamp: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """加密消息
 
         Args:
@@ -127,8 +127,8 @@ class WecomAIBotAPIClient:
             return "verify fail"
 
     async def process_encrypted_image(
-        self, image_url: str, aes_key_base64: Optional[str] = None
-    ) -> Tuple[bool, Union[bytes, str]]:
+        self, image_url: str, aes_key_base64: str | None = None
+    ) -> tuple[bool, bytes | str]:
         """下载并解密加密图片
 
         Args:
@@ -292,7 +292,7 @@ class WecomAIBotMessageParser:
     """企业微信智能机器人消息解析器"""
 
     @staticmethod
-    def parse_text_message(data: Dict[str, Any]) -> Optional[str]:
+    def parse_text_message(data: dict[str, Any]) -> str | None:
         """解析文本消息
 
         Args:
@@ -308,7 +308,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_image_message(data: Dict[str, Any]) -> Optional[str]:
+    def parse_image_message(data: dict[str, Any]) -> str | None:
         """解析图片消息
 
         Args:
@@ -324,7 +324,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_stream_message(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_stream_message(data: dict[str, Any]) -> dict[str, Any] | None:
         """解析流消息
 
         Args:
@@ -346,7 +346,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_mixed_message(data: Dict[str, Any]) -> Optional[list]:
+    def parse_mixed_message(data: dict[str, Any]) -> list | None:
         """解析混合消息
 
         Args:
@@ -362,7 +362,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_event_message(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_event_message(data: dict[str, Any]) -> dict[str, Any] | None:
         """解析事件消息
 
         Args:

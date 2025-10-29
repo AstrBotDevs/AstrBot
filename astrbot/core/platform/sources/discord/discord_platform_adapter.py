@@ -19,7 +19,7 @@ from astrbot import logger
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
 
-from typing import Any, Tuple
+from typing import Any
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
@@ -420,7 +420,7 @@ class DiscordPlatformAdapter(Platform):
     @staticmethod
     def _extract_command_info(
         event_filter: Any, handler_metadata: StarHandlerMetadata
-    ) -> Tuple[str, str, CommandFilter] | None:
+    ) -> tuple[str, str, CommandFilter] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
         # is_group = False

@@ -2,7 +2,9 @@ import time
 import asyncio
 import uuid
 import os
-from typing import Awaitable, Any, Callable
+from typing import Any
+
+from collections.abc import Awaitable, Callable
 from astrbot.core.platform import (
     Platform,
     AstrBotMessage,

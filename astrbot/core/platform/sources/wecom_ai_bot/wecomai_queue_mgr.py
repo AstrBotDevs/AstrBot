@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Any
 from astrbot.api import logger
 
 
@@ -13,13 +13,13 @@ class WecomAIQueueMgr:
     """企业微信智能机器人队列管理器"""
 
     def __init__(self) -> None:
-        self.queues: Dict[str, asyncio.Queue] = {}
+        self.queues: dict[str, asyncio.Queue] = {}
         """StreamID 到输入队列的映射 - 用于接收用户消息"""
 
-        self.back_queues: Dict[str, asyncio.Queue] = {}
+        self.back_queues: dict[str, asyncio.Queue] = {}
         """StreamID 到输出队列的映射 - 用于发送机器人响应"""
 
-        self.pending_responses: Dict[str, Dict[str, Any]] = {}
+        self.pending_responses: dict[str, dict[str, Any]] = {}
         """待处理的响应缓存，用于流式响应"""
 
     def get_or_create_queue(self, session_id: str) -> asyncio.Queue:
@@ -90,7 +90,7 @@ class WecomAIQueueMgr:
         """
         return session_id in self.back_queues
 
-    def set_pending_response(self, session_id: str, callback_params: Dict[str, str]):
+    def set_pending_response(self, session_id: str, callback_params: dict[str, str]):
         """设置待处理的响应参数
 
         Args:
@@ -103,7 +103,7 @@ class WecomAIQueueMgr:
         }
         logger.debug(f"[WecomAI] 设置待处理响应: {session_id}")
 
-    def get_pending_response(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_pending_response(self, session_id: str) -> dict[str, Any] | None:
         """获取待处理的响应参数
 
         Args:
@@ -131,7 +131,7 @@ class WecomAIQueueMgr:
             del self.pending_responses[session_id]
             logger.debug(f"[WecomAI] 清理过期响应: {session_id}")
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """获取队列统计信息
 
         Returns:

@@ -4,7 +4,9 @@ import uuid
 import aiohttp
 import re
 import base64
-from typing import Awaitable, Any
+from typing import Any
+
+from collections.abc import Awaitable
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from astrbot.api.platform import (
