@@ -100,8 +100,11 @@ class DingtalkPlatformAdapter(Platform):
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
-            if message.is_in_at_list:
-                abm.message.append(At(qq=abm.self_id))
+            # 处理所有被 @ 的用户（包括机器人自己，因 at_users 已包含）
+            if message.at_users:
+                for user in message.at_users:
+                    if user.dingtalk_id:
+                        abm.message.append(At(qq=user.dingtalk_id))
             abm.group_id = message.conversation_id
             if self.unique_session:
                 abm.session_id = abm.sender.user_id
