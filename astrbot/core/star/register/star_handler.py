@@ -12,7 +12,9 @@ from ..filter.platform_adapter_type import (
 from ..filter.permission import PermissionTypeFilter, PermissionType
 from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
 from ..filter.regex import RegexFilter
-from typing import Awaitable, Any, Callable
+from typing import Any
+
+from collections.abc import Awaitable, Callable
 from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.agent.agent import Agent
@@ -220,9 +222,7 @@ def register_command_group(
 class RegisteringCommandable:
     """用于指令组级联注册"""
 
-    group: Callable[..., Callable[..., "RegisteringCommandable"]] = (
-        register_command_group
-    )
+    group: Callable[..., Callable[..., RegisteringCommandable]] = register_command_group
     command: Callable[..., Callable[..., None]] = register_command
     custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
 

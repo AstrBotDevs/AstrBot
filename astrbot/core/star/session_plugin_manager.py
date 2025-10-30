@@ -3,7 +3,6 @@
 """
 
 from astrbot.core import sp, logger
-from typing import Dict, List
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
@@ -95,7 +94,7 @@ class SessionPluginManager:
         )
 
     @staticmethod
-    def get_session_plugin_config(session_id: str) -> Dict[str, List[str]]:
+    def get_session_plugin_config(session_id: str) -> dict[str, list[str]]:
         """获取指定会话的插件配置
 
         Args:
@@ -112,7 +111,7 @@ class SessionPluginManager:
         )
 
     @staticmethod
-    def filter_handlers_by_session(event: AstrMessageEvent, handlers: List) -> List:
+    def filter_handlers_by_session(event: AstrMessageEvent, handlers: list) -> list:
         """根据会话配置过滤处理器列表
 
         Args:

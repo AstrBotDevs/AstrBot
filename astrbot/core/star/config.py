@@ -2,13 +2,12 @@
 此功能已过时，参考 https://astrbot.app/dev/plugin.html#%E6%B3%A8%E5%86%8C%E6%8F%92%E4%BB%B6%E9%85%8D%E7%BD%AE-beta
 """
 
-from typing import Union
 import os
 import json
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
-def load_config(namespace: str) -> Union[dict, bool]:
+def load_config(namespace: str) -> dict | bool:
     """
     从配置文件中加载配置。
     namespace: str, 配置的唯一识别符，也就是配置文件的名字。
@@ -17,7 +16,7 @@ def load_config(namespace: str) -> Union[dict, bool]:
     path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
     if not os.path.exists(path):
         return False
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         ret = {}
         data = json.load(f)
         for k in data:
@@ -51,7 +50,7 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8-sig") as f:
             f.write("{}")
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         d = json.load(f)
     assert isinstance(d, dict)
     if key not in d:
@@ -78,7 +77,7 @@ def update_config(namespace: str, key: str, value):
     path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"配置文件 {namespace}.json 不存在。")
-    with open(path, "r", encoding="utf-8-sig") as f:
+    with open(path, encoding="utf-8-sig") as f:
         d = json.load(f)
     assert isinstance(d, dict)
     if key not in d:
