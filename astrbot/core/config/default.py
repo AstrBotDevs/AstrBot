@@ -1274,6 +1274,18 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "launch_model_if_not_running": False,
                     },
+                    "Xinference STT": {
+                        "id": "xinference_stt",
+                        "type": "xinference_stt",
+                        "provider": "xinference",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "http://127.0.0.1:9997",
+                        "model": "whisper-large-v3",
+                        "timeout": 180,
+                        "launch_model_if_not_running": False,
+                    },
                 },
                 "items": {
                     "rerank_api_base": {
