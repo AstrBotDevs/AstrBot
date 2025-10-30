@@ -71,7 +71,7 @@ class ProviderXinferenceSTT(STTProvider):
             )
 
     async def get_text(self, audio_url: str) -> str:
-        if not self.model_uid:
+        if not self.model_uid or self.client is None or self.client.session is None:
             logger.error("Xinference STT model is not initialized.")
             return ""
 
