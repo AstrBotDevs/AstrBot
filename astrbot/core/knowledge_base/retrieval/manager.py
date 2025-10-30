@@ -6,7 +6,6 @@
 import time
 
 from dataclasses import dataclass
-from typing import List
 
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
@@ -45,7 +44,7 @@ class RetrievalManager:
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBSQLiteDatabase,
-    ):
+    ) -> None:
         """初始化检索管理器
 
         Args:
@@ -61,11 +60,11 @@ class RetrievalManager:
     async def retrieve(
         self,
         query: str,
-        kb_ids: List[str],
+        kb_ids: list[str],
         kb_id_helper_map: dict[str, KBHelper],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         """混合检索
 
         流程:
@@ -188,9 +187,9 @@ class RetrievalManager:
     async def _dense_retrieve(
         self,
         query: str,
-        kb_ids: List[str],
+        kb_ids: list[str],
         kb_options: dict,
-    ):
+    ) -> list[Result]:
         """稠密检索 (向量相似度)
 
         为每个知识库使用独立的向量数据库进行检索,然后合并结果。
@@ -233,10 +232,10 @@ class RetrievalManager:
     async def _rerank(
         self,
         query: str,
-        results: List[RetrievalResult],
+        results: list[RetrievalResult],
         top_k: int,
         rerank_provider: RerankProvider,
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         """Rerank 重排序
 
         Args:

@@ -32,7 +32,7 @@ async def do_migration_v4(
     db_helper: BaseDatabase,
     platform_id_map: dict[str, dict[str, str]],
     astrbot_config: AstrBotConfig,
-):
+) -> None:
     """
     执行数据库迁移
     迁移旧的 webchat_conversation 表到新的 conversation 表。

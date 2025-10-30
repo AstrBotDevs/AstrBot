@@ -1,4 +1,4 @@
-from typing import Generic
+from typing import Any, Generic
 from .tool import FunctionTool
 from .agent import Agent
 from .run_context import TContext
@@ -8,8 +8,11 @@ class HandoffTool(FunctionTool, Generic[TContext]):
     """Handoff tool for delegating tasks to another agent."""
 
     def __init__(
-        self, agent: Agent[TContext], parameters: dict | None = None, **kwargs
-    ):
+        self,
+        agent: Agent[TContext],
+        parameters: dict | None = None,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
         self.agent = agent
         super().__init__(
             name=f"transfer_to_{agent.name}",

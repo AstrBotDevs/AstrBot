@@ -19,7 +19,7 @@ class PluginStatus(str, Enum):
     NOT_PUBLISHED = "未发布"
 
 
-def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
+def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
     """从 Git 仓库下载代码并解压到指定路径"""
     temp_dir = Path(tempfile.mkdtemp())
     try:

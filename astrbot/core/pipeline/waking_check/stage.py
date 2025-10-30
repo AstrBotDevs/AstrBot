@@ -1,4 +1,4 @@
-from typing import AsyncGenerator, Union
+from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
@@ -49,7 +49,7 @@ class WakingCheckStage(Stage):
 
     async def process(
         self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+    ) -> None | AsyncGenerator[None, None]:
         if (
             self.ignore_bot_self_message
             and event.get_self_id() == event.get_sender_id()

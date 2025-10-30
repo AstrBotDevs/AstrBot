@@ -17,7 +17,7 @@ class VersionComparator:
         v1 = v1.lower().replace("v", "")
         v2 = v2.lower().replace("v", "")
 
-        def split_version(version):
+        def split_version(version: str) -> tuple[list[int], list[int | str] | None]:
             match = re.match(
                 r"^([0-9]+(?:\.[0-9]+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+(.+))?$",
                 version,
@@ -79,7 +79,7 @@ class VersionComparator:
         return 0  # 数字部分和预发布标签都相同
 
     @staticmethod
-    def _split_prerelease(prerelease):
+    def _split_prerelease(prerelease: str) -> list[int | str] | None:
         if not prerelease:
             return None
         parts = prerelease.split(".")

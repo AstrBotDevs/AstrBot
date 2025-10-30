@@ -1,7 +1,7 @@
 import sqlite3
 import time
 from astrbot.core.db.po import Platform, Stats
-from typing import Tuple, List, Dict, Any
+from typing import Any
 from dataclasses import dataclass
 
 
@@ -126,7 +126,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: Tuple = None):
+    def _exec_sql(self, sql: str, params: tuple | None = None) -> None:
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -143,7 +143,7 @@ class SQLiteDatabase:
 
         conn.commit()
 
-    def insert_platform_metrics(self, metrics: dict):
+    def insert_platform_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -152,7 +152,7 @@ class SQLiteDatabase:
                 (k, v, int(time.time())),
             )
 
-    def insert_llm_metrics(self, metrics: dict):
+    def insert_llm_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -225,7 +225,9 @@ class SQLiteDatabase:
 
         return Stats(platform, [], [])
 
-    def get_conversation_by_user_id(self, user_id: str, cid: str) -> Conversation:
+    def get_conversation_by_user_id(
+        self, user_id: str, cid: str
+    ) -> Conversation | None:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -246,7 +248,7 @@ class SQLiteDatabase:
 
         return Conversation(*res)
 
-    def new_conversation(self, user_id: str, cid: str):
+    def new_conversation(self, user_id: str, cid: str) -> None:
         history = "[]"
         updated_at = int(time.time())
         created_at = updated_at
@@ -257,7 +259,7 @@ class SQLiteDatabase:
             (user_id, cid, history, updated_at, created_at),
         )
 
-    def get_conversations(self, user_id: str) -> Tuple:
+    def get_conversations(self, user_id: str) -> list[Conversation]:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -284,7 +286,7 @@ class SQLiteDatabase:
             )
         return conversations
 
-    def update_conversation(self, user_id: str, cid: str, history: str):
+    def update_conversation(self, user_id: str, cid: str, history: str) -> None:
         """更新对话，并且同时更新时间"""
         updated_at = int(time.time())
         self._exec_sql(
@@ -294,7 +296,7 @@ class SQLiteDatabase:
             (history, updated_at, user_id, cid),
         )
 
-    def update_conversation_title(self, user_id: str, cid: str, title: str):
+    def update_conversation_title(self, user_id: str, cid: str, title: str) -> None:
         self._exec_sql(
             """
             UPDATE webchat_conversation SET title = ? WHERE user_id = ? AND cid = ?
@@ -302,7 +304,9 @@ class SQLiteDatabase:
             (title, user_id, cid),
         )
 
-    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
+    def update_conversation_persona_id(
+        self, user_id: str, cid: str, persona_id: str
+    ) -> None:
         self._exec_sql(
             """
             UPDATE webchat_conversation SET persona_id = ? WHERE user_id = ? AND cid = ?
@@ -310,7 +314,7 @@ class SQLiteDatabase:
             (persona_id, user_id, cid),
         )
 
-    def delete_conversation(self, user_id: str, cid: str):
+    def delete_conversation(self, user_id: str, cid: str) -> None:
         self._exec_sql(
             """
             DELETE FROM webchat_conversation WHERE user_id = ? AND cid = ?
@@ -320,7 +324,7 @@ class SQLiteDatabase:
 
     def get_all_conversations(
         self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页，按更新时间降序排序"""
         try:
             c = self.conn.cursor()
@@ -381,12 +385,12 @@ class SQLiteDatabase:
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
-        search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        platforms: list[str] | None = None,
+        message_types: list[str] | None = None,
+        search_query: str | None = None,
+        exclude_ids: list[str] | None = None,
+        exclude_platforms: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表"""
         try:
             c = self.conn.cursor()

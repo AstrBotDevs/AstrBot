@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import timedelta
-from typing import Optional
 from contextlib import AsyncExitStack
 from astrbot import logger
 from astrbot.core.utils.log_pipe import LogPipe
@@ -94,9 +93,9 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize session and client objects
-        self.session: Optional[mcp.ClientSession] = None
+        self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
         self.name: str | None = None
@@ -105,7 +104,7 @@ class MCPClient:
         self.server_errlogs: list[str] = []
         self.running_event = asyncio.Event()
 
-    async def connect_to_server(self, mcp_server_config: dict, name: str):
+    async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """连接到 MCP 服务器
 
         如果 `url` 参数存在：
@@ -118,7 +117,7 @@ class MCPClient:
         """
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(msg: str):
+        def logging_callback(msg: str) -> None:
             # 处理 MCP 服务的错误日志
             print(f"MCP Server {name} Error: {msg}")
             self.server_errlogs.append(msg)
@@ -188,7 +187,7 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str):
+            def callback(msg: str) -> None:
                 # 处理 MCP 服务的错误日志
                 self.server_errlogs.append(msg)
 
@@ -218,7 +217,7 @@ class MCPClient:
         self.tools = response.tools
         return response
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources"""
         await self.exit_stack.aclose()
         self.running_event.set()  # Set the running event to indicate cleanup is done

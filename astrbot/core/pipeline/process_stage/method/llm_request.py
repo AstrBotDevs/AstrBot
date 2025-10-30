@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import traceback
+import typing as T
 from datetime import timedelta
 from collections.abc import AsyncGenerator
 from astrbot.core.conversation_mgr import Conversation
@@ -50,7 +51,12 @@ AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
+    async def execute(
+        cls,
+        tool: FunctionTool,
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args: T.Any,  # noqa:ANN401
+    ) -> AsyncGenerator[T.Union[None, "mcp.types.CallToolResult"], None]:
         """执行函数调用。
 
         Args:
@@ -82,8 +88,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: T.Any,  # noqa: ANN401
+    ) -> AsyncGenerator[T.Union[None, "mcp.types.CallToolResult"], None]:
         input_ = tool_args.get("input", "agent")
         agent_runner = AgentRunner()
 
@@ -172,8 +178,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: FunctionTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: T.Any,  # noqa: ANN401
+    ) -> AsyncGenerator[T.Union[None, "mcp.types.CallToolResult"], None]:
         if not run_context.event:
             raise ValueError("Event must be provided for local function tools.")
 
@@ -220,8 +226,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: FunctionTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: T.Any,  # noqa: ANN401
+    ) -> AsyncGenerator[T.Union[None, "mcp.types.CallToolResult"], None]:
         if not tool.mcp_client:
             raise ValueError("MCP client is not available for MCP function tools.")
 
@@ -241,7 +247,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
-    async def on_agent_done(self, run_context, llm_response):
+    async def on_agent_done(
+        self, run_context: ContextWrapper[AstrAgentContext], llm_response: LLMResponse
+    ) -> None:
         # 执行事件钩子
         await call_event_hook(
             run_context.event, EventType.OnLLMResponseEvent, llm_response
@@ -338,7 +346,7 @@ class LLMRequestSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-    def _select_provider(self, event: AstrMessageEvent):
+    def _select_provider(self, event: AstrMessageEvent) -> Provider | None:
         """选择使用的 LLM 提供商"""
         sel_provider = event.get_extra("selected_provider")
         _ctx = self.ctx.plugin_manager.context
@@ -565,7 +573,7 @@ class LLMRequestSubStage(Stage):
 
     async def _handle_webchat(
         self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider
-    ):
+    ) -> None:
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
         if not req.conversation:
             return
@@ -623,7 +631,7 @@ class LLMRequestSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse | None,
-    ):
+    ) -> None:
         if (
             not req
             or not req.conversation
