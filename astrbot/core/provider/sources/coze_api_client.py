@@ -2,7 +2,9 @@ import json
 import asyncio
 import aiohttp
 import io
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Any
+
+from collections.abc import AsyncGenerator
 from astrbot.core import logger
 
 
@@ -117,12 +119,12 @@ class CozeAPIClient:
         self,
         bot_id: str,
         user_id: str,
-        additional_messages: List[Dict] | None = None,
+        additional_messages: list[dict] | None = None,
         conversation_id: str | None = None,
         auto_save_history: bool = True,
         stream: bool = True,
         timeout: float = 120,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """发送聊天消息并返回流式响应
 
         Args:

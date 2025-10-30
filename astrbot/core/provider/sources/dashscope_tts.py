@@ -3,7 +3,6 @@ import base64
 import logging
 import os
 import uuid
-from typing import Optional, Tuple
 import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
@@ -80,7 +79,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
     async def _synthesize_with_qwen_tts(
         self, model: str, text: str
-    ) -> Tuple[Optional[bytes], str]:
+    ) -> tuple[bytes | None, str]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
         audio_bytes = await self._extract_audio_from_response(response)
@@ -91,7 +90,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         ext = ".wav"
         return audio_bytes, ext
 
-    async def _extract_audio_from_response(self, response) -> Optional[bytes]:
+    async def _extract_audio_from_response(self, response) -> bytes | None:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:
@@ -110,7 +109,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             return await self._download_audio_from_url(url)
         return None
 
-    async def _download_audio_from_url(self, url: str) -> Optional[bytes]:
+    async def _download_audio_from_url(self, url: str) -> bytes | None:
         if not url:
             return None
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
@@ -126,7 +125,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
     async def _synthesize_with_cosyvoice(
         self, model: str, text: str
-    ) -> Tuple[Optional[bytes], str]:
+    ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
             model=model,
             voice=self.voice,

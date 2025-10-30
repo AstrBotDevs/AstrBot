@@ -2,7 +2,8 @@ import json
 import os
 import base64
 import hashlib
-from typing import AsyncGenerator, Dict
+
+from collections.abc import AsyncGenerator
 from astrbot.core.message.message_event_result import MessageChain
 import astrbot.core.message.components as Comp
 from astrbot.api.provider import Provider
@@ -44,8 +45,8 @@ class ProviderCoze(Provider):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
         self.auto_save_history = provider_config.get("auto_save_history", True)
-        self.conversation_ids: Dict[str, str] = {}
-        self.file_id_cache: Dict[str, Dict[str, str]] = {}
+        self.conversation_ids: dict[str, str] = {}
+        self.file_id_cache: dict[str, dict[str, str]] = {}
 
         # 创建 API 客户端
         self.api_client = CozeAPIClient(api_key=self.api_key, api_base=self.api_base)

@@ -3,7 +3,6 @@ import base64
 import json
 import logging
 import random
-from typing import Optional, List
 from collections.abc import AsyncGenerator
 
 from google import genai
@@ -60,11 +59,11 @@ class ProviderGoogleGenAI(Provider):
             provider_settings,
             default_persona,
         )
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.timeout: int = int(provider_config.get("timeout", 180))
 
-        self.api_base: Optional[str] = provider_config.get("api_base", None)
+        self.api_base: str | None = provider_config.get("api_base", None)
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
@@ -122,9 +121,9 @@ class ProviderGoogleGenAI(Provider):
     async def _prepare_query_config(
         self,
         payloads: dict,
-        tools: Optional[ToolSet] = None,
-        system_instruction: Optional[str] = None,
-        modalities: Optional[list[str]] = None,
+        tools: ToolSet | None = None,
+        system_instruction: str | None = None,
+        modalities: list[str] | None = None,
         temperature: float = 0.7,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
@@ -406,7 +405,7 @@ class ProviderGoogleGenAI(Provider):
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
 
-        result: Optional[types.GenerateContentResponse] = None
+        result: types.GenerateContentResponse | None = None
         while True:
             try:
                 config = await self._prepare_query_config(

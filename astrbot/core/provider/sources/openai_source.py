@@ -17,7 +17,8 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.api.provider import Provider
 from astrbot import logger
 from astrbot.core.provider.func_tool_manager import ToolSet
-from typing import List, AsyncGenerator
+
+from collections.abc import AsyncGenerator
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
 
@@ -38,7 +39,7 @@ class ProviderOpenAIOfficial(Provider):
             default_persona,
         )
         self.chosen_api_key = None
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
@@ -280,7 +281,7 @@ class ProviderOpenAIOfficial(Provider):
         context_query: list,
         func_tool: ToolSet,
         chosen_key: str,
-        available_api_keys: List[str],
+        available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
     ) -> tuple:
@@ -497,7 +498,7 @@ class ProviderOpenAIOfficial(Provider):
                 raise Exception("未知错误")
             raise last_exception
 
-    async def _remove_image_from_context(self, contexts: List):
+    async def _remove_image_from_context(self, contexts: list):
         """
         从上下文中删除所有带有 image 的记录
         """
@@ -521,14 +522,14 @@ class ProviderOpenAIOfficial(Provider):
     def get_current_key(self) -> str:
         return self.client.api_key
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key):
         self.client.api_key = key
 
     async def assemble_context(
-        self, text: str, image_urls: List[str] | None = None
+        self, text: str, image_urls: list[str] | None = None
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:

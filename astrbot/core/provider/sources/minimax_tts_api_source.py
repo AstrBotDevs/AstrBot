@@ -2,7 +2,8 @@ import json
 import os
 import uuid
 import aiohttp
-from typing import Dict, List, Union, AsyncIterator
+
+from collections.abc import AsyncIterator
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api import logger
 from ..entities import ProviderType
@@ -30,7 +31,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         self.is_timber_weight: bool = provider_config.get(
             "minimax-is-timber-weight", False
         )
-        self.timber_weight: List[Dict[str, Union[str, int]]] = json.loads(
+        self.timber_weight: list[dict[str, str | int]] = json.loads(
             provider_config.get(
                 "minimax-timber-weight",
                 '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
@@ -66,7 +67,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
 
     def _build_tts_stream_body(self, text: str):
         """构建流式请求体"""
-        dict_body: Dict[str, object] = {
+        dict_body: dict[str, object] = {
             "model": self.model_name,
             "text": text,
             "stream": True,

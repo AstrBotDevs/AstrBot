@@ -1,7 +1,6 @@
 import abc
 import asyncio
-from typing import List
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -67,7 +66,7 @@ class Provider(AbstractProvider):
     def get_current_key(self) -> str:
         raise NotImplementedError()
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         """获得提供商 Key"""
         keys = self.provider_config.get("key", [""])
         return keys or [""]
@@ -77,7 +76,7 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    async def get_models(self) -> List[str]:
+    async def get_models(self) -> list[str]:
         """获得支持的模型列表"""
         raise NotImplementedError()
 
@@ -140,7 +139,7 @@ class Provider(AbstractProvider):
         """
         ...
 
-    async def pop_record(self, context: List):
+    async def pop_record(self, context: list):
         """
         弹出 context 第一条非系统提示词对话记录
         """

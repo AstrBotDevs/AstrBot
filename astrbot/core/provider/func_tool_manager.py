@@ -4,7 +4,9 @@ import os
 import asyncio
 import aiohttp
 
-from typing import Dict, List, Awaitable, Callable, Any
+from typing import Any
+
+from collections.abc import Awaitable, Callable
 from astrbot import logger
 from astrbot.core import sp
 
@@ -96,10 +98,10 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
 class FunctionToolManager:
     def __init__(self) -> None:
-        self.func_list: List[FuncTool] = []
-        self.mcp_client_dict: Dict[str, MCPClient] = {}
+        self.func_list: list[FuncTool] = []
+        self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
-        self.mcp_client_event: Dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -202,8 +204,8 @@ class FunctionToolManager:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(
-            open(mcp_json_file, "r", encoding="utf-8")
+        mcp_server_json_obj: dict[str, dict] = json.load(
+            open(mcp_json_file, encoding="utf-8")
         )["mcpServers"]
 
         for name in mcp_server_json_obj.keys():
@@ -479,7 +481,7 @@ class FunctionToolManager:
             return DEFAULT_MCP_CONFIG
 
         try:
-            with open(self.mcp_config_path, "r", encoding="utf-8") as f:
+            with open(self.mcp_config_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"加载 MCP 配置失败: {e}")

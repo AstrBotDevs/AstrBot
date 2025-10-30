@@ -1,7 +1,6 @@
 import json
 import anthropic
 import base64
-from typing import List
 from mimetypes import guess_type
 
 from anthropic import AsyncAnthropic
@@ -13,7 +12,7 @@ from astrbot import logger
 from astrbot.core.provider.func_tool_manager import ToolSet
 from ..register import register_provider_adapter
 from astrbot.core.provider.entities import LLMResponse
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 
 @register_provider_adapter(
@@ -33,7 +32,7 @@ class ProviderAnthropic(Provider):
         )
 
         self.chosen_api_key: str = ""
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
@@ -326,7 +325,7 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: List[str] | None = None):
+    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
         """组装上下文，支持文本和图片"""
         if not image_urls:
             return {"role": "user", "content": text}
@@ -384,7 +383,7 @@ class ProviderAnthropic(Provider):
     def get_current_key(self) -> str:
         return self.chosen_api_key
 
-    async def get_models(self) -> List[str]:
+    async def get_models(self) -> list[str]:
         models_str = []
         models = await self.client.models.list()
         models = sorted(models.data, key=lambda x: x.id)

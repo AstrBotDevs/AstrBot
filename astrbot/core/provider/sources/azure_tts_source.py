@@ -6,7 +6,6 @@ import hashlib
 import random
 import asyncio
 from pathlib import Path
-from typing import Dict
 from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
@@ -21,7 +20,7 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class OTTSProvider:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -58,7 +57,7 @@ class OTTSProvider:
         path = re.sub(r"^https?://[^/]+", "", self.api_url) or "/"
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
-    async def get_audio(self, text: str, voice_params: Dict) -> str:
+    async def get_audio(self, text: str, voice_params: dict) -> str:
         file_path = TEMP_DIR / f"otts-{uuid.uuid4()}.wav"
         signature = await self._generate_signature()
         for attempt in range(self.retry_count):
