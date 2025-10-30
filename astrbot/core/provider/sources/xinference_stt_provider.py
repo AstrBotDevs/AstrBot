@@ -1,7 +1,6 @@
 import uuid
 import os
 import aiohttp
-import base64
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
