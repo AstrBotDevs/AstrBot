@@ -68,27 +68,14 @@ class ProviderOpenAIOfficial(Provider):
         model = model_config.get("model", "unknown")
         self.set_model(model)
 
-    def _is_xai(self) -> bool:
-        """判断当前提供商是否为 xAI（OpenAI 兼容接口）。"""
-        try:
-            api_base = str(self.provider_config.get("api_base", ""))
-            pid = str(self.provider_config.get("id", "")).lower()
-            return ("api.x.ai" in api_base) or (pid == "xai")
-        except Exception:
-            return False
-
     def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
-        """当为 xAI 且开启全局 web_search 时，向请求体注入原生 Live Search 参数。
+        """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
 
+        - 仅在 provider_config.xai_native_search 为 True 时生效
         - 默认注入 {"mode": "auto"}
         - 允许通过 kwargs 使用 xai_search_mode 覆盖（on/auto/off）
-        - 仅在 provider_settings.web_search 为 True 时生效
         """
-        if not self._is_xai():
-            return
-        web_search_enabled = bool(self.provider_settings.get("web_search", False))
-        xai_native_search = bool(self.provider_config.get("xai_native_search", False))
-        if not (web_search_enabled or xai_native_search):
+        if not bool(self.provider_config.get("xai_native_search", False)):
             return
 
         mode = kwargs.get("xai_search_mode", "auto")
