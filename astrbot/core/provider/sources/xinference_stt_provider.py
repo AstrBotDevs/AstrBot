@@ -129,7 +129,7 @@ class ProviderXinferenceSTT(STTProvider):
                     audio_bytes = f.read()
 
             # 4. Transcribe
-            # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现请求，提交issue等待官方修复后再改回来
+            # 官方asyncCLient的客户端似乎实现有点问题，这里直接用aiohttp实现openai标准兼容请求，提交issue等待官方修复后再改回来
             url = f"{self.base_url}/v1/audio/transcriptions"
             headers = {
                 "accept": "application/json",
