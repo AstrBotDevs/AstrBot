@@ -90,7 +90,9 @@ class ProviderXinferenceSTT(STTProvider):
                         if resp.status == 200:
                             audio_bytes = await resp.read()
                         else:
-                            logger.error(f"Failed to download audio from {audio_url}, status: {resp.status}")
+                            logger.error(
+                                f"Failed to download audio from {audio_url}, status: {resp.status}"
+                            )
                             return ""
             else:
                 if os.path.exists(audio_url):
@@ -106,7 +108,11 @@ class ProviderXinferenceSTT(STTProvider):
 
             # 2. Check for conversion
             needs_conversion = False
-            if audio_url.endswith((".amr", ".silk")) or is_tencent or b"SILK" in audio_bytes[:8]:
+            if (
+                audio_url.endswith((".amr", ".silk"))
+                or is_tencent
+                or b"SILK" in audio_bytes[:8]
+            ):
                 needs_conversion = True
 
             # 3. Perform conversion if needed
@@ -114,17 +120,17 @@ class ProviderXinferenceSTT(STTProvider):
                 logger.info("Audio requires conversion, using temporary files...")
                 temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                 os.makedirs(temp_dir, exist_ok=True)
-                
+
                 input_path = os.path.join(temp_dir, str(uuid.uuid4()))
                 output_path = os.path.join(temp_dir, str(uuid.uuid4()) + ".wav")
                 temp_files.extend([input_path, output_path])
 
                 with open(input_path, "wb") as f:
                     f.write(audio_bytes)
-                
+
                 logger.info("Converting silk/amr file to wav ...")
                 await tencent_silk_to_wav(input_path, output_path)
-                
+
                 with open(output_path, "rb") as f:
                     audio_bytes = f.read()
 
@@ -139,9 +145,13 @@ class ProviderXinferenceSTT(STTProvider):
 
             data = aiohttp.FormData()
             data.add_field("model", self.model_uid)
-            data.add_field("file", audio_bytes, filename="audio.wav", content_type="audio/wav")
+            data.add_field(
+                "file", audio_bytes, filename="audio.wav", content_type="audio/wav"
+            )
 
-            async with self.client.session.post(url, data=data, headers=headers, timeout=self.timeout) as resp:
+            async with self.client.session.post(
+                url, data=data, headers=headers, timeout=self.timeout
+            ) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     text = result.get("text", "")
@@ -149,7 +159,9 @@ class ProviderXinferenceSTT(STTProvider):
                     return text
                 else:
                     error_text = await resp.text()
-                    logger.error(f"Xinference STT transcription failed with status {resp.status}: {error_text}")
+                    logger.error(
+                        f"Xinference STT transcription failed with status {resp.status}: {error_text}"
+                    )
                     return ""
 
         except Exception as e:
