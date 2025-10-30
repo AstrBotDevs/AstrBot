@@ -8,11 +8,13 @@ import time
 import functools
 import copy
 import astrbot.core.message.components as Comp
-from typing import Dict, Any, Callable, Awaitable, List
+from typing import Any
+
+from collections.abc import Callable, Awaitable
 from astrbot.core.platform import AstrMessageEvent
 
-USER_SESSIONS: Dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
-FILTERS: List["SessionFilter"] = []  # 存储 SessionFilter 实例
+USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
+FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 
 
 class SessionController:
@@ -29,7 +31,7 @@ class SessionController:
         self.timeout: float | int = None
         """上次保持(keep)开始时的超时时间"""
 
-        self.history_chains: List[List[Comp.BaseMessageComponent]] = []
+        self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
     def stop(self, error: Exception = None):
         """立即结束这个会话"""
@@ -81,7 +83,7 @@ class SessionController:
             pass  # 避免报错
         # finally:
 
-    def get_history_chains(self) -> List[List[Comp.BaseMessageComponent]]:
+    def get_history_chains(self) -> list[list[Comp.BaseMessageComponent]]:
         """获取历史消息链"""
         return self.history_chains
 

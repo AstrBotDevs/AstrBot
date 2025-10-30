@@ -2,7 +2,9 @@ import codecs
 import json
 from astrbot.core import logger
 from aiohttp import ClientSession, ClientResponse
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Any
+
+from collections.abc import AsyncGenerator
 
 
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
@@ -39,14 +41,14 @@ class DifyAPIClient:
 
     async def chat_messages(
         self,
-        inputs: Dict,
+        inputs: dict,
         query: str,
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: List[Dict[str, Any]] = [],
+        files: list[dict[str, Any]] = [],
         timeout: float = 60,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         url = f"{self.api_base}/chat-messages"
         payload = locals()
         payload.pop("self")
@@ -65,10 +67,10 @@ class DifyAPIClient:
 
     async def workflow_run(
         self,
-        inputs: Dict,
+        inputs: dict,
         user: str,
         response_mode: str = "streaming",
-        files: List[Dict[str, Any]] = [],
+        files: list[dict[str, Any]] = [],
         timeout: float = 60,
     ):
         url = f"{self.api_base}/workflows/run"
@@ -91,7 +93,7 @@ class DifyAPIClient:
         self,
         file_path: str,
         user: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.api_base}/files/upload"
         with open(file_path, "rb") as f:
             payload = {

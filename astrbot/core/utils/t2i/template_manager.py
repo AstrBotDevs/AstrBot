@@ -43,7 +43,7 @@ class TemplateManager:
 
     def _read_file(self, path: str) -> str:
         """读取文件内容。"""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return f.read()
 
     def list_templates(self) -> list[dict]:

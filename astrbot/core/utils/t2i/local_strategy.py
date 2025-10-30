@@ -66,7 +66,7 @@ class TextMeasurer:
     """测量文本尺寸的工具类"""
 
     @staticmethod
-    def get_text_size(text: str, font: ImageFont.FreeTypeFont) -> Tuple[int, int]:
+    def get_text_size(text: str, font: ImageFont.FreeTypeFont) -> tuple[int, int]:
         """获取文本的尺寸"""
         try:
             # PIL 9.0.0 以上版本
@@ -82,7 +82,7 @@ class TextMeasurer:
     @staticmethod
     def split_text_to_fit_width(
         text: str, font: ImageFont.FreeTypeFont, max_width: int
-    ) -> List[str]:
+    ) -> list[str]:
         """将文本拆分为多行，确保每行不超过指定宽度"""
         lines = []
         if not text:
@@ -532,7 +532,7 @@ class ListItemElement(MarkdownElement):
 class CodeBlockElement(MarkdownElement):
     """代码块元素"""
 
-    def __init__(self, content: List[str]):
+    def __init__(self, content: list[str]):
         super().__init__("\n".join(content))
 
     def calculate_height(self, image_width: int, font_size: int) -> int:
@@ -705,7 +705,7 @@ class MarkdownParser:
     """Markdown解析器，将文本解析为元素"""
 
     @staticmethod
-    async def parse(text: str) -> List[MarkdownElement]:
+    async def parse(text: str) -> list[MarkdownElement]:
         elements = []
         lines = text.split("\n")
 
@@ -847,7 +847,7 @@ class MarkdownRenderer:
         self,
         font_size: int = 26,
         width: int = 800,
-        bg_color: Tuple[int, int, int] = (255, 255, 255),
+        bg_color: tuple[int, int, int] = (255, 255, 255),
     ):
         self.font_size = font_size
         self.width = width

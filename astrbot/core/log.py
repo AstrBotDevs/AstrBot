@@ -28,7 +28,6 @@ import os
 import sys
 from collections import deque
 from asyncio import Queue
-from typing import List
 
 # 日志缓存大小
 CACHED_SIZE = 200
@@ -87,7 +86,7 @@ class LogBroker:
 
     def __init__(self):
         self.log_cache = deque(maxlen=CACHED_SIZE)  # 环形缓冲区, 保存最近的日志
-        self.subscribers: List[Queue] = []  # 订阅者列表
+        self.subscribers: list[Queue] = []  # 订阅者列表
 
     def register(self) -> Queue:
         """注册新的订阅者, 并给每个订阅者返回一个带有日志缓存的队列
