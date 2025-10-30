@@ -68,6 +68,41 @@ class ProviderOpenAIOfficial(Provider):
         model = model_config.get("model", "unknown")
         self.set_model(model)
 
+    def _is_xai(self) -> bool:
+        """判断当前提供商是否为 xAI（OpenAI 兼容接口）。"""
+        try:
+            api_base = str(self.provider_config.get("api_base", ""))
+            pid = str(self.provider_config.get("id", "")).lower()
+            return ("api.x.ai" in api_base) or (pid == "xai")
+        except Exception:
+            return False
+
+    def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
+        """当为 xAI 且开启全局 web_search 时，向请求体注入原生 Live Search 参数。
+
+        - 默认注入 {"mode": "auto"}
+        - 允许通过 kwargs 使用 xai_search_mode 覆盖（on/auto/off）
+        - 仅在 provider_settings.web_search 为 True 时生效
+        """
+        if not self._is_xai():
+            return
+        web_search_enabled = bool(self.provider_settings.get("web_search", False))
+        xai_native_search = bool(self.provider_config.get("xai_native_search", False))
+        if not (web_search_enabled or xai_native_search):
+            return
+
+        mode = kwargs.get("xai_search_mode", "auto")
+        mode = str(mode).lower()
+        if mode not in ("auto", "on", "off"):
+            mode = "auto"
+
+        # off 时不注入，保持与未开启一致
+        if mode == "off":
+            return
+
+        # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
+        payloads["search_parameters"] = {"mode": mode}
+    
     async def get_models(self):
         try:
             models_str = []
@@ -270,6 +305,9 @@ class ProviderOpenAIOfficial(Provider):
         model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
+
+        # xAI 原生搜索参数（最小侵入地在此处注入）
+        self._maybe_inject_xai_search(payloads, **kwargs)
 
         return payloads, context_query
 
