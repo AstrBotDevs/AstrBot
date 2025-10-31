@@ -17,8 +17,11 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
     检查是否需要进行数据库迁移
     如果存在 data_v3.db 并且 preference 中没有 migration_done_v4，则需要进行迁移。
     """
-    data_v3_exists = os.path.exists(get_astrbot_data_path())
-    if not data_v3_exists:
+    # 仅当 data 目录下存在旧版本数据（data_v3.db 文件）时才考虑迁移
+    data_dir = get_astrbot_data_path()
+    data_v3_db = os.path.join(data_dir, "data_v3.db")
+
+    if not os.path.exists(data_v3_db):
         return False
     migration_done = await db_helper.get_preference(
         "global", "global", "migration_done_v4"
@@ -32,7 +35,7 @@ async def do_migration_v4(
     db_helper: BaseDatabase,
     platform_id_map: dict[str, dict[str, str]],
     astrbot_config: AstrBotConfig,
-):
+) -> None:
     """
     执行数据库迁移
     迁移旧的 webchat_conversation 表到新的 conversation 表。
