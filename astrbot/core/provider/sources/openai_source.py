@@ -102,7 +102,7 @@ class ProviderOpenAIOfficial(Provider):
         except NotFoundError as e:
             raise Exception(f"获取模型列表失败：{e}")
 
-    async def _query(self, payloads: dict, tools: ToolSet) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -151,9 +151,7 @@ class ProviderOpenAIOfficial(Provider):
         return llm_response
 
     async def _query_stream(
-        self,
-        payloads: dict,
-        tools: ToolSet,
+        self, payloads: dict, tools: ToolSet | None
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -212,7 +210,9 @@ class ProviderOpenAIOfficial(Provider):
 
         yield llm_response
 
-    async def parse_openai_completion(self, completion: ChatCompletion, tools: ToolSet):
+    async def parse_openai_completion(
+        self, completion: ChatCompletion, tools: ToolSet | None
+    ):
         """解析 OpenAI 的 ChatCompletion 响应"""
         llm_response = LLMResponse("assistant")
 
@@ -234,6 +234,10 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(tool_call, str):
                     # workaround for #1359
                     tool_call = json.loads(tool_call)
+                if tools is None:
+                    # 工具集未提供
+                    # Should be unreachable
+                    raise Exception("工具集未提供")
                 for tool in tools.func_list:
                     if (
                         tool_call.type == "function"
@@ -310,7 +314,7 @@ class ProviderOpenAIOfficial(Provider):
         e: Exception,
         payloads: dict,
         context_query: list,
-        func_tool: ToolSet,
+        func_tool: ToolSet | None,
         chosen_key: str,
         available_api_keys: list[str],
         retry_cnt: int,

@@ -7,6 +7,7 @@ import asyncio
 import os
 import re
 from datetime import datetime
+from typing import cast
 
 from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
@@ -32,7 +33,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.set_model(provider_config.get("stt_model"))
+        self.set_model(provider_config["stt_model"])
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
@@ -86,7 +87,9 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             loop = asyncio.get_event_loop()
             res = await loop.run_in_executor(
                 None,  # 使用默认的线程池
-                lambda: self.model(audio_url, language="auto", use_itn=True),
+                lambda: cast(SenseVoiceSmall, self.model)(
+                    audio_url, language="auto", use_itn=True
+                ),
             )
 
             # res = self.model(audio_url, language="auto", use_itn=True)

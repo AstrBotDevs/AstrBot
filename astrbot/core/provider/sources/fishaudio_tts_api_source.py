@@ -59,9 +59,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model"))
+        self.set_model(provider_config["model"])
 
-    async def _get_reference_id_by_character(self, character: str) -> str:
+    async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
 
         Args:
@@ -128,7 +128,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             text=text,
             format="wav",
             reference_id=reference_id,
-        )
+        ).model_dump()
 
     async def get_audio(self, text: str) -> str:
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
@@ -146,5 +146,6 @@ class ProviderFishAudioTTSAPI(TTSProvider):
                     async for chunk in response.aiter_bytes():
                         f.write(chunk)
                 return path
-            text = await response.aread()
+            body = await response.aread()
+            text = body.decode("utf-8", errors="replace")
             raise Exception(f"Fish Audio API请求失败: {text}")

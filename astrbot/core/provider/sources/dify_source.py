@@ -101,6 +101,8 @@ class ProviderDify(Provider):
         payload_vars = self.variables.copy()
         # 动态变量
         session_var = await sp.session_get(session_id, "session_variables", default={})
+        if not isinstance(session_var, dict):
+            session_var = {}
         payload_vars.update(session_var)
         payload_vars["system_prompt"] = system_prompt
 
@@ -271,10 +273,10 @@ class ProviderDify(Provider):
         self.conversation_ids[session_id] = ""
         return True
 
-    async def get_current_key(self):
+    def get_current_key(self):
         return self.api_key
 
-    async def set_key(self, key):
+    def set_key(self, key):
         raise Exception("Dify 适配器不支持设置 API Key。")
 
     async def get_models(self):

@@ -44,6 +44,7 @@ class VLLMRerankProvider(RerankProvider):
         }
         if top_n is not None:
             payload["top_n"] = top_n
+        assert self.client is not None
         async with self.client.post(
             f"{self.base_url}/v1/rerank",
             json=payload,

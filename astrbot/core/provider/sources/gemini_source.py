@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from google import genai
 from google.genai import types
@@ -138,7 +139,7 @@ class ProviderGoogleGenAI(Provider):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
             modalities = ["Text"]
 
-        tool_list = []
+        tool_list: list[types.Tool] | None = []
         model_name = self.get_model()
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
@@ -215,7 +216,7 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,
+            tools=cast(types.ToolListUnion | None, tool_list),
             safety_settings=self.safety_settings if self.safety_settings else None,
             thinking_config=(
                 types.ThinkingConfig(
@@ -259,6 +260,7 @@ class ProviderGoogleGenAI(Provider):
             content_cls: type[types.Content],
         ) -> None:
             if contents and isinstance(contents[-1], content_cls):
+                assert contents[-1].parts is not None
                 contents[-1].parts.extend(part)
             else:
                 contents.append(content_cls(parts=part))
@@ -419,7 +421,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content(
                     model=self.get_model(),
-                    contents=conversation,
+                    contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
 
@@ -494,7 +496,7 @@ class ProviderGoogleGenAI(Provider):
                 )
                 result = await self.client.models.generate_content_stream(
                     model=self.get_model(),
-                    contents=conversation,
+                    contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
                 break
