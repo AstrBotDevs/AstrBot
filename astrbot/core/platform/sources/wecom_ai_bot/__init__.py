@@ -1,5 +1,4 @@
-"""
-企业微信智能机器人平台适配器包
+"""企业微信智能机器人平台适配器包
 """
 
 from .wecomai_adapter import WecomAIBotAdapter
@@ -9,9 +8,9 @@ from .wecomai_server import WecomAIBotServer
 from .wecomai_utils import WecomAIBotConstants
 
 __all__ = [
-    "WecomAIBotAdapter",
     "WecomAIBotAPIClient",
+    "WecomAIBotAdapter",
+    "WecomAIBotConstants",
     "WecomAIBotMessageEvent",
     "WecomAIBotServer",
-    "WecomAIBotConstants",
 ]

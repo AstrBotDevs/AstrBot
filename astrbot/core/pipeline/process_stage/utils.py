@@ -1,6 +1,7 @@
-from ..context import PipelineContext
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.api import logger, sp
+from astrbot.core.provider.entities import ProviderRequest
+
+from ..context import PipelineContext
 
 
 async def inject_kb_context(
@@ -8,14 +9,14 @@ async def inject_kb_context(
     p_ctx: PipelineContext,
     req: ProviderRequest,
 ) -> None:
-    """inject knowledge base context into the provider request
+    """Inject knowledge base context into the provider request
 
     Args:
         umo: Unique message object (session ID)
         p_ctx: Pipeline context
         req: Provider request
-    """
 
+    """
     kb_mgr = p_ctx.plugin_manager.context.kb_manager
 
     # 1. 优先读取会话级配置
@@ -45,7 +46,7 @@ async def inject_kb_context(
 
         if invalid_kb_ids:
             logger.warning(
-                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}"
+                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}",
             )
 
         if not kb_names:

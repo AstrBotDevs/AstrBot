@@ -1,13 +1,12 @@
-"""
-企业微信智能机器人事件处理模块，处理消息事件的发送和接收
+"""企业微信智能机器人事件处理模块，处理消息事件的发送和接收
 """
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     Image,
     Plain,
 )
-from astrbot.api import logger
 
 from .wecomai_api import WecomAIBotAPIClient
 from .wecomai_queue_mgr import wecomai_queue_mgr
@@ -32,6 +31,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             platform_meta: 平台元数据
             session_id: 会话 ID
             api_client: API 客户端
+
         """
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.api_client = api_client
@@ -50,7 +50,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     "type": "end",
                     "data": "",
                     "streaming": False,
-                }
+                },
             )
             return ""
 
@@ -64,7 +64,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "session_id": stream_id,
-                    }
+                    },
                 )
             elif isinstance(comp, Image):
                 # 处理图片消息
@@ -77,7 +77,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                                 "image_data": image_base64,
                                 "streaming": streaming,
                                 "session_id": stream_id,
-                            }
+                            },
                         )
                     else:
                         logger.warning("图片数据为空，跳过")
@@ -127,7 +127,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": final_data,
                         "streaming": True,
                         "session_id": self.session_id,
-                    }
+                    },
                 )
                 final_data = ""
                 continue
@@ -144,6 +144,6 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "streaming": True,
                 "session_id": self.session_id,
-            }
+            },
         )
         await super().send_streaming(generator, use_fallback)

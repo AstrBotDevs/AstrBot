@@ -1,10 +1,9 @@
 import random
 import re
-from bs4 import BeautifulSoup
-from . import SearchEngine, SearchResult
-from . import USER_AGENTS
 
-from typing import List
+from bs4 import BeautifulSoup
+
+from . import USER_AGENTS, SearchEngine, SearchResult
 
 
 class Sogo(SearchEngine):
@@ -27,7 +26,7 @@ class Sogo(SearchEngine):
         url = f"{self.base_url}/web?query={query}"
         return await self._get_html(url, None)
 
-    async def search(self, query: str, num_results: int) -> List[SearchResult]:
+    async def search(self, query: str, num_results: int) -> list[SearchResult]:
         results = await super().search(query, num_results)
         for result in results:
             result.url = result.url.get("href")
@@ -42,6 +41,6 @@ class Sogo(SearchEngine):
         script = soup.find("script")
         if script:
             url = re.search(r'window.location.replace\("(.+?)"\)', script.string).group(
-                1
+                1,
             )
         return url

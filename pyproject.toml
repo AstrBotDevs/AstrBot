@@ -58,14 +58,29 @@ dependencies = [
     "xinference-client",
 ]
 
+[dependency-groups]
+dev = [
+    "commitizen>=4.9.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12.8",
+    "mypy>=1.5.1",
+]
+
+keywords = [
+    "Astrbot",
+    "Astrbot Module",
+    "Astrbot Plugin"
+]
+
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
-[build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
-build-backend = "hatchling.build"
 
 [tool.ruff]
+select = ["ALL"]
+
 exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",
   "astrbot/api/all.py",
@@ -77,21 +92,36 @@ lint.ignore = [
     "E501",
     "ASYNC230" # TODO: handle ASYNC230 in AstrBot
 ]
-lint.select = [
-  "F", # Pyflakes
-  "W", # pycodestyle warnings
-  "E", # pycodestyle errors
-  "ASYNC", # flake8-async
-  "C4", # flake8-comprehensions
-  "Q", # flake8-quotes
-]
+
+
 target-version = "py310"
 
-[dependency-groups]
-dev = [
-    "commitizen>=4.9.1",
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-cov>=6.2.1",
-    "ruff>=0.12.8",
-]
+[tool.mypy]
+python_version = "3.10"
+# Keep missing third-party stubs silent by default for easier onboarding.
+ignore_missing_imports = true
+follow_imports = "silent"
+exclude = '(?x)(^dashboard/|^data/|^node_modules/|^dist/|^tests/)'
+mypy_path = ["astrbot/","packages/"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+disallow_untyped_defs = false
+check_untyped_defs = false
+disallow_incomplete_defs = false
+
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+reportMissingTypeStubs = false
+reportMissingImports = false
+include = ["astrbot"]
+exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+

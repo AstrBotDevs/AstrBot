@@ -1,7 +1,9 @@
 import enum
-from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+from . import HandlerFilter
 
 
 class PlatformAdapterType(enum.Flag):

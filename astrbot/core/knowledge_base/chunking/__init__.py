@@ -1,5 +1,4 @@
-"""
-文档分块模块
+"""文档分块模块
 """
 
 from .base import BaseChunker

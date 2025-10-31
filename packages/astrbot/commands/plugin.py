@@ -1,10 +1,10 @@
-import astrbot.api.star as star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
+from astrbot.core import DEMO_MODE, logger
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core import DEMO_MODE, logger
 
 
 class PluginCommands:
@@ -24,7 +24,7 @@ class PluginCommands:
 
         plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
         event.set_result(
-            MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
+            MessageEventResult().message(f"{plugin_list_info}").use_t2i(False),
         )
 
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = ""):
@@ -34,7 +34,7 @@ class PluginCommands:
             return
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin off <插件名> 禁用插件。")
+                MessageEventResult().message("/plugin off <插件名> 禁用插件。"),
             )
             return
         await self.context._star_manager.turn_off_plugin(plugin_name)  # type: ignore
@@ -47,7 +47,7 @@ class PluginCommands:
             return
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin on <插件名> 启用插件。")
+                MessageEventResult().message("/plugin on <插件名> 启用插件。"),
             )
             return
         await self.context._star_manager.turn_on_plugin(plugin_name)  # type: ignore
@@ -60,7 +60,7 @@ class PluginCommands:
             return
         if not plugin_repo:
             event.set_result(
-                MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
+                MessageEventResult().message("/plugin get <插件仓库地址> 安装插件"),
             )
             return
         logger.info(f"准备从 {plugin_repo} 安装插件。")
@@ -78,7 +78,7 @@ class PluginCommands:
         """获取插件帮助"""
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin help <插件名> 查看插件信息。")
+                MessageEventResult().message("/plugin help <插件名> 查看插件信息。"),
             )
             return
         plugin = self.context.get_registered_star(plugin_name)
@@ -98,7 +98,7 @@ class PluginCommands:
                     command_handlers.append(handler)
                     command_names.append(filter_.command_name)
                     break
-                elif isinstance(filter_, CommandGroupFilter):
+                if isinstance(filter_, CommandGroupFilter):
                     command_handlers.append(handler)
                     command_names.append(filter_.group_name)
 

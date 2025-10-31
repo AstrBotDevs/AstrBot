@@ -1,5 +1,4 @@
-"""
-Astrbot统一路径获取
+"""Astrbot统一路径获取
 
 项目路径：固定为源码所在路径
 根目录路径：默认为当前工作目录，可通过环境变量 ASTRBOT_ROOT 指定
@@ -14,7 +13,7 @@ import os
 def get_astrbot_path() -> str:
     """获取Astrbot项目路径"""
     return os.path.realpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../"),
     )
 
 
@@ -22,8 +21,7 @@ def get_astrbot_root() -> str:
     """获取Astrbot根目录路径"""
     if path := os.environ.get("ASTRBOT_ROOT"):
         return os.path.realpath(path)
-    else:
-        return os.path.realpath(os.getcwd())
+    return os.path.realpath(os.getcwd())
 
 
 def get_astrbot_data_path() -> str:

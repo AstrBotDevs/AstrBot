@@ -1,13 +1,16 @@
-import uuid
 import os
-from openai import AsyncOpenAI, NOT_GIVEN
-from ..provider import STTProvider
-from ..entities import ProviderType
-from astrbot.core.utils.io import download_file
-from ..register import register_provider_adapter
+import uuid
+
+from openai import NOT_GIVEN, AsyncOpenAI
+
 from astrbot.core import logger
-from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -26,11 +29,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
-            base_url=provider_config.get("api_base", None),
+            base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
 
-        self.set_model(provider_config.get("model", None))
+        self.set_model(provider_config.get("model"))
 
     async def _is_silk_file(self, file_path):
         silk_header = b"SILK"
@@ -39,11 +42,10 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         if silk_header in file_header:
             return True
-        else:
-            return False
+        return False
 
     async def get_text(self, audio_url: str) -> str:
-        """only supports mp3, mp4, mpeg, m4a, wav, webm"""
+        """Only supports mp3, mp4, mpeg, m4a, wav, webm"""
         is_tencent = False
 
         if audio_url.startswith("http"):

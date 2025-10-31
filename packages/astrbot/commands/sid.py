@@ -1,6 +1,6 @@
 """会话ID命令"""
 
-import astrbot.api.star as star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 

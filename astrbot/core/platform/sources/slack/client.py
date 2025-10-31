@@ -1,14 +1,16 @@
-import json
-import hmac
-import hashlib
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
-from typing import Callable, Optional
-from quart import Quart, request, Response
-from slack_sdk.web.async_client import AsyncWebClient
+from collections.abc import Callable
+
+from quart import Quart, Response, request
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
+from slack_sdk.web.async_client import AsyncWebClient
+
 from astrbot.api import logger
 
 
@@ -22,7 +24,7 @@ class SlackWebhookClient:
         host: str = "0.0.0.0",
         port: int = 3000,
         path: str = "/slack/events",
-        event_handler: Optional[Callable] = None,
+        event_handler: Callable | None = None,
     ):
         self.web_client = web_client
         self.signing_secret = signing_secret
@@ -93,7 +95,7 @@ class SlackWebhookClient:
     async def start(self):
         """启动 Webhook 服务器"""
         logger.info(
-            f"Slack Webhook 服务器启动中，监听 {self.host}:{self.port}{self.path}..."
+            f"Slack Webhook 服务器启动中，监听 {self.host}:{self.port}{self.path}...",
         )
 
         await self.app.run_task(
@@ -119,7 +121,7 @@ class SlackSocketClient:
         self,
         web_client: AsyncWebClient,
         app_token: str,
-        event_handler: Optional[Callable] = None,
+        event_handler: Callable | None = None,
     ):
         self.web_client = web_client
         self.app_token = app_token

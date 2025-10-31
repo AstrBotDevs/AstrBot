@@ -1,5 +1,4 @@
-"""
-Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
+"""Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
 该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
 该类还负责加载和执行插件, 以及处理事件总线的分发。
 
@@ -9,38 +8,37 @@ Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、�
 3. 执行启动完成事件钩子
 """
 
-import traceback
 import asyncio
-import time
-import threading
 import os
-from .event_bus import EventBus
-from . import astrbot_config, html_renderer
+import threading
+import time
+import traceback
 from asyncio import Queue
-from astrbot.core.pipeline.scheduler import PipelineScheduler, PipelineContext
-from astrbot.core.star import PluginManager
-from astrbot.core.platform.manager import PlatformManager
-from astrbot.core.star.context import Context
-from astrbot.core.persona_mgr import PersonaManager
-from astrbot.core.provider.manager import ProviderManager
-from astrbot.core import LogBroker
-from astrbot.core.db import BaseDatabase
-from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
-from astrbot.core.updator import AstrBotUpdator
-from astrbot.core import logger, sp
+
+from astrbot.core import LogBroker, logger, sp
+from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
-from astrbot.core.umop_config_router import UmopConfigRouter
-from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.star.star_handler import star_handlers_registry, EventType
-from astrbot.core.star.star_handler import star_map
+from astrbot.core.db import BaseDatabase
+from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.persona_mgr import PersonaManager
+from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.platform.manager import PlatformManager
+from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
+from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.star import PluginManager
+from astrbot.core.star.context import Context
+from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.umop_config_router import UmopConfigRouter
+from astrbot.core.updator import AstrBotUpdator
+
+from . import astrbot_config, html_renderer
+from .event_bus import EventBus
 
 
 class AstrBotCoreLifecycle:
-    """
-    AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
+    """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
     该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、
     EventBus 等。
     该类还负责加载和执行插件, 以及处理事件总线的分发。
@@ -71,10 +69,8 @@ class AstrBotCoreLifecycle:
             logger.debug("HTTP proxy cleared")
 
     async def initialize(self):
+        """初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
         """
-        初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
-        """
-
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
@@ -91,7 +87,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
-            default_config=self.astrbot_config, ucr=self.umop_config_router, sp=sp
+            default_config=self.astrbot_config, ucr=self.umop_config_router, sp=sp,
         )
 
         # 4.5 to 4.6 migration for umop_config_router
@@ -110,7 +106,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化供应商管理器
         self.provider_manager = ProviderManager(
-            self.astrbot_config_mgr, self.db, self.persona_mgr
+            self.astrbot_config_mgr, self.db, self.persona_mgr,
         )
 
         # 初始化平台管理器
@@ -158,7 +154,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化事件总线
         self.event_bus = EventBus(
-            self.event_queue, self.pipeline_scheduler_mapping, self.astrbot_config_mgr
+            self.event_queue, self.pipeline_scheduler_mapping, self.astrbot_config_mgr,
         )
 
         # 记录启动时间
@@ -175,11 +171,10 @@ class AstrBotCoreLifecycle:
 
     def _load(self):
         """加载事件总线和任务并初始化"""
-
         # 创建一个异步任务来执行事件总线的 dispatch() 方法
         # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
         event_bus_task = asyncio.create_task(
-            self.event_bus.dispatch(), name="event_bus"
+            self.event_bus.dispatch(), name="event_bus",
         )
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
@@ -190,7 +185,7 @@ class AstrBotCoreLifecycle:
         tasks_ = [event_bus_task, *extra_tasks]
         for task in tasks_:
             self.curr_tasks.append(
-                asyncio.create_task(self._task_wrapper(task), name=task.get_name())
+                asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
             )
 
         self.start_time = int(time.time())
@@ -200,6 +195,7 @@ class AstrBotCoreLifecycle:
 
         Args:
             task (asyncio.Task): 要执行的异步任务
+
         """
         try:
             await task
@@ -219,12 +215,12 @@ class AstrBotCoreLifecycle:
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnAstrBotLoadedEvent
+            EventType.OnAstrBotLoadedEvent,
         )
         for handler in handlers:
             try:
                 logger.info(
-                    f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                    f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
             except BaseException:
@@ -245,7 +241,7 @@ class AstrBotCoreLifecycle:
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。"
+                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
                 )
 
         await self.provider_manager.terminate()
@@ -269,7 +265,7 @@ class AstrBotCoreLifecycle:
         await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot, name="restart", daemon=True
+            target=self.astrbot_updator._reboot, name="restart", daemon=True,
         ).start()
 
     def load_platform(self) -> list[asyncio.Task]:
@@ -281,7 +277,7 @@ class AstrBotCoreLifecycle:
                 asyncio.create_task(
                     platform_inst.run(),
                     name=f"{platform_inst.meta().id}({platform_inst.meta().name})",
-                )
+                ),
             )
         return tasks
 
@@ -290,11 +286,12 @@ class AstrBotCoreLifecycle:
 
         Returns:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+
         """
         mapping = {}
         for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
             scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id)
+                PipelineContext(ab_config, self.plugin_manager, conf_id),
             )
             await scheduler.initialize()
             mapping[conf_id] = scheduler
@@ -305,12 +302,13 @@ class AstrBotCoreLifecycle:
 
         Returns:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+
         """
         ab_config = self.astrbot_config_mgr.confs.get(conf_id)
         if not ab_config:
             raise ValueError(f"配置文件 {conf_id} 不存在")
         scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id)
+            PipelineContext(ab_config, self.plugin_manager, conf_id),
         )
         await scheduler.initialize()
         self.pipeline_scheduler_mapping[conf_id] = scheduler

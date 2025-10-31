@@ -1,13 +1,13 @@
-"""
-AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json 格式的shared_preferences, 另外一个是数据库
+"""AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json 格式的shared_preferences, 另外一个是数据库
 
 在 AstrBot 中, 会话和对话是独立的, 会话用于标记对话窗口, 例如群聊"123456789"可以建立一个会话,
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
 
 import json
+from collections.abc import Awaitable, Callable
+
 from astrbot.core import sp
-from typing import Dict, List, Callable, Awaitable
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 
@@ -16,15 +16,15 @@ class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase):
-        self.session_conversations: Dict[str, str] = {}
+        self.session_conversations: dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次
 
         # 会话删除回调函数列表（用于级联清理，如知识库配置）
-        self._on_session_deleted_callbacks: List[Callable[[str], Awaitable[None]]] = []
+        self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
 
     def register_on_session_deleted(
-        self, callback: Callable[[str], Awaitable[None]]
+        self, callback: Callable[[str], Awaitable[None]],
     ) -> None:
         """注册会话删除回调函数
 
@@ -33,6 +33,7 @@ class ConversationManager:
 
         Args:
             callback: 回调函数，接收会话ID (unified_msg_origin) 作为参数
+
         """
         self._on_session_deleted_callbacks.append(callback)
 
@@ -41,6 +42,7 @@ class ConversationManager:
 
         Args:
             unified_msg_origin: 会话ID
+
         """
         for callback in self._on_session_deleted_callbacks:
             try:
@@ -49,7 +51,7 @@ class ConversationManager:
                 from astrbot.core import logger
 
                 logger.error(
-                    f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}"
+                    f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
                 )
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
@@ -81,6 +83,7 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+
         """
         if not platform_id:
             # 如果没有提供 platform_id，则从 unified_msg_origin 中解析
@@ -106,18 +109,20 @@ class ConversationManager:
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+
         """
         self.session_conversations[unified_msg_origin] = conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
 
     async def delete_conversation(
-        self, unified_msg_origin: str, conversation_id: str | None = None
+        self, unified_msg_origin: str, conversation_id: str | None = None,
     ):
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+
         """
         if not conversation_id:
             conversation_id = self.session_conversations.get(unified_msg_origin)
@@ -133,6 +138,7 @@ class ConversationManager:
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+
         """
         await self.db.delete_conversations_by_user_id(user_id=unified_msg_origin)
         self.session_conversations.pop(unified_msg_origin, None)
@@ -148,6 +154,7 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+
         """
         ret = self.session_conversations.get(unified_msg_origin, None)
         if not ret:
@@ -169,6 +176,7 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         Returns:
             conversation (Conversation): 对话对象
+
         """
         conv = await self.db.get_conversation_by_id(cid=conversation_id)
         if not conv and create_if_not_exists:
@@ -181,8 +189,8 @@ class ConversationManager:
         return conv_res
 
     async def get_conversations(
-        self, unified_msg_origin: str | None = None, platform_id: str | None = None
-    ) -> List[Conversation]:
+        self, unified_msg_origin: str | None = None, platform_id: str | None = None,
+    ) -> list[Conversation]:
         """获取对话列表
 
         Args:
@@ -190,9 +198,10 @@ class ConversationManager:
             platform_id (str): 平台 ID, 可选参数, 用于过滤对话
         Returns:
             conversations (List[Conversation]): 对话对象列表
+
         """
         convs = await self.db.get_conversations(
-            user_id=unified_msg_origin, platform_id=platform_id
+            user_id=unified_msg_origin, platform_id=platform_id,
         )
         convs_res = []
         for conv in convs:
@@ -217,6 +226,7 @@ class ConversationManager:
             search_query (str): 搜索查询字符串, 可选
         Returns:
             conversations (list[Conversation]): 对话对象列表
+
         """
         convs, cnt = await self.db.get_filtered_conversations(
             page=page,
@@ -245,6 +255,7 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             history (List[Dict]): 对话历史记录, 是一个字典列表, 每个字典包含 role 和 content 字段
+
         """
         if not conversation_id:
             # 如果没有提供 conversation_id，则获取当前的
@@ -258,7 +269,7 @@ class ConversationManager:
             )
 
     async def update_conversation_title(
-        self, unified_msg_origin: str, title: str, conversation_id: str | None = None
+        self, unified_msg_origin: str, title: str, conversation_id: str | None = None,
     ):
         """更新会话的对话标题
 
@@ -268,6 +279,7 @@ class ConversationManager:
 
         Deprecated:
             Use `update_conversation` with `title` parameter instead.
+
         """
         await self.update_conversation(
             unified_msg_origin=unified_msg_origin,
@@ -289,6 +301,7 @@ class ConversationManager:
 
         Deprecated:
             Use `update_conversation` with `persona_id` parameter instead.
+
         """
         await self.update_conversation(
             unified_msg_origin=unified_msg_origin,
@@ -297,7 +310,7 @@ class ConversationManager:
         )
 
     async def get_human_readable_context(
-        self, unified_msg_origin, conversation_id, page=1, page_size=10
+        self, unified_msg_origin, conversation_id, page=1, page_size=10,
     ):
         """获取人类可读的上下文
 
@@ -306,6 +319,7 @@ class ConversationManager:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             page (int): 页码
             page_size (int): 每页大小
+
         """
         conversation = await self.get_conversation(unified_msg_origin, conversation_id)
         history = json.loads(conversation.history)
@@ -316,11 +330,11 @@ class ConversationManager:
             if record["role"] == "user":
                 temp_contexts.append(f"User: {record['content']}")
             elif record["role"] == "assistant":
-                if "content" in record and record["content"]:
+                if record.get("content"):
                     temp_contexts.append(f"Assistant: {record['content']}")
                 elif "tool_calls" in record:
                     tool_calls_str = json.dumps(
-                        record["tool_calls"], ensure_ascii=False
+                        record["tool_calls"], ensure_ascii=False,
                     )
                     temp_contexts.append(f"Assistant: [函数调用] {tool_calls_str}")
                 else:

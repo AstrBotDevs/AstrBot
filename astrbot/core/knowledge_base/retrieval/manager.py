@@ -4,18 +4,17 @@
 """
 
 import time
-
 from dataclasses import dataclass
-from typing import List
 
+from astrbot import logger
+from astrbot.core.db.vec_db.base import Result
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.rank_fusion import RankFusion
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 from astrbot.core.provider.provider import RerankProvider
-from astrbot.core.db.vec_db.base import Result
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+
 from ..kb_helper import KBHelper
-from astrbot import logger
 
 
 @dataclass
@@ -53,6 +52,7 @@ class RetrievalManager:
             sparse_retriever: 稀疏检索器
             rank_fusion: 结果融合器
             kb_db: 知识库数据库实例
+
         """
         self.sparse_retriever = sparse_retriever
         self.rank_fusion = rank_fusion
@@ -61,11 +61,11 @@ class RetrievalManager:
     async def retrieve(
         self,
         query: str,
-        kb_ids: List[str],
+        kb_ids: list[str],
         kb_id_helper_map: dict[str, KBHelper],
         top_k_fusion: int = 20,
         top_m_final: int = 5,
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         """混合检索
 
         流程:
@@ -82,6 +82,7 @@ class RetrievalManager:
 
         Returns:
             List[RetrievalResult]: 检索结果列表
+
         """
         if not kb_ids:
             return []
@@ -114,7 +115,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            f"Dense retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(dense_results)} results."
+            f"Dense retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(dense_results)} results.",
         )
 
         # 2. 稀疏检索
@@ -126,7 +127,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            f"Sparse retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(sparse_results)} results."
+            f"Sparse retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(sparse_results)} results.",
         )
 
         # 3. 结果融合
@@ -138,7 +139,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results."
+            f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results.",
         )
 
         # 4. 转换为 RetrievalResult (获取元数据)
@@ -159,7 +160,7 @@ class RetrievalManager:
                             "chunk_index": fr.chunk_index,
                             "char_count": len(fr.content),
                         },
-                    )
+                    ),
                 )
 
         # 5. Rerank
@@ -188,7 +189,7 @@ class RetrievalManager:
     async def _dense_retrieve(
         self,
         query: str,
-        kb_ids: List[str],
+        kb_ids: list[str],
         kb_options: dict,
     ):
         """稠密检索 (向量相似度)
@@ -202,6 +203,7 @@ class RetrievalManager:
 
         Returns:
             List[Result]: 检索结果列表
+
         """
         all_results: list[Result] = []
         for kb_id in kb_ids:
@@ -233,10 +235,10 @@ class RetrievalManager:
     async def _rerank(
         self,
         query: str,
-        results: List[RetrievalResult],
+        results: list[RetrievalResult],
         top_k: int,
         rerank_provider: RerankProvider,
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         """Rerank 重排序
 
         Args:
@@ -246,6 +248,7 @@ class RetrievalManager:
 
         Returns:
             List[RetrievalResult]: 重排序后的结果列表
+
         """
         if not results:
             return []

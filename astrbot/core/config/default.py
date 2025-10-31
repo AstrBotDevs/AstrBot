@@ -1,5 +1,4 @@
-"""
-如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
+"""如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。
 """
 
 import os
@@ -2700,9 +2699,9 @@ CONFIG_METADATA_3_SYSTEM = {
                         "items": {"type": "string"},
                     },
                 },
-            }
+            },
         },
-    }
+    },
 }
 
 

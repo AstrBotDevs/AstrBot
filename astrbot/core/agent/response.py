@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import typing as T
+from dataclasses import dataclass
+
 from astrbot.core.message.message_event_result import MessageChain
 
 

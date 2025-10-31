@@ -1,31 +1,31 @@
 # Commands module
 
+from .admin import AdminCommands
+from .alter_cmd import AlterCmdCommands
+from .conversation import ConversationCommands
 from .help import HelpCommand
 from .llm import LLMCommands
-from .tool import ToolCommands
-from .plugin import PluginCommands
-from .admin import AdminCommands
-from .conversation import ConversationCommands
-from .provider import ProviderCommands
 from .persona import PersonaCommands
-from .alter_cmd import AlterCmdCommands
+from .plugin import PluginCommands
+from .provider import ProviderCommands
 from .setunset import SetUnsetCommands
-from .t2i import T2ICommand
-from .tts import TTSCommand
 from .sid import SIDCommand
+from .t2i import T2ICommand
+from .tool import ToolCommands
+from .tts import TTSCommand
 
 __all__ = [
+    "AdminCommands",
+    "AlterCmdCommands",
+    "ConversationCommands",
     "HelpCommand",
     "LLMCommands",
-    "ToolCommands",
-    "PluginCommands",
-    "AdminCommands",
-    "ConversationCommands",
-    "ProviderCommands",
     "PersonaCommands",
-    "AlterCmdCommands",
+    "PluginCommands",
+    "ProviderCommands",
+    "SIDCommand",
     "SetUnsetCommands",
     "T2ICommand",
     "TTSCommand",
-    "SIDCommand",
+    "ToolCommands",
 ]

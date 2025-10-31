@@ -1,19 +1,17 @@
 import traceback
 from pathlib import Path
+
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 
-from .retrieval.manager import RetrievalManager, RetrievalResult
-from .retrieval.sparse_retriever import SparseRetriever
-from .retrieval.rank_fusion import RankFusion
-from .kb_db_sqlite import KBSQLiteDatabase
-
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
+from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
-
 from .models import KnowledgeBase
-
+from .retrieval.manager import RetrievalManager, RetrievalResult
+from .retrieval.rank_fusion import RankFusion
+from .retrieval.sparse_retriever import SparseRetriever
 
 FILES_PATH = "data/knowledge_base"
 DB_PATH = Path(FILES_PATH) / "kb.db"
@@ -257,6 +255,7 @@ class KnowledgeBaseManager:
 
         Returns:
             str: 格式化的上下文文本
+
         """
         lines = ["以下是相关的知识库内容,请参考这些信息回答用户的问题:\n"]
 

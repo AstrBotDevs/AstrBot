@@ -1,5 +1,4 @@
-"""
-事件总线, 用于处理事件的分发和处理
+"""事件总线, 用于处理事件的分发和处理
 事件总线是一个异步队列, 用于接收各种消息事件, 并将其发送到Scheduler调度器进行处理
 其中包含了一个无限循环的调度函数, 用于从事件队列中获取新的事件, 并创建一个新的异步任务来执行管道调度器的处理逻辑
 
@@ -13,10 +12,12 @@ class:
 
 import asyncio
 from asyncio import Queue
-from astrbot.core.pipeline.scheduler import PipelineScheduler
+
 from astrbot.core import logger
-from .platform import AstrMessageEvent
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.pipeline.scheduler import PipelineScheduler
+
+from .platform import AstrMessageEvent
 
 
 class EventBus:
@@ -46,14 +47,15 @@ class EventBus:
 
         Args:
             event (AstrMessageEvent): 事件对象
+
         """
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}"
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}"
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
             )

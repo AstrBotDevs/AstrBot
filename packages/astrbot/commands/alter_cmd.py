@@ -1,11 +1,12 @@
-import astrbot.api.star as star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.core.utils.command_parser import CommandParserMixin
-from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
-from astrbot.core.star.star import star_map
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.command_parser import CommandParserMixin
+
 from .utils.rst_scene import RstScene
 
 
@@ -34,8 +35,8 @@ class AlterCmdCommands(CommandParserMixin):
                     "格式: /alter_cmd <cmd_name> <admin/member>\n"
                     "例1: /alter_cmd c1 admin 将 c1 设为管理员指令\n"
                     "例2: /alter_cmd g1 c1 admin 将 g1 指令组的 c1 子指令设为管理员指令\n"
-                    "/alter_cmd reset config 打开 reset 权限配置"
-                )
+                    "/alter_cmd reset config 打开 reset 权限配置",
+                ),
             )
             return
 
@@ -75,13 +76,13 @@ class AlterCmdCommands(CommandParserMixin):
 
             if not scene_num.isdigit() or int(scene_num) < 1 or int(scene_num) > 3:
                 await event.send(
-                    MessageChain().message("场景编号必须是 1-3 之间的数字")
+                    MessageChain().message("场景编号必须是 1-3 之间的数字"),
                 )
                 return
 
             if perm_type not in ["admin", "member"]:
                 await event.send(
-                    MessageChain().message("权限类型错误，只能是 admin 或 member")
+                    MessageChain().message("权限类型错误，只能是 admin 或 member"),
                 )
                 return
 
@@ -93,14 +94,14 @@ class AlterCmdCommands(CommandParserMixin):
 
             await event.send(
                 MessageChain().message(
-                    f"已将 reset 命令在{scene.name}场景下的权限设为{perm_type}"
-                )
+                    f"已将 reset 命令在{scene.name}场景下的权限设为{perm_type}",
+                ),
             )
             return
 
         if cmd_type not in ["admin", "member"]:
             await event.send(
-                MessageChain().message("指令类型错误，可选类型有 admin, member")
+                MessageChain().message("指令类型错误，可选类型有 admin, member"),
             )
             return
 
@@ -144,29 +145,29 @@ class AlterCmdCommands(CommandParserMixin):
         for filter_ in found_command.event_filters:
             if isinstance(filter_, PermissionTypeFilter):
                 if cmd_type == "admin":
-                    import astrbot.api.event.filter as filter
+                    from astrbot.api.event import filter
 
                     filter_.permission_type = filter.PermissionType.ADMIN
                 else:
-                    import astrbot.api.event.filter as filter
+                    from astrbot.api.event import filter
 
                     filter_.permission_type = filter.PermissionType.MEMBER
                 found_permission_filter = True
                 break
         if not found_permission_filter:
-            import astrbot.api.event.filter as filter
+            from astrbot.api.event import filter
 
             found_command.event_filters.insert(
                 0,
                 PermissionTypeFilter(
                     filter.PermissionType.ADMIN
                     if cmd_type == "admin"
-                    else filter.PermissionType.MEMBER
+                    else filter.PermissionType.MEMBER,
                 ),
             )
         cmd_group_str = "指令组" if cmd_group else "指令"
         await event.send(
             MessageChain().message(
-                f"已将「{cmd_name}」{cmd_group_str} 的权限级别调整为 {cmd_type}。"
-            )
+                f"已将「{cmd_name}」{cmd_group_str} 的权限级别调整为 {cmd_type}。",
+            ),
         )
