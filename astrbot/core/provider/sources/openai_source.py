@@ -89,7 +89,7 @@ class ProviderOpenAIOfficial(Provider):
 
         # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
         payloads["search_parameters"] = {"mode": mode}
-    
+
     async def get_models(self):
         try:
             models_str = []
