@@ -1,7 +1,7 @@
 import abc
 import uuid
 from asyncio import Queue
-from collections.abc import Awaitable
+from collections.abc import Coroutine
 from typing import Any
 
 from astrbot.core.message.message_event_result import MessageChain
@@ -20,7 +20,7 @@ class Platform(abc.ABC):
         self.client_self_id = uuid.uuid4().hex
 
     @abc.abstractmethod
-    def run(self) -> Awaitable[Any]:
+    def run(self) -> Coroutine[Any, Any, None]:
         """得到一个平台的运行实例，需要返回一个协程对象。"""
         raise NotImplementedError
 
@@ -36,7 +36,7 @@ class Platform(abc.ABC):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> Awaitable[Any]:
+    ) -> None:
         """通过会话发送消息。该方法旨在让插件能够直接通过**可持久化的会话数据**发送消息，而不需要保存 event 对象。
 
         异步方法。

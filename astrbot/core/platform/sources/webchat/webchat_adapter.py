@@ -2,7 +2,7 @@ import asyncio
 import os
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from astrbot import logger
@@ -141,7 +141,7 @@ class WebChatAdapter(Platform):
         abm.raw_message = data
         return abm
 
-    def run(self) -> Awaitable[Any]:
+    def run(self) -> Coroutine[Any, Any, None]:
         async def callback(data: tuple):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
