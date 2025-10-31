@@ -68,6 +68,28 @@ class ProviderOpenAIOfficial(Provider):
         model = model_config.get("model", "unknown")
         self.set_model(model)
 
+    def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
+        """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
+
+        - 仅在 provider_config.xai_native_search 为 True 时生效
+        - 默认注入 {"mode": "auto"}
+        - 允许通过 kwargs 使用 xai_search_mode 覆盖（on/auto/off）
+        """
+        if not bool(self.provider_config.get("xai_native_search", False)):
+            return
+
+        mode = kwargs.get("xai_search_mode", "auto")
+        mode = str(mode).lower()
+        if mode not in ("auto", "on", "off"):
+            mode = "auto"
+
+        # off 时不注入，保持与未开启一致
+        if mode == "off":
+            return
+
+        # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
+        payloads["search_parameters"] = {"mode": mode}
+
     async def get_models(self):
         try:
             models_str = []
@@ -270,6 +292,9 @@ class ProviderOpenAIOfficial(Provider):
         model_config["model"] = model or self.get_model()
 
         payloads = {"messages": context_query, **model_config}
+
+        # xAI 原生搜索参数（最小侵入地在此处注入）
+        self._maybe_inject_xai_search(payloads, **kwargs)
 
         return payloads, context_query
 
