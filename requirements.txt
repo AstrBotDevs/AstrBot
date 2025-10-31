@@ -1,4 +1,6 @@
-aiohttp
+aiocqhttp>=1.4.4
+aiodocker>=0.24.0
+aiohttp>=3.11.18
 aiocqhttp>=1.4.4
 aiodocker>=0.24.0
 aiohttp>=3.11.18
