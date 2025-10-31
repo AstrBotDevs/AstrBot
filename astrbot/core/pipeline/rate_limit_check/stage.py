@@ -29,8 +29,7 @@ class RateLimitStage(Stage):
         self.rate_limit_time: timedelta = timedelta(0)
 
     async def initialize(self, ctx: PipelineContext) -> None:
-        """初始化限流器，根据配置设置限流参数。
-        """
+        """初始化限流器，根据配置设置限流参数。"""
         self.rate_limit_count = ctx.astrbot_config["platform_settings"]["rate_limit"][
             "count"
         ]
@@ -42,7 +41,8 @@ class RateLimitStage(Stage):
         ]  # stall or discard
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """检查并处理限流逻辑。如果触发限流，流水线会 stall 并在窗口期后自动恢复。
 
@@ -83,7 +83,9 @@ class RateLimitStage(Stage):
                         return event.stop_event()
 
     def _remove_expired_timestamps(
-        self, timestamps: deque[datetime], now: datetime,
+        self,
+        timestamps: deque[datetime],
+        now: datetime,
     ) -> None:
         """移除时间窗口外的时间戳。
 

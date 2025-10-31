@@ -31,7 +31,8 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
 
 @register_provider_adapter(
-    "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器",
+    "googlegenai_chat_completion",
+    "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
     CATEGORY_MAPPING = {
@@ -86,7 +87,8 @@ class ProviderGoogleGenAI(Provider):
         user_safety_config = self.provider_config.get("gm_safety_settings", {})
         self.safety_settings = [
             types.SafetySetting(
-                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str],
+                category=harm_category,
+                threshold=self.THRESHOLD_MAPPING[threshold_str],
             )
             for config_key, harm_category in self.CATEGORY_MAPPING.items()
             if (threshold_str := user_safety_config.get(config_key))
@@ -220,7 +222,8 @@ class ProviderGoogleGenAI(Provider):
                     thinking_budget=min(
                         int(
                             self.provider_config.get("gm_thinking_config", {}).get(
-                                "budget", 0,
+                                "budget",
+                                0,
                             ),
                         ),
                         24576,
@@ -325,7 +328,8 @@ class ProviderGoogleGenAI(Provider):
 
     @staticmethod
     def _process_content_parts(
-        candidate: types.Candidate, llm_response: LLMResponse,
+        candidate: types.Candidate,
+        llm_response: LLMResponse,
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         if not candidate.content:
@@ -407,7 +411,11 @@ class ProviderGoogleGenAI(Provider):
         while True:
             try:
                 config = await self._prepare_query_config(
-                    payloads, tools, system_instruction, modalities, temperature,
+                    payloads,
+                    tools,
+                    system_instruction,
+                    modalities,
+                    temperature,
                 )
                 result = await self.client.models.generate_content(
                     model=self.get_model(),
@@ -458,12 +466,15 @@ class ProviderGoogleGenAI(Provider):
         llm_response = LLMResponse("assistant")
         llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(
-            result.candidates[0], llm_response,
+            result.candidates[0],
+            llm_response,
         )
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet | None,
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -477,7 +488,9 @@ class ProviderGoogleGenAI(Provider):
         while True:
             try:
                 config = await self._prepare_query_config(
-                    payloads, tools, system_instruction,
+                    payloads,
+                    tools,
+                    system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
                     model=self.get_model(),
@@ -520,7 +533,8 @@ class ProviderGoogleGenAI(Provider):
                 llm_response = LLMResponse("assistant", is_chunk=False)
                 llm_response.raw_completion = chunk
                 llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0], llm_response,
+                    chunk.candidates[0],
+                    llm_response,
                 )
                 yield llm_response
                 return
@@ -536,7 +550,8 @@ class ProviderGoogleGenAI(Provider):
                     final_response = LLMResponse("assistant", is_chunk=False)
                     final_response.raw_completion = chunk
                     final_response.result_chain = self._process_content_parts(
-                        chunk.candidates[0], final_response,
+                        chunk.candidates[0],
+                        final_response,
                     )
                 break
 
@@ -677,8 +692,7 @@ class ProviderGoogleGenAI(Provider):
         self._init_client()
 
     async def assemble_context(self, text: str, image_urls: list[str] | None = None):
-        """组装上下文。
-        """
+        """组装上下文。"""
         if image_urls:
             user_content = {
                 "role": "user",
@@ -706,8 +720,7 @@ class ProviderGoogleGenAI(Provider):
         return {"role": "user", "content": text}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:

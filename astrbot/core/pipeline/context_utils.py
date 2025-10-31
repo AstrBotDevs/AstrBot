@@ -86,7 +86,8 @@ async def call_event_hook(
 
     """
     handlers = star_handlers_registry.get_handlers_by_event_type(
-        hook_type, plugins_name=event.plugins_name,
+        hook_type,
+        plugins_name=event.plugins_name,
     )
     for handler in handlers:
         try:

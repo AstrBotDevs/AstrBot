@@ -76,7 +76,8 @@ async def test_install_plugin(plugin_manager_pm: PluginManager):
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_info = await plugin_manager_pm.install_plugin(test_repo)
     plugin_path = os.path.join(
-        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential",
+        plugin_manager_pm.plugin_store_path,
+        "astrbot_plugin_essential",
     )
 
     assert plugin_info is not None
@@ -120,7 +121,8 @@ async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     await plugin_manager_pm.install_plugin(test_repo)
     plugin_path = os.path.join(
-        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential",
+        plugin_manager_pm.plugin_store_path,
+        "astrbot_plugin_essential",
     )
     assert os.path.exists(plugin_path)  # Pre-condition
 

@@ -29,7 +29,9 @@ class QQOfficialWebhook:
 
         self.server = quart.Quart(__name__)
         self.server.add_url_rule(
-            "/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"],
+            "/astrbot-qo-webhook/callback",
+            view_func=self.callback,
+            methods=["POST"],
         )
         self.client = botpy_client
         self.event_queue = event_queue
@@ -64,7 +66,8 @@ class QQOfficialWebhook:
         seed = await self.repeat_seed(self.secret)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
         msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token", "",
+            "plain_token",
+            "",
         )
         # sign
         signature = private_key.sign(msg.encode()).hex()

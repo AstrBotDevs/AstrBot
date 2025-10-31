@@ -26,7 +26,10 @@ from .lark_event import LarkMessageEvent
 @register_platform_adapter("lark", "飞书机器人官方 API 适配器")
 class LarkPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -67,7 +70,9 @@ class LarkPlatformAdapter(Platform):
         )
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
         wrapped = {

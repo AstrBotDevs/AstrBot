@@ -34,18 +34,23 @@ from astrbot.core.platform.astr_message_event import MessageSession
 )
 class SatoriPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settings = platform_settings
 
         self.api_base_url = self.config.get(
-            "satori_api_base_url", "http://localhost:5140/satori/v1",
+            "satori_api_base_url",
+            "http://localhost:5140/satori/v1",
         )
         self.token = self.config.get("satori_token", "")
         self.endpoint = self.config.get(
-            "satori_endpoint", "ws://localhost:5140/satori/v1/events",
+            "satori_endpoint",
+            "ws://localhost:5140/satori/v1/events",
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
         self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
@@ -66,12 +71,16 @@ class SatoriPlatformAdapter(Platform):
         self.ready_received = False
 
     async def send_by_session(
-        self, session: MessageSession, message_chain: MessageChain,
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
     ):
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
-            self, message_chain, session.session_id,
+            self,
+            message_chain,
+            session.session_id,
         )
         await super().send_by_session(session, message_chain)
 
@@ -281,7 +290,12 @@ class SatoriPlatformAdapter(Platform):
                     return
 
                 abm = await self.convert_satori_message(
-                    message, user, channel, guild, login, timestamp,
+                    message,
+                    user,
+                    channel,
+                    guild,
+                    login,
+                    timestamp,
                 )
                 if abm:
                     await self.handle_msg(abm)
@@ -482,14 +496,17 @@ class SatoriPlatformAdapter(Platform):
                     inner_content += quote_element.text
                 for child in quote_element:
                     inner_content += ET.tostring(
-                        child, encoding="unicode", method="xml",
+                        child,
+                        encoding="unicode",
+                        method="xml",
                     )
                     if child.tail:
                         inner_content += child.tail
 
                 # 构造移除了<quote>标签的内容
                 content_without_quote = content.replace(
-                    ET.tostring(quote_element, encoding="unicode", method="xml"), "",
+                    ET.tostring(quote_element, encoding="unicode", method="xml"),
+                    "",
                 )
 
                 return {
@@ -746,7 +763,10 @@ class SatoriPlatformAdapter(Platform):
 
         try:
             async with self.session.request(
-                method, url, json=data, headers=headers,
+                method,
+                url,
+                json=data,
+                headers=headers,
             ) as response:
                 if response.status == 200:
                     result = await response.json()

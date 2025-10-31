@@ -125,7 +125,9 @@ class WebChatMessageEvent(AstrMessageEvent):
                 final_data = ""
                 continue
             final_data += await WebChatMessageEvent._send(
-                chain, session_id=self.session_id, streaming=True,
+                chain,
+                session_id=self.session_id,
+                streaming=True,
             )
 
         await web_chat_back_queue.put(

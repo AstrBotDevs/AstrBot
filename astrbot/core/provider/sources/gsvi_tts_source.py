@@ -12,7 +12,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "gsvi_tts_api", "GSVI TTS API", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "gsvi_tts_api",
+    "GSVI TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderGSVITTS(TTSProvider):
     def __init__(

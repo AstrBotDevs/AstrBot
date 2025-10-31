@@ -93,7 +93,8 @@ class T2iRoute(Route):
             response = jsonify(
                 asdict(
                     Response().ok(
-                        data={"name": name}, message="Template created successfully.",
+                        data={"name": name},
+                        message="Template created successfully.",
                     ),
                 ),
             )

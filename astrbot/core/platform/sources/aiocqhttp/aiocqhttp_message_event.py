@@ -20,7 +20,12 @@ from astrbot.api.platform import Group, MessageMember
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
-        self, message_str, message_obj, platform_meta, session_id, bot: CQHttp,
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: CQHttp,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
@@ -153,7 +158,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

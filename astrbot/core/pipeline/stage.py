@@ -31,7 +31,8 @@ class Stage(abc.ABC):
 
     @abc.abstractmethod
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """处理事件
 

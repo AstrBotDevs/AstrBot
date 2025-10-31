@@ -15,7 +15,10 @@ class UmopConfigRouter:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
         sp_data = self.sp.get(
-            "umop_config_routing", {}, scope="global", scope_id="global",
+            "umop_config_routing",
+            {},
+            scope="global",
+            scope_id="global",
         )
         self.umop_to_conf_id = sp_data
 

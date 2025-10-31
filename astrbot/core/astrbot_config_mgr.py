@@ -49,7 +49,10 @@ class AstrBotConfigManager:
         """获取所有的 abconf 数据"""
         if self.abconf_data is None:
             self.abconf_data = self.sp.get(
-                "abconf_mapping", {}, scope="global", scope_id="global",
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
             )
         return self.abconf_data
 
@@ -105,7 +108,10 @@ class AstrBotConfigManager:
     ) -> None:
         """保存配置文件的映射关系"""
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global",
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
@@ -186,7 +192,10 @@ class AstrBotConfigManager:
 
         # 从映射中移除
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global",
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -194,7 +203,8 @@ class AstrBotConfigManager:
 
         # 获取配置文件路径
         conf_path = os.path.join(
-            get_astrbot_config_path(), abconf_data[conf_id]["path"],
+            get_astrbot_config_path(),
+            abconf_data[conf_id]["path"],
         )
 
         # 删除配置文件
@@ -233,7 +243,10 @@ class AstrBotConfigManager:
             raise ValueError("不能更新默认配置文件的信息")
 
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global",
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -250,7 +263,10 @@ class AstrBotConfigManager:
         return True
 
     def g(
-        self, umo: str | None = None, key: str | None = None, default: _VT = None,
+        self,
+        umo: str | None = None,
+        key: str | None = None,
+        default: _VT = None,
     ) -> _VT:
         """获取配置项。umo 为 None 时使用默认配置"""
         if umo is None:

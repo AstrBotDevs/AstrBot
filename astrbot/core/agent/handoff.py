@@ -9,7 +9,10 @@ class HandoffTool(FunctionTool, Generic[TContext]):
     """Handoff tool for delegating tasks to another agent."""
 
     def __init__(
-        self, agent: Agent[TContext], parameters: dict | None = None, **kwargs,
+        self,
+        agent: Agent[TContext],
+        parameters: dict | None = None,
+        **kwargs,
     ):
         self.agent = agent
         super().__init__(

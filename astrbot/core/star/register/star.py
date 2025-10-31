@@ -6,7 +6,11 @@ _warned_register_star = False
 
 
 def register_star(
-    name: str, author: str, desc: str, version: str, repo: str | None = None,
+    name: str,
+    author: str,
+    desc: str,
+    version: str,
+    repo: str | None = None,
 ):
     """注册一个插件(Star)。
 

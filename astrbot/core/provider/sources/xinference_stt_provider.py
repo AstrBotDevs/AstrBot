@@ -31,7 +31,8 @@ class ProviderXinferenceSTT(STTProvider):
         self.model_name = provider_config.get("model", "whisper-large-v3")
         self.api_key = provider_config.get("api_key")
         self.launch_model_if_not_running = provider_config.get(
-            "launch_model_if_not_running", False,
+            "launch_model_if_not_running",
+            False,
         )
         self.client = None
         self.model_uid = None
@@ -58,7 +59,8 @@ class ProviderXinferenceSTT(STTProvider):
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
                     self.model_uid = await self.client.launch_model(
-                        model_name=self.model_name, model_type="audio",
+                        model_name=self.model_name,
+                        model_type="audio",
                     )
                     logger.info("Model launched.")
                 else:
@@ -70,7 +72,8 @@ class ProviderXinferenceSTT(STTProvider):
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
-                f"Xinference initialization failed with exception: {e}", exc_info=True,
+                f"Xinference initialization failed with exception: {e}",
+                exc_info=True,
             )
 
     async def get_text(self, audio_url: str) -> str:
@@ -147,11 +150,17 @@ class ProviderXinferenceSTT(STTProvider):
             data = aiohttp.FormData()
             data.add_field("model", self.model_uid)
             data.add_field(
-                "file", audio_bytes, filename="audio.wav", content_type="audio/wav",
+                "file",
+                audio_bytes,
+                filename="audio.wav",
+                content_type="audio/wav",
             )
 
             async with self.client.session.post(
-                url, data=data, headers=headers, timeout=self.timeout,
+                url,
+                data=data,
+                headers=headers,
+                timeout=self.timeout,
             ) as resp:
                 if resp.status == 200:
                     result = await resp.json()

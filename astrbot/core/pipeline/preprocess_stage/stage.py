@@ -22,7 +22,8 @@ class PreProcessStage(Stage):
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
         # 平台特异配置：platform_specific.<platform>.pre_ack_emoji

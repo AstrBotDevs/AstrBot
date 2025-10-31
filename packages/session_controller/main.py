@@ -59,7 +59,8 @@ class Waiter(Star):
 
                             if curr_cid:
                                 conversation = await self.context.conversation_manager.get_conversation(
-                                    event.unified_msg_origin, curr_cid,
+                                    event.unified_msg_origin,
+                                    curr_cid,
                                 )
                             else:
                                 # 创建新对话
@@ -88,10 +89,12 @@ class Waiter(Star):
 
                     @session_waiter(60)
                     async def empty_mention_waiter(
-                        controller: SessionController, event: AstrMessageEvent,
+                        controller: SessionController,
+                        event: AstrMessageEvent,
                     ):
                         event.message_obj.message.insert(
-                            0, Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
+                            0,
+                            Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
                         )
                         new_event = copy.copy(event)
                         # 重新推入事件队列

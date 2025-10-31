@@ -55,7 +55,10 @@ class DifyAPIClient:
         payload.pop("timeout")
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
-            url, json=payload, headers=self.headers, timeout=timeout,
+            url,
+            json=payload,
+            headers=self.headers,
+            timeout=timeout,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -79,7 +82,10 @@ class DifyAPIClient:
         payload.pop("timeout")
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
-            url, json=payload, headers=self.headers, timeout=timeout,
+            url,
+            json=payload,
+            headers=self.headers,
+            timeout=timeout,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -101,7 +107,9 @@ class DifyAPIClient:
                 "file": f,
             }
             async with self.session.post(
-                url, data=payload, headers=self.headers,
+                url,
+                data=payload,
+                headers=self.headers,
             ) as resp:
                 return await resp.json()  # {"id": "xxx", ...}
 
@@ -128,7 +136,11 @@ class DifyAPIClient:
             return await resp.json()
 
     async def rename(
-        self, conversation_id: str, name: str, user: str, auto_generate: bool = False,
+        self,
+        conversation_id: str,
+        name: str,
+        user: str,
+        auto_generate: bool = False,
     ):
         # /conversations/:conversation_id/name
         url = f"{self.api_base}/conversations/{conversation_id}/name"

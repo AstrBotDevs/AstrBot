@@ -79,7 +79,10 @@ async def check_dashboard_files(webui_dir: str | None = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AstrBot")
     parser.add_argument(
-        "--webui-dir", type=str, help="指定 WebUI 静态文件目录路径", default=None,
+        "--webui-dir",
+        type=str,
+        help="指定 WebUI 静态文件目录路径",
+        default=None,
     )
     args = parser.parse_args()
 

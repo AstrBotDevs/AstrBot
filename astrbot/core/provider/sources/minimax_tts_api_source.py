@@ -14,7 +14,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "minimax_tts_api", "MiniMax TTS API", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "minimax_tts_api",
+    "MiniMax TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderMiniMaxTTSAPI(TTSProvider):
     def __init__(
@@ -25,13 +27,15 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.api_base: str = provider_config.get(
-            "api_base", "https://api.minimax.chat/v1/t2a_v2",
+            "api_base",
+            "https://api.minimax.chat/v1/t2a_v2",
         )
         self.group_id: str = provider_config.get("minimax-group-id", "")
         self.set_model(provider_config.get("model", ""))
         self.lang_boost: str = provider_config.get("minimax-langboost", "auto")
         self.is_timber_weight: bool = provider_config.get(
-            "minimax-is-timber-weight", False,
+            "minimax-is-timber-weight",
+            False,
         )
         self.timber_weight: list[dict[str, str | int]] = json.loads(
             provider_config.get(
@@ -50,7 +54,8 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "emotion": provider_config.get("minimax-voice-emotion", "neutral"),
             "latex_read": provider_config.get("minimax-voice-latex", False),
             "english_normalization": provider_config.get(
-                "minimax-voice-english-normalization", False,
+                "minimax-voice-english-normalization",
+                False,
             ),
         }
 
@@ -85,12 +90,15 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
     async def _call_tts_stream(self, text: str) -> AsyncIterator[bytes]:
         """进行流式请求"""
         try:
-            async with aiohttp.ClientSession() as session, session.post(
-                self.concat_base_url,
-                headers=self.headers,
-                data=self._build_tts_stream_body(text),
-                timeout=aiohttp.ClientTimeout(total=60),
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    self.concat_base_url,
+                    headers=self.headers,
+                    data=self._build_tts_stream_body(text),
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as response,
+            ):
                 response.raise_for_status()
 
                 buffer = b""

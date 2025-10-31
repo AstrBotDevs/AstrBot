@@ -1,5 +1,4 @@
-"""会话控制
-"""
+"""会话控制"""
 
 import abc
 import asyncio
@@ -17,8 +16,7 @@ FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 
 
 class SessionController:
-    """控制一个 Session 是否已经结束
-    """
+    """控制一个 Session 是否已经结束"""
 
     def __init__(self):
         self.future = asyncio.Future()
@@ -120,7 +118,9 @@ class SessionWaiter:
         """需要保证一个 session 同时只有一个 trigger"""
 
     async def register_wait(
-        self, handler: Callable[[str], Awaitable[Any]], timeout: int = 30,
+        self,
+        handler: Callable[[str], Awaitable[Any]],
+        timeout: int = 30,
     ) -> Any:
         """等待外部输入并处理"""
         self.handler = handler

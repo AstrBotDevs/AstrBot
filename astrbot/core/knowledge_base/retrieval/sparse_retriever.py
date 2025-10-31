@@ -77,7 +77,9 @@ class SparseRetriever:
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
-                metadata_filters={}, limit=None, offset=None,
+                metadata_filters={},
+                limit=None,
+                offset=None,
             )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
             result = [

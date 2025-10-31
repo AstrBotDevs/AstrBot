@@ -38,7 +38,9 @@ class ServeTTSRequest(BaseModel):
 
 
 @register_provider_adapter(
-    "fishaudio_tts_api", "FishAudio TTS API", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "fishaudio_tts_api",
+    "FishAudio TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderFishAudioTTSAPI(TTSProvider):
     def __init__(
@@ -51,7 +53,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.reference_id: str = provider_config.get("fishaudio-tts-reference-id", "")
         self.character: str = provider_config.get("fishaudio-tts-character", "可莉")
         self.api_base: str = provider_config.get(
-            "api_base", "https://api.fish-audio.cn/v1",
+            "api_base",
+            "https://api.fish-audio.cn/v1",
         )
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
@@ -76,7 +79,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             for sort_by in sort_options:
                 params = {"title": character, "sort_by": sort_by}
                 response = await client.get(
-                    "/model", params=params, headers=self.headers,
+                    "/model",
+                    params=params,
+                    headers=self.headers,
                 )
                 resp_data = response.json()
                 if resp_data["total"] == 0:

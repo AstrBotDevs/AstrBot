@@ -269,7 +269,8 @@ class KnowledgeBaseRoute(Route):
                 # 检查重排序模型可用性
                 try:
                     res = await rerank_prv.rerank(
-                        query="astrbot", documents=["astrbot knowledge base"],
+                        query="astrbot",
+                        documents=["astrbot knowledge base"],
                     )
                     if not res:
                         raise ValueError("重排序模型返回结果异常")
@@ -830,7 +831,9 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
             chunk_list = await kb_helper.get_chunks_by_doc_id(
-                doc_id=doc_id, offset=offset, limit=limit,
+                doc_id=doc_id,
+                offset=offset,
+                limit=limit,
             )
             return (
                 Response()
@@ -896,7 +899,9 @@ class KnowledgeBaseRoute(Route):
             if debug:
                 try:
                     img_base64 = await generate_tsne_visualization(
-                        query, kb_names, kb_manager,
+                        query,
+                        kb_names,
+                        kb_manager,
                     )
                     if img_base64:
                         response_data["visualization"] = img_base64

@@ -55,7 +55,8 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Tests the login functionality with both wrong and correct credentials."""
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/auth/login", json={"username": "wrong", "password": "password"},
+        "/api/auth/login",
+        json={"username": "wrong", "password": "password"},
     )
     data = await response.get_json()
     assert data["status"] == "error"
@@ -93,7 +94,8 @@ async def test_plugins(app: Quart, authenticated_header: dict):
 
     # 插件市场
     response = await test_client.get(
-        "/api/plugin/market_list", headers=authenticated_header,
+        "/api/plugin/market_list",
+        headers=authenticated_header,
     )
     assert response.status_code == 200
     data = await response.get_json()
@@ -185,10 +187,12 @@ async def test_do_update(
 
     monkeypatch.setattr(core_lifecycle_td.astrbot_updator, "update", mock_update)
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.download_dashboard", mock_download_dashboard,
+        "astrbot.dashboard.routes.update.download_dashboard",
+        mock_download_dashboard,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.pip_installer.install", mock_pip_install,
+        "astrbot.dashboard.routes.update.pip_installer.install",
+        mock_pip_install,
     )
 
     response = await test_client.post(

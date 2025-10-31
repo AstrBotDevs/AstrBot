@@ -1,5 +1,4 @@
-"""企业微信智能机器人事件处理模块，处理消息事件的发送和接收
-"""
+"""企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain

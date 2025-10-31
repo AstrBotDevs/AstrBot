@@ -23,7 +23,8 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "openai_chat_completion", "OpenAI API Chat Completion 提供商适配器",
+    "openai_chat_completion",
+    "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
     def __init__(
@@ -111,7 +112,9 @@ class ProviderOpenAIOfficial(Provider):
             del payloads["tools"]
 
         completion = await self.client.chat.completions.create(
-            **payloads, stream=False, extra_body=extra_body,
+            **payloads,
+            stream=False,
+            extra_body=extra_body,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -126,7 +129,9 @@ class ProviderOpenAIOfficial(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet,
+        self,
+        payloads: dict,
+        tools: ToolSet,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -155,7 +160,9 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
 
         stream = await self.client.chat.completions.create(
-            **payloads, stream=True, extra_body=extra_body,
+            **payloads,
+            stream=True,
+            extra_body=extra_body,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -495,8 +502,7 @@ class ProviderOpenAIOfficial(Provider):
             raise last_exception
 
     async def _remove_image_from_context(self, contexts: list):
-        """从上下文中删除所有带有 image 的记录
-        """
+        """从上下文中删除所有带有 image 的记录"""
         new_contexts = []
 
         for context in contexts:
@@ -524,7 +530,9 @@ class ProviderOpenAIOfficial(Provider):
         self.client.api_key = key
 
     async def assemble_context(
-        self, text: str, image_urls: list[str] | None = None,
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
@@ -554,8 +562,7 @@ class ProviderOpenAIOfficial(Provider):
         return {"role": "user", "content": text}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:

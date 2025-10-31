@@ -70,7 +70,8 @@ class ResultDecorateStage(Stage):
                     await self.content_safe_check_stage.initialize(ctx)
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
         if result is None or not result.chain:
@@ -93,13 +94,15 @@ class ResultDecorateStage(Stage):
                 if isinstance(comp, Plain):
                     text += comp.text
             async for _ in self.content_safe_check_stage.process(
-                event, check_text=text,
+                event,
+                check_text=text,
             ):
                 yield
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnDecoratingResultEvent, plugins_name=event.plugins_name,
+            EventType.OnDecoratingResultEvent,
+            plugins_name=event.plugins_name,
         )
         for handler in handlers:
             try:
@@ -159,7 +162,9 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
                             split_response = re.findall(
-                                self.regex, comp.text, re.DOTALL | re.MULTILINE,
+                                self.regex,
+                                comp.text,
+                                re.DOTALL | re.MULTILINE,
                             )
                             if not split_response:
                                 new_chain.append(comp)
@@ -285,7 +290,9 @@ class ResultDecorateStage(Stage):
                         word_cnt += len(comp.text)
                 if word_cnt > self.forward_threshold:
                     node = Node(
-                        uin=event.get_self_id(), name="AstrBot", content=[*result.chain],
+                        uin=event.get_self_id(),
+                        name="AstrBot",
+                        content=[*result.chain],
                     )
                     result.chain = [node]
 
@@ -297,7 +304,8 @@ class ResultDecorateStage(Stage):
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
                 ):
                     result.chain.insert(
-                        0, At(qq=event.get_sender_id(), name=event.get_sender_name()),
+                        0,
+                        At(qq=event.get_sender_id(), name=event.get_sender_name()),
                     )
                     if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
                         result.chain[1].text = "\n" + result.chain[1].text

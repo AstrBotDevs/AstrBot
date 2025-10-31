@@ -37,8 +37,7 @@ class BaseAgentRunner(T.Generic[TContext]):
 
     @abc.abstractmethod
     async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
-        """Process a single step of the agent.
-        """
+        """Process a single step of the agent."""
         ...
 
     @abc.abstractmethod

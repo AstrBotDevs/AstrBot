@@ -16,7 +16,6 @@ class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
 
-
 def unwrap_optional(annotation) -> tuple:
     """去掉 Optional[T] / Union[T, None] / T|None，返回 T"""
     args = typing.get_args(annotation)
@@ -89,7 +88,9 @@ class CommandFilter(HandlerFilter):
         return True
 
     def validate_and_convert_params(
-        self, params: list[Any], param_type: dict[str, type],
+        self,
+        params: list[Any],
+        param_type: dict[str, type],
     ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典。"""
         result = {}

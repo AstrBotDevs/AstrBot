@@ -1,4 +1,3 @@
-
 """The MIT License (MIT)
 
 Copyright (c) 2014-2020 messense
@@ -73,7 +72,11 @@ class WeChatKF(BaseWeChatAPI):
         return self._post("kf/service_state/get", data=data)
 
     def trans_service_state(
-        self, open_kfid, external_userid, service_state, servicer_userid="",
+        self,
+        open_kfid,
+        external_userid,
+        service_state,
+        servicer_userid="",
     ):
         """变更会话状态
 
@@ -175,7 +178,12 @@ class WeChatKF(BaseWeChatAPI):
         return self._get("kf/customer/get_upgrade_service_config")
 
     def upgrade_service(
-        self, open_kfid, external_userid, service_type, member=None, groupchat=None,
+        self,
+        open_kfid,
+        external_userid,
+        service_type,
+        member=None,
+        groupchat=None,
     ):
         """为客户升级为专员或客户群服务
 
@@ -236,7 +244,11 @@ class WeChatKF(BaseWeChatAPI):
         return self._post("kf/get_corp_statistic", data=data)
 
     def get_servicer_statistic(
-        self, start_time, end_time, open_kfid=None, servicer_userid=None,
+        self,
+        start_time,
+        end_time,
+        open_kfid=None,
+        servicer_userid=None,
     ):
         """获取「客户数据统计」接待人员明细数据
 

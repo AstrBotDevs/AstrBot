@@ -123,7 +123,9 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     # 是否需要转换为 WAV
     ext = os.path.splitext(audio_path)[1].lower()
     temp_wav = tempfile.NamedTemporaryFile(
-        suffix=".wav", delete=False, dir=temp_dir,
+        suffix=".wav",
+        delete=False,
+        dir=temp_dir,
     ).name
 
     if ext != ".wav":
@@ -138,12 +140,18 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
         rate = wav_file.getframerate()
 
     silk_path = tempfile.NamedTemporaryFile(
-        suffix=".silk", delete=False, dir=temp_dir,
+        suffix=".silk",
+        delete=False,
+        dir=temp_dir,
     ).name
 
     try:
         duration = await asyncio.to_thread(
-            pilk.encode, wav_path, silk_path, pcm_rate=rate, tencent=True,
+            pilk.encode,
+            wav_path,
+            silk_path,
+            pcm_rate=rate,
+            tencent=True,
         )
 
         with open(silk_path, "rb") as f:

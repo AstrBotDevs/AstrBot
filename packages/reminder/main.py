@@ -56,7 +56,8 @@ class Main(star.Star):
                         trigger="date",
                         args=[group, reminder],
                         run_date=datetime.datetime.strptime(
-                            reminder["datetime"], "%Y-%m-%d %H:%M",
+                            reminder["datetime"],
+                            "%Y-%m-%d %H:%M",
                         ),
                         misfire_grace_time=60,
                     )
@@ -74,7 +75,8 @@ class Main(star.Star):
         """Check if the reminder is outdated."""
         if "datetime" in reminder:
             reminder_time = datetime.datetime.strptime(
-                reminder["datetime"], "%Y-%m-%d %H:%M",
+                reminder["datetime"],
+                "%Y-%m-%d %H:%M",
             ).replace(tzinfo=self.timezone)
             return reminder_time < datetime.datetime.now(self.timezone)
         return False
@@ -151,7 +153,8 @@ class Main(star.Star):
             d = {"text": text, "datetime": datetime_str, "id": str(uuid.uuid4())}
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(
-                datetime_str, "%Y-%m-%d %H:%M",
+                datetime_str,
+                "%Y-%m-%d %H:%M",
             )
             self.scheduler.add_job(
                 self._reminder_callback,
@@ -186,7 +189,8 @@ class Main(star.Star):
             for reminder in reminders
             if "datetime" not in reminder
             or datetime.datetime.strptime(
-                reminder["datetime"], "%Y-%m-%d %H:%M",
+                reminder["datetime"],
+                "%Y-%m-%d %H:%M",
             ).replace(tzinfo=self.timezone)
             >= now
         ]

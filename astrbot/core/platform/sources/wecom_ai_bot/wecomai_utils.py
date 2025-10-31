@@ -152,7 +152,8 @@ def format_error_response(error_code: int, error_msg: str) -> str:
 
 
 async def process_encrypted_image(
-    image_url: str, aes_key_base64: str,
+    image_url: str,
+    aes_key_base64: str,
 ) -> tuple[bool, str]:
     """下载并解密加密图片
 

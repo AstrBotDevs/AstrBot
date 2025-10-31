@@ -70,7 +70,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_client(
-        cls, client: ExtBot, message: MessageChain, user_name: str,
+        cls,
+        client: ExtBot,
+        message: MessageChain,
+        user_name: str,
     ):
         image_path = None
 
@@ -106,10 +109,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 for chunk in chunks:
                     try:
                         md_text = telegramify_markdown.markdownify(
-                            chunk, max_line_length=None, normalize_whitespace=False,
+                            chunk,
+                            max_line_length=None,
+                            normalize_whitespace=False,
                         )
                         await client.send_message(
-                            text=md_text, parse_mode="MarkdownV2", **payload,
+                            text=md_text,
+                            parse_mode="MarkdownV2",
+                            **payload,
                         )
                     except Exception as e:
                         logger.warning(
@@ -217,7 +224,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             i.file = path
 
                         await self.client.send_document(
-                            document=i.file, filename=i.name, **payload,
+                            document=i.file,
+                            filename=i.name,
+                            **payload,
                         )
                         continue
                     elif isinstance(i, Record):
@@ -264,7 +273,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if delta and current_content != delta:
                 try:
                     markdown_text = telegramify_markdown.markdownify(
-                        delta, max_line_length=None, normalize_whitespace=False,
+                        delta,
+                        max_line_length=None,
+                        normalize_whitespace=False,
                     )
                     await self.client.edit_message_text(
                         text=markdown_text,
@@ -275,7 +286,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
                     await self.client.edit_message_text(
-                        text=delta, chat_id=payload["chat_id"], message_id=message_id,
+                        text=delta,
+                        chat_id=payload["chat_id"],
+                        message_id=message_id,
                     )
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")

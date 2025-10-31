@@ -53,11 +53,15 @@ class AstrBotDashboard:
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
         self.ur = UpdateRoute(
-            self.context, core_lifecycle.astrbot_updator, core_lifecycle,
+            self.context,
+            core_lifecycle.astrbot_updator,
+            core_lifecycle,
         )
         self.sr = StatRoute(self.context, db, core_lifecycle)
         self.pr = PluginRoute(
-            self.context, core_lifecycle, core_lifecycle.plugin_manager,
+            self.context,
+            core_lifecycle,
+            core_lifecycle.plugin_manager,
         )
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
@@ -68,7 +72,9 @@ class AstrBotDashboard:
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
-            self.context, db, core_lifecycle,
+            self.context,
+            db,
+            core_lifecycle,
         )
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
@@ -85,8 +91,7 @@ class AstrBotDashboard:
         self._init_jwt_secret()
 
     async def srv_plug_route(self, subpath, *args, **kwargs):
-        """插件路由
-        """
+        """插件路由"""
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
@@ -120,8 +125,7 @@ class AstrBotDashboard:
             return r
 
     def check_port_in_use(self, port: int) -> bool:
-        """跨平台检测端口是否被占用
-        """
+        """跨平台检测端口是否被占用"""
         try:
             # 创建 IPv4 TCP Socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -223,7 +227,9 @@ class AstrBotDashboard:
         logger.info(display)
 
         return self.app.run_task(
-            host=host, port=port, shutdown_trigger=self.shutdown_trigger,
+            host=host,
+            port=port,
+            shutdown_trigger=self.shutdown_trigger,
         )
 
     async def shutdown_trigger(self):

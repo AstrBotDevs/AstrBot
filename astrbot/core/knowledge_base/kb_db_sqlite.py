@@ -209,7 +209,10 @@ class KBSQLiteDatabase:
             return result.scalar_one_or_none()
 
     async def list_documents_by_kb(
-        self, kb_id: str, offset: int = 0, limit: int = 100,
+        self,
+        kb_id: str,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         async with self.get_db() as session:

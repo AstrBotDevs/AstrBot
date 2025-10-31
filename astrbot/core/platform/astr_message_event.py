@@ -87,8 +87,7 @@ class AstrMessageEvent(abc.ABC):
         return self.platform_meta.id
 
     def get_message_str(self) -> str:
-        """获取消息字符串。
-        """
+        """获取消息字符串。"""
         return self.message_str
 
     def _outline_chain(self, chain: list[BaseMessageComponent] | None) -> str:
@@ -128,76 +127,62 @@ class AstrMessageEvent(abc.ABC):
         return self._outline_chain(self.message_obj.message)
 
     def get_messages(self) -> list[BaseMessageComponent]:
-        """获取消息链。
-        """
+        """获取消息链。"""
         return self.message_obj.message
 
     def get_message_type(self) -> MessageType:
-        """获取消息类型。
-        """
+        """获取消息类型。"""
         return self.message_obj.type
 
     def get_session_id(self) -> str:
-        """获取会话id。
-        """
+        """获取会话id。"""
         return self.session_id
 
     def get_group_id(self) -> str:
-        """获取群组id。如果不是群组消息，返回空字符串。
-        """
+        """获取群组id。如果不是群组消息，返回空字符串。"""
         return self.message_obj.group_id
 
     def get_self_id(self) -> str:
-        """获取机器人自身的id。
-        """
+        """获取机器人自身的id。"""
         return self.message_obj.self_id
 
     def get_sender_id(self) -> str:
-        """获取消息发送者的id。
-        """
+        """获取消息发送者的id。"""
         return self.message_obj.sender.user_id
 
     def get_sender_name(self) -> str:
-        """获取消息发送者的名称。(可能会返回空字符串)
-        """
+        """获取消息发送者的名称。(可能会返回空字符串)"""
         return self.message_obj.sender.nickname
 
     def set_extra(self, key, value):
-        """设置额外的信息。
-        """
+        """设置额外的信息。"""
         self._extras[key] = value
 
     def get_extra(self, key: str | None = None, default=None) -> Any:
-        """获取额外的信息。
-        """
+        """获取额外的信息。"""
         if key is None:
             return self._extras
         return self._extras.get(key, default)
 
     def clear_extra(self):
-        """清除额外的信息。
-        """
+        """清除额外的信息。"""
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
     def is_private_chat(self) -> bool:
-        """是否是私聊。
-        """
+        """是否是私聊。"""
         return self.message_obj.type.value == (MessageType.FRIEND_MESSAGE).value
 
     def is_wake_up(self) -> bool:
-        """是否是唤醒机器人的事件。
-        """
+        """是否是唤醒机器人的事件。"""
         return self.is_wake
 
     def is_admin(self) -> bool:
-        """是否是管理员。
-        """
+        """是否是管理员。"""
         return self.role == "admin"
 
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
-        """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。
-        """
+        """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""
         while True:
             match = re.search(pattern, buffer)
             if not match:
@@ -209,7 +194,9 @@ class AstrMessageEvent(abc.ABC):
         return buffer
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
     ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
@@ -270,8 +257,7 @@ class AstrMessageEvent(abc.ABC):
             self._result.continue_event()
 
     def is_stopped(self) -> bool:
-        """是否终止事件传播。
-        """
+        """是否终止事件传播。"""
         if self._result is None:
             return False  # 默认是继续传播
         return self._result.is_stopped()
@@ -284,13 +270,11 @@ class AstrMessageEvent(abc.ABC):
         self.call_llm = call_llm
 
     def get_result(self) -> MessageEventResult:
-        """获取消息事件的结果。
-        """
+        """获取消息事件的结果。"""
         return self._result
 
     def clear_result(self):
-        """清除消息事件的结果。
-        """
+        """清除消息事件的结果。"""
         self._result = None
 
     """消息链相关"""
@@ -311,8 +295,7 @@ class AstrMessageEvent(abc.ABC):
         return MessageEventResult()
 
     def plain_result(self, text: str) -> MessageEventResult:
-        """创建一个空的消息事件结果，只包含一条文本消息。
-        """
+        """创建一个空的消息事件结果，只包含一条文本消息。"""
         return MessageEventResult().message(text)
 
     def image_result(self, url_or_path: str) -> MessageEventResult:
@@ -325,8 +308,7 @@ class AstrMessageEvent(abc.ABC):
         return MessageEventResult().file_image(url_or_path)
 
     def chain_result(self, chain: list[BaseMessageComponent]) -> MessageEventResult:
-        """创建一个空的消息事件结果，包含指定的消息链。
-        """
+        """创建一个空的消息事件结果，包含指定的消息链。"""
         mer = MessageEventResult()
         mer.chain = chain
         return mer
@@ -391,7 +373,9 @@ class AstrMessageEvent(abc.ABC):
         sid = str(uuid.UUID(bytes=hash_obj.digest()))
         asyncio.create_task(
             Metric.upload(
-                msg_event_tick=1, adapter_name=self.platform_meta.name, sid=sid,
+                msg_event_tick=1,
+                adapter_name=self.platform_meta.name,
+                sid=sid,
             ),
         )
         self._has_send_oper = True

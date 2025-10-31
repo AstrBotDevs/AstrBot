@@ -246,7 +246,8 @@ class ChatRoute(Route):
         NOTE: 关于这里为什么要单独做一个 WebChat 的 Conversation ID 出来，这个是为了向前兼容。
         """
         conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin="webchat", conversation_id=conversation_id,
+            unified_msg_origin="webchat",
+            conversation_id=conversation_id,
         )
         if not conversation:
             raise ValueError(f"Conversation with ID {conversation_id} not found.")
@@ -270,7 +271,9 @@ class ChatRoute(Route):
             conversation_id=conversation_id,
         )
         await self.platform_history_mgr.delete(
-            platform_id="webchat", user_id=webchat_conv_id, offset_sec=99999999,
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            offset_sec=99999999,
         )
         return Response().ok().__dict__
 
@@ -317,7 +320,10 @@ class ChatRoute(Route):
 
         # Get platform message history
         history_ls = await self.platform_history_mgr.get(
-            platform_id="webchat", user_id=webchat_conv_id, page=1, page_size=1000,
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            page=1,
+            page_size=1000,
         )
 
         history_res = [history.model_dump() for history in history_ls]

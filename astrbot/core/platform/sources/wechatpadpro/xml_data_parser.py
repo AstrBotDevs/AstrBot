@@ -50,8 +50,7 @@ class GeweDataParser:
             raise
 
     async def parse_mutil_49(self) -> list[BaseMessageComponent] | None:
-        """处理 msg_type == 49 的多种 appmsg 类型（目前支持 type==57）
-        """
+        """处理 msg_type == 49 的多种 appmsg 类型（目前支持 type==57）"""
         try:
             appmsg_type = self._format_to_xml().findtext(".//appmsg/type")
             if appmsg_type == "57":
@@ -61,8 +60,7 @@ class GeweDataParser:
         return None
 
     async def parse_reply(self) -> list[BaseMessageComponent]:
-        """处理 type == 57 的引用消息：支持文本（1）、图片（3）、嵌套49（49）
-        """
+        """处理 type == 57 的引用消息：支持文本（1）、图片（3）、嵌套49（49）"""
         components = []
 
         try:
@@ -97,7 +95,9 @@ class GeweDataParser:
                             )
                             if cdn_url and self.downloader:
                                 image_resp = await self.downloader(
-                                    self.from_user_name, self.to_user_name, self.msg_id,
+                                    self.from_user_name,
+                                    self.to_user_name,
+                                    self.msg_id,
                                 )
                                 quoted_image_b64 = (
                                     image_resp.get("Data", {})
@@ -144,8 +144,7 @@ class GeweDataParser:
         return components
 
     def parse_emoji(self) -> Emoji | None:
-        """处理 msg_type == 47 的表情消息（emoji）
-        """
+        """处理 msg_type == 47 的表情消息（emoji）"""
         try:
             emoji_element = self._format_to_xml().find(".//emoji")
             if emoji_element is not None:

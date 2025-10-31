@@ -166,7 +166,9 @@ class KBHelper:
                 await progress_callback("chunking", 0, 100)
 
             chunks_text = await self.chunker.chunk(
-                text_content, chunk_size=chunk_size, chunk_overlap=chunk_overlap,
+                text_content,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
             )
             contents = []
             metadatas = []
@@ -238,7 +240,9 @@ class KBHelper:
             raise e
 
     async def list_documents(
-        self, offset: int = 0, limit: int = 100,
+        self,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         docs = await self.kb_db.list_documents_by_kb(self.kb.kb_id, offset, limit)
@@ -292,12 +296,17 @@ class KBHelper:
             await session.refresh(doc)
 
     async def get_chunks_by_doc_id(
-        self, doc_id: str, offset: int = 0, limit: int = 100,
+        self,
+        doc_id: str,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[dict]:
         """获取文档的所有块及其元数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         chunks = await vec_db.document_storage.get_documents(
-            metadata_filters={"kb_doc_id": doc_id}, offset=offset, limit=limit,
+            metadata_filters={"kb_doc_id": doc_id},
+            offset=offset,
+            limit=limit,
         )
         result = []
         for chunk in chunks:

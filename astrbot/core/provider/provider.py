@@ -142,8 +142,7 @@ class Provider(AbstractProvider):
         """
 
     async def pop_record(self, context: list):
-        """弹出 context 第一条非系统提示词对话记录
-        """
+        """弹出 context 第一条非系统提示词对话记录"""
         poped = 0
         indexs_to_pop = []
         for idx, record in enumerate(context):
@@ -279,7 +278,10 @@ class RerankProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None,
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None = None,
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...

@@ -134,8 +134,7 @@ class Main(star.Star):
             # )
 
     async def file_upload(self, file_path: str):
-        """上传图像文件到 S3
-        """
+        """上传图像文件到 S3"""
         ext = os.path.splitext(file_path)[1]
         S3_URL = "https://s3.neko.soulter.top/astrbot-s3"
         with open(file_path, "rb") as f:
@@ -143,9 +142,13 @@ class Main(star.Star):
 
         s3_file_url = f"{S3_URL}/{uuid.uuid4().hex}{ext}"
 
-        async with aiohttp.ClientSession(
-            headers={"Accept": "application/json"}, trust_env=True,
-        ) as session, session.put(s3_file_url, data=file) as resp:
+        async with (
+            aiohttp.ClientSession(
+                headers={"Accept": "application/json"},
+                trust_env=True,
+            ) as session,
+            session.put(s3_file_url, data=file) as resp,
+        ):
             if resp.status != 200:
                 raise Exception(f"Failed to upload image: {resp.status}")
             return s3_file_url
@@ -175,7 +178,10 @@ class Main(star.Star):
         return uuid.uuid4().hex[:8]
 
     async def download_image(
-        self, image_url: str, workplace_path: str, filename: str,
+        self,
+        image_url: str,
+        workplace_path: str,
+        filename: str,
     ) -> str:
         """Download image from url to workplace_path"""
         async with aiohttp.ClientSession(trust_env=True) as session:
@@ -371,7 +377,8 @@ class Main(star.Star):
             )
             provider = self.context.get_using_provider()
             llm_response = await provider.text_chat(
-                prompt=PROMPT_, session_id=f"{event.session_id}_{magic_code}_{i!s}",
+                prompt=PROMPT_,
+                session_id=f"{event.session_id}_{magic_code}_{i!s}",
             )
 
             logger.debug(
@@ -400,17 +407,21 @@ class Main(star.Star):
             )
 
             self.docker_host_astrbot_abs_path = self.config.get(
-                "docker_host_astrbot_abs_path", "",
+                "docker_host_astrbot_abs_path",
+                "",
             )
             if self.docker_host_astrbot_abs_path:
                 host_shared = os.path.join(
-                    self.docker_host_astrbot_abs_path, self.shared_path,
+                    self.docker_host_astrbot_abs_path,
+                    self.shared_path,
                 )
                 host_output = os.path.join(
-                    self.docker_host_astrbot_abs_path, output_path,
+                    self.docker_host_astrbot_abs_path,
+                    output_path,
                 )
                 host_workplace = os.path.join(
-                    self.docker_host_astrbot_abs_path, workplace_path,
+                    self.docker_host_astrbot_abs_path,
+                    workplace_path,
                 )
 
             else:
@@ -502,7 +513,9 @@ class Main(star.Star):
         yield event.plain_result(f"用户 {event.get_session_id()} 上传的文件已清理。")
 
     async def run_container(
-        self, container: aiodocker.docker.DockerContainer, timeout: int = 20,
+        self,
+        container: aiodocker.docker.DockerContainer,
+        timeout: int = 20,
     ) -> list[str]:
         """Run the container and get the output"""
         try:

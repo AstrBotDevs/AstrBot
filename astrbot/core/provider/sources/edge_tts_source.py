@@ -22,7 +22,9 @@ Windows 如果提示找不到指定文件，以管理员身份运行命令行窗
 
 
 @register_provider_adapter(
-    "edge_tts", "Microsoft Edge TTS", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "edge_tts",
+    "Microsoft Edge TTS",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderEdgeTTS(TTSProvider):
     def __init__(

@@ -1,4 +1,3 @@
-
 from astrbot import logger
 
 from . import ContentSafetyStrategy

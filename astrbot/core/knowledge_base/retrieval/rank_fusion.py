@@ -103,7 +103,9 @@ class RankFusion:
 
         # 4. 排序
         sorted_ids = sorted(
-            rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True,
+            rrf_scores.keys(),
+            key=lambda cid: rrf_scores[cid],
+            reverse=True,
         )[:top_k]
 
         # 5. 构建融合结果

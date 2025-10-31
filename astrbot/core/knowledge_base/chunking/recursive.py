@@ -99,7 +99,9 @@ class RecursiveCharacterChunker(BaseChunker):
                         # 递归分割过大的部分
                         final_chunks.extend(
                             await self.chunk(
-                                split, chunk_size=chunk_size, chunk_overlap=overlap,
+                                split,
+                                chunk_size=chunk_size,
+                                chunk_overlap=overlap,
                             ),
                         )
                     # 如果添加这部分会使当前块超过chunk_size
@@ -133,7 +135,10 @@ class RecursiveCharacterChunker(BaseChunker):
         return [text]
 
     def _split_by_character(
-        self, text: str, chunk_size: int | None = None, overlap: int | None = None,
+        self,
+        text: str,
+        chunk_size: int | None = None,
+        overlap: int | None = None,
     ) -> list[str]:
         """按字符级别分割文本
 

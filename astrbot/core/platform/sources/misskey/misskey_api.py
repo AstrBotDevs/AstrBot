@@ -26,25 +26,20 @@ class APIError(Exception):
     """Misskey API 基础异常"""
 
 
-
 class APIConnectionError(APIError):
     """网络连接异常"""
-
 
 
 class APIRateLimitError(APIError):
     """API 频率限制异常"""
 
 
-
 class AuthenticationError(APIError):
     """认证失败异常"""
 
 
-
 class WebSocketError(APIError):
     """WebSocket 连接异常"""
-
 
 
 class StreamingClient:
@@ -62,12 +57,15 @@ class StreamingClient:
     async def connect(self) -> bool:
         try:
             ws_url = self.instance_url.replace("https://", "wss://").replace(
-                "http://", "ws://",
+                "http://",
+                "ws://",
             )
             ws_url += f"/streaming?i={self.access_token}"
 
             self.websocket = await websockets.connect(
-                ws_url, ping_interval=30, ping_timeout=10,
+                ws_url,
+                ping_interval=30,
+                ping_timeout=10,
             )
             self.is_connected = True
             self._running = True
@@ -101,7 +99,9 @@ class StreamingClient:
         logger.info("[Misskey WebSocket] 连接已断开")
 
     async def subscribe_channel(
-        self, channel_type: str, params: dict | None = None,
+        self,
+        channel_type: str,
+        params: dict | None = None,
     ) -> str:
         if not self.is_connected or not self.websocket:
             raise WebSocketError("WebSocket 未连接")
@@ -133,7 +133,9 @@ class StreamingClient:
             self.desired_channels.pop(channel_type, None)
 
     def add_message_handler(
-        self, event_type: str, handler: Callable[[dict], Awaitable[None]],
+        self,
+        event_type: str,
+        handler: Callable[[dict], Awaitable[None]],
     ):
         self.message_handlers[event_type] = handler
 
@@ -409,7 +411,9 @@ class MisskeyAPI:
         raise APIConnectionError(f"HTTP {status} for {endpoint}")
 
     async def _process_response(
-        self, response: aiohttp.ClientResponse, endpoint: str,
+        self,
+        response: aiohttp.ClientResponse,
+        endpoint: str,
     ) -> Any:
         """处理 API 响应"""
         if response.status == HTTP_OK:
@@ -452,7 +456,9 @@ class MisskeyAPI:
         retryable_exceptions=(APIConnectionError, APIRateLimitError),
     )
     async def _make_request(
-        self, endpoint: str, data: dict[str, Any] | None = None,
+        self,
+        endpoint: str,
+        data: dict[str, Any] | None = None,
     ) -> Any:
         url = f"{self.instance_url}/api/{endpoint}"
         payload = {"i": self.access_token}
@@ -589,7 +595,9 @@ class MisskeyAPI:
             raise
 
     async def find_files_by_name(
-        self, name: str, folder_id: str | None = None,
+        self,
+        name: str,
+        folder_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Find files by name"""
         if not name:
@@ -637,27 +645,34 @@ class MisskeyAPI:
             raise
 
     async def _download_with_existing_session(
-        self, url: str, ssl_verify: bool = True,
+        self,
+        url: str,
+        ssl_verify: bool = True,
     ) -> bytes | None:
         """使用现有会话下载文件"""
         if not (hasattr(self, "session") and self.session):
             raise APIConnectionError("No existing session available")
 
         async with self.session.get(
-            url, timeout=aiohttp.ClientTimeout(total=15), ssl=ssl_verify,
+            url,
+            timeout=aiohttp.ClientTimeout(total=15),
+            ssl=ssl_verify,
         ) as response:
             if response.status == 200:
                 return await response.read()
         return None
 
     async def _download_with_temp_session(
-        self, url: str, ssl_verify: bool = True,
+        self,
+        url: str,
+        ssl_verify: bool = True,
     ) -> bytes | None:
         """使用临时会话下载文件"""
         connector = aiohttp.TCPConnector(ssl=ssl_verify)
         async with aiohttp.ClientSession(connector=connector) as temp_session:
             async with temp_session.get(
-                url, timeout=aiohttp.ClientTimeout(total=15),
+                url,
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 if response.status == 200:
                     return await response.read()
@@ -696,7 +711,8 @@ class MisskeyAPI:
             tmp_bytes = None
             try:
                 tmp_bytes = await self._download_with_existing_session(
-                    url, ssl_verify=True,
+                    url,
+                    ssl_verify=True,
                 ) or await self._download_with_temp_session(url, ssl_verify=True)
             except Exception as ssl_error:
                 logger.debug(
@@ -704,7 +720,8 @@ class MisskeyAPI:
                 )
                 try:
                     tmp_bytes = await self._download_with_existing_session(
-                        url, ssl_verify=False,
+                        url,
+                        ssl_verify=False,
                     ) or await self._download_with_temp_session(url, ssl_verify=False)
                 except Exception:
                     pass
@@ -733,7 +750,9 @@ class MisskeyAPI:
         return await self._make_request("i", {})
 
     async def send_message(
-        self, user_id_or_payload: Any, text: str | None = None,
+        self,
+        user_id_or_payload: Any,
+        text: str | None = None,
     ) -> dict[str, Any]:
         """发送聊天消息。
 
@@ -750,7 +769,9 @@ class MisskeyAPI:
         return result
 
     async def send_room_message(
-        self, room_id_or_payload: Any, text: str | None = None,
+        self,
+        room_id_or_payload: Any,
+        text: str | None = None,
     ) -> dict[str, Any]:
         """发送房间消息。
 
@@ -767,7 +788,10 @@ class MisskeyAPI:
         return result
 
     async def get_messages(
-        self, user_id: str, limit: int = 10, since_id: str | None = None,
+        self,
+        user_id: str,
+        limit: int = 10,
+        since_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """获取聊天消息历史"""
         data: dict[str, Any] = {"userId": user_id, "limit": limit}
@@ -781,7 +805,9 @@ class MisskeyAPI:
         return []
 
     async def get_mentions(
-        self, limit: int = 10, since_id: str | None = None,
+        self,
+        limit: int = 10,
+        since_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """获取提及通知"""
         data: dict[str, Any] = {"limit": limit}
@@ -838,7 +864,11 @@ class MisskeyAPI:
 
         # 根据消息类型发送
         return await self._dispatch_message(
-            message_type, target_id, text, file_ids, **kwargs,
+            message_type,
+            target_id,
+            text,
+            file_ids,
+            **kwargs,
         )
 
     async def _process_media_urls(self, urls: list[str]) -> list[str]:

@@ -29,7 +29,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _from_segment_to_slack_block(
-        segment: BaseMessageComponent, web_client: AsyncWebClient,
+        segment: BaseMessageComponent,
+        web_client: AsyncWebClient,
     ) -> dict:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
@@ -88,7 +89,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _parse_slack_blocks(
-        message_chain: MessageChain, web_client: AsyncWebClient,
+        message_chain: MessageChain,
+        web_client: AsyncWebClient,
     ):
         """解析成 Slack 块格式"""
         blocks = []
@@ -110,7 +112,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
                 # 添加其他类型的块
                 block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment, web_client,
+                    segment,
+                    web_client,
                 )
                 blocks.append(block)
 
@@ -124,7 +127,8 @@ class SlackMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message, self.web_client,
+            message,
+            self.web_client,
         )
 
         try:
@@ -155,17 +159,21 @@ class SlackMessageEvent(AstrMessageEvent):
 
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=fallback_text,
+                    channel=self.get_group_id(),
+                    text=fallback_text,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=fallback_text,
+                    channel=self.get_sender_id(),
+                    text=fallback_text,
                 )
 
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

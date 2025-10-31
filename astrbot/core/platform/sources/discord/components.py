@@ -1,4 +1,3 @@
-
 import discord
 
 from astrbot.api.message_components import BaseMessageComponent
@@ -97,7 +96,9 @@ class DiscordView(BaseMessageComponent):
     type: str = "discord_view"
 
     def __init__(
-        self, components: list[BaseMessageComponent] = None, timeout: float = None,
+        self,
+        components: list[BaseMessageComponent] = None,
+        timeout: float = None,
     ):
         self.components = components or []
         self.timeout = timeout
@@ -109,7 +110,9 @@ class DiscordView(BaseMessageComponent):
         for component in self.components:
             if isinstance(component, DiscordButton):
                 button_style = getattr(
-                    discord.ButtonStyle, component.style, discord.ButtonStyle.primary,
+                    discord.ButtonStyle,
+                    component.style,
+                    discord.ButtonStyle.primary,
                 )
 
                 if component.url:

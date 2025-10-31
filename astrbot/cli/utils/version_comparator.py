@@ -1,5 +1,4 @@
-"""拷贝自 astrbot.core.utils.version_comparator
-"""
+"""拷贝自 astrbot.core.utils.version_comparator"""
 
 import re
 
@@ -63,7 +62,9 @@ class VersionComparator:
                     return -1
                 if isinstance(p1, str) and isinstance(p2, int):
                     return 1
-                if (isinstance(p1, int) and isinstance(p2, int)) or (isinstance(p1, str) and isinstance(p2, str)):
+                if (isinstance(p1, int) and isinstance(p2, int)) or (
+                    isinstance(p1, str) and isinstance(p2, str)
+                ):
                     if p1 > p2:
                         return 1
                     if p1 < p2:

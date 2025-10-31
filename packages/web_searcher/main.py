@@ -65,7 +65,10 @@ class Main(star.Star):
                 return ret
 
     async def _process_search_result(
-        self, result: SearchResult, idx: int, websearch_link: bool,
+        self,
+        result: SearchResult,
+        idx: int,
+        websearch_link: bool,
     ) -> str:
         """处理单个搜索结果"""
         logger.info(f"web_searcher - scraping web: {result.title} - {result.url}")
@@ -85,7 +88,9 @@ class Main(star.Star):
         return f"{header}\n{result.snippet}\n{site_result}\n\n"
 
     async def _web_search_default(
-        self, query, num_results: int = 5,
+        self,
+        query,
+        num_results: int = 5,
     ) -> list[SearchResult]:
         results = []
         try:
@@ -116,7 +121,9 @@ class Main(star.Star):
             return key
 
     async def _web_search_tavily(
-        self, cfg: AstrBotConfig, payload: dict,
+        self,
+        cfg: AstrBotConfig,
+        payload: dict,
     ) -> list[SearchResult]:
         """使用 Tavily 搜索引擎进行搜索"""
         tavily_key = await self._get_tavily_key(cfg)
@@ -127,7 +134,10 @@ class Main(star.Star):
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(
-                url, json=payload, headers=header, timeout=6,
+                url,
+                json=payload,
+                headers=header,
+                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -155,7 +165,10 @@ class Main(star.Star):
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(
-                url, json=payload, headers=header, timeout=6,
+                url,
+                json=payload,
+                headers=header,
+                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -180,7 +193,10 @@ class Main(star.Star):
 
     @llm_tool(name="web_search")
     async def search_from_search_engine(
-        self, event: AstrMessageEvent, query: str, max_results: int = 5,
+        self,
+        event: AstrMessageEvent,
+        query: str,
+        max_results: int = 5,
     ) -> str:
         """搜索网络以回答用户的问题。当用户需要搜索网络以获取即时性的信息时调用此工具。
 
@@ -219,7 +235,8 @@ class Main(star.Star):
             return
         cfg = self.context.get_config(umo=umo)
         key = cfg.get("provider_settings", {}).get(
-            "websearch_baidu_app_builder_key", "",
+            "websearch_baidu_app_builder_key",
+            "",
         )
         if not key:
             raise ValueError(
@@ -322,7 +339,10 @@ class Main(star.Star):
 
     @llm_tool("tavily_extract_web_page")
     async def tavily_extract_web_page(
-        self, event: AstrMessageEvent, url: str = "", extract_depth: str = "basic",
+        self,
+        event: AstrMessageEvent,
+        url: str = "",
+        extract_depth: str = "basic",
     ) -> str:
         """Extract the content of a web page using Tavily.
 
@@ -355,7 +375,9 @@ class Main(star.Star):
 
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
-        self, event: AstrMessageEvent, req: ProviderRequest,
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
     ):
         """Get the session conversation for the given event."""
         cfg = self.context.get_config(umo=event.unified_msg_origin)

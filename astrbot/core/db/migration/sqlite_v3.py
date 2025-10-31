@@ -320,7 +320,9 @@ class SQLiteDatabase:
         )
 
     def get_all_conversations(
-        self, page: int = 1, page_size: int = 20,
+        self,
+        page: int = 1,
+        page_size: int = 20,
     ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页，按更新时间降序排序"""
         try:

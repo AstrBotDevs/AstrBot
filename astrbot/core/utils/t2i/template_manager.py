@@ -16,7 +16,12 @@ class TemplateManager:
 
     def __init__(self):
         self.builtin_template_dir = os.path.join(
-            get_astrbot_path(), "astrbot", "core", "utils", "t2i", "template",
+            get_astrbot_path(),
+            "astrbot",
+            "core",
+            "utils",
+            "t2i",
+            "template",
         )
         self.user_template_dir = os.path.join(get_astrbot_data_path(), "t2i_templates")
 
@@ -102,6 +107,5 @@ class TemplateManager:
         os.remove(path)
 
     def reset_default_template(self):
-        """将核心模板从内置目录强制重置到用户目录。
-        """
+        """将核心模板从内置目录强制重置到用户目录。"""
         self._copy_core_templates(overwrite=True)

@@ -136,10 +136,8 @@ class ToolSet:
             }
 
             if (
-                (tool.parameters
-                and tool.parameters.get("properties"))
-                or not omit_empty_parameter_field
-            ):
+                tool.parameters and tool.parameters.get("properties")
+            ) or not omit_empty_parameter_field:
                 func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
@@ -189,7 +187,8 @@ class ToolSet:
             if "type" in schema and schema["type"] in supported_types:
                 result["type"] = schema["type"]
                 if "format" in schema and schema["format"] in supported_formats.get(
-                    result["type"], set(),
+                    result["type"],
+                    set(),
                 ):
                     result["format"] = schema["format"]
             else:

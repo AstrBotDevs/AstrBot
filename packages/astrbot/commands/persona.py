@@ -88,7 +88,8 @@ class PersonaCommands:
                 )
                 return
             await self.context.conversation_manager.update_conversation_persona_id(
-                message.unified_msg_origin, "[%None]",
+                message.unified_msg_origin,
+                "[%None]",
             )
             message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
@@ -108,7 +109,8 @@ class PersonaCommands:
                 None,
             ):
                 await self.context.conversation_manager.update_conversation_persona_id(
-                    message.unified_msg_origin, ps,
+                    message.unified_msg_origin,
+                    ps,
                 )
                 message.set_result(
                     MessageEventResult().message(

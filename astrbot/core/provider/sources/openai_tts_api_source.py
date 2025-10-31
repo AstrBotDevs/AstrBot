@@ -11,7 +11,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "openai_tts_api", "OpenAI TTS API", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "openai_tts_api",
+    "OpenAI TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderOpenAITTSAPI(TTSProvider):
     def __init__(
@@ -39,7 +41,10 @@ class ProviderOpenAITTSAPI(TTSProvider):
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
         path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
         async with self.client.audio.speech.with_streaming_response.create(
-            model=self.model_name, voice=self.voice, response_format="wav", input=text,
+            model=self.model_name,
+            voice=self.voice,
+            response_format="wav",
+            input=text,
         ) as response:
             with open(path, "wb") as f:
                 async for chunk in response.iter_bytes(chunk_size=1024):

@@ -99,7 +99,8 @@ def _save_config(config: dict[str, Any]) -> None:
     config_path = get_astrbot_root() / "data" / "cmd_config.json"
 
     config_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig",
+        json.dumps(config, ensure_ascii=False, indent=2),
+        encoding="utf-8-sig",
     )
 
 

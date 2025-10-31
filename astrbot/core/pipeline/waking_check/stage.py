@@ -34,7 +34,8 @@ class WakingCheckStage(Stage):
         """
         self.ctx = ctx
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
-            "no_permission_reply", True,
+            "no_permission_reply",
+            True,
         )
         # 私聊是否需要 wake_prefix 才能唤醒机器人
         self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
@@ -42,14 +43,17 @@ class WakingCheckStage(Stage):
         ].get("friend_message_needs_wake_prefix", False)
         # 是否忽略机器人自己发送的消息
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_bot_self_message", False,
+            "ignore_bot_self_message",
+            False,
         )
         self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_at_all", False,
+            "ignore_at_all",
+            False,
         )
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         if (
             self.ignore_bot_self_message
@@ -124,7 +128,8 @@ class WakingCheckStage(Stage):
         logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
 
         for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent, plugins_name=event.plugins_name,
+            EventType.AdapterMessageEvent,
+            plugins_name=event.plugins_name,
         ):
             # filter 需满足 AND 逻辑关系
             passed = True
@@ -185,7 +190,8 @@ class WakingCheckStage(Stage):
 
         # 根据会话配置过滤插件处理器
         activated_handlers = SessionPluginManager.filter_handlers_by_session(
-            event, activated_handlers,
+            event,
+            activated_handlers,
         )
 
         event.set_extra("activated_handlers", activated_handlers)

@@ -23,7 +23,8 @@ class ConversationCommands:
         if not curr:
             return None
         conv = await self.context.conversation_manager.get_conversation(
-            session_id, curr,
+            session_id,
+            curr,
         )
         return conv.persona_id
 
@@ -49,7 +50,8 @@ class ConversationCommands:
         reset_cfg = plugin_config.get("reset", {})
 
         required_perm = reset_cfg.get(
-            scene.key, "admin" if is_group and not is_unique_session else "member",
+            scene.key,
+            "admin" if is_group and not is_unique_session else "member",
         )
 
         if required_perm == "admin" and message.role != "admin":
@@ -93,7 +95,9 @@ class ConversationCommands:
             return
 
         await self.context.conversation_manager.update_conversation(
-            message.unified_msg_origin, cid, [],
+            message.unified_msg_origin,
+            cid,
+            [],
         )
 
         ret = "清除会话 LLM 聊天历史成功。"
@@ -119,11 +123,15 @@ class ConversationCommands:
 
         if not session_curr_cid:
             session_curr_cid = await conv_mgr.new_conversation(
-                umo, message.get_platform_id(),
+                umo,
+                message.get_platform_id(),
             )
 
         contexts, total_pages = await conv_mgr.get_human_readable_context(
-            umo, session_curr_cid, page, size_per_page,
+            umo,
+            session_curr_cid,
+            page,
+            size_per_page,
         )
 
         history = ""
@@ -225,8 +233,7 @@ class ConversationCommands:
         return
 
     async def new_conv(self, message: AstrMessageEvent):
-        """创建新对话
-        """
+        """创建新对话"""
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type in ["dify", "coze"]:
             assert isinstance(provider, (ProviderDify, ProviderCoze)), (
@@ -240,7 +247,9 @@ class ConversationCommands:
 
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
-            message.unified_msg_origin, message.get_platform_id(), persona_id=cpersona,
+            message.unified_msg_origin,
+            message.get_platform_id(),
+            persona_id=cpersona,
         )
 
         # 长期记忆
@@ -277,7 +286,9 @@ class ConversationCommands:
 
             cpersona = await self._get_current_persona_id(session)
             cid = await self.context.conversation_manager.new_conversation(
-                session, message.get_platform_id(), persona_id=cpersona,
+                session,
+                message.get_platform_id(),
+                persona_id=cpersona,
             )
             message.set_result(
                 MessageEventResult().message(
@@ -290,7 +301,9 @@ class ConversationCommands:
             )
 
     async def switch_conv(
-        self, message: AstrMessageEvent, index: int | None = None,
+        self,
+        message: AstrMessageEvent,
+        index: int | None = None,
     ):
         """通过 /ls 前面的序号切换对话"""
         if not isinstance(index, int):
@@ -342,7 +355,8 @@ class ConversationCommands:
             conversation = conversations[index - 1]
             title = conversation.title if conversation.title else "新对话"
             await self.context.conversation_manager.switch_conversation(
-                message.unified_msg_origin, conversation.cid,
+                message.unified_msg_origin,
+                conversation.cid,
             )
             message.set_result(
                 MessageEventResult().message(
@@ -369,7 +383,8 @@ class ConversationCommands:
             return
 
         await self.context.conversation_manager.update_conversation_title(
-            message.unified_msg_origin, new_name,
+            message.unified_msg_origin,
+            new_name,
         )
         message.set_result(MessageEventResult().message("重命名对话成功。"))
 
@@ -393,7 +408,8 @@ class ConversationCommands:
             dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
             if dify_cid:
                 await provider.api_client.delete_chat_conv(
-                    message.unified_msg_origin, dify_cid,
+                    message.unified_msg_origin,
+                    dify_cid,
                 )
             message.set_result(
                 MessageEventResult().message(
@@ -417,7 +433,8 @@ class ConversationCommands:
             return
 
         await self.context.conversation_manager.delete_conversation(
-            message.unified_msg_origin, session_curr_cid,
+            message.unified_msg_origin,
+            session_curr_cid,
         )
 
         ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"

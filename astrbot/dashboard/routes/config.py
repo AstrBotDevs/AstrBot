@@ -128,7 +128,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
     try:
         if is_core:
             errors, post_config = validate_config(
-                post_config, CONFIG_METADATA_2, is_core,
+                post_config,
+                CONFIG_METADATA_2,
+                is_core,
             )
         else:
             errors, post_config = validate_config(post_config, config.schema, is_core)
@@ -144,7 +146,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
 
 class ConfigRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -358,7 +362,8 @@ class ConfigRoute(Route):
             try:
                 logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
                 response = await asyncio.wait_for(
-                    provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0,
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
+                    timeout=45.0,
                 )
                 logger.debug(
                     f"Received response from {status_info['name']}: {response}",
@@ -446,7 +451,8 @@ class ConfigRoute(Route):
                     )
             except Exception as e:
                 logger.error(
-                    f"Error testing TTS provider {provider_name}: {e}", exc_info=True,
+                    f"Error testing TTS provider {provider_name}: {e}",
+                    exc_info=True,
                 )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"TTS test failed: {e!s}"
@@ -456,7 +462,9 @@ class ConfigRoute(Route):
                     f"Sending health check audio to provider: {status_info['name']}",
                 )
                 sample_audio_path = os.path.join(
-                    get_astrbot_path(), "samples", "stt_health_check.wav",
+                    get_astrbot_path(),
+                    "samples",
+                    "stt_health_check.wav",
                 )
                 if not os.path.exists(sample_audio_path):
                     status_info["status"] = "unavailable"
@@ -488,7 +496,8 @@ class ConfigRoute(Route):
                         )
             except Exception as e:
                 logger.error(
-                    f"Error testing STT provider {provider_name}: {e}", exc_info=True,
+                    f"Error testing STT provider {provider_name}: {e}",
+                    exc_info=True,
                 )
                 status_info["status"] = "unavailable"
                 status_info["error"] = f"STT test failed: {e!s}"
@@ -517,7 +526,10 @@ class ConfigRoute(Route):
         return status_info
 
     def _error_response(
-        self, message: str, status_code: int = 500, log_fn=logger.error,
+        self,
+        message: str,
+        status_code: int = 500,
+        log_fn=logger.error,
     ):
         log_fn(message)
         # 记录更详细的traceback信息，但只在是严重错误时
@@ -530,7 +542,9 @@ class ConfigRoute(Route):
         provider_id = request.args.get("id")
         if not provider_id:
             return self._error_response(
-                "Missing provider_id parameter", 400, logger.warning,
+                "Missing provider_id parameter",
+                400,
+                logger.warning,
             )
 
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
@@ -553,7 +567,8 @@ class ConfigRoute(Route):
 
         except Exception as e:
             return self._error_response(
-                f"Critical error checking provider {provider_id}: {e}", 500,
+                f"Critical error checking provider {provider_id}: {e}",
+                500,
             )
 
     async def get_configs(self):
@@ -801,7 +816,9 @@ class ConfigRoute(Route):
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
                 # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl or not isinstance(platform_default_tmpl[platform.name], dict):
+                if platform.name not in platform_default_tmpl or not isinstance(
+                    platform_default_tmpl[platform.name], dict
+                ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
                 logger.debug(f"Using cached logo token for platform {platform.name}")
@@ -823,11 +840,14 @@ class ConfigRoute(Route):
             # 检查文件是否存在并注册令牌
             if os.path.exists(logo_file_path):
                 logo_token = await file_token_service.register_file(
-                    logo_file_path, timeout=3600,
+                    logo_file_path,
+                    timeout=3600,
                 )
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl or not isinstance(platform_default_tmpl[platform.name], dict):
+                if platform.name not in platform_default_tmpl or not isinstance(
+                    platform_default_tmpl[platform.name], dict
+                ):
                     platform_default_tmpl[platform.name] = {}
 
                 platform_default_tmpl[platform.name]["logo_token"] = logo_token

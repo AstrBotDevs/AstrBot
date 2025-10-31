@@ -34,10 +34,12 @@ class ProviderDify(Provider):
             raise Exception("Dify API 类型不能为空。")
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get(
-            "dify_workflow_output_key", "astrbot_wf_output",
+            "dify_workflow_output_key",
+            "astrbot_wf_output",
         )
         self.dify_query_input_key = provider_config.get(
-            "dify_query_input_key", "astrbot_text_query",
+            "dify_query_input_key",
+            "astrbot_text_query",
         )
         if not self.dify_query_input_key:
             self.dify_query_input_key = "astrbot_text_query"
@@ -78,7 +80,8 @@ class ProviderDify(Provider):
                 else image_url
             )
             file_response = await self.api_client.file_upload(
-                image_path, user=session_id,
+                image_path,
+                user=session_id,
             )
             logger.debug(f"Dify 上传图片响应：{file_response}")
             if "id" not in file_response:

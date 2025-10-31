@@ -112,7 +112,8 @@ class ConversationRoute(Route):
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
 
             conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id, conversation_id=cid,
+                unified_msg_origin=user_id,
+                conversation_id=cid,
             )
             if not conversation:
                 return Response().error("对话不存在").__dict__
@@ -149,7 +150,8 @@ class ConversationRoute(Route):
             if not user_id or not cid:
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
             conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id, conversation_id=cid,
+                unified_msg_origin=user_id,
+                conversation_id=cid,
             )
             if not conversation:
                 return Response().error("对话不存在").__dict__
@@ -195,7 +197,8 @@ class ConversationRoute(Route):
 
                     try:
                         await self.core_lifecycle.conversation_manager.delete_conversation(
-                            unified_msg_origin=user_id, conversation_id=cid,
+                            unified_msg_origin=user_id,
+                            conversation_id=cid,
                         )
                         deleted_count += 1
                     except Exception as e:
@@ -225,7 +228,8 @@ class ConversationRoute(Route):
                 return Response().error("缺少必要参数: user_id 和 cid").__dict__
 
             await self.core_lifecycle.conversation_manager.delete_conversation(
-                unified_msg_origin=user_id, conversation_id=cid,
+                unified_msg_origin=user_id,
+                conversation_id=cid,
             )
             return Response().ok({"message": "对话删除成功"}).__dict__
 
@@ -260,7 +264,8 @@ class ConversationRoute(Route):
                 )
 
             conversation = await self.conv_mgr.get_conversation(
-                unified_msg_origin=user_id, conversation_id=cid,
+                unified_msg_origin=user_id,
+                conversation_id=cid,
             )
             if not conversation:
                 return Response().error("对话不存在").__dict__
@@ -268,7 +273,9 @@ class ConversationRoute(Route):
             history = json.loads(history) if isinstance(history, str) else history
 
             await self.conv_mgr.update_conversation(
-                unified_msg_origin=user_id, conversation_id=cid, history=history,
+                unified_msg_origin=user_id,
+                conversation_id=cid,
+                history=history,
             )
 
             return Response().ok({"message": "对话历史更新成功"}).__dict__

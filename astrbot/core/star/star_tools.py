@@ -58,7 +58,9 @@ class StarTools:
 
     @classmethod
     async def send_message(
-        cls, session: str | MessageSesion, message_chain: MessageChain,
+        cls,
+        session: str | MessageSesion,
+        message_chain: MessageChain,
     ) -> bool:
         """根据session(unified_msg_origin)主动发送消息
 
@@ -102,7 +104,8 @@ class StarTools:
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next(
-                (p for p in platforms if isinstance(p, AiocqhttpAdapter)), None,
+                (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
+                None,
             )
             if adapter is None:
                 raise ValueError("未找到适配器: AiocqhttpAdapter")
@@ -162,7 +165,10 @@ class StarTools:
 
     @classmethod
     async def create_event(
-        cls, abm: AstrBotMessage, platform: str = "aiocqhttp", is_wake: bool = True,
+        cls,
+        abm: AstrBotMessage,
+        platform: str = "aiocqhttp",
+        is_wake: bool = True,
     ) -> None:
         """创建并提交事件到指定平台
         当有需要创建一个事件, 触发某些处理流程时, 使用该方法
@@ -178,7 +184,8 @@ class StarTools:
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next(
-                (p for p in platforms if isinstance(p, AiocqhttpAdapter)), None,
+                (p for p in platforms if isinstance(p, AiocqhttpAdapter)),
+                None,
             )
             if adapter is None:
                 raise ValueError("未找到适配器: AiocqhttpAdapter")

@@ -28,11 +28,15 @@ from .slack_event import SlackMessageEvent
 
 
 @register_platform_adapter(
-    "slack", "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
+    "slack",
+    "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
 )
 class SlackAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -47,7 +51,8 @@ class SlackAdapter(Platform):
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
-            "slack_webhook_path", "/astrbot-slack-webhook/callback",
+            "slack_webhook_path",
+            "/astrbot-slack-webhook/callback",
         )
 
         if not self.bot_token:
@@ -73,10 +78,13 @@ class SlackAdapter(Platform):
         self.bot_self_id = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         blocks, text = SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain, web_client=self.web_client,
+            message_chain=message_chain,
+            web_client=self.web_client,
         )
 
         try:
@@ -170,7 +178,8 @@ class SlackAdapter(Platform):
                         mentioned_user = await self.web_client.users_info(user=mention)
                         user_data = mentioned_user["user"]
                         user_name = user_data.get("real_name") or user_data.get(
-                            "name", mention,
+                            "name",
+                            mention,
                         )
                         abm.message.append(At(qq=mention, name=user_name))
                     except Exception:
@@ -326,7 +335,9 @@ class SlackAdapter(Platform):
 
             # 创建 Socket 客户端
             self.socket_client = SlackSocketClient(
-                self.web_client, self.app_token, self._handle_socket_event,
+                self.web_client,
+                self.app_token,
+                self._handle_socket_event,
             )
 
             logger.info("Slack 适配器 (Socket Mode) 启动中...")

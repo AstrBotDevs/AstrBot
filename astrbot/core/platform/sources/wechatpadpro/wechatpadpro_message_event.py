@@ -66,7 +66,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         if (
             self.message_obj.type == MessageType.GROUP_MESSAGE  # 确保是群聊消息
             and self.adapter.settings.get(
-                "reply_with_mention", False,
+                "reply_with_mention",
+                False,
             )  # 检查适配器设置是否启用 reply_with_mention
             and self.message_obj.sender  # 确保有发送者信息
             and (

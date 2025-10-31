@@ -41,12 +41,14 @@ class PersonaManager:
         return persona
 
     async def get_default_persona_v3(
-        self, umo: str | MessageSession | None = None,
+        self,
+        umo: str | MessageSession | None = None,
     ) -> Personality:
         """获取默认 persona"""
         cfg = self.acm.get_conf(umo)
         default_persona_id = cfg.get("provider_settings", {}).get(
-            "default_personality", "default",
+            "default_personality",
+            "default",
         )
         if not default_persona_id or default_persona_id == "default":
             return DEFAULT_PERSONALITY
@@ -75,7 +77,10 @@ class PersonaManager:
         if not existing_persona:
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
         persona = await self.db.update_persona(
-            persona_id, system_prompt, begin_dialogs, tools=tools,
+            persona_id,
+            system_prompt,
+            begin_dialogs,
+            tools=tools,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -100,7 +105,10 @@ class PersonaManager:
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
         new_persona = await self.db.insert_persona(
-            persona_id, system_prompt, begin_dialogs, tools=tools,
+            persona_id,
+            system_prompt,
+            begin_dialogs,
+            tools=tools,
         )
         self.personas.append(new_persona)
         self.get_v3_persona_data()

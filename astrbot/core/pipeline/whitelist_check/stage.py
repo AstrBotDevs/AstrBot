@@ -29,7 +29,8 @@ class WhitelistCheckStage(Stage):
         self.wl_log = ctx.astrbot_config["platform_settings"]["id_whitelist_log"]
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         if not self.enable_whitelist_check:
             # 白名单检查未启用

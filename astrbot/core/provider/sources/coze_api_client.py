@@ -35,7 +35,9 @@ class CozeAPIClient:
                 "Accept": "text/event-stream",
             }
             self.session = aiohttp.ClientSession(
-                headers=headers, timeout=timeout, connector=connector,
+                headers=headers,
+                timeout=timeout,
+                connector=connector,
             )
         return self.session
 

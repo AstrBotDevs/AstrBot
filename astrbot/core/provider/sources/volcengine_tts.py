@@ -15,7 +15,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "volcengine_tts", "火山引擎 TTS", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "volcengine_tts",
+    "火山引擎 TTS",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderVolcengineTTS(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -26,7 +28,8 @@ class ProviderVolcengineTTS(TTSProvider):
         self.voice_type = provider_config.get("volcengine_voice_type", "")
         self.speed_ratio = provider_config.get("volcengine_speed_ratio", 1.0)
         self.api_base = provider_config.get(
-            "api_base", "https://openspeech.bytedance.com/api/v1/tts",
+            "api_base",
+            "https://openspeech.bytedance.com/api/v1/tts",
         )
         self.timeout = provider_config.get("timeout", 20)
 
@@ -69,12 +72,15 @@ class ProviderVolcengineTTS(TTSProvider):
         logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
 
         try:
-            async with aiohttp.ClientSession() as session, session.post(
-                self.api_base,
-                data=json.dumps(payload),
-                headers=headers,
-                timeout=self.timeout,
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    self.api_base,
+                    data=json.dumps(payload),
+                    headers=headers,
+                    timeout=self.timeout,
+                ) as response,
+            ):
                 logger.debug(f"响应状态码: {response.status}")
 
                 response_text = await response.text()
@@ -92,7 +98,8 @@ class ProviderVolcengineTTS(TTSProvider):
 
                         loop = asyncio.get_running_loop()
                         await loop.run_in_executor(
-                            None, lambda: open(file_path, "wb").write(audio_data),
+                            None,
+                            lambda: open(file_path, "wb").write(audio_data),
                         )
 
                         return file_path

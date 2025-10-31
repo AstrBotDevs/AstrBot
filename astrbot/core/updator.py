@@ -70,11 +70,16 @@ class AstrBotUpdator(RepoZipUpdator):
             raise e
 
     async def check_update(
-        self, url: str, current_version: str, consider_prerelease: bool = True,
+        self,
+        url: str,
+        current_version: str,
+        consider_prerelease: bool = True,
     ) -> ReleaseInfo:
         """检查更新"""
         return await super().check_update(
-            self.ASTRBOT_RELEASE_API, VERSION, consider_prerelease,
+            self.ASTRBOT_RELEASE_API,
+            VERSION,
+            consider_prerelease,
         )
 
     async def get_releases(self) -> list:

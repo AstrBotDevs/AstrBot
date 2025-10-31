@@ -154,8 +154,7 @@ class FunctionToolManager:
         logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
-        """删除一个函数调用工具。
-        """
+        """删除一个函数调用工具。"""
         for i, f in enumerate(self.func_list):
             if f.name == name:
                 self.func_list.pop(i)
@@ -349,7 +348,9 @@ class FunctionToolManager:
                 raise exc
 
     async def disable_mcp_server(
-        self, name: str | None = None, timeout: float = 10,
+        self,
+        name: str | None = None,
+        timeout: float = 10,
     ) -> None:
         """Disable an MCP server by its name.
 
@@ -390,8 +391,7 @@ class FunctionToolManager:
                 self.func_list = [f for f in self.func_list if f.origin != "mcp"]
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
-        """获得 OpenAI API 风格的**已经激活**的工具描述
-        """
+        """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.openai_schema(
@@ -399,15 +399,13 @@ class FunctionToolManager:
         )
 
     def get_func_desc_anthropic_style(self) -> list:
-        """获得 Anthropic API 风格的**已经激活**的工具描述
-        """
+        """获得 Anthropic API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
-        """获得 Google GenAI API 风格的**已经激活**的工具描述
-        """
+        """获得 Google GenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.google_schema()
@@ -424,7 +422,10 @@ class FunctionToolManager:
             func_tool.active = False
 
             inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools", [], scope="global", scope_id="global",
+                "inactivated_llm_tools",
+                [],
+                scope="global",
+                scope_id="global",
             )
             if name not in inactivated_llm_tools:
                 inactivated_llm_tools.append(name)
@@ -451,7 +452,10 @@ class FunctionToolManager:
             func_tool.active = True
 
             inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools", [], scope="global", scope_id="global",
+                "inactivated_llm_tools",
+                [],
+                scope="global",
+                scope_id="global",
             )
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
@@ -509,7 +513,8 @@ class FunctionToolManager:
                     if response.status == 200:
                         data = await response.json()
                         mcp_server_list = data.get("data", {}).get(
-                            "mcp_server_list", [],
+                            "mcp_server_list",
+                            [],
                         )
                         local_mcp_config = self.load_mcp_config()
 

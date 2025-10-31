@@ -30,26 +30,27 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
 
         self.model = provider_config.get(
-            "embedding_model", "gemini-embedding-exp-03-07",
+            "embedding_model",
+            "gemini-embedding-exp-03-07",
         )
 
     async def get_embedding(self, text: str) -> list[float]:
-        """获取文本的嵌入
-        """
+        """获取文本的嵌入"""
         try:
             result = await self.client.models.embed_content(
-                model=self.model, contents=text,
+                model=self.model,
+                contents=text,
             )
             return result.embeddings[0].values
         except APIError as e:
             raise Exception(f"Gemini Embedding API请求失败: {e.message}")
 
     async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """批量获取文本的嵌入
-        """
+        """批量获取文本的嵌入"""
         try:
             result = await self.client.models.embed_content(
-                model=self.model, contents=texts,
+                model=self.model,
+                contents=texts,
             )
             return [embedding.values for embedding in result.embeddings]
         except APIError as e:

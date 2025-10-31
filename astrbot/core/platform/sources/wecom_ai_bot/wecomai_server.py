@@ -110,7 +110,10 @@ class WecomAIBotServer:
 
             # 解密消息
             ret_code, message_data = await self.api_client.decrypt_message(
-                post_data, msg_signature, timestamp, nonce,
+                post_data,
+                msg_signature,
+                timestamp,
+                nonce,
             )
 
             if ret_code != WecomAIBotConstants.SUCCESS or not message_data:
@@ -122,7 +125,8 @@ class WecomAIBotServer:
             if self.message_handler:
                 try:
                     response = await self.message_handler(
-                        message_data, {"nonce": nonce, "timestamp": timestamp},
+                        message_data,
+                        {"nonce": nonce, "timestamp": timestamp},
                     )
                 except Exception as e:
                     logger.error("消息处理器执行异常: %s", e)

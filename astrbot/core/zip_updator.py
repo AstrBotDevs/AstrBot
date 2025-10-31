@@ -18,7 +18,10 @@ class ReleaseInfo:
     body: str
 
     def __init__(
-        self, version: str = "", published_at: str = "", body: str = "",
+        self,
+        version: str = "",
+        published_at: str = "",
+        body: str = "",
     ) -> None:
         self.version = version
         self.published_at = published_at
@@ -44,9 +47,13 @@ class RepoZipUpdator:
             connector = aiohttp.TCPConnector(
                 ssl=ssl_context,
             )  # 新增：使用 TCPConnector 指定 SSL 上下文
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=connector,
-            ) as session, session.get(url) as response:
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(url) as response,
+            ):
                 # 检查 HTTP 状态码
                 if response.status != 200:
                     text = await response.text()
@@ -105,7 +112,10 @@ class RepoZipUpdator:
         return VersionComparator.compare_version(v1, v2)
 
     async def check_update(
-        self, url: str, current_version: str, consider_prerelease: bool = True,
+        self,
+        url: str,
+        current_version: str,
+        consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
 
@@ -194,8 +204,7 @@ class RepoZipUpdator:
         raise ValueError("无效的 GitHub URL")
 
     def unzip_file(self, zip_path: str, target_dir: str):
-        """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir
-        """
+        """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
         with zipfile.ZipFile(zip_path, "r") as z:

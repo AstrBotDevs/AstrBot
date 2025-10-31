@@ -21,7 +21,9 @@ class Document(BaseDocModel, table=True):
     __tablename__ = "documents"  # type: ignore
 
     id: int | None = Field(
-        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True},
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     doc_id: str = Field(nullable=False)
     text: str = Field(nullable=False)
@@ -37,7 +39,8 @@ class DocumentStorage:
         self.engine: AsyncEngine | None = None
         self.async_session_maker: sessionmaker | None = None
         self.sqlite_init_path = os.path.join(
-            os.path.dirname(__file__), "sqlite_init.sql",
+            os.path.dirname(__file__),
+            "sqlite_init.sql",
         )
 
     async def initialize(self):
@@ -172,7 +175,10 @@ class DocumentStorage:
             return document.id  # type: ignore
 
     async def insert_documents_batch(
-        self, doc_ids: list[str], texts: list[str], metadatas: list[dict],
+        self,
+        doc_ids: list[str],
+        texts: list[str],
+        metadatas: list[dict],
     ) -> list[int]:
         """Batch insert documents and return their integer IDs.
 

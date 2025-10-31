@@ -1,4 +1,3 @@
-
 from astrbot.core import logger
 
 from .platform_metadata import PlatformMetadata

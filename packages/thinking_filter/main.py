@@ -23,7 +23,8 @@ class R1Filter(Star):
     @filter.on_llm_response()
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
         cfg = self.context.get_config(umo=event.unified_msg_origin).get(
-            "provider_settings", {},
+            "provider_settings",
+            {},
         )
         show_reasoning = cfg.get("display_reasoning_text", False)
 
@@ -31,7 +32,8 @@ class R1Filter(Star):
         # Gemini 可能在 parts 中注入 {"thought": true, "text": "..."}
         # 官方 SDK 默认不会返回此字段。
         if GenerateContentResponse is not None and isinstance(
-            response.raw_completion, GenerateContentResponse,
+            response.raw_completion,
+            GenerateContentResponse,
         ):
             thought_text, answer_text = self._extract_gemini_texts(
                 response.raw_completion,
@@ -88,7 +90,10 @@ class R1Filter(Star):
             if r"<think>" in completion_text or r"</think>" in completion_text:
                 # 移除配对的标签及其内容
                 completion_text = re.sub(
-                    r"<think>.*?</think>", "", completion_text, flags=re.DOTALL,
+                    r"<think>.*?</think>",
+                    "",
+                    completion_text,
+                    flags=re.DOTALL,
                 ).strip()
 
                 # 移除可能残留的单个标签

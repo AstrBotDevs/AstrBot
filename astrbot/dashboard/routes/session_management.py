@@ -47,7 +47,10 @@ class SessionManagementRoute(Route):
 
             # 获取活跃的会话数据（处于对话内的会话）
             sessions_data, total = await self.db_helper.get_session_conversations(
-                page, page_size, search_query, platform,
+                page,
+                page_size,
+                search_query,
+                platform,
             )
 
             provider_manager = self.core_lifecycle.provider_manager
@@ -105,13 +108,16 @@ class SessionManagementRoute(Route):
 
                 # 获取 provider 信息
                 chat_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.CHAT_COMPLETION, umo=session_id,
+                    provider_type=ProviderType.CHAT_COMPLETION,
+                    umo=session_id,
                 )
                 tts_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.TEXT_TO_SPEECH, umo=session_id,
+                    provider_type=ProviderType.TEXT_TO_SPEECH,
+                    umo=session_id,
                 )
                 stt_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.SPEECH_TO_TEXT, umo=session_id,
+                    provider_type=ProviderType.SPEECH_TO_TEXT,
+                    umo=session_id,
                 )
                 if chat_provider:
                     meta = chat_provider.meta()
@@ -207,11 +213,16 @@ class SessionManagementRoute(Route):
 
         # 更新 persona
         await conversation_manager.update_conversation_persona_id(
-            session_id, persona_name,
+            session_id,
+            persona_name,
         )
 
     async def _handle_batch_operation(
-        self, session_ids: list, operation_func, operation_name: str, **kwargs,
+        self,
+        session_ids: list,
+        operation_func,
+        operation_name: str,
+        **kwargs,
     ):
         """通用的批量操作处理方法"""
         success_count = 0
@@ -291,7 +302,10 @@ class SessionManagementRoute(Route):
             return Response().error(f"更新会话人格失败: {e!s}").__dict__
 
     async def _update_single_session_provider(
-        self, session_id: str, provider_id: str, provider_type_enum,
+        self,
+        session_id: str,
+        provider_id: str,
+        provider_type_enum,
     ):
         """更新单个会话的 provider 的内部方法"""
         provider_manager = self.core_lifecycle.star_context.provider_manager
@@ -347,7 +361,9 @@ class SessionManagementRoute(Route):
                 return Response().error("缺少必要参数: session_id").__dict__
 
             await self._update_single_session_provider(
-                session_id, provider_id, provider_type_enum,
+                session_id,
+                provider_id,
+                provider_type_enum,
             )
             return (
                 Response()
@@ -381,7 +397,8 @@ class SessionManagementRoute(Route):
                 if plugin.activated and not plugin.reserved:
                     plugin_name = plugin.name or ""
                     plugin_enabled = SessionPluginManager.is_plugin_enabled_for_session(
-                        session_id, plugin_name,
+                        session_id,
+                        plugin_name,
                     )
 
                     all_plugins.append(
@@ -445,7 +462,9 @@ class SessionManagementRoute(Route):
 
             # 使用 SessionPluginManager 更新插件状态
             SessionPluginManager.set_plugin_status_for_session(
-                session_id, plugin_name, enabled,
+                session_id,
+                plugin_name,
+                enabled,
             )
 
             return (

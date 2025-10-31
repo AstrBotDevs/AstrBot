@@ -43,7 +43,8 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True,
+                    f"[Discord] on_ready_once_callback 执行失败: {e}",
+                    exc_info=True,
                 )
 
     def _create_message_data(self, message: discord.Message) -> dict:

@@ -151,7 +151,8 @@ class RespondStage(Stage):
         return extracted
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         result = event.get_result()
         if result is None:
@@ -169,7 +170,8 @@ class RespondStage(Stage):
                 return
             # 流式结果直接交付平台适配器处理
             use_fallback = self.config.get("provider_settings", {}).get(
-                "streaming_segmented", False,
+                "streaming_segmented",
+                False,
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
             await event.send_streaming(result.async_stream, use_fallback)

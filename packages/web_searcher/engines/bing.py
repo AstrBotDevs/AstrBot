@@ -1,4 +1,3 @@
-
 from . import USER_AGENT_BING, SearchEngine, SearchResult
 
 

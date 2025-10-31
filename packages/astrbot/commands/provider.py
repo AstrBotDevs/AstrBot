@@ -102,7 +102,9 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message("无效的参数。"))
 
     async def model_ls(
-        self, message: AstrMessageEvent, idx_or_name: int | str | None = None,
+        self,
+        message: AstrMessageEvent,
+        idx_or_name: int | str | None = None,
     ):
         """查看或者切换模型"""
         prov = self.context.get_using_provider(message.unified_msg_origin)

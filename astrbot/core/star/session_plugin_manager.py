@@ -1,6 +1,4 @@
-"""会话插件管理器 - 负责管理每个会话的插件启停状态
-"""
-
+"""会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -23,7 +21,10 @@ class SessionPluginManager:
         """
         # 获取会话插件配置
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id,
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         session_config = session_plugin_config.get(session_id, {})
 
@@ -43,7 +44,9 @@ class SessionPluginManager:
 
     @staticmethod
     def set_plugin_status_for_session(
-        session_id: str, plugin_name: str, enabled: bool,
+        session_id: str,
+        plugin_name: str,
+        enabled: bool,
     ) -> None:
         """设置插件在指定会话中的启停状态
 
@@ -55,7 +58,10 @@ class SessionPluginManager:
         """
         # 获取当前配置
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id,
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         if session_id not in session_plugin_config:
             session_plugin_config[session_id] = {
@@ -107,10 +113,14 @@ class SessionPluginManager:
 
         """
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id,
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         return session_plugin_config.get(
-            session_id, {"enabled_plugins": [], "disabled_plugins": []},
+            session_id,
+            {"enabled_plugins": [], "disabled_plugins": []},
         )
 
     @staticmethod
@@ -148,7 +158,8 @@ class SessionPluginManager:
 
             # 检查插件是否在当前会话中启用
             if SessionPluginManager.is_plugin_enabled_for_session(
-                session_id, plugin.name,
+                session_id,
+                plugin.name,
             ):
                 filtered_handlers.append(handler)
             else:

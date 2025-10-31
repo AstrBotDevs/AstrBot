@@ -22,7 +22,9 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
     if not data_v3_exists:
         return False
     migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_v4",
+        "global",
+        "global",
+        "migration_done_v4",
     )
     if migration_done:
         return False

@@ -41,7 +41,8 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
         # 将模型加载放到线程池中执行
         self.model = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
+            None,
+            lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
         )
 
         logger.info("SenseVoice 模型加载完成。")

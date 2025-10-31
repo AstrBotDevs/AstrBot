@@ -40,7 +40,8 @@ class ConversationV2(SQLModel, table=True):
     __tablename__ = "conversations"
 
     inner_conversation_id: int = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True},
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     conversation_id: str = Field(
         max_length=36,
@@ -76,7 +77,9 @@ class Persona(SQLModel, table=True):
     __tablename__ = "personas"
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     persona_id: str = Field(max_length=255, nullable=False)
     system_prompt: str = Field(sa_type=Text, nullable=False)
@@ -104,7 +107,9 @@ class Preference(SQLModel, table=True):
     __tablename__ = "preferences"
 
     id: int | None = Field(
-        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True},
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     scope: str = Field(nullable=False)
     """Scope of the preference, such as 'global', 'umo', 'plugin'."""
@@ -138,7 +143,9 @@ class PlatformMessageHistory(SQLModel, table=True):
     __tablename__ = "platform_message_history"
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
@@ -163,7 +170,9 @@ class Attachment(SQLModel, table=True):
     __tablename__ = "attachments"
 
     inner_attachment_id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     attachment_id: str = Field(
         max_length=36,

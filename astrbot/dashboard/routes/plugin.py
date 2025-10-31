@@ -105,9 +105,13 @@ class PluginRoute(Route):
 
         for url in urls:
             try:
-                async with aiohttp.ClientSession(
-                    trust_env=True, connector=connector,
-                ) as session, session.get(url) as response:
+                async with (
+                    aiohttp.ClientSession(
+                        trust_env=True,
+                        connector=connector,
+                    ) as session,
+                    session.get(url) as response,
+                ):
                     if response.status == 200:
                         remote_data = await response.json()
 
@@ -122,7 +126,9 @@ class PluginRoute(Route):
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._get_remote_md5()
                         self._save_plugin_cache(
-                            cache_file, remote_data, current_md5,
+                            cache_file,
+                            remote_data,
+                            current_md5,
                         )
                         return Response().ok(remote_data).__dict__
                     logger.error(f"请求 {url} 失败，状态码：{response.status}")
@@ -176,11 +182,15 @@ class PluginRoute(Route):
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=connector,
-            ) as session, session.get(
-                "https://api.soulter.top/astrbot/plugins-md5",
-            ) as response:
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(
+                    "https://api.soulter.top/astrbot/plugins-md5",
+                ) as response,
+            ):
                 if response.status == 200:
                     data = await response.json()
                     return data.get("md5", "")
@@ -274,13 +284,15 @@ class PluginRoute(Route):
         for handler_full_name in handler_full_names:
             info = {}
             handler = star_handlers_registry.star_handlers_map.get(
-                handler_full_name, None,
+                handler_full_name,
+                None,
             )
             if handler is None:
                 continue
             info["event_type"] = handler.event_type.name
             info["event_type_h"] = self.translated_event_type.get(
-                handler.event_type, handler.event_type.name,
+                handler.event_type,
+                handler.event_type.name,
             )
             info["handler_full_name"] = handler.handler_full_name
             info["desc"] = handler.desc
@@ -469,7 +481,8 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
         plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path, plugin_obj.root_dir_name,
+            self.plugin_manager.plugin_store_path,
+            plugin_obj.root_dir_name,
         )
 
         if not os.path.isdir(plugin_dir):

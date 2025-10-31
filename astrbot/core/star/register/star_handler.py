@@ -81,7 +81,10 @@ def register_command(
                 command_name.parent_group.get_complete_command_names()
             )
             new_command = CommandFilter(
-                sub_command, alias, None, parent_command_names=parent_command_names,
+                sub_command,
+                alias,
+                None,
+                parent_command_names=parent_command_names,
             )
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
@@ -101,7 +104,9 @@ def register_command(
                 True  # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
             )
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs,
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         if new_command:
             new_command.init_handler_md(handler_md)
@@ -143,19 +148,20 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
         if (
-            (not add_to_event_filters
-            and isinstance(awaitable, RegisteringCommandable))
-            or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable))
-        ):
+            not add_to_event_filters and isinstance(awaitable, RegisteringCommandable)
+        ) or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable)):
             # 指令组 与 根指令组，添加到本层的grouphandle中一起判断
             awaitable.parent_group.add_custom_filter(custom_filter)
         else:
             handler_md = get_handler_or_create(
-                awaitable, EventType.AdapterMessageEvent, **kwargs,
+                awaitable,
+                EventType.AdapterMessageEvent,
+                **kwargs,
             )
 
             if not add_to_event_filters and not isinstance(
-                awaitable, RegisteringCommandable,
+                awaitable,
+                RegisteringCommandable,
             ):
                 # 底层子指令
                 handle_full_name = get_handler_full_name(awaitable)
@@ -174,7 +180,9 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
             else:
                 # 裸指令
                 handler_md = get_handler_or_create(
-                    awaitable, EventType.AdapterMessageEvent, **kwargs,
+                    awaitable,
+                    EventType.AdapterMessageEvent,
+                    **kwargs,
                 )
                 handler_md.event_filters.append(custom_filter)
 
@@ -197,7 +205,9 @@ def register_command_group(
             logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
         else:
             new_group = CommandGroupFilter(
-                sub_command, alias, parent_group=command_group_name.parent_group,
+                sub_command,
+                alias,
+                parent_group=command_group_name.parent_group,
             )
             command_group_name.parent_group.add_sub_command_filter(new_group)
     # 根指令组
@@ -209,7 +219,9 @@ def register_command_group(
     def decorator(obj):
         if new_group:
             handler_md = get_handler_or_create(
-                obj, EventType.AdapterMessageEvent, **kwargs,
+                obj,
+                EventType.AdapterMessageEvent,
+                **kwargs,
             )
             handler_md.event_filters.append(new_group)
 
@@ -222,9 +234,7 @@ def register_command_group(
 class RegisteringCommandable:
     """用于指令组级联注册"""
 
-    group: Callable[..., Callable[..., RegisteringCommandable]] = (
-        register_command_group
-    )
+    group: Callable[..., Callable[..., RegisteringCommandable]] = register_command_group
     command: Callable[..., Callable[..., None]] = register_command
     custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
 
@@ -237,7 +247,9 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs,
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         handler_md.event_filters.append(EventMessageTypeFilter(event_message_type))
         return awaitable
@@ -246,7 +258,8 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
 
 
 def register_platform_adapter_type(
-    platform_adapter_type: PlatformAdapterType, **kwargs,
+    platform_adapter_type: PlatformAdapterType,
+    **kwargs,
 ):
     """注册一个 PlatformAdapterType"""
 
@@ -265,7 +278,9 @@ def register_regex(regex: str, **kwargs):
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs,
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         handler_md.event_filters.append(RegexFilter(regex))
         return awaitable
@@ -303,8 +318,7 @@ def register_on_astrbot_loaded(**kwargs):
 
 
 def register_on_platform_loaded(**kwargs):
-    """当平台加载完成时
-    """
+    """当平台加载完成时"""
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnPlatformLoadedEvent, **kwargs)
@@ -483,7 +497,9 @@ def register_on_decorating_result(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnDecoratingResultEvent, **kwargs,
+            awaitable,
+            EventType.OnDecoratingResultEvent,
+            **kwargs,
         )
         return awaitable
 
@@ -495,7 +511,9 @@ def register_after_message_sent(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnAfterMessageSentEvent, **kwargs,
+            awaitable,
+            EventType.OnAfterMessageSentEvent,
+            **kwargs,
         )
         return awaitable
 

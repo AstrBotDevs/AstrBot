@@ -123,7 +123,13 @@ class WeChatKFMessage(BaseWeChatAPI):
         )
 
     def send_msgmenu(
-        self, user_id, open_kfid, head_content, menu_list, tail_content, msgid="",
+        self,
+        user_id,
+        open_kfid,
+        head_content,
+        menu_list,
+        tail_content,
+        msgid="",
     ):
         return self.send(
             user_id,
@@ -140,7 +146,14 @@ class WeChatKFMessage(BaseWeChatAPI):
         )
 
     def send_location(
-        self, user_id, open_kfid, name, address, latitude, longitude, msgid="",
+        self,
+        user_id,
+        open_kfid,
+        name,
+        address,
+        latitude,
+        longitude,
+        msgid="",
     ):
         return self.send(
             user_id,
@@ -158,7 +171,14 @@ class WeChatKFMessage(BaseWeChatAPI):
         )
 
     def send_miniprogram(
-        self, user_id, open_kfid, appid, title, thumb_media_id, pagepath, msgid="",
+        self,
+        user_id,
+        open_kfid,
+        appid,
+        title,
+        thumb_media_id,
+        pagepath,
+        msgid="",
     ):
         return self.send(
             user_id,

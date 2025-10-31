@@ -14,7 +14,8 @@ class HelpCommand:
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(
-                    "https://astrbot.app/notice.json", timeout=2,
+                    "https://astrbot.app/notice.json",
+                    timeout=2,
                 ) as resp:
                     return (await resp.json())["notice"]
         except BaseException:

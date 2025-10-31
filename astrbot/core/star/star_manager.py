@@ -1,5 +1,4 @@
-"""插件的重载、启停、安装、卸载等操作。
-"""
+"""插件的重载、启停、安装、卸载等操作。"""
 
 import asyncio
 import functools
@@ -51,7 +50,8 @@ class PluginManager:
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.abspath(
             os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../packages",
+                os.path.dirname(os.path.abspath(__file__)),
+                "../../../packages",
             ),
         )
         """保留插件的路径。在 packages 目录下"""
@@ -94,11 +94,13 @@ class PluginManager:
                 continue
             if star.reserved:
                 plugin_dir_path = os.path.join(
-                    self.reserved_plugin_path, star.root_dir_name,
+                    self.reserved_plugin_path,
+                    star.root_dir_name,
                 )
             else:
                 plugin_dir_path = os.path.join(
-                    self.plugin_store_path, star.root_dir_name,
+                    self.plugin_store_path,
+                    star.root_dir_name,
                 )
             plugins_to_check.append((plugin_dir_path, star.name))
         reloaded_plugins = set()
@@ -200,7 +202,8 @@ class PluginManager:
 
         if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
             with open(
-                os.path.join(plugin_path, "metadata.yaml"), encoding="utf-8",
+                os.path.join(plugin_path, "metadata.yaml"),
+                encoding="utf-8",
             ) as f:
                 metadata = yaml.safe_load(f)
         elif plugin_obj and hasattr(plugin_obj, "info"):
@@ -233,7 +236,8 @@ class PluginManager:
 
     @staticmethod
     def _get_plugin_related_modules(
-        plugin_root_dir: str, is_reserved: bool = False,
+        plugin_root_dir: str,
+        is_reserved: bool = False,
     ) -> list[str]:
         """获取与指定插件相关的所有已加载模块名
 
@@ -279,7 +283,8 @@ class PluginManager:
 
         if root_dir_name:
             for module_name in self._get_plugin_related_modules(
-                root_dir_name, is_reserved,
+                root_dir_name,
+                is_reserved,
             ):
                 try:
                     del sys.modules[module_name]
@@ -374,7 +379,8 @@ class PluginManager:
                 # module_path = plugin_module['module_path']
                 root_dir_name = plugin_module["pname"]  # 插件的目录名
                 reserved = plugin_module.get(
-                    "reserved", False,
+                    "reserved",
+                    False,
                 )  # 是否是保留插件。目前在 packages/ 目录下的都是保留插件。保留插件不可以卸载。
 
                 path = "data.plugins." if not reserved else "packages."
@@ -408,14 +414,16 @@ class PluginManager:
                     else os.path.join(self.reserved_plugin_path, root_dir_name)
                 )
                 plugin_schema_path = os.path.join(
-                    plugin_dir_path, self.conf_schema_fname,
+                    plugin_dir_path,
+                    self.conf_schema_fname,
                 )
                 if os.path.exists(plugin_schema_path):
                     # 加载插件配置
                     with open(plugin_schema_path, encoding="utf-8") as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
-                                self.plugin_config_path, f"{root_dir_name}_config.json",
+                                self.plugin_config_path,
+                                f"{root_dir_name}_config.json",
                             ),
                             schema=json.loads(f.read()),
                         )
@@ -448,7 +456,8 @@ class PluginManager:
                         if plugin_config and metadata.star_cls_type:
                             try:
                                 metadata.star_cls = metadata.star_cls_type(
-                                    context=self.context, config=plugin_config,
+                                    context=self.context,
+                                    config=plugin_config,
                                 )
                             except TypeError as _:
                                 metadata.star_cls = metadata.star_cls_type(
@@ -517,7 +526,8 @@ class PluginManager:
                         if plugin_config:
                             try:
                                 obj = getattr(module, classes[0])(
-                                    context=self.context, config=plugin_config,
+                                    context=self.context,
+                                    config=plugin_config,
                                 )  # 实例化插件类
                             except TypeError as _:
                                 obj = getattr(module, classes[0])(
@@ -529,7 +539,8 @@ class PluginManager:
                             )  # 实例化插件类
 
                     metadata = self._load_plugin_metadata(
-                        plugin_path=plugin_dir_path, plugin_obj=obj,
+                        plugin_path=plugin_dir_path,
+                        plugin_obj=obj,
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
@@ -565,7 +576,8 @@ class PluginManager:
                         and handler.handler_name in alter_cmd[metadata.name]
                     ):
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
-                            "permission", "member",
+                            "permission",
+                            "member",
                         )
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
@@ -743,7 +755,8 @@ class PluginManager:
             return
 
         self._purge_modules(
-            root_dir_name=plugin.root_dir_name, is_reserved=plugin.reserved,
+            root_dir_name=plugin.root_dir_name,
+            is_reserved=plugin.reserved,
         )
 
     async def update_plugin(self, plugin_name: str, proxy=""):
@@ -807,7 +820,8 @@ class PluginManager:
 
         if "__del__" in star_metadata.star_cls_type.__dict__:
             asyncio.get_event_loop().run_in_executor(
-                None, star_metadata.star_cls.__del__,
+                None,
+                star_metadata.star_cls.__del__,
             )
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()

@@ -181,7 +181,9 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
-        self, message: AstrMessageEvent, idx_or_name: int | str | None = None,
+        self,
+        message: AstrMessageEvent,
+        idx_or_name: int | str | None = None,
     ):
         """查看或者切换模型"""
         await self.provider_c.model_ls(message, idx_or_name)
@@ -198,8 +200,7 @@ class Main(star.Star):
 
     @filter.command("new")
     async def new_conv(self, message: AstrMessageEvent):
-        """创建新对话
-        """
+        """创建新对话"""
         await self.conversation_c.new_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -290,13 +291,15 @@ class Main(star.Star):
                             return
 
                         conv = await self.context.conversation_manager.get_conversation(
-                            event.unified_msg_origin, session_curr_cid,
+                            event.unified_msg_origin,
+                            session_curr_cid,
                         )
                     else:
                         # Dify 自己有维护对话，不需要 bot 端维护。
                         assert isinstance(provider, ProviderDify)
                         cid = provider.conversation_ids.get(
-                            event.unified_msg_origin, None,
+                            event.unified_msg_origin,
+                            None,
                         )
                         if cid is None:
                             logger.error(

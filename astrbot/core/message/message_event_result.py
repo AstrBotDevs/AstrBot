@@ -206,8 +206,7 @@ class MessageEventResult(MessageChain):
         return self
 
     def is_stopped(self) -> bool:
-        """是否终止事件传播。
-        """
+        """是否终止事件传播。"""
         return self.result_type == EventResultType.STOP
 
     def set_async_stream(self, stream: AsyncGenerator) -> "MessageEventResult":

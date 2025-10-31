@@ -17,7 +17,12 @@ from astrbot.core.utils.io import download_image_by_url
 
 class LarkMessageEvent(AstrMessageEvent):
     def __init__(
-        self, message_str, message_obj, platform_meta, session_id, bot: lark.Client,
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: lark.Client,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot

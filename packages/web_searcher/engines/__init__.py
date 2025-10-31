@@ -39,8 +39,7 @@ class SearchResult:
 
 
 class SearchEngine:
-    """搜索引擎爬虫基类
-    """
+    """搜索引擎爬虫基类"""
 
     def __init__(self) -> None:
         self.TIMEOUT = 10
@@ -58,21 +57,31 @@ class SearchEngine:
         headers["Referer"] = url
         headers["User-Agent"] = random.choice(USER_AGENTS)
         if data:
-            async with ClientSession() as session, session.post(
-                url, headers=headers, data=data, timeout=self.TIMEOUT,
-            ) as resp:
+            async with (
+                ClientSession() as session,
+                session.post(
+                    url,
+                    headers=headers,
+                    data=data,
+                    timeout=self.TIMEOUT,
+                ) as resp,
+            ):
                 ret = await resp.text(encoding="utf-8")
                 return ret
         else:
-            async with ClientSession() as session, session.get(
-                url, headers=headers, timeout=self.TIMEOUT,
-            ) as resp:
+            async with (
+                ClientSession() as session,
+                session.get(
+                    url,
+                    headers=headers,
+                    timeout=self.TIMEOUT,
+                ) as resp,
+            ):
                 ret = await resp.text(encoding="utf-8")
                 return ret
 
     def tidy_text(self, text: str) -> str:
-        """清理文本，去除空格、换行符等
-        """
+        """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
     async def search(self, query: str, num_results: int) -> list[SearchResult]:

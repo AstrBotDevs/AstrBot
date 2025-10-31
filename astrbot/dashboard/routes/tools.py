@@ -13,7 +13,9 @@ DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 class ToolsRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle,
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -105,16 +107,16 @@ class ToolsRoute(Route):
             if self.tool_mgr.save_mcp_config(config):
                 try:
                     await self.tool_mgr.enable_mcp_server(
-                        name, server_config, timeout=30,
+                        name,
+                        server_config,
+                        timeout=30,
                     )
                 except TimeoutError:
                     return Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     return (
-                        Response()
-                        .error(f"启用 MCP 服务器 {name} 失败: {e!s}")
-                        .__dict__
+                        Response().error(f"启用 MCP 服务器 {name} 失败: {e!s}").__dict__
                     )
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             return Response().error("保存配置失败").__dict__
@@ -138,7 +140,8 @@ class ToolsRoute(Route):
 
             # 获取活动状态
             active = server_data.get(
-                "active", config["mcpServers"][name].get("active", True),
+                "active",
+                config["mcpServers"][name].get("active", True),
             )
 
             # 创建新的配置对象
@@ -188,7 +191,9 @@ class ToolsRoute(Route):
                             )
                     try:
                         await self.tool_mgr.enable_mcp_server(
-                            name, config["mcpServers"][name], timeout=30,
+                            name,
+                            config["mcpServers"][name],
+                            timeout=30,
                         )
                     except TimeoutError:
                         return (
@@ -207,9 +212,7 @@ class ToolsRoute(Route):
                         await self.tool_mgr.disable_mcp_server(name, timeout=10)
                     except TimeoutError:
                         return (
-                            Response()
-                            .error(f"停用 MCP 服务器 {name} 超时。")
-                            .__dict__
+                            Response().error(f"停用 MCP 服务器 {name} 超时。").__dict__
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
@@ -262,8 +265,7 @@ class ToolsRoute(Route):
             return Response().error(f"删除 MCP 服务器失败: {e!s}").__dict__
 
     async def test_mcp_connection(self):
-        """测试 MCP 服务器连接
-        """
+        """测试 MCP 服务器连接"""
         try:
             server_data = await request.json
             config = server_data.get("mcp_server_config", None)

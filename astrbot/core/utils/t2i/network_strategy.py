@@ -90,11 +90,16 @@ class NetworkRenderStrategy(RenderStrategy):
                 if return_url:
                     ssl_context = ssl.create_default_context(cafile=certifi.where())
                     connector = aiohttp.TCPConnector(ssl=ssl_context)
-                    async with aiohttp.ClientSession(
-                        trust_env=True, connector=connector,
-                    ) as session, session.post(
-                        f"{endpoint}/generate", json=post_data,
-                    ) as resp:
+                    async with (
+                        aiohttp.ClientSession(
+                            trust_env=True,
+                            connector=connector,
+                        ) as session,
+                        session.post(
+                            f"{endpoint}/generate",
+                            json=post_data,
+                        ) as resp,
+                    ):
                         if resp.status == 200:
                             ret = await resp.json()
                             return f"{endpoint}/{ret['data']['id']}"
@@ -102,7 +107,9 @@ class NetworkRenderStrategy(RenderStrategy):
                 else:
                     # download_image_by_url 失败时抛异常
                     return await download_image_by_url(
-                        f"{endpoint}/generate", post=True, post_data=post_data,
+                        f"{endpoint}/generate",
+                        post=True,
+                        post_data=post_data,
                     )
             except Exception as e:
                 last_exception = e
@@ -113,14 +120,18 @@ class NetworkRenderStrategy(RenderStrategy):
         raise RuntimeError(f"All endpoints failed: {last_exception}")
 
     async def render(
-        self, text: str, return_url: bool = False, template_name: str | None = "base",
+        self,
+        text: str,
+        return_url: bool = False,
+        template_name: str | None = "base",
     ) -> str:
-        """返回图像的文件路径
-        """
+        """返回图像的文件路径"""
         if not template_name:
             template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
         text = text.replace("`", "\\`")
         return await self.render_custom_template(
-            tmpl_str, {"text": text, "version": f"v{VERSION}"}, return_url,
+            tmpl_str,
+            {"text": text, "version": f"v{VERSION}"},
+            return_url,
         )

@@ -26,7 +26,8 @@ class CommandGroupFilter(HandlerFilter):
         self._cmpl_cmd_names: list | None = None
 
     def add_sub_command_filter(
-        self, sub_command_filter: CommandFilter | CommandGroupFilter,
+        self,
+        sub_command_filter: CommandFilter | CommandGroupFilter,
     ):
         self.sub_command_filters.append(sub_command_filter)
 

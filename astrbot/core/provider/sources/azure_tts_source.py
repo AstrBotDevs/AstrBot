@@ -94,7 +94,8 @@ class AzureNativeProvider(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict):
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get(
-            "azure_tts_subscription_key", "",
+            "azure_tts_subscription_key",
+            "",
         ).strip()
         if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
@@ -132,7 +133,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )
         response = await self.client.post(
-            token_url, headers={"Ocp-Apim-Subscription-Key": self.subscription_key},
+            token_url,
+            headers={"Ocp-Apim-Subscription-Key": self.subscription_key},
         )
         response.raise_for_status()
         self.token = response.text

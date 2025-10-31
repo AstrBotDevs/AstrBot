@@ -59,7 +59,10 @@ class ProviderGSVTTS(TTSProvider):
         return self._session
 
     async def _make_request(
-        self, endpoint: str, params=None, retries: int = 3,
+        self,
+        endpoint: str,
+        params=None,
+        retries: int = 3,
     ) -> bytes | None:
         """发起请求"""
         for attempt in range(retries):

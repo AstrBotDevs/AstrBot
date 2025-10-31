@@ -23,7 +23,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "dashscope_tts", "Dashscope TTS API", provider_type=ProviderType.TEXT_TO_SPEECH,
+    "dashscope_tts",
+    "Dashscope TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderDashscopeTTSAPI(TTSProvider):
     def __init__(
@@ -80,7 +82,9 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         return MultiModalConversation.call(**kwargs)
 
     async def _synthesize_with_qwen_tts(
-        self, model: str, text: str,
+        self,
+        model: str,
+        text: str,
     ) -> tuple[bytes | None, str]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
@@ -116,16 +120,22 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             return None
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
-            async with aiohttp.ClientSession() as session, session.get(
-                url, timeout=aiohttp.ClientTimeout(total=timeout),
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response,
+            ):
                 return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
             return None
 
     async def _synthesize_with_cosyvoice(
-        self, model: str, text: str,
+        self,
+        model: str,
+        text: str,
     ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
             model=model,
@@ -134,7 +144,10 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         )
         loop = asyncio.get_event_loop()
         audio_bytes = await loop.run_in_executor(
-            None, synthesizer.call, text, self.timeout_ms,
+            None,
+            synthesizer.call,
+            text,
+            self.timeout_ms,
         )
         if not audio_bytes:
             resp = synthesizer.get_response()

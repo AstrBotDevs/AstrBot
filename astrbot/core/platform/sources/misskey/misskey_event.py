@@ -89,7 +89,8 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     user_info = {
                         "username": user_data.get("username", ""),
                         "nickname": user_data.get(
-                            "name", user_data.get("username", ""),
+                            "name",
+                            user_data.get("username", ""),
                         ),
                     }
                     content = add_at_mention_if_needed(content, user_info, has_at)
@@ -101,7 +102,8 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     user_id = extract_user_id_from_session_id(self.session_id)
                     await self.client.send_message(user_id, content)
                 elif hasattr(
-                    self.client, "send_room_message",
+                    self.client,
+                    "send_room_message",
                 ) and is_valid_room_session_id(self.session_id):
                     room_id = extract_room_id_from_session_id(self.session_id)
                     await self.client.send_room_message(room_id, content)
@@ -125,7 +127,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             logger.error(f"[MisskeyEvent] 发送失败: {e}")
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False,
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None

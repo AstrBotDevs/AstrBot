@@ -120,29 +120,38 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.message.GroupMessage:
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
-                        image_base64, 1, group_openid=source.group_openid,
+                        image_base64,
+                        1,
+                        group_openid=source.group_openid,
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
                 if record_file_path:  # group record msg
                     media = await self.upload_group_and_c2c_record(
-                        record_file_path, 3, group_openid=source.group_openid,
+                        record_file_path,
+                        3,
+                        group_openid=source.group_openid,
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
                 ret = await self.bot.api.post_group_message(
-                    group_openid=source.group_openid, **payload,
+                    group_openid=source.group_openid,
+                    **payload,
                 )
             case botpy.message.C2CMessage:
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
-                        image_base64, 1, openid=source.author.user_openid,
+                        image_base64,
+                        1,
+                        openid=source.author.user_openid,
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
                 if record_file_path:  # c2c record
                     media = await self.upload_group_and_c2c_record(
-                        record_file_path, 3, openid=source.author.user_openid,
+                        record_file_path,
+                        3,
+                        openid=source.author.user_openid,
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
@@ -154,14 +163,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                 else:
                     ret = await self.post_c2c_message(
-                        openid=source.author.user_openid, **payload,
+                        openid=source.author.user_openid,
+                        **payload,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
             case botpy.message.Message:
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.bot.api.post_message(
-                    channel_id=source.channel_id, **payload,
+                    channel_id=source.channel_id,
+                    **payload,
                 )
             case botpy.message.DirectMessage:
                 if image_path:
@@ -175,7 +186,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return ret
 
     async def upload_group_and_c2c_image(
-        self, image_base64: str, file_type: int, **kwargs,
+        self,
+        image_base64: str,
+        file_type: int,
+        **kwargs,
     ) -> botpy.types.message.Media:
         payload = {
             "file_data": image_base64,
@@ -196,10 +210,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return await self.bot.api._http.request(route, json=payload)
 
     async def upload_group_and_c2c_record(
-        self, file_source: str, file_type: int, srv_send_msg: bool = False, **kwargs,
+        self,
+        file_source: str,
+        file_type: int,
+        srv_send_msg: bool = False,
+        **kwargs,
     ) -> Media | None:
-        """上传媒体文件
-        """
+        """上传媒体文件"""
         # 构建基础payload
         payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
 
@@ -291,11 +308,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     record_wav_path = await i.convert_to_file_path()  # wav 路径
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     record_tecent_silk_path = os.path.join(
-                        temp_dir, f"{uuid.uuid4()}.silk",
+                        temp_dir,
+                        f"{uuid.uuid4()}.silk",
                     )
                     try:
                         duration = await wav_to_tencent_silk(
-                            record_wav_path, record_tecent_silk_path,
+                            record_wav_path,
+                            record_tecent_silk_path,
                         )
                         if duration > 0:
                             record_file_path = record_tecent_silk_path

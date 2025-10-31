@@ -1,5 +1,4 @@
-"""AstrBot CLI入口
-"""
+"""AstrBot CLI入口"""
 
 import sys
 

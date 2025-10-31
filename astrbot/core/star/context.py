@@ -37,8 +37,7 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 
 class Context:
-    """暴露给插件的接口上下文。
-    """
+    """暴露给插件的接口上下文。"""
 
     registered_web_apis: list = []
 
@@ -106,12 +105,12 @@ class Context:
         return self.provider_manager.llm_tools.deactivate_llm_tool(name)
 
     def register_provider(self, provider: Provider):
-        """注册一个 LLM Provider(Chat_Completion 类型)。
-        """
+        """注册一个 LLM Provider(Chat_Completion 类型)。"""
         self.provider_manager.provider_insts.append(provider)
 
     def get_provider_by_id(
-        self, provider_id: str,
+        self,
+        provider_id: str,
     ) -> (
         Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
     ):
@@ -192,8 +191,7 @@ class Context:
         return self._db
 
     def get_event_queue(self) -> Queue:
-        """获取事件队列。
-        """
+        """获取事件队列。"""
         return self._event_queue
 
     @deprecated(version="4.0.0", reason="Use get_platform_inst instead")
@@ -228,7 +226,9 @@ class Context:
                 return platform
 
     async def send_message(
-        self, session: str | MessageSesion, message_chain: MessageChain,
+        self,
+        session: str | MessageSesion,
+        message_chain: MessageChain,
     ) -> bool:
         """根据 session(unified_msg_origin) 主动发送消息。
 
@@ -333,12 +333,15 @@ class Context:
         star_handlers_registry.append(md)
 
     def register_task(self, task: Awaitable, desc: str):
-        """注册一个异步任务。
-        """
+        """注册一个异步任务。"""
         self._register_tasks.append(task)
 
     def register_web_api(
-        self, route: str, view_handler: Awaitable, methods: list, desc: str,
+        self,
+        route: str,
+        view_handler: Awaitable,
+        methods: list,
+        desc: str,
     ):
         for idx, api in enumerate(self.registered_web_apis):
             if api[0] == route and methods == api[2]:

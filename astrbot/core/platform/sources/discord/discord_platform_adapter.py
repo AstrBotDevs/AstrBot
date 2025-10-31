@@ -37,7 +37,10 @@ else:
 @register_platform_adapter("discord", "Discord 适配器 (基于 Pycord)")
 class DiscordPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
@@ -53,7 +56,9 @@ class DiscordPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         """通过会话发送消息"""
         # 创建一个 message_obj 以便在 event 中使用
@@ -80,7 +85,8 @@ class DiscordPlatformAdapter(Platform):
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
-            user_id=str(self.client_self_id), nickname=self.client.user.display_name,
+            user_id=str(self.client_self_id),
+            nickname=self.client.user.display_name,
         )
         message_obj.self_id = self.client_self_id
         message_obj.session_id = session.session_id
@@ -151,7 +157,9 @@ class DiscordPlatformAdapter(Platform):
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
     def _get_message_type(
-        self, channel: Messageable, guild_id: int | None = None,
+        self,
+        channel: Messageable,
+        guild_id: int | None = None,
     ) -> MessageType:
         """根据 channel 对象和 guild_id 判断消息类型"""
         if guild_id is not None:
@@ -203,7 +211,8 @@ class DiscordPlatformAdapter(Platform):
         abm.group_id = self._get_channel_id(message.channel)
         abm.message_str = content
         abm.sender = MessageMember(
-            user_id=str(message.author.id), nickname=message.author.display_name,
+            user_id=str(message.author.id),
+            nickname=message.author.display_name,
         )
         message_chain = []
         if abm.message_str:
@@ -406,7 +415,8 @@ class DiscordPlatformAdapter(Platform):
             abm.group_id = self._get_channel_id(ctx.channel)
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
-                user_id=str(ctx.author.id), nickname=ctx.author.display_name,
+                user_id=str(ctx.author.id),
+                nickname=ctx.author.display_name,
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
@@ -421,7 +431,8 @@ class DiscordPlatformAdapter(Platform):
 
     @staticmethod
     def _extract_command_info(
-        event_filter: Any, handler_metadata: StarHandlerMetadata,
+        event_filter: Any,
+        handler_metadata: StarHandlerMetadata,
     ) -> tuple[str, str, CommandFilter] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None

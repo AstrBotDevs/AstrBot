@@ -17,7 +17,8 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "anthropic_chat_completion", "Anthropic Claude API 提供商适配器",
+    "anthropic_chat_completion",
+    "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
     def __init__(
@@ -41,7 +42,9 @@ class ProviderAnthropic(Provider):
             self.timeout = int(self.timeout)
 
         self.client = AsyncAnthropic(
-            api_key=self.chosen_api_key, timeout=self.timeout, base_url=self.base_url,
+            api_key=self.chosen_api_key,
+            timeout=self.timeout,
+            base_url=self.base_url,
         )
 
         self.set_model(provider_config["model_config"]["model"])
@@ -74,7 +77,8 @@ class ProviderAnthropic(Provider):
                                 "input": (
                                     json.loads(tool_call["function"]["arguments"])
                                     if isinstance(
-                                        tool_call["function"]["arguments"], str,
+                                        tool_call["function"]["arguments"],
+                                        str,
                                     )
                                     else tool_call["function"]["arguments"]
                                 ),
@@ -136,7 +140,9 @@ class ProviderAnthropic(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet | None,
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -155,7 +161,9 @@ class ProviderAnthropic(Provider):
                     if event.content_block.type == "text":
                         # 文本块开始
                         yield LLMResponse(
-                            role="assistant", completion_text="", is_chunk=True,
+                            role="assistant",
+                            completion_text="",
+                            is_chunk=True,
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
@@ -219,7 +227,9 @@ class ProviderAnthropic(Provider):
 
         # 返回最终的完整结果
         final_response = LLMResponse(
-            role="assistant", completion_text=final_text, is_chunk=False,
+            role="assistant",
+            completion_text=final_text,
+            is_chunk=False,
         )
 
         if final_tool_calls:
@@ -372,8 +382,7 @@ class ProviderAnthropic(Provider):
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:

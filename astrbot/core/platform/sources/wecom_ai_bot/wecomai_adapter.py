@@ -44,7 +44,9 @@ class WecomAIQueueListener:
     """企业微信智能机器人队列监听器，参考webchat的QueueListener设计"""
 
     def __init__(
-        self, queue_mgr: WecomAIQueueMgr, callback: Callable[[dict], Awaitable[None]],
+        self,
+        queue_mgr: WecomAIQueueMgr,
+        callback: Callable[[dict], Awaitable[None]],
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
@@ -89,13 +91,17 @@ class WecomAIQueueListener:
 
 
 @register_platform_adapter(
-    "wecom_ai_bot", "企业微信智能机器人适配器，支持 HTTP 回调接收消息",
+    "wecom_ai_bot",
+    "企业微信智能机器人适配器，支持 HTTP 回调接收消息",
 )
 class WecomAIBotAdapter(Platform):
     """企业微信智能机器人适配器"""
 
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -109,10 +115,12 @@ class WecomAIBotAdapter(Platform):
         self.host = self.config.get("callback_server_host", "0.0.0.0")
         self.bot_name = self.config.get("wecom_ai_bot_name", "")
         self.initial_respond_text = self.config.get(
-            "wecomaibot_init_respond_text", "💭 思考中...",
+            "wecomaibot_init_respond_text",
+            "💭 思考中...",
         )
         self.friend_message_welcome_text = self.config.get(
-            "wecomaibot_friend_message_welcome_text", "",
+            "wecomaibot_friend_message_welcome_text",
+            "",
         )
 
         # 平台元数据
@@ -138,7 +146,8 @@ class WecomAIBotAdapter(Platform):
 
         # 队列监听器
         self.queue_listener = WecomAIQueueListener(
-            wecomai_queue_mgr, self._handle_queued_message,
+            wecomai_queue_mgr,
+            self._handle_queued_message,
         )
 
     async def _handle_queued_message(self, data: dict):
@@ -150,7 +159,9 @@ class WecomAIBotAdapter(Platform):
             logger.error(f"处理队列消息时发生异常: {e}")
 
     async def _process_message(
-        self, message_data: dict[str, Any], callback_params: dict[str, str],
+        self,
+        message_data: dict[str, Any],
+        callback_params: dict[str, str],
     ) -> str | None:
         """处理接收到的消息
 
@@ -173,15 +184,22 @@ class WecomAIBotAdapter(Platform):
                 # create a brand-new unique stream_id for this message session
                 stream_id = f"{session_id}_{generate_random_string(10)}"
                 await self._enqueue_message(
-                    message_data, callback_params, stream_id, session_id,
+                    message_data,
+                    callback_params,
+                    stream_id,
+                    session_id,
                 )
                 wecomai_queue_mgr.set_pending_response(stream_id, callback_params)
 
                 resp = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id, self.initial_respond_text, False,
+                    stream_id,
+                    self.initial_respond_text,
+                    False,
                 )
                 return await self.api_client.encrypt_message(
-                    resp, callback_params["nonce"], callback_params["timestamp"],
+                    resp,
+                    callback_params["nonce"],
+                    callback_params["timestamp"],
                 )
             except Exception as e:
                 logger.error("处理消息时发生异常: %s", e)
@@ -194,7 +212,9 @@ class WecomAIBotAdapter(Platform):
 
                 # 返回结束标志，告诉微信服务器流已结束
                 end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id, "", True,
+                    stream_id,
+                    "",
+                    True,
                 )
                 resp = await self.api_client.encrypt_message(
                     end_message,
@@ -245,7 +265,10 @@ class WecomAIBotAdapter(Platform):
                     image_base64 = []
 
                 plain_message = WecomAIBotStreamMessageBuilder.make_mixed_stream(
-                    stream_id, latest_plain_content, msg_items, finish,
+                    stream_id,
+                    latest_plain_content,
+                    msg_items,
+                    finish,
                 )
                 encrypted_message = await self.api_client.encrypt_message(
                     plain_message,
@@ -389,7 +412,9 @@ class WecomAIBotAdapter(Platform):
         return abm
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         """通过会话发送消息"""
         # 企业微信智能机器人主要通过回调响应，这里记录日志

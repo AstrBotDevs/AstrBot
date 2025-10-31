@@ -117,7 +117,9 @@ class ProviderCoze(Provider):
         return file_id
 
     async def _download_and_upload_image(
-        self, image_url: str, session_id: str | None = None,
+        self,
+        image_url: str,
+        session_id: str | None = None,
     ) -> str:
         """下载图片并上传到 Coze，返回 file_id"""
         # 计算哈希实现缓存
@@ -146,7 +148,9 @@ class ProviderCoze(Provider):
             raise Exception(f"处理图片失败: {e!s}")
 
     async def _process_context_images(
-        self, content: str | list, session_id: str,
+        self,
+        content: str | list,
+        session_id: str,
     ) -> str:
         """处理上下文中的图片内容，将 base64 图片上传并替换为 file_id"""
         try:
@@ -183,7 +187,8 @@ class ProviderCoze(Provider):
                             continue
                         # 计算哈希用于缓存
                         cache_key = self._generate_cache_key(
-                            image_data, is_base64=image_data.startswith("data:image/"),
+                            image_data,
+                            is_base64=image_data.startswith("data:image/"),
                         )
 
                         # 检查缓存
@@ -206,7 +211,8 @@ class ProviderCoze(Provider):
                             elif image_data.startswith(("http://", "https://")):
                                 # URL 图片
                                 file_id = await self._download_and_upload_image(
-                                    image_data, session_id,
+                                    image_data,
+                                    session_id,
                                 )
                                 # 为URL图片也添加缓存
                                 self.file_id_cache[session_id][cache_key] = file_id
@@ -318,7 +324,11 @@ class ProviderCoze(Provider):
         if system_prompt:
             if not self.auto_save_history or not conversation_id:
                 additional_messages.append(
-                    {"role": "system", "content": system_prompt, "content_type": "text"},
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                        "content_type": "text",
+                    },
                 )
 
         if not self.auto_save_history and contexts:
@@ -342,7 +352,8 @@ class ProviderCoze(Provider):
                         )
                     ):
                         processed_content = await self._process_context_images(
-                            content, user_id,
+                            content,
+                            user_id,
                         )
                         additional_messages.append(
                             {
@@ -379,7 +390,8 @@ class ProviderCoze(Provider):
                         if url.startswith(("http://", "https://")):
                             # 网络图片
                             file_id = await self._download_and_upload_image(
-                                url, user_id,
+                                url,
+                                user_id,
                             )
                         else:
                             # 本地文件或 base64
@@ -388,10 +400,13 @@ class ProviderCoze(Provider):
                                 _, encoded = url.split(",", 1)
                                 image_data = base64.b64decode(encoded)
                                 cache_key = self._generate_cache_key(
-                                    url, is_base64=True,
+                                    url,
+                                    is_base64=True,
                                 )
                                 file_id = await self._upload_file(
-                                    image_data, user_id, cache_key,
+                                    image_data,
+                                    user_id,
+                                    cache_key,
                                 )
                             # 本地文件
                             elif os.path.exists(url):
@@ -404,7 +419,9 @@ class ProviderCoze(Provider):
                                     is_base64=False,
                                 )
                                 file_id = await self._upload_file(
-                                    image_data, user_id, cache_key,
+                                    image_data,
+                                    user_id,
+                                    cache_key,
                                 )
                             else:
                                 logger.warning(f"图片文件不存在: {url}")
@@ -586,7 +603,10 @@ class ProviderCoze(Provider):
             self.bot_id = model
 
     async def get_human_readable_context(
-        self, session_id: str, page: int = 1, page_size: int = 10,
+        self,
+        session_id: str,
+        page: int = 1,
+        page_size: int = 10,
     ):
         """获取人类可读的上下文历史"""
         user_id = session_id

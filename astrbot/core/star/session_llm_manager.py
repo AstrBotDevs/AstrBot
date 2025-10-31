@@ -1,5 +1,4 @@
-"""会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态
-"""
+"""会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -25,7 +24,10 @@ class SessionServiceManager:
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id,
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的LLM状态，返回该状态
@@ -50,7 +52,10 @@ class SessionServiceManager:
         )
         session_config["llm_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id,
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
     @staticmethod
@@ -84,7 +89,10 @@ class SessionServiceManager:
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id,
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的TTS状态，返回该状态
@@ -109,7 +117,10 @@ class SessionServiceManager:
         )
         session_config["tts_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id,
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
@@ -147,7 +158,10 @@ class SessionServiceManager:
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id,
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的整体状态，返回该状态
@@ -172,7 +186,10 @@ class SessionServiceManager:
         )
         session_config["session_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id,
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
@@ -209,7 +226,10 @@ class SessionServiceManager:
 
         """
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id,
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         return session_services.get("custom_name")
 
@@ -231,7 +251,10 @@ class SessionServiceManager:
             # 如果传入空名称，则删除自定义名称
             session_config.pop("custom_name", None)
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id,
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(

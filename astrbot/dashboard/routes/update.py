@@ -42,7 +42,9 @@ class UpdateRoute(Route):
             data = await request.json
             pim = data.get("platform_id_map", {})
             await do_migration_v4(
-                self.core_lifecycle.db, pim, self.core_lifecycle.astrbot_config,
+                self.core_lifecycle.db,
+                pim,
+                self.core_lifecycle.astrbot_config,
             )
             return Response().ok(None, "迁移成功。").__dict__
         except Exception as e:
@@ -99,7 +101,9 @@ class UpdateRoute(Route):
 
         try:
             await self.astrbot_updator.update(
-                latest=latest, version=version, proxy=proxy,
+                latest=latest,
+                version=version,
+                proxy=proxy,
             )
 
             try:

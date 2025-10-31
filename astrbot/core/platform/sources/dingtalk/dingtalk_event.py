@@ -20,7 +20,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self.client = client
 
     async def send_with_client(
-        self, client: dingtalk_stream.ChatbotHandler, message: MessageChain,
+        self,
+        client: dingtalk_stream.ChatbotHandler,
+        message: MessageChain,
     ):
         for segment in message.chain:
             if isinstance(segment, Comp.Plain):

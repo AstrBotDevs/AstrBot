@@ -1,5 +1,4 @@
-"""本地 Agent 模式的 AstrBot 插件调用 Stage
-"""
+"""本地 Agent 模式的 AstrBot 插件调用 Stage"""
 
 import traceback
 from collections.abc import AsyncGenerator
@@ -23,7 +22,8 @@ class StarRequestSubStage(Stage):
         self.ctx = ctx
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",

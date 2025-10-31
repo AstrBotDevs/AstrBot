@@ -32,7 +32,11 @@ class WecomAIBotAPIClient:
         self.wxcpt = WXBizJsonMsgCrypt(token, encoding_aes_key, "")  # receiveid 为空串
 
     async def decrypt_message(
-        self, encrypted_data: bytes, msg_signature: str, timestamp: str, nonce: str,
+        self,
+        encrypted_data: bytes,
+        msg_signature: str,
+        timestamp: str,
+        nonce: str,
     ) -> tuple[int, dict[str, Any] | None]:
         """解密企业微信消息
 
@@ -48,7 +52,10 @@ class WecomAIBotAPIClient:
         """
         try:
             ret, decrypted_msg = self.wxcpt.DecryptMsg(
-                encrypted_data, msg_signature, timestamp, nonce,
+                encrypted_data,
+                msg_signature,
+                timestamp,
+                nonce,
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
@@ -73,7 +80,10 @@ class WecomAIBotAPIClient:
             return WecomAIBotConstants.DECRYPT_ERROR, None
 
     async def encrypt_message(
-        self, plain_message: str, nonce: str, timestamp: str,
+        self,
+        plain_message: str,
+        nonce: str,
+        timestamp: str,
     ) -> str | None:
         """加密消息
 
@@ -101,7 +111,11 @@ class WecomAIBotAPIClient:
             return None
 
     def verify_url(
-        self, msg_signature: str, timestamp: str, nonce: str, echostr: str,
+        self,
+        msg_signature: str,
+        timestamp: str,
+        nonce: str,
+        echostr: str,
     ) -> str:
         """验证回调 URL
 
@@ -117,7 +131,10 @@ class WecomAIBotAPIClient:
         """
         try:
             ret, echo_result = self.wxcpt.VerifyURL(
-                msg_signature, timestamp, nonce, echostr,
+                msg_signature,
+                timestamp,
+                nonce,
+                echostr,
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
@@ -132,7 +149,9 @@ class WecomAIBotAPIClient:
             return "verify fail"
 
     async def process_encrypted_image(
-        self, image_url: str, aes_key_base64: str | None = None,
+        self,
+        image_url: str,
+        aes_key_base64: str | None = None,
     ) -> tuple[bool, bytes | str]:
         """下载并解密加密图片
 
@@ -228,7 +247,9 @@ class WecomAIBotStreamMessageBuilder:
 
     @staticmethod
     def make_image_stream(
-        stream_id: str, image_data: bytes, finish: bool = False,
+        stream_id: str,
+        image_data: bytes,
+        finish: bool = False,
     ) -> str:
         """构建图片流消息
 
@@ -261,7 +282,10 @@ class WecomAIBotStreamMessageBuilder:
 
     @staticmethod
     def make_mixed_stream(
-        stream_id: str, content: str, msg_items: list, finish: bool = False,
+        stream_id: str,
+        content: str,
+        msg_items: list,
+        finish: bool = False,
     ) -> str:
         """构建混合类型流消息
 

@@ -150,8 +150,7 @@ class StatRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def test_ghproxy_connection(self):
-        """测试 GitHub 代理连接是否可用。
-        """
+        """测试 GitHub 代理连接是否可用。"""
         try:
             data = await request.get_json()
             proxy_url: str = data.get("proxy_url")
@@ -164,9 +163,13 @@ class StatRoute(Route):
             test_url = f"{proxy_url}/https://github.com/AstrBotDevs/AstrBot/raw/refs/heads/master/.python-version"
             start_time = time.time()
 
-            async with aiohttp.ClientSession() as session, session.get(
-                test_url, timeout=aiohttp.ClientTimeout(total=10),
-            ) as response:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    test_url,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response,
+            ):
                 if response.status == 200:
                     end_time = time.time()
                     _ = await response.text()
@@ -175,9 +178,7 @@ class StatRoute(Route):
                     }
                     return Response().ok(data=ret).__dict__
                 return (
-                    Response()
-                    .error(f"Failed. Status code: {response.status}")
-                    .__dict__
+                    Response().error(f"Failed. Status code: {response.status}").__dict__
                 )
         except Exception as e:
             logger.error(traceback.format_exc())

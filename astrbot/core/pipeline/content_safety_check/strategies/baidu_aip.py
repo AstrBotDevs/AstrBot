@@ -1,5 +1,4 @@
-"""使用此功能应该先 pip install baidu-aip
-"""
+"""使用此功能应该先 pip install baidu-aip"""
 
 from aip import AipContentCensor
 

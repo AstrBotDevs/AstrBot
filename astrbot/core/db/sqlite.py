@@ -62,7 +62,9 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 if timestamp is None:
                     timestamp = datetime.now().replace(
-                        minute=0, second=0, microsecond=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0,
                     )
                 current_hour = timestamp
                 await session.execute(
@@ -268,7 +270,9 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(ConversationV2).where(col(ConversationV2.user_id) == user_id),
+                    delete(ConversationV2).where(
+                        col(ConversationV2.user_id) == user_id
+                    ),
                 )
 
     async def get_session_conversations(
@@ -300,7 +304,8 @@ class SQLiteDatabase(BaseDatabase):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona, col(ConversationV2.persona_id) == Persona.persona_id,
+                    Persona,
+                    col(ConversationV2.persona_id) == Persona.persona_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -341,7 +346,8 @@ class SQLiteDatabase(BaseDatabase):
                     == ConversationV2.conversation_id,
                 )
                 .outerjoin(
-                    Persona, col(ConversationV2.persona_id) == Persona.persona_id,
+                    Persona,
+                    col(ConversationV2.persona_id) == Persona.persona_id,
                 )
                 .where(Preference.scope == "umo", Preference.key == "sel_conv_id")
             )
@@ -401,7 +407,10 @@ class SQLiteDatabase(BaseDatabase):
                 return new_history
 
     async def delete_platform_message_offset(
-        self, platform_id, user_id, offset_sec=86400,
+        self,
+        platform_id,
+        user_id,
+        offset_sec=86400,
     ):
         """Delete platform message history records older than the specified offset."""
         async with self.get_db() as session:
@@ -418,7 +427,11 @@ class SQLiteDatabase(BaseDatabase):
                 )
 
     async def get_platform_message_history(
-        self, platform_id, user_id, page=1, page_size=20,
+        self,
+        platform_id,
+        user_id,
+        page=1,
+        page_size=20,
     ):
         """Get platform message history records."""
         async with self.get_db() as session:
@@ -457,7 +470,11 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalar_one_or_none()
 
     async def insert_persona(
-        self, persona_id, system_prompt, begin_dialogs=None, tools=None,
+        self,
+        persona_id,
+        system_prompt,
+        begin_dialogs=None,
+        tools=None,
     ):
         """Insert a new persona record."""
         async with self.get_db() as session:
@@ -489,7 +506,11 @@ class SQLiteDatabase(BaseDatabase):
             return result.scalars().all()
 
     async def update_persona(
-        self, persona_id, system_prompt=None, begin_dialogs=None, tools=NOT_GIVEN,
+        self,
+        persona_id,
+        system_prompt=None,
+        begin_dialogs=None,
+        tools=NOT_GIVEN,
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -534,7 +555,10 @@ class SQLiteDatabase(BaseDatabase):
                     existing_preference.value = value
                 else:
                     new_preference = Preference(
-                        scope=scope, scope_id=scope_id, key=key, value=value,
+                        scope=scope,
+                        scope_id=scope_id,
+                        key=key,
+                        value=value,
                     )
                     session.add(new_preference)
                 return existing_preference or new_preference

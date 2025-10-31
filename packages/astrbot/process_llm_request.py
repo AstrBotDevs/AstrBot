@@ -63,11 +63,16 @@ class ProcessLLMRequest:
         logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
     async def _ensure_img_caption(
-        self, req: ProviderRequest, cfg: dict, img_cap_prov_id: str,
+        self,
+        req: ProviderRequest,
+        cfg: dict,
+        img_cap_prov_id: str,
     ):
         try:
             caption = await self._request_img_caption(
-                img_cap_prov_id, cfg, req.image_urls,
+                img_cap_prov_id,
+                cfg,
+                req.image_urls,
             )
             if caption:
                 req.prompt = f"(Image Caption: {caption})\n\n{req.prompt}"
@@ -76,12 +81,16 @@ class ProcessLLMRequest:
             logger.error(f"处理图片描述失败: {e}")
 
     async def _request_img_caption(
-        self, provider_id: str, cfg: dict, image_urls: list[str],
+        self,
+        provider_id: str,
+        cfg: dict,
+        image_urls: list[str],
     ) -> str:
         if prov := self.ctx.get_provider_by_id(provider_id):
             if isinstance(prov, Provider):
                 img_cap_prompt = cfg.get(
-                    "image_caption_prompt", "Please describe the image.",
+                    "image_caption_prompt",
+                    "Please describe the image.",
                 )
                 logger.debug(f"Processing image caption with provider: {provider_id}")
                 llm_resp = await prov.text_chat(

@@ -34,7 +34,9 @@ class WecomPlatformEvent(AstrMessageEvent):
 
     @staticmethod
     async def send_with_client(
-        client: WeChatClient, message: MessageChain, user_name: str,
+        client: WeChatClient,
+        message: MessageChain,
+        user_name: str,
     ):
         pass
 
@@ -127,7 +129,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
                     pydub.AudioSegment.from_wav(record_path).export(
-                        record_path_amr, format="amr",
+                        record_path_amr,
+                        format="amr",
                     )
 
                     with open(record_path_amr, "rb") as f:
@@ -155,7 +158,9 @@ class WecomPlatformEvent(AstrMessageEvent):
                     plain_chunks = await self.split_plain(comp.text)
                     for chunk in plain_chunks:
                         self.client.message.send_text(
-                            message_obj.self_id, message_obj.session_id, chunk,
+                            message_obj.self_id,
+                            message_obj.session_id,
+                            chunk,
                         )
                         await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
@@ -182,7 +187,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                     record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
                     pydub.AudioSegment.from_wav(record_path).export(
-                        record_path_amr, format="amr",
+                        record_path_amr,
+                        format="amr",
                     )
 
                     with open(record_path_amr, "rb") as f:

@@ -1,5 +1,4 @@
-"""本地 Agent 模式的 LLM 调用 Stage
-"""
+"""本地 Agent 模式的 LLM 调用 Stage"""
 
 import asyncio
 import copy
@@ -125,7 +124,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             provider=run_context.context.provider,
             request=request,
             run_context=AgentContextWrapper(
-                context=astr_agent_ctx, event=run_context.event,
+                context=astr_agent_ctx,
+                event=run_context.event,
             ),
             tool_executor=FunctionToolExecutor(),
             agent_hooks=tool.agent.run_hooks or BaseAgentRunHooks[AstrAgentContext](),
@@ -245,7 +245,9 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
-            run_context.event, EventType.OnLLMResponseEvent, llm_response,
+            run_context.event,
+            EventType.OnLLMResponseEvent,
+            llm_response,
         )
 
 
@@ -253,7 +255,9 @@ MAIN_AGENT_HOOKS = MainAgentHooks()
 
 
 async def run_agent(
-    agent_runner: AgentRunner, max_step: int = 30, show_tool_use: bool = True,
+    agent_runner: AgentRunner,
+    max_step: int = 30,
+    show_tool_use: bool = True,
 ) -> AsyncGenerator[MessageChain, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.event
@@ -367,7 +371,9 @@ class LLMRequestSubStage(Stage):
         return conversation
 
     async def process(
-        self, event: AstrMessageEvent, _nested: bool = False,
+        self,
+        event: AstrMessageEvent,
+        _nested: bool = False,
     ) -> None | AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
@@ -423,7 +429,9 @@ class LLMRequestSubStage(Stage):
         # 应用知识库
         try:
             await inject_kb_context(
-                umo=event.unified_msg_origin, p_ctx=self.ctx, req=req,
+                umo=event.unified_msg_origin,
+                p_ctx=self.ctx,
+                req=req,
             )
         except Exception as e:
             logger.error(f"调用知识库时遇到问题: {e}")
@@ -564,13 +572,17 @@ class LLMRequestSubStage(Stage):
         )
 
     async def _handle_webchat(
-        self, event: AstrMessageEvent, req: ProviderRequest, prov: Provider,
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+        prov: Provider,
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
         if not req.conversation:
             return
         conversation = await self.conv_manager.get_conversation(
-            event.unified_msg_origin, req.conversation.cid,
+            event.unified_msg_origin,
+            req.conversation.cid,
         )
         if conversation and not req.conversation.title:
             messages = json.loads(conversation.history)
@@ -650,7 +662,9 @@ class LLMRequestSubStage(Stage):
         messages.append({"role": "assistant", "content": llm_response.completion_text})
         messages = list(filter(lambda item: "_no_save" not in item, messages))
         await self.conv_manager.update_conversation(
-            event.unified_msg_origin, req.conversation.cid, history=messages,
+            event.unified_msg_origin,
+            req.conversation.cid,
+            history=messages,
         )
 
     def fix_messages(self, messages: list[dict]) -> list[dict]:

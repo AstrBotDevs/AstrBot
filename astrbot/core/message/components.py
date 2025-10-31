@@ -727,8 +727,7 @@ class Unknown(BaseMessageComponent):
 
 
 class File(BaseMessageComponent):
-    """文件消息段
-    """
+    """文件消息段"""
 
     type = ComponentType.File
     name: str | None = ""  # 名字
@@ -755,11 +754,9 @@ class File(BaseMessageComponent):
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     logger.warning(
-
-                            "不可以在异步上下文中同步等待下载! "
-                            "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                            "请使用 await get_file() 代替直接获取 <File>.file 字段",
-
+                        "不可以在异步上下文中同步等待下载! "
+                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
                     )
                     return ""
                 # 等待下载完成

@@ -40,10 +40,14 @@ class WecomServer:
         self.encoding_aes_key = config.get("encoding_aes_key")
         self.appid = config.get("appid")
         self.server.add_url_rule(
-            "/callback/command", view_func=self.verify, methods=["GET"],
+            "/callback/command",
+            view_func=self.verify,
+            methods=["GET"],
         )
         self.server.add_url_rule(
-            "/callback/command", view_func=self.callback_command, methods=["POST"],
+            "/callback/command",
+            view_func=self.callback_command,
+            methods=["POST"],
         )
         self.crypto = WeChatCrypto(self.token, self.encoding_aes_key, self.appid)
 
@@ -112,14 +116,18 @@ class WecomServer:
 @register_platform_adapter("weixin_official_account", "微信公众平台 适配器")
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
-            "api_base_url", "https://api.weixin.qq.com/cgi-bin/",
+            "api_base_url",
+            "https://api.weixin.qq.com/cgi-bin/",
         )
         self.active_send_mode = self.config.get("active_send_mode", False)
 
@@ -160,7 +168,8 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         await self.convert_message(msg, future)
                     # I love shield so much!
                     result = await asyncio.wait_for(
-                        asyncio.shield(future), 60,
+                        asyncio.shield(future),
+                        60,
                     )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
                     self.wexin_event_workers.pop(msg.id, None)
@@ -174,7 +183,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         await super().send_by_session(session, message_chain)
 
@@ -191,7 +202,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         await self.server.start_polling()
 
     async def convert_message(
-        self, msg, future: asyncio.Future = None,
+        self,
+        msg,
+        future: asyncio.Future = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
@@ -223,7 +236,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             assert isinstance(msg, VoiceMessage)
 
             resp: Response = await asyncio.get_event_loop().run_in_executor(
-                None, self.client.media.download, msg.media_id,
+                None,
+                self.client.media.download,
+                msg.media_id,
             )
             path = f"data/temp/wecom_{msg.media_id}.amr"
             with open(path, "wb") as f:

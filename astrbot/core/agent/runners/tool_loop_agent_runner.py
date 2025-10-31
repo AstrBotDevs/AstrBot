@@ -242,7 +242,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 try:
                     await self.agent_hooks.on_tool_start(
-                        self.run_context, func_tool, valid_params,
+                        self.run_context,
+                        func_tool,
+                        valid_params,
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
@@ -321,7 +323,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if res := self.run_context.event.get_result():
                             if res.chain:
                                 yield MessageChain(
-                                    chain=res.chain, type="tool_direct_result",
+                                    chain=res.chain,
+                                    type="tool_direct_result",
                                 )
                     else:
                         # 不应该出现其他类型
@@ -331,7 +334,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 try:
                     await self.agent_hooks.on_tool_end(
-                        self.run_context, func_tool, func_tool_args, _final_resp,
+                        self.run_context,
+                        func_tool,
+                        func_tool_args,
+                        _final_resp,
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)

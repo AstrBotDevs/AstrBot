@@ -10,15 +10,16 @@ class Result:
 
 class BaseVecDB:
     async def initialize(self):
-        """初始化向量数据库
-        """
+        """初始化向量数据库"""
 
     @abc.abstractmethod
     async def insert(
-        self, content: str, metadata: dict | None = None, id: str | None = None,
+        self,
+        content: str,
+        metadata: dict | None = None,
+        id: str | None = None,
     ) -> int:
-        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。
-        """
+        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。"""
         ...
 
     @abc.abstractmethod

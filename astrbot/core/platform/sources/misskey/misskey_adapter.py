@@ -48,7 +48,10 @@ DEFAULT_UPLOAD_CONCURRENCY = 3
 @register_platform_adapter("misskey", "Misskey 平台适配器")
 class MisskeyPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config or {}
@@ -57,7 +60,8 @@ class MisskeyPlatformAdapter(Platform):
         self.access_token = self.config.get("misskey_token", "")
         self.max_message_length = self.config.get("max_message_length", 3000)
         self.default_visibility = self.config.get(
-            "misskey_default_visibility", "public",
+            "misskey_default_visibility",
+            "public",
         )
         self.local_only = self.config.get("misskey_local_only", False)
         self.enable_chat = self.config.get("misskey_enable_chat", True)
@@ -155,12 +159,17 @@ class MisskeyPlatformAdapter(Platform):
         if self.enable_chat:
             streaming.add_message_handler("newChatMessage", self._handle_chat_message)
             streaming.add_message_handler(
-                "messaging:newChatMessage", self._handle_chat_message,
+                "messaging:newChatMessage",
+                self._handle_chat_message,
             )
             streaming.add_message_handler("_debug", self._debug_handler)
 
     async def _send_text_only_message(
-        self, session_id: str, text: str, session, message_chain,
+        self,
+        session_id: str,
+        text: str,
+        session,
+        message_chain,
     ):
         """发送纯文本消息（无文件上传）"""
         if not self.api:
@@ -182,7 +191,10 @@ class MisskeyPlatformAdapter(Platform):
         return await super().send_by_session(session, message_chain)
 
     def _process_poll_data(
-        self, message: AstrBotMessage, poll: dict[str, Any], message_parts: list[str],
+        self,
+        message: AstrBotMessage,
+        poll: dict[str, Any],
+        message_parts: list[str],
     ):
         """处理投票数据，将其添加到消息中"""
         try:
@@ -208,7 +220,8 @@ class MisskeyPlatformAdapter(Platform):
                 break
 
         if hasattr(session, "extra_data") and isinstance(
-            getattr(session, "extra_data", None), dict,
+            getattr(session, "extra_data", None),
+            dict,
         ):
             extra_data = session.extra_data
             fields.update(
@@ -354,7 +367,9 @@ class MisskeyPlatformAdapter(Platform):
         return False
 
     async def send_by_session(
-        self, session: MessageSession, message_chain: MessageChain,
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
     ) -> Awaitable[Any]:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
@@ -406,13 +421,17 @@ class MisskeyPlatformAdapter(Platform):
 
             if not self.enable_file_upload:
                 return await self._send_text_only_message(
-                    session_id, text, session, message_chain,
+                    session_id,
+                    text,
+                    session,
+                    message_chain,
                 )
 
             MAX_UPLOAD_CONCURRENCY = 10
             upload_concurrency = int(
                 self.config.get(
-                    "misskey_upload_concurrency", DEFAULT_UPLOAD_CONCURRENCY,
+                    "misskey_upload_concurrency",
+                    DEFAULT_UPLOAD_CONCURRENCY,
                 ),
             )
             upload_concurrency = min(upload_concurrency, MAX_UPLOAD_CONCURRENCY)
@@ -440,7 +459,9 @@ class MisskeyPlatformAdapter(Platform):
                             return None
 
                         preferred_name = getattr(comp, "name", None) or getattr(
-                            comp, "file", None,
+                            comp,
+                            "file",
+                            None,
                         )
 
                         # URL 上传：下载后本地上传
@@ -622,7 +643,11 @@ class MisskeyPlatformAdapter(Platform):
             unique_session=self.unique_session,
         )
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False,
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.client_self_id,
+            is_chat=False,
         )
 
         message_parts = []
@@ -630,7 +655,10 @@ class MisskeyPlatformAdapter(Platform):
 
         if raw_text:
             text_parts, processed_text = process_at_mention(
-                message, raw_text, self._bot_username, self.client_self_id,
+                message,
+                raw_text,
+                self._bot_username,
+                self.client_self_id,
             )
             message_parts.extend(text_parts)
 
@@ -664,7 +692,11 @@ class MisskeyPlatformAdapter(Platform):
             unique_session=self.unique_session,
         )
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=True,
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.client_self_id,
+            is_chat=True,
         )
 
         raw_text = raw_data.get("text", "")
@@ -691,7 +723,11 @@ class MisskeyPlatformAdapter(Platform):
         )
 
         cache_user_info(
-            self._user_cache, sender_info, raw_data, self.client_self_id, is_chat=False,
+            self._user_cache,
+            sender_info,
+            raw_data,
+            self.client_self_id,
+            is_chat=False,
         )
         cache_room_info(self._user_cache, raw_data, self.client_self_id)
 
@@ -701,7 +737,10 @@ class MisskeyPlatformAdapter(Platform):
         if raw_text:
             if self._bot_username and f"@{self._bot_username}" in raw_text:
                 text_parts, processed_text = process_at_mention(
-                    message, raw_text, self._bot_username, self.client_self_id,
+                    message,
+                    raw_text,
+                    self._bot_username,
+                    self.client_self_id,
                 )
                 message_parts.extend(text_parts)
             else:

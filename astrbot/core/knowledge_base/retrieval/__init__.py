@@ -1,5 +1,4 @@
-"""检索模块
-"""
+"""检索模块"""
 
 from .manager import RetrievalManager, RetrievalResult
 from .rank_fusion import FusedResult, RankFusion

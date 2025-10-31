@@ -69,7 +69,10 @@ class QueueListener:
 @register_platform_adapter("webchat", "webchat")
 class WebChatAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -80,11 +83,15 @@ class WebChatAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.metadata = PlatformMetadata(
-            name="webchat", description="webchat", id="webchat",
+            name="webchat",
+            description="webchat",
+            id="webchat",
         )
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         await WebChatMessageEvent._send(message_chain, session.session_id)
         await super().send_by_session(session, message_chain)

@@ -1,5 +1,4 @@
-"""企业微信智能机器人平台适配器包
-"""
+"""企业微信智能机器人平台适配器包"""
 
 from .wecomai_adapter import WecomAIBotAdapter
 from .wecomai_api import WecomAIBotAPIClient

@@ -40,7 +40,8 @@ class botClient(Client):
     # 收到群消息
     async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE,
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
             abm.sender.user_id if self.platform.unique_session else message.group_openid
@@ -50,7 +51,8 @@ class botClient(Client):
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE,
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
             abm.sender.user_id if self.platform.unique_session else message.channel_id
@@ -60,7 +62,8 @@ class botClient(Client):
     # 收到私聊消息
     async def on_direct_message_create(self, message: botpy.message.DirectMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE,
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self._commit(abm)
@@ -68,7 +71,8 @@ class botClient(Client):
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE,
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self._commit(abm)
@@ -88,7 +92,10 @@ class botClient(Client):
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue,
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -108,7 +115,8 @@ class QQOfficialPlatformAdapter(Platform):
             )
         else:
             self.intents = botpy.Intents(
-                public_guild_messages=True, direct_message=guild_dm,
+                public_guild_messages=True,
+                direct_message=guild_dm,
             )
         self.client = botClient(
             intents=self.intents,
@@ -121,7 +129,9 @@ class QQOfficialPlatformAdapter(Platform):
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain,
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
@@ -146,7 +156,8 @@ class QQOfficialPlatformAdapter(Platform):
         msg: list[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
-            message, botpy.message.C2CMessage,
+            message,
+            botpy.message.C2CMessage,
         ):
             if isinstance(message, botpy.message.GroupMessage):
                 abm.sender = MessageMember(message.author.member_openid, "")
@@ -168,7 +179,8 @@ class QQOfficialPlatformAdapter(Platform):
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
-            message, botpy.message.DirectMessage,
+            message,
+            botpy.message.DirectMessage,
         ):
             try:
                 abm.self_id = str(message.mentions[0].id)
@@ -176,7 +188,8 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.self_id = ""
 
             plain_content = message.content.replace(
-                "<@!" + str(abm.self_id) + ">", "",
+                "<@!" + str(abm.self_id) + ">",
+                "",
             ).strip()
 
             if message.attachments:
@@ -190,7 +203,8 @@ class QQOfficialPlatformAdapter(Platform):
             abm.message = msg
             abm.message_str = plain_content
             abm.sender = MessageMember(
-                str(message.author.id), str(message.author.username),
+                str(message.author.id),
+                str(message.author.username),
             )
             msg.append(At(qq="qq_official"))
             msg.append(Plain(plain_content))

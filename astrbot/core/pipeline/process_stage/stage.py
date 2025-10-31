@@ -24,7 +24,8 @@ class ProcessStage(Stage):
         await self.star_request_sub_stage.initialize(ctx)
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(

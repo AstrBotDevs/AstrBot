@@ -111,7 +111,9 @@ class AstrBotConfig(dict):
                 else:
                     # 递归检查并同步顺序
                     child_has_new = self.check_config_integrity(
-                        value, conf[key], path + "." + key if path else key,
+                        value,
+                        conf[key],
+                        path + "." + key if path else key,
                     )
                     new_conf[key] = conf[key]
                     has_new |= child_has_new

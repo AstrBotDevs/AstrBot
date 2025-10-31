@@ -38,7 +38,10 @@ class InitialLoader:
         webui_dir = self.webui_dir
 
         self.dashboard_server = AstrBotDashboard(
-            core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event, webui_dir,
+            core_lifecycle,
+            self.db,
+            core_lifecycle.dashboard_shutdown_event,
+            webui_dir,
         )
 
         coro = self.dashboard_server.run()

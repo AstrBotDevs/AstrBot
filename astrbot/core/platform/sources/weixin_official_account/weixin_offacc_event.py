@@ -31,7 +31,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     @staticmethod
     async def send_with_client(
-        client: WeChatClient, message: MessageChain, user_name: str,
+        client: WeChatClient,
+        message: MessageChain,
+        user_name: str,
     ):
         pass
 
@@ -135,7 +137,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 # 转成amr
                 record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
                 pydub.AudioSegment.from_wav(record_path).export(
-                    record_path_amr, format="amr",
+                    record_path_amr,
+                    format="amr",
                 )
 
                 with open(record_path_amr, "rb") as f:

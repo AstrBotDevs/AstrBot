@@ -26,5 +26,7 @@ class BaseAgentRunHooks(Generic[TContext]):
         tool_result: mcp.types.CallToolResult | None,
     ): ...
     async def on_agent_done(
-        self, run_context: ContextWrapper[TContext], llm_response: LLMResponse,
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
     ): ...

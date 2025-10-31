@@ -1,5 +1,4 @@
-"""文档解析器模块
-"""
+"""文档解析器模块"""
 
 from .base import BaseParser, MediaItem, ParseResult
 from .pdf_parser import PDFParser

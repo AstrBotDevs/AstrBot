@@ -17,7 +17,8 @@ class SessionStatusCheckStage(Stage):
         self.conv_mgr = ctx.plugin_manager.context.conversation_manager
 
     async def process(
-        self, event: AstrMessageEvent,
+        self,
+        event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         # 检查会话是否整体启用
         if not SessionServiceManager.is_session_enabled(event.unified_msg_origin):
@@ -29,7 +30,8 @@ class SessionStatusCheckStage(Stage):
             )
             if not conv_id:
                 await self.conv_mgr.new_conversation(
-                    event.unified_msg_origin, platform_id=event.get_platform_id(),
+                    event.unified_msg_origin,
+                    platform_id=event.get_platform_id(),
                 )
 
             event.stop_event()

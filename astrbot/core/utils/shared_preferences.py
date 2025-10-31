@@ -15,7 +15,8 @@ class SharedPreferences:
     def __init__(self, db_helper: BaseDatabase, json_storage_path=None):
         if json_storage_path is None:
             json_storage_path = os.path.join(
-                get_astrbot_data_path(), "shared_preferences.json",
+                get_astrbot_data_path(),
+                "shared_preferences.json",
             )
         self.path = json_storage_path
         self.db_helper = db_helper
@@ -44,7 +45,10 @@ class SharedPreferences:
         )
 
     async def range_get_async(
-        self, scope: str, scope_id: str | None = None, key: str | None = None,
+        self,
+        scope: str,
+        scope_id: str | None = None,
+        key: str | None = None,
     ) -> list[Preference]:
         """获取指定范围的偏好设置
         Note: 返回 Preference 列表，其中的 value 属性是一个 dict，value["val"] 为值。scope_id 和 key 可以为 None，这时返回该范围下所有的偏好设置。
@@ -54,21 +58,33 @@ class SharedPreferences:
 
     @overload
     async def session_get(
-        self, umo: None, key: str, default: Any = None,
+        self,
+        umo: None,
+        key: str,
+        default: Any = None,
     ) -> list[Preference]: ...
 
     @overload
     async def session_get(
-        self, umo: str, key: None, default: Any = None,
+        self,
+        umo: str,
+        key: None,
+        default: Any = None,
     ) -> list[Preference]: ...
 
     @overload
     async def session_get(
-        self, umo: None, key: None, default: Any = None,
+        self,
+        umo: None,
+        key: None,
+        default: Any = None,
     ) -> list[Preference]: ...
 
     async def session_get(
-        self, umo: str | None, key: str | None = None, default: _VT = None,
+        self,
+        umo: str | None,
+        key: str | None = None,
+        default: _VT = None,
     ) -> _VT | list[Preference]:
         """获取会话范围的偏好设置
 
@@ -85,7 +101,9 @@ class SharedPreferences:
     async def global_get(self, key: str, default: _VT = None) -> _VT: ...
 
     async def global_get(
-        self, key: str | None, default: _VT = None,
+        self,
+        key: str | None,
+        default: _VT = None,
     ) -> _VT | list[Preference]:
         """获取全局范围的偏好设置
 
@@ -98,7 +116,10 @@ class SharedPreferences:
     async def put_async(self, scope: str, scope_id: str, key: str, value: Any):
         """设置指定范围和键的偏好设置"""
         await self.db_helper.insert_preference_or_update(
-            scope, scope_id, key, {"val": value},
+            scope,
+            scope_id,
+            key,
+            {"val": value},
         )
 
     async def session_put(self, umo: str, key: str, value: Any):
@@ -149,11 +170,15 @@ class SharedPreferences:
         return result if result is not None else default
 
     def range_get(
-        self, scope: str, scope_id: str | None = None, key: str | None = None,
+        self,
+        scope: str,
+        scope_id: str | None = None,
+        key: str | None = None,
     ) -> list[Preference]:
         """获取指定范围的偏好设置（已弃用）"""
         result = asyncio.run_coroutine_threadsafe(
-            self.range_get_async(scope, scope_id, key), self._sync_loop,
+            self.range_get_async(scope, scope_id, key),
+            self._sync_loop,
         ).result()
 
         return result

@@ -32,7 +32,8 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
-                proxy=proxy if proxy else None, follow_redirects=True,
+                proxy=proxy if proxy else None,
+                follow_redirects=True,
             ) as client:
                 resp = client.get(release_url)
                 resp.raise_for_status()
@@ -55,7 +56,8 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
 
         # 下载并解压
         with httpx.Client(
-            proxy=proxy if proxy else None, follow_redirects=True,
+            proxy=proxy if proxy else None,
+            follow_redirects=True,
         ) as client:
             resp = client.get(download_url)
             if (
@@ -170,7 +172,8 @@ def build_plug_list(plugins_dir: Path) -> list:
             )
             if (
                 VersionComparator.compare_version(
-                    local_plugin["version"], online_plugin["version"],
+                    local_plugin["version"],
+                    online_plugin["version"],
                 )
                 < 0
             ):
@@ -188,7 +191,10 @@ def build_plug_list(plugins_dir: Path) -> list:
 
 
 def manage_plugin(
-    plugin: dict, plugins_dir: Path, is_update: bool = False, proxy: str | None = None,
+    plugin: dict,
+    plugins_dir: Path,
+    is_update: bool = False,
+    proxy: str | None = None,
 ) -> None:
     """安装或更新插件
 

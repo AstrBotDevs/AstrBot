@@ -76,7 +76,10 @@ class ProviderManager:
         return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
-        self, provider_id: str, provider_type: ProviderType, umo: str | None = None,
+        self,
+        provider_id: str,
+        provider_type: ProviderType,
+        umo: str | None = None,
     ):
         """设置提供商。
 
@@ -101,17 +104,20 @@ class ProviderManager:
 
         prov = self.inst_map[provider_id]
         if provider_type == ProviderType.TEXT_TO_SPEECH and isinstance(
-            prov, TTSProvider,
+            prov,
+            TTSProvider,
         ):
             self.curr_tts_provider_inst = prov
             sp.put("curr_provider_tts", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.SPEECH_TO_TEXT and isinstance(
-            prov, STTProvider,
+            prov,
+            STTProvider,
         ):
             self.curr_stt_provider_inst = prov
             sp.put("curr_provider_stt", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.CHAT_COMPLETION and isinstance(
-            prov, Provider,
+            prov,
+            Provider,
         ):
             self.curr_provider_inst = prov
             sp.put("curr_provider", provider_id, scope="global", scope_id="global")
@@ -121,7 +127,9 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None,
+        self,
+        provider_type: ProviderType,
+        umo=None,
     ) -> Provider | STTProvider | TTSProvider | None:
         """获取正在使用的提供商实例。
 

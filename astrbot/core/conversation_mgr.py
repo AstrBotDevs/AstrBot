@@ -24,7 +24,8 @@ class ConversationManager:
         self._on_session_deleted_callbacks: list[Callable[[str], Awaitable[None]]] = []
 
     def register_on_session_deleted(
-        self, callback: Callable[[str], Awaitable[None]],
+        self,
+        callback: Callable[[str], Awaitable[None]],
     ) -> None:
         """注册会话删除回调函数.
 
@@ -115,7 +116,9 @@ class ConversationManager:
         await sp.session_put(unified_msg_origin, "sel_conv_id", conversation_id)
 
     async def delete_conversation(
-        self, unified_msg_origin: str, conversation_id: str | None = None,
+        self,
+        unified_msg_origin: str,
+        conversation_id: str | None = None,
     ):
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
 
@@ -190,7 +193,9 @@ class ConversationManager:
         return conv_res
 
     async def get_conversations(
-        self, unified_msg_origin: str | None = None, platform_id: str | None = None,
+        self,
+        unified_msg_origin: str | None = None,
+        platform_id: str | None = None,
     ) -> list[Conversation]:
         """获取对话列表.
 
@@ -202,7 +207,8 @@ class ConversationManager:
 
         """
         convs = await self.db.get_conversations(
-            user_id=unified_msg_origin, platform_id=platform_id,
+            user_id=unified_msg_origin,
+            platform_id=platform_id,
         )
         convs_res = []
         for conv in convs:
@@ -346,7 +352,8 @@ class ConversationManager:
                     temp_contexts.append(f"Assistant: {record['content']}")
                 elif "tool_calls" in record:
                     tool_calls_str = json.dumps(
-                        record["tool_calls"], ensure_ascii=False,
+                        record["tool_calls"],
+                        ensure_ascii=False,
                     )
                     temp_contexts.append(f"Assistant: [函数调用] {tool_calls_str}")
                 else:

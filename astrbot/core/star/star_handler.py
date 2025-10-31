@@ -67,7 +67,8 @@ class StarHandlerRegistry(Generic[T]):
         return self.star_handlers_map.get(full_name, None)
 
     def get_handlers_by_module_name(
-        self, module_name: str,
+        self,
+        module_name: str,
     ) -> list[StarHandlerMetadata]:
         return [
             handler
@@ -141,5 +142,6 @@ class StarHandlerMetadata:
     def __lt__(self, other: StarHandlerMetadata):
         """定义小于运算符以支持优先队列"""
         return self.extras_configs.get("priority", 0) < other.extras_configs.get(
-            "priority", 0,
+            "priority",
+            0,
         )

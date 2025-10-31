@@ -91,7 +91,9 @@ class AstrBotCoreLifecycle:
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
-            default_config=self.astrbot_config, ucr=self.umop_config_router, sp=sp,
+            default_config=self.astrbot_config,
+            ucr=self.umop_config_router,
+            sp=sp,
         )
 
         # 4.5 to 4.6 migration for umop_config_router
@@ -110,7 +112,9 @@ class AstrBotCoreLifecycle:
 
         # 初始化供应商管理器
         self.provider_manager = ProviderManager(
-            self.astrbot_config_mgr, self.db, self.persona_mgr,
+            self.astrbot_config_mgr,
+            self.db,
+            self.persona_mgr,
         )
 
         # 初始化平台管理器
@@ -158,7 +162,9 @@ class AstrBotCoreLifecycle:
 
         # 初始化事件总线
         self.event_bus = EventBus(
-            self.event_queue, self.pipeline_scheduler_mapping, self.astrbot_config_mgr,
+            self.event_queue,
+            self.pipeline_scheduler_mapping,
+            self.astrbot_config_mgr,
         )
 
         # 记录启动时间
@@ -178,7 +184,8 @@ class AstrBotCoreLifecycle:
         # 创建一个异步任务来执行事件总线的 dispatch() 方法
         # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
         event_bus_task = asyncio.create_task(
-            self.event_bus.dispatch(), name="event_bus",
+            self.event_bus.dispatch(),
+            name="event_bus",
         )
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
@@ -272,7 +279,9 @@ class AstrBotCoreLifecycle:
         await self.kb_manager.terminate()
         self.dashboard_shutdown_event.set()
         threading.Thread(
-            target=self.astrbot_updator._reboot, name="restart", daemon=True,
+            target=self.astrbot_updator._reboot,
+            name="restart",
+            daemon=True,
         ).start()
 
     def load_platform(self) -> list[asyncio.Task]:

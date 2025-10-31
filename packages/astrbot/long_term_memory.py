@@ -67,7 +67,10 @@ class LongTermMemory:
         return cnt
 
     async def get_image_caption(
-        self, image_url: str, image_caption_provider_id: str, image_caption_prompt: str,
+        self,
+        image_url: str,
+        image_caption_provider_id: str,
+        image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
