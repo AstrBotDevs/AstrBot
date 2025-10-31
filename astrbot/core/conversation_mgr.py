@@ -1,4 +1,4 @@
-"""AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json 格式的shared_preferences, 另外一个是数据库
+"""AstrBot 会话-对话管理器, 维护两个本地存储, 其中一个是 json 格式的shared_preferences, 另外一个是数据库.
 
 在 AstrBot 中, 会话和对话是独立的, 会话用于标记对话窗口, 例如群聊"123456789"可以建立一个会话,
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
@@ -26,7 +26,7 @@ class ConversationManager:
     def register_on_session_deleted(
         self, callback: Callable[[str], Awaitable[None]],
     ) -> None:
-        """注册会话删除回调函数
+        """注册会话删除回调函数.
 
         其他模块可以注册回调来响应会话删除事件，实现级联清理。
         例如：知识库模块可以注册回调来清理会话的知识库配置。
@@ -38,7 +38,7 @@ class ConversationManager:
         self._on_session_deleted_callbacks.append(callback)
 
     async def _trigger_session_deleted(self, unified_msg_origin: str) -> None:
-        """触发会话删除回调
+        """触发会话删除回调.
 
         Args:
             unified_msg_origin: 会话ID
@@ -77,7 +77,7 @@ class ConversationManager:
         title: str | None = None,
         persona_id: str | None = None,
     ) -> str:
-        """新建对话，并将当前会话的对话转移到新对话
+        """新建对话，并将当前会话的对话转移到新对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
@@ -169,11 +169,12 @@ class ConversationManager:
         conversation_id: str,
         create_if_not_exists: bool = False,
     ) -> Conversation | None:
-        """获取会话的对话
+        """获取会话的对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+            create_if_not_exists (bool): 如果对话不存在,是否创建一个新的对话
         Returns:
             conversation (Conversation): 对话对象
 
@@ -191,7 +192,7 @@ class ConversationManager:
     async def get_conversations(
         self, unified_msg_origin: str | None = None, platform_id: str | None = None,
     ) -> list[Conversation]:
-        """获取对话列表
+        """获取对话列表.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id，可选
@@ -217,7 +218,7 @@ class ConversationManager:
         search_query: str = "",
         **kwargs,
     ) -> tuple[list[Conversation], int]:
-        """获取过滤后的对话列表
+        """获取过滤后的对话列表.
 
         Args:
             page (int): 页码, 默认为 1
@@ -248,8 +249,8 @@ class ConversationManager:
         history: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
-    ):
-        """更新会话的对话
+    ) -> None:
+        """更新会话的对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
@@ -269,14 +270,17 @@ class ConversationManager:
             )
 
     async def update_conversation_title(
-        self, unified_msg_origin: str, title: str, conversation_id: str | None = None,
-    ):
-        """更新会话的对话标题
+        self,
+        unified_msg_origin: str,
+        title: str,
+        conversation_id: str | None = None,
+    ) -> None:
+        """更新会话的对话标题.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             title (str): 对话标题
-
+            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         Deprecated:
             Use `update_conversation` with `title` parameter instead.
 
@@ -292,13 +296,13 @@ class ConversationManager:
         unified_msg_origin: str,
         persona_id: str,
         conversation_id: str | None = None,
-    ):
-        """更新会话的对话 Persona ID
+    ) -> None:
+        """更新会话的对话 Persona ID.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             persona_id (str): 对话 Persona ID
-
+            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
         Deprecated:
             Use `update_conversation` with `persona_id` parameter instead.
 
@@ -310,9 +314,13 @@ class ConversationManager:
         )
 
     async def get_human_readable_context(
-        self, unified_msg_origin, conversation_id, page=1, page_size=10,
-    ):
-        """获取人类可读的上下文
+        self,
+        unified_msg_origin: str,
+        conversation_id: str,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[list[str], int]:
+        """获取人类可读的上下文.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
@@ -322,10 +330,14 @@ class ConversationManager:
 
         """
         conversation = await self.get_conversation(unified_msg_origin, conversation_id)
+        if not conversation:
+            return [], 0
         history = json.loads(conversation.history)
 
-        contexts = []
-        temp_contexts = []
+        # contexts_groups 存放按顺序的段落（每个段落是一个 str 列表），
+        # 之后会被展平成一个扁平的 str 列表返回。
+        contexts_groups: list[list[str]] = []
+        temp_contexts: list[str] = []
         for record in history:
             if record["role"] == "user":
                 temp_contexts.append(f"User: {record['content']}")
@@ -339,11 +351,11 @@ class ConversationManager:
                     temp_contexts.append(f"Assistant: [函数调用] {tool_calls_str}")
                 else:
                     temp_contexts.append("Assistant: [未知的内容]")
-                contexts.insert(0, temp_contexts)
+                contexts_groups.insert(0, temp_contexts)
                 temp_contexts = []
 
-        # 展平 contexts 列表
-        contexts = [item for sublist in contexts for item in sublist]
+        # 展平分组后的 contexts 列表为单层字符串列表
+        contexts = [item for sublist in contexts_groups for item in sublist]
 
         # 计算分页
         paged_contexts = contexts[(page - 1) * page_size : page * page_size]

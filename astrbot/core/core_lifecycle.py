@@ -1,4 +1,5 @@
-"""Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
+"""Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
+
 该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
 该类还负责加载和执行插件, 以及处理事件总线的分发。
 
@@ -38,13 +39,14 @@ from .event_bus import EventBus
 
 
 class AstrBotCoreLifecycle:
-    """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作。
+    """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
+
     该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、
     EventBus 等。
     该类还负责加载和执行插件, 以及处理事件总线的分发。
     """
 
-    def __init__(self, log_broker: LogBroker, db: BaseDatabase):
+    def __init__(self, log_broker: LogBroker, db: BaseDatabase) -> None:
         self.log_broker = log_broker  # 初始化日志代理
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
@@ -68,8 +70,10 @@ class AstrBotCoreLifecycle:
                 del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
 
-    async def initialize(self):
-        """初始化 AstrBot 核心生命周期管理类, 负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+    async def initialize(self) -> None:
+        """初始化 AstrBot 核心生命周期管理类.
+
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -169,8 +173,8 @@ class AstrBotCoreLifecycle:
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
 
-    def _load(self):
-        """加载事件总线和任务并初始化"""
+    def _load(self) -> None:
+        """加载事件总线和任务并初始化."""
         # 创建一个异步任务来执行事件总线的 dispatch() 方法
         # dispatch是一个无限循环的协程, 从事件队列中获取事件并处理
         event_bus_task = asyncio.create_task(
@@ -190,8 +194,8 @@ class AstrBotCoreLifecycle:
 
         self.start_time = int(time.time())
 
-    async def _task_wrapper(self, task: asyncio.Task):
-        """异步任务包装器, 用于处理异步任务执行中出现的各种异常
+    async def _task_wrapper(self, task: asyncio.Task) -> None:
+        """异步任务包装器, 用于处理异步任务执行中出现的各种异常.
 
         Args:
             task (asyncio.Task): 要执行的异步任务
@@ -208,8 +212,11 @@ class AstrBotCoreLifecycle:
                 logger.error(f"|    {line}")
             logger.error("-------")
 
-    async def start(self):
-        """启动 AstrBot 核心生命周期管理类, 用load加载事件总线和任务并初始化, 执行启动完成事件钩子"""
+    async def start(self) -> None:
+        """启动 AstrBot 核心生命周期管理类.
+
+        用load加载事件总线和任务并初始化, 执行启动完成事件钩子
+        """
         self._load()
         logger.info("AstrBot 启动完成。")
 
@@ -229,8 +236,8 @@ class AstrBotCoreLifecycle:
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
 
-    async def stop(self):
-        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器"""
+    async def stop(self) -> None:
+        """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
         # 请求停止所有正在运行的异步任务
         for task in self.curr_tasks:
             task.cancel()
@@ -258,7 +265,7 @@ class AstrBotCoreLifecycle:
             except Exception as e:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
 
-    async def restart(self):
+    async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
         await self.provider_manager.terminate()
         await self.platform_manager.terminate()
@@ -282,7 +289,7 @@ class AstrBotCoreLifecycle:
         return tasks
 
     async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
-        """加载消息事件流水线调度器
+        """加载消息事件流水线调度器.
 
         Returns:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
@@ -297,8 +304,8 @@ class AstrBotCoreLifecycle:
             mapping[conf_id] = scheduler
         return mapping
 
-    async def reload_pipeline_scheduler(self, conf_id: str):
-        """重新加载消息事件流水线调度器
+    async def reload_pipeline_scheduler(self, conf_id: str) -> None:
+        """重新加载消息事件流水线调度器.
 
         Returns:
             dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
