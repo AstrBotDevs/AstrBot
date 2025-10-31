@@ -1281,7 +1281,7 @@ CONFIG_METADATA_2 = {
                         "description": "启用原生搜索功能",
                         "type": "bool",
                         "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。",
-                        "condition": {"provider": "xai"}
+                        "condition": {"provider": "xai"},
                     },
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
