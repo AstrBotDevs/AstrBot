@@ -80,10 +80,18 @@ dev = [
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
-
-
 [tool.ruff]
-select = ["ALL"]
+select = [
+  "F", # Pyflakes
+  "W", # pycodestyle warnings
+  "E", # pycodestyle errors
+  "ASYNC", # flake8-async
+  "C4", # flake8-comprehensions
+  "Q", # flake8-quotes
+  "I", # import-order
+  "UP", # pyupgrade
+  "SIM", # flake8-simplify 
+]
 
 exclude = [
   "astrbot/core/utils/t2i/local_strategy.py",
