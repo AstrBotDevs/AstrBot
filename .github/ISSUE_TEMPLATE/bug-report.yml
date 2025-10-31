@@ -6,13 +6,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢您抽出时间报告问题！请准确解释您的问题。如果可能，请提供一个可复现的片段（这有助于更快地解决问题）。
+        感谢您抽出时间报告问题！请准确解释您的问题。如果可能，请提供一个可复现的片段（这有助于更快地解决问题）。请注意，不详细 / 没有日志的 issue 会被直接关闭，谢谢理解。
   - type: textarea
     attributes:
       label: 发生了什么
       description: 描述你遇到的异常
       placeholder: >
-        一个清晰且具体的描述这个异常是什么。
+        一个清晰且具体的描述这个异常是什么。请注意，不详细 / 没有日志的 issue 会被直接关闭，谢谢理解。
     validations:
       required: true
 
@@ -55,7 +55,7 @@ body:
     attributes:
       label: 报错日志
       description: >
-        如报错日志、截图等。请提供完整的 Debug 级别的日志，不要介意它很长！
+        如报错日志、截图等。请提供完整的 Debug 级别的日志，不要介意它很长！请注意，不详细 / 没有日志的 issue 会被直接关闭，谢谢理解。
       placeholder: >
         请提供完整的报错日志或截图。
     validations:

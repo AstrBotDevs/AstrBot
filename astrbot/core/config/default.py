@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.5.0"
+VERSION = "4.5.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -769,6 +769,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "model_config": {"model": "grok-2-latest", "temperature": 0.4},
                         "custom_extra_body": {},
+                        "xai_native_search": False,
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Anthropic": {
@@ -1286,6 +1287,12 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "xai_native_search": {
+                        "description": "启用原生搜索功能",
+                        "type": "bool",
+                        "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。",
+                        "condition": {"provider": "xai"},
+                    },
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
