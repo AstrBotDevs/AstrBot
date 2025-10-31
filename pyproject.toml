@@ -135,7 +135,10 @@ exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
-# 后续子项目也应该一样使用dynamic-versioning
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
