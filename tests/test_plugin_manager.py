@@ -6,10 +6,6 @@ import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.star.context import Context
-from astrbot.core.star.star import star_registry
-from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.star.star_manager import PluginManager
 
 
 @pytest.fixture
@@ -19,6 +15,10 @@ def plugin_manager_pm(tmp_path):
     - Uses a temporary database.
     - Creates a fresh context for each test.
     """
+    # Import here to avoid circular import issues
+    from astrbot.core.star.context import Context
+    from astrbot.core.star.star_manager import PluginManager
+
     # Create temporary resources
     temp_plugins_path = tmp_path / "plugins"
     temp_plugins_path.mkdir()
@@ -39,6 +39,7 @@ def plugin_manager_pm(tmp_path):
     message_history_manager = MagicMock()
     persona_manager = MagicMock()
     astrbot_config_mgr = MagicMock()
+    knowledge_base_manager = MagicMock()
 
     star_context = Context(
         event_queue,
@@ -50,6 +51,7 @@ def plugin_manager_pm(tmp_path):
         message_history_manager,
         persona_manager,
         astrbot_config_mgr,
+        knowledge_base_manager,
     )
 
     # Create the PluginManager instance
@@ -71,8 +73,10 @@ async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_install_plugin(plugin_manager_pm: PluginManager):
+async def test_install_plugin(plugin_manager_pm):
     """Tests successful plugin installation in an isolated environment."""
+    from astrbot.core.star.star import star_registry
+
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_info = await plugin_manager_pm.install_plugin(test_repo)
     plugin_path = os.path.join(
@@ -88,7 +92,7 @@ async def test_install_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
+async def test_install_nonexistent_plugin(plugin_manager_pm):
     """Tests that installing a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
         await plugin_manager_pm.install_plugin(
@@ -97,7 +101,7 @@ async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_update_plugin(plugin_manager_pm: PluginManager):
+async def test_update_plugin(plugin_manager_pm):
     """Tests updating an existing plugin in an isolated environment."""
     # First, install the plugin
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
