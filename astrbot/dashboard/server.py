@@ -213,11 +213,12 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        display = f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"
-        display += f"   ➜  本地: http://localhost:{port}\n"
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
+        parts.append(f"   ➜  本地: http://localhost:{port}\n")
         for ip in ip_addr:
-            display += f"   ➜  网络: http://{ip}:{port}\n"
-        display += "   ➜  默认用户名和密码: astrbot\n ✨✨✨\n"
+            parts.append(f"   ➜  网络: http://{ip}:{port}\n")
+        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+        display = "".join(parts)
 
         if not ip_addr:
             display += (
