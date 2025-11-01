@@ -59,10 +59,11 @@ class PersonaCommands:
                 .use_t2i(False),
             )
         elif l[1] == "list":
-            msg = "人格列表：\n"
+            parts = ["人格列表：\n"]
             for persona in self.context.provider_manager.personas:
-                msg += f"- {persona['name']}\n"
-            msg += "\n\n*输入 `/persona view 人格名` 查看人格详细信息"
+                parts.append(f"- {persona['name']}\n")
+            parts.append("\n\n*输入 `/persona view 人格名` 查看人格详细信息")
+            msg = "".join(parts)
             message.set_result(MessageEventResult().message(msg))
         elif l[1] == "view":
             if len(l) == 2:

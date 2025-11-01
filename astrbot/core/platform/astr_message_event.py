@@ -91,33 +91,34 @@ class AstrMessageEvent(abc.ABC):
         return self.message_str
 
     def _outline_chain(self, chain: list[BaseMessageComponent] | None) -> str:
-        outline = ""
         if not chain:
-            return outline
+            return ""
+
+        parts = []
         for i in chain:
             if isinstance(i, Plain):
-                outline += i.text
+                parts.append(i.text)
             elif isinstance(i, Image):
-                outline += "[图片]"
+                parts.append("[图片]")
             elif isinstance(i, Face):
-                outline += f"[表情:{i.id}]"
+                parts.append(f"[表情:{i.id}]")
             elif isinstance(i, At):
-                outline += f"[At:{i.qq}]"
+                parts.append(f"[At:{i.qq}]")
             elif isinstance(i, AtAll):
-                outline += "[At:全体成员]"
+                parts.append("[At:全体成员]")
             elif isinstance(i, Forward):
                 # 转发消息
-                outline += "[转发消息]"
+                parts.append("[转发消息]")
             elif isinstance(i, Reply):
                 # 引用回复
                 if i.message_str:
-                    outline += f"[引用消息({i.sender_nickname}: {i.message_str})]"
+                    parts.append(f"[引用消息({i.sender_nickname}: {i.message_str})]")
                 else:
-                    outline += "[引用消息]"
+                    parts.append("[引用消息]")
             else:
-                outline += f"[{i.type}]"
-            outline += " "
-        return outline
+                parts.append(f"[{i.type}]")
+            parts.append(" ")
+        return "".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。

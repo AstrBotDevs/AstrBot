@@ -203,14 +203,15 @@ class Main(star.Star):
         if not reminders:
             yield event.plain_result("没有正在进行的待办事项。")
         else:
-            reminder_str = "正在进行的待办事项：\n"
+            parts = ["正在进行的待办事项：\n"]
             for i, reminder in enumerate(reminders):
                 time_ = reminder.get("datetime", "")
                 if not time_:
                     cron_expr = reminder.get("cron", "")
                     time_ = reminder.get("cron_h", "") + f"(Cron: {cron_expr})"
-                reminder_str += f"{i + 1}. {reminder['text']} - {time_}\n"
-            reminder_str += "\n使用 /reminder rm <id> 删除待办事项。\n"
+                parts.append(f"{i + 1}. {reminder['text']} - {time_}\n")
+            parts.append("\n使用 /reminder rm <id> 删除待办事项。\n")
+            reminder_str = "".join(parts)
             yield event.plain_result(reminder_str)
 
     @reminder.command("rm")

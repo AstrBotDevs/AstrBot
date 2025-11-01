@@ -246,12 +246,13 @@ class ResultDecorateStage(Stage):
             elif (
                 result.use_t2i_ is None and self.ctx.astrbot_config["t2i"]
             ) or result.use_t2i_:
-                plain_str = ""
+                parts = []
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        plain_str += "\n\n" + comp.text
+                        parts.append("\n\n" + comp.text)
                     else:
                         break
+                plain_str = "".join(parts)
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
                     try:

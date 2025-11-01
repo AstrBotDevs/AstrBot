@@ -19,38 +19,39 @@ class ProviderCommands:
         umo = event.unified_msg_origin
 
         if idx is None:
-            ret = "## 载入的 LLM 提供商\n"
+            parts = ["## 载入的 LLM 提供商\n"]
             for idx, llm in enumerate(self.context.get_all_providers()):
                 id_ = llm.meta().id
-                ret += f"{idx + 1}. {id_} ({llm.meta().model})"
+                line = f"{idx + 1}. {id_} ({llm.meta().model})"
                 provider_using = self.context.get_using_provider(umo=umo)
                 if provider_using and provider_using.meta().id == id_:
-                    ret += " (当前使用)"
-                ret += "\n"
+                    line += " (当前使用)"
+                parts.append(line + "\n")
 
             tts_providers = self.context.get_all_tts_providers()
             if tts_providers:
-                ret += "\n## 载入的 TTS 提供商\n"
+                parts.append("\n## 载入的 TTS 提供商\n")
                 for idx, tts in enumerate(tts_providers):
                     id_ = tts.meta().id
-                    ret += f"{idx + 1}. {id_}"
+                    line = f"{idx + 1}. {id_}"
                     tts_using = self.context.get_using_tts_provider(umo=umo)
                     if tts_using and tts_using.meta().id == id_:
-                        ret += " (当前使用)"
-                    ret += "\n"
+                        line += " (当前使用)"
+                    parts.append(line + "\n")
 
             stt_providers = self.context.get_all_stt_providers()
             if stt_providers:
-                ret += "\n## 载入的 STT 提供商\n"
+                parts.append("\n## 载入的 STT 提供商\n")
                 for idx, stt in enumerate(stt_providers):
                     id_ = stt.meta().id
-                    ret += f"{idx + 1}. {id_}"
+                    line = f"{idx + 1}. {id_}"
                     stt_using = self.context.get_using_stt_provider(umo=umo)
                     if stt_using and stt_using.meta().id == id_:
-                        ret += " (当前使用)"
-                    ret += "\n"
+                        line += " (当前使用)"
+                    parts.append(line + "\n")
 
-            ret += "\n使用 /provider <序号> 切换 LLM 提供商。"
+            parts.append("\n使用 /provider <序号> 切换 LLM 提供商。")
+            ret = "".join(parts)
 
             if tts_providers:
                 ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
@@ -128,16 +129,17 @@ class ProviderCommands:
                     .use_t2i(False),
                 )
                 return
-            i = 1
-            ret = "下面列出了此模型提供商可用模型:"
-            for model in models:
-                ret += f"\n{i}. {model}"
-                i += 1
+            parts = ["下面列出了此模型提供商可用模型:"]
+            for i, model in enumerate(models, 1):
+                parts.append(f"\n{i}. {model}")
 
             curr_model = prov.get_model() or "无"
-            ret += f"\n当前模型: [{curr_model}]"
+            parts.append(f"\n当前模型: [{curr_model}]")
+            parts.append(
+                "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+            )
 
-            ret += "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+            ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         elif isinstance(idx_or_name, int):
             models = []
@@ -180,14 +182,15 @@ class ProviderCommands:
         if index is None:
             keys_data = prov.get_keys()
             curr_key = prov.get_current_key()
-            ret = "Key:"
-            for i, k in enumerate(keys_data):
-                ret += f"\n{i + 1}. {k[:8]}"
+            parts = ["Key:"]
+            for i, k in enumerate(keys_data, 1):
+                parts.append(f"\n{i}. {k[:8]}")
 
-            ret += f"\n当前 Key: {curr_key[:8]}"
-            ret += "\n当前模型: " + prov.get_model()
-            ret += "\n使用 /key <idx> 切换 Key。"
+            parts.append(f"\n当前 Key: {curr_key[:8]}")
+            parts.append("\n当前模型: " + prov.get_model())
+            parts.append("\n使用 /key <idx> 切换 Key。")
 
+            ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
             keys_data = prov.get_keys()

@@ -148,14 +148,15 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
         except Exception:
             # 如果块发送失败，尝试只发送文本
-            fallback_text = ""
+            parts = []
             for segment in message.chain:
                 if isinstance(segment, Plain):
-                    fallback_text += segment.text
+                    parts.append(segment.text)
                 elif isinstance(segment, File):
-                    fallback_text += f" [文件: {segment.name}] "
+                    parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
-                    fallback_text += " [图片] "
+                    parts.append(" [图片] ")
+            fallback_text = "".join(parts)
 
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
