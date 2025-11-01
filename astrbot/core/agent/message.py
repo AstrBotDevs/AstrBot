@@ -151,7 +151,7 @@ class AssistantMessageSegment(Message):
 class ToolCallMessageSegment(Message):
     """A message segment representing a tool call."""
 
-    role: str = "tool"
+    role: Literal["tool"] = "tool"
     tool_call_id: str
 
 
