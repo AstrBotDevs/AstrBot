@@ -28,7 +28,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             provider_settings,
             default_persona,
         )
-        self.api_key = provider_config.get("dashscope_api_key", "")
+        self.api_key: str = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
             raise Exception("阿里云百炼 API Key 不能为空。")
         self.app_id = provider_config.get("dashscope_app_id", "")
@@ -70,6 +70,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         func_tool=None,
         contexts=None,
         system_prompt=None,
+        tool_calls_result=None,
         model=None,
         **kwargs,
     ) -> LLMResponse:
@@ -79,6 +80,8 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         payload_vars = self.variables.copy()
         # 动态变量
         session_var = await sp.session_get(session_id, "session_variables", default={})
+        if not isinstance(session_var, dict):
+            session_var = {}
         payload_vars.update(session_var)
 
         if (
@@ -163,9 +166,9 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         self,
         prompt,
         session_id=None,
-        image_urls=...,
+        image_urls=None,
         func_tool=None,
-        contexts=...,
+        contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
@@ -190,10 +193,10 @@ class ProviderDashscope(ProviderOpenAIOfficial):
     async def forget(self, session_id):
         return True
 
-    async def get_current_key(self):
+    def get_current_key(self):
         return self.api_key
 
-    async def set_key(self, key):
+    def set_key(self, key):
         raise Exception("阿里云百炼 适配器不支持设置 API Key。")
 
     async def get_models(self):

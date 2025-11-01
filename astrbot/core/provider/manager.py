@@ -1,5 +1,6 @@
 import asyncio
 import traceback
+from typing import Protocol, cast
 
 from astrbot.core import logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -10,11 +11,16 @@ from .entities import ProviderType
 from .provider import (
     EmbeddingProvider,
     Provider,
+    Providers,
     RerankProvider,
     STTProvider,
     TTSProvider,
 )
 from .register import llm_tools, provider_cls_map
+
+
+class HasInitialize(Protocol):
+    async def initialize(self) -> None: ...
 
 
 class ProviderManager:
@@ -47,7 +53,7 @@ class ProviderManager:
         """加载的 Rerank Provider 的实例"""
         self.inst_map: dict[
             str,
-            Provider | STTProvider | TTSProvider | EmbeddingProvider | RerankProvider,
+            Providers,
         ] = {}
         """Provider 实例映射. key: provider_id, value: Provider 实例"""
         self.llm_tools = llm_tools
@@ -122,15 +128,13 @@ class ProviderManager:
             self.curr_provider_inst = prov
             sp.put("curr_provider", provider_id, scope="global", scope_id="global")
 
-    async def get_provider_by_id(self, provider_id: str) -> Provider | None:
+    async def get_provider_by_id(self, provider_id: str) -> Providers | None:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self,
-        provider_type: ProviderType,
-        umo=None,
-    ) -> Provider | STTProvider | TTSProvider | None:
+        self, provider_type: ProviderType, umo=None
+    ) -> Providers | None:
         """获取正在使用的提供商实例。
 
         Args:
@@ -190,34 +194,48 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
-        # 设置默认提供商
-        selected_provider_id = sp.get(
-            "curr_provider",
-            self.provider_settings.get("default_provider_id"),
-            scope="global",
-            scope_id="global",
+        selected_provider_id = cast(
+            str,
+            sp.get(
+                "curr_provider",
+                self.provider_settings.get("default_provider_id"),
+                scope="global",
+                scope_id="global",
+            ),
         )
-        selected_stt_provider_id = sp.get(
-            "curr_provider_stt",
-            self.provider_stt_settings.get("provider_id"),
-            scope="global",
-            scope_id="global",
+        selected_stt_provider_id = cast(
+            str,
+            sp.get(
+                "curr_provider_stt",
+                self.provider_stt_settings.get("provider_id"),
+                scope="global",
+                scope_id="global",
+            ),
         )
-        selected_tts_provider_id = sp.get(
-            "curr_provider_tts",
-            self.provider_tts_settings.get("provider_id"),
-            scope="global",
-            scope_id="global",
+        selected_tts_provider_id = cast(
+            str,
+            sp.get(
+                "curr_provider_tts",
+                self.provider_tts_settings.get("provider_id"),
+                scope="global",
+                scope_id="global",
+            ),
         )
-        self.curr_provider_inst = self.inst_map.get(selected_provider_id)
+        self.curr_provider_inst = cast(
+            Provider | None, self.inst_map.get(selected_provider_id)
+        )
         if not self.curr_provider_inst and self.provider_insts:
             self.curr_provider_inst = self.provider_insts[0]
 
-        self.curr_stt_provider_inst = self.inst_map.get(selected_stt_provider_id)
+        self.curr_stt_provider_inst = cast(
+            STTProvider | None, self.inst_map.get(selected_stt_provider_id)
+        )
         if not self.curr_stt_provider_inst and self.stt_provider_insts:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
 
-        self.curr_tts_provider_inst = self.inst_map.get(selected_tts_provider_id)
+        self.curr_tts_provider_inst = cast(
+            TTSProvider | None, self.inst_map.get(selected_tts_provider_id)
+        )
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
@@ -356,10 +374,11 @@ class ProviderManager:
 
             if provider_metadata.provider_type == ProviderType.SPEECH_TO_TEXT:
                 # STT 任务
+                assert cls_type is type[STTProvider]
                 inst = cls_type(provider_config, self.provider_settings)
 
                 if getattr(inst, "initialize", None):
-                    await inst.initialize()
+                    await cast(HasInitialize, inst).initialize()
 
                 self.stt_provider_insts.append(inst)
                 if (
@@ -375,10 +394,11 @@ class ProviderManager:
 
             elif provider_metadata.provider_type == ProviderType.TEXT_TO_SPEECH:
                 # TTS 任务
+                assert cls_type is type[TTSProvider]
                 inst = cls_type(provider_config, self.provider_settings)
 
                 if getattr(inst, "initialize", None):
-                    await inst.initialize()
+                    await cast(HasInitialize, inst).initialize()
 
                 self.tts_provider_insts.append(inst)
                 if self.provider_settings.get("provider_id") == provider_config["id"]:
@@ -391,6 +411,7 @@ class ProviderManager:
 
             elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
                 # 文本生成任务
+                assert cls_type is type[Provider]
                 inst = cls_type(
                     provider_config,
                     self.provider_settings,
@@ -398,7 +419,7 @@ class ProviderManager:
                 )
 
                 if getattr(inst, "initialize", None):
-                    await inst.initialize()
+                    await cast(HasInitialize, inst).initialize()
 
                 self.provider_insts.append(inst)
                 if (
@@ -413,15 +434,21 @@ class ProviderManager:
                     self.curr_provider_inst = inst
 
             elif provider_metadata.provider_type == ProviderType.EMBEDDING:
+                assert cls_type is type[EmbeddingProvider]
                 inst = cls_type(provider_config, self.provider_settings)
                 if getattr(inst, "initialize", None):
-                    await inst.initialize()
+                    await cast(HasInitialize, inst).initialize()
                 self.embedding_provider_insts.append(inst)
             elif provider_metadata.provider_type == ProviderType.RERANK:
+                assert cls_type is type[RerankProvider]
                 inst = cls_type(provider_config, self.provider_settings)
                 if getattr(inst, "initialize", None):
-                    await inst.initialize()
+                    await cast(HasInitialize, inst).initialize()
                 self.rerank_provider_insts.append(inst)
+            else:
+                # 未知供应商抛出异常，确保inst初始化
+                # Should be unreachable
+                raise Exception(f"未知的提供商类型：{provider_metadata.provider_type}")
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:

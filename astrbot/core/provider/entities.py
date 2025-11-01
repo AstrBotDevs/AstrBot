@@ -16,6 +16,7 @@ from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.provider.provider import Providers
 from astrbot.core.utils.io import download_image_by_url
 
 
@@ -34,7 +35,7 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述."""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: type | None = None
+    cls_type: "type[Providers] | None" = None
 
     default_config_tmpl: dict | None = None
     """平台的默认配置模板"""

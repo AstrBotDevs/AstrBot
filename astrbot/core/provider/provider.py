@@ -2,6 +2,7 @@ import abc
 import asyncio
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from typing import TypeAlias, Union
 
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Personality
@@ -13,13 +14,21 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.register import provider_cls_map
 
+Providers: TypeAlias = Union[
+    "Provider",
+    "STTProvider",
+    "TTSProvider",
+    "EmbeddingProvider",
+    "RerankProvider",
+]
+
 
 @dataclass
 class ProviderMeta:
     id: str
     model: str
     type: str
-    provider_type: ProviderType
+    provider_type: ProviderType | None
 
 
 class AbstractProvider(abc.ABC):
@@ -85,12 +94,12 @@ class Provider(AbstractProvider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: ToolSet = None,
-        contexts: list = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: ToolSet | None = None,
+        contexts: list | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         **kwargs,
     ) -> LLMResponse:
@@ -115,12 +124,12 @@ class Provider(AbstractProvider):
     async def text_chat_stream(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: list[str] = None,
-        func_tool: ToolSet = None,
-        contexts: list = None,
-        system_prompt: str = None,
-        tool_calls_result: ToolCallsResult | list[ToolCallsResult] = None,
+        session_id: str | None = None,
+        image_urls: list[str] | None = None,
+        func_tool: ToolSet | None = None,
+        contexts: list | None = None,
+        system_prompt: str | None = None,
+        tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
@@ -140,6 +149,9 @@ class Provider(AbstractProvider):
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
+        if False:  # pragma: no cover - make this an async generator for typing
+            yield None  # type: ignore
+        raise NotImplementedError()
 
     async def pop_record(self, context: list):
         """弹出 context 第一条非系统提示词对话记录"""

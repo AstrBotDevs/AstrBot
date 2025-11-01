@@ -1,3 +1,5 @@
+from typing import cast
+
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -18,8 +20,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
 
-        api_key: str = provider_config.get("embedding_api_key")
-        api_base: str = provider_config.get("embedding_api_base")
+        api_key: str = provider_config["embedding_api_key"]
+        api_base: str = provider_config["embedding_api_base"]
         timeout: int = int(provider_config.get("timeout", 20))
 
         http_options = types.HttpOptions(timeout=timeout * 1000)
@@ -41,18 +43,26 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 model=self.model,
                 contents=text,
             )
+            assert result.embeddings is not None
+            assert result.embeddings[0].values is not None
             return result.embeddings[0].values
         except APIError as e:
             raise Exception(f"Gemini Embedding API请求失败: {e.message}")
 
-    async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+    async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
         try:
             result = await self.client.models.embed_content(
                 model=self.model,
-                contents=texts,
+                contents=cast(types.ContentListUnion, text),
             )
-            return [embedding.values for embedding in result.embeddings]
+            assert result.embeddings is not None
+
+            embeddings: list[list[float]] = []
+            for embedding in result.embeddings:
+                assert embedding.values is not None
+                embeddings.append(embedding.values)
+            return embeddings
         except APIError as e:
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
 

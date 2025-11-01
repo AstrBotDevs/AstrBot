@@ -6,6 +6,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from typing import cast
 from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
@@ -41,7 +42,7 @@ class OTTSProvider:
 
     async def _sync_time(self):
         try:
-            response = await self.client.get(self.auth_time_url)
+            response = await cast(AsyncClient, self.client).get(self.auth_time_url)
             response.raise_for_status()
             server_time = int(response.json()["timestamp"])
             local_time = int(time.time())
@@ -63,7 +64,7 @@ class OTTSProvider:
         signature = await self._generate_signature()
         for attempt in range(self.retry_count):
             try:
-                response = await self.client.post(
+                response = await cast(AsyncClient, self.client).post(
                     f"{self.api_url}?sign={signature}",
                     data={
                         "text": text,
@@ -88,6 +89,7 @@ class OTTSProvider:
                 if attempt == self.retry_count - 1:
                     raise RuntimeError(f"OTTS请求失败: {e!s}") from e
                 await asyncio.sleep(0.5 * (attempt + 1))
+        raise RuntimeError("OTTS未返回音频文件")
 
 
 class AzureNativeProvider(TTSProvider):
@@ -132,7 +134,7 @@ class AzureNativeProvider(TTSProvider):
         token_url = (
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )
-        response = await self.client.post(
+        response = await cast(AsyncClient, self.client).post(
             token_url,
             headers={"Ocp-Apim-Subscription-Key": self.subscription_key},
         )
@@ -156,7 +158,7 @@ class AzureNativeProvider(TTSProvider):
                 </mstts:express-as>
             </voice>
         </speak>"""
-        response = await self.client.post(
+        response = await cast(AsyncClient, self.client).post(
             self.endpoint,
             content=ssml,
             headers={
@@ -179,8 +181,11 @@ class AzureTTSProvider(TTSProvider):
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
 
-    def _parse_provider(self, key_value: str, config: dict) -> TTSProvider:
+    def _parse_provider(
+        self, key_value: str, config: dict
+    ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
+            json_str = ""
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:

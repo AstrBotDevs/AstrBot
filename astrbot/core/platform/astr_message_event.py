@@ -4,7 +4,7 @@ import hashlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -52,7 +52,7 @@ class AstrMessageEvent(abc.ABC):
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
         self.session = MessageSesion(
-            platform_name=platform_meta.id,
+            platform_name=cast(str, platform_meta.id),
             message_type=message_obj.type,
             session_id=session_id,
         )
@@ -152,7 +152,9 @@ class AstrMessageEvent(abc.ABC):
 
     def get_sender_name(self) -> str:
         """获取消息发送者的名称。(可能会返回空字符串)"""
-        return self.message_obj.sender.nickname
+        if isinstance(self.message_obj.sender.nickname, str):
+            return self.message_obj.sender.nickname
+        return ""
 
     def set_extra(self, key, value):
         """设置额外的信息。"""
@@ -269,7 +271,7 @@ class AstrMessageEvent(abc.ABC):
         """
         self.call_llm = call_llm
 
-    def get_result(self) -> MessageEventResult:
+    def get_result(self) -> MessageEventResult | None:
         """获取消息事件的结果。"""
         return self._result
 
@@ -319,11 +321,11 @@ class AstrMessageEvent(abc.ABC):
         self,
         prompt: str,
         func_tool_manager=None,
-        session_id: str = None,
+        session_id: str = "",
         image_urls: list[str] = [],
         contexts: list = [],
         system_prompt: str = "",
-        conversation: Conversation = None,
+        conversation: Conversation | None = None,
     ) -> ProviderRequest:
         """创建一个 LLM 请求。
 
@@ -389,7 +391,7 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def get_group(self, group_id: str = None, **kwargs) -> Group | None:
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:

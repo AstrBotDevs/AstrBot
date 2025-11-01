@@ -27,7 +27,7 @@ class ProviderCoze(Provider):
             provider_settings,
             default_persona,
         )
-        self.api_key = provider_config.get("coze_api_key", "")
+        self.api_key: str = provider_config.get("coze_api_key", "")
         if not self.api_key:
             raise Exception("Coze API Key 不能为空。")
         self.bot_id = provider_config.get("bot_id", "")
@@ -65,8 +65,8 @@ class ProviderCoze(Provider):
         """
         try:
             if is_base64 and data.startswith("data:image/"):
+                header, encoded = data.split(",", 1)
                 try:
-                    header, encoded = data.split(",", 1)
                     image_bytes = base64.b64decode(encoded)
                     cache_key = hashlib.md5(image_bytes).hexdigest()
                     return cache_key
@@ -579,11 +579,11 @@ class ProviderCoze(Provider):
             logger.error(f"清空 Coze 会话失败: {e!s}")
             return False
 
-    async def get_current_key(self):
+    def get_current_key(self):
         """获取当前API Key"""
         return self.api_key
 
-    async def set_key(self, key: str):
+    def set_key(self, key: str):
         """设置新的API Key"""
         raise NotImplementedError("Coze 适配器不支持设置 API Key。")
 
@@ -595,12 +595,12 @@ class ProviderCoze(Provider):
         """获取当前模型"""
         return f"bot_{self.bot_id}"
 
-    def set_model(self, model: str):
+    def set_model(self, model_name: str):
         """设置模型（在Coze中是Bot ID）"""
-        if model.startswith("bot_"):
-            self.bot_id = model[4:]
+        if model_name.startswith("bot_"):
+            self.bot_id = model_name[4:]
         else:
-            self.bot_id = model
+            self.bot_id = model_name
 
     async def get_human_readable_context(
         self,

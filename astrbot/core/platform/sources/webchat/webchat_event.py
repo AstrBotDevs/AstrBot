@@ -49,7 +49,9 @@ class WebChatMessageEvent(AstrMessageEvent):
                 # save image to local
                 filename = str(uuid.uuid4()) + ".jpg"
                 path = os.path.join(imgs_dir, filename)
-                if comp.file and comp.file.startswith("file:///"):
+                if comp.file is None:
+                    raise ValueError("Image file is None")
+                elif comp.file.startswith("file:///"):
                     ph = comp.file[8:]
                     with open(path, "wb") as f:
                         with open(ph, "rb") as f2:
@@ -78,7 +80,9 @@ class WebChatMessageEvent(AstrMessageEvent):
                 # save record to local
                 filename = str(uuid.uuid4()) + ".wav"
                 path = os.path.join(imgs_dir, filename)
-                if comp.file and comp.file.startswith("file:///"):
+                if comp.file is None:
+                    raise ValueError("Record file is None")
+                elif comp.file.startswith("file:///"):
                     ph = comp.file[8:]
                     with open(path, "wb") as f:
                         with open(ph, "rb") as f2:
