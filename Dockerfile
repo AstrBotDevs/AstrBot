@@ -21,10 +21,9 @@ RUN apt-get update && apt-get install -y curl gnupg && \
     rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install uv
-RUN uv pip install -r requirements.txt --no-cache-dir --system
-RUN uv pip install socksio uv pilk --no-cache-dir --system
+RUN uv sync --no-dev --no-cache
 
 EXPOSE 6185
 EXPOSE 6186
 
-CMD [ "python", "main.py" ]
+CMD [ "uv", "run", "main.py" ]
