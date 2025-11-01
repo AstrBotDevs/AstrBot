@@ -111,7 +111,7 @@ async def download_image_by_url(
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             if post:
-                async with session.get(url, ssl=ssl_context) as resp:
+                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
                     return save_temp_img(await resp.read())
             else:
                 async with session.get(url, ssl=ssl_context) as resp:

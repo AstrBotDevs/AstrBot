@@ -139,6 +139,10 @@ class PKCS7Encoder:
 class Prpcrypt:
     """提供接收和推送给企业微信消息的加解密接口"""
 
+    # 16位随机字符串的范围常量
+    MIN_RANDOM_VALUE = 1000000000000000  # 最小值: 16位数字
+    RANDOM_RANGE = 9000000000000000  # 范围: 确保生成16位数字
+
     def __init__(self, key):
         # self.key = base64.b64decode(key+"=")
         self.key = key
@@ -207,7 +211,9 @@ class Prpcrypt:
         """随机生成16位字符串
         @return: 16位字符串
         """
-        return str(secrets.randbelow(9000000000000000) + 1000000000000000).encode()
+        return str(
+            secrets.randbelow(self.RANDOM_RANGE) + self.MIN_RANDOM_VALUE
+        ).encode()
 
 
 class WXBizJsonMsgCrypt:
