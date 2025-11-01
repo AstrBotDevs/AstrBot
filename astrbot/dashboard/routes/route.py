@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from quart import Quart
+from fastapi import FastAPI
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -8,7 +8,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 @dataclass
 class RouteContext:
     config: AstrBotConfig
-    app: Quart
+    app: FastAPI
 
 
 class Route:
@@ -20,7 +20,16 @@ class Route:
         def _add_rule(path, method, func):
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
-            self.app.add_url_rule(full_path, view_func=func, methods=[method])
+            if method.upper() == "GET":
+                self.app.get(full_path)(func)
+            elif method.upper() == "POST":
+                self.app.post(full_path)(func)
+            elif method.upper() == "PUT":
+                self.app.put(full_path)(func)
+            elif method.upper() == "DELETE":
+                self.app.delete(full_path)(func)
+            elif method.upper() == "PATCH":
+                self.app.patch(full_path)(func)
 
         # 兼容字典和列表两种格式
         routes_to_register = (
