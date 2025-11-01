@@ -55,7 +55,7 @@ class DocumentStorage:
             "The database now uses async operations with self.engine and async context managers. "
             "\n\nIf you're seeing this error, please: "
             "\n1. Clear Python cache files:"
-            "\n   - On Unix/macOS: find data/plugins -name '*.pyc' -delete && find data/plugins -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true"
+            "\n   - On Unix/macOS: find data/plugins -name '*.pyc' -delete && find data/plugins -type d -name '__pycache__' -prune -exec rm -rf {} \\; 2>/dev/null || true"
             "\n   - On Windows: Delete all .pyc files and __pycache__ folders in data\\plugins manually, or run:"
             "\n       del /s data\\plugins\\*.pyc"
             "\n       rmdir /s /q data\\plugins\\__pycache__"
