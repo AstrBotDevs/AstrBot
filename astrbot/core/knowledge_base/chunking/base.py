@@ -21,4 +21,5 @@ class BaseChunker(ABC):
 
         Returns:
             list[str]: 分块后的文本列表
+
         """

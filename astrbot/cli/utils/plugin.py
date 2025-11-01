@@ -1,14 +1,14 @@
 import shutil
 import tempfile
-
-import httpx
-import yaml
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
 import click
+import httpx
+import yaml
+
 from .version_comparator import VersionComparator
 
 
@@ -32,7 +32,8 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
-                proxy=proxy if proxy else None, follow_redirects=True
+                proxy=proxy if proxy else None,
+                follow_redirects=True,
             ) as client:
                 resp = client.get(release_url)
                 resp.raise_for_status()
@@ -55,7 +56,8 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None):
 
         # 下载并解压
         with httpx.Client(
-            proxy=proxy if proxy else None, follow_redirects=True
+            proxy=proxy if proxy else None,
+            follow_redirects=True,
         ) as client:
             resp = client.get(download_url)
             if (
@@ -89,6 +91,7 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
 
     Returns:
         dict: 包含元数据的字典，如果读取失败则返回空字典
+
     """
     yaml_path = plugin_dir / "metadata.yaml"
     if yaml_path.exists():
@@ -107,6 +110,7 @@ def build_plug_list(plugins_dir: Path) -> list:
 
     Returns:
         list: 包含插件信息的字典列表
+
     """
     # 获取本地插件信息
     result = []
@@ -133,7 +137,7 @@ def build_plug_list(plugins_dir: Path) -> list:
                         "repo": str(metadata.get("repo", "")),
                         "status": PluginStatus.INSTALLED,
                         "local_path": str(plugin_dir),
-                    }
+                    },
                 )
 
     # 获取在线插件列表
@@ -153,7 +157,7 @@ def build_plug_list(plugins_dir: Path) -> list:
                         "repo": str(plugin_info.get("repo", "")),
                         "status": PluginStatus.NOT_INSTALLED,
                         "local_path": None,
-                    }
+                    },
                 )
     except Exception as e:
         click.echo(f"获取在线插件列表失败: {e}", err=True)
@@ -168,7 +172,8 @@ def build_plug_list(plugins_dir: Path) -> list:
             )
             if (
                 VersionComparator.compare_version(
-                    local_plugin["version"], online_plugin["version"]
+                    local_plugin["version"],
+                    online_plugin["version"],
                 )
                 < 0
             ):
@@ -186,7 +191,10 @@ def build_plug_list(plugins_dir: Path) -> list:
 
 
 def manage_plugin(
-    plugin: dict, plugins_dir: Path, is_update: bool = False, proxy: str | None = None
+    plugin: dict,
+    plugins_dir: Path,
+    is_update: bool = False,
+    proxy: str | None = None,
 ) -> None:
     """安装或更新插件
 
@@ -195,6 +203,7 @@ def manage_plugin(
         plugins_dir (Path): 插件目录
         is_update (bool, optional): 是否为更新操作. 默认为 False
         proxy (str, optional): 代理服务器地址
+
     """
     plugin_name = plugin["name"]
     repo_url = plugin["repo"]
@@ -219,7 +228,7 @@ def manage_plugin(
 
     try:
         click.echo(
-            f"正在从 {repo_url} {'更新' if is_update else '下载'}插件 {plugin_name}..."
+            f"正在从 {repo_url} {'更新' if is_update else '下载'}插件 {plugin_name}...",
         )
         get_git_repo(repo_url, target_path, proxy)
 
@@ -233,5 +242,5 @@ def manage_plugin(
         if is_update and backup_path.exists():
             shutil.move(backup_path, target_path)
         raise click.ClickException(
-            f"{'更新' if is_update else '安装'}插件 {plugin_name} 时出错: {e}"
+            f"{'更新' if is_update else '安装'}插件 {plugin_name} 时出错: {e}",
         )

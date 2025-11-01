@@ -1,4 +1,4 @@
-import astrbot.api.star as star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
 
 

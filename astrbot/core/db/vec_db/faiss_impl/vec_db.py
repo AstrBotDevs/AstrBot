@@ -1,18 +1,18 @@
-import uuid
 import time
+import uuid
+
 import numpy as np
+
+from astrbot import logger
+from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+
+from ..base import BaseVecDB, Result
 from .document_storage import DocumentStorage
 from .embedding_storage import EmbeddingStorage
-from ..base import Result, BaseVecDB
-from astrbot.core.provider.provider import EmbeddingProvider
-from astrbot.core.provider.provider import RerankProvider
-from astrbot import logger
 
 
 class FaissVecDB(BaseVecDB):
-    """
-    A class to represent a vector database.
-    """
+    """A class to represent a vector database."""
 
     def __init__(
         self,
@@ -26,7 +26,8 @@ class FaissVecDB(BaseVecDB):
         self.embedding_provider = embedding_provider
         self.document_storage = DocumentStorage(doc_store_path)
         self.embedding_storage = EmbeddingStorage(
-            embedding_provider.get_dim(), index_store_path
+            embedding_provider.get_dim(),
+            index_store_path,
         )
         self.embedding_provider = embedding_provider
         self.rerank_provider = rerank_provider
@@ -35,11 +36,12 @@ class FaissVecDB(BaseVecDB):
         await self.document_storage.initialize()
 
     async def insert(
-        self, content: str, metadata: dict | None = None, id: str | None = None
+        self,
+        content: str,
+        metadata: dict | None = None,
+        id: str | None = None,
     ) -> int:
-        """
-        插入一条文本和其对应向量，自动生成 ID 并保持一致性。
-        """
+        """插入一条文本和其对应向量，自动生成 ID 并保持一致性。"""
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
@@ -63,11 +65,11 @@ class FaissVecDB(BaseVecDB):
         max_retries: int = 3,
         progress_callback=None,
     ) -> list[int]:
-        """
-        批量插入文本和其对应向量，自动生成 ID 并保持一致性。
+        """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
         Args:
             progress_callback: 进度回调函数，接收参数 (current, total)
+
         """
         metadatas = metadatas or [{} for _ in contents]
         ids = ids or [str(uuid.uuid4()) for _ in contents]
@@ -83,12 +85,14 @@ class FaissVecDB(BaseVecDB):
         )
         end = time.time()
         logger.debug(
-            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds."
+            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
         )
 
         # 使用 DocumentStorage 的批量插入方法
         int_ids = await self.document_storage.insert_documents_batch(
-            ids, contents, metadatas
+            ids,
+            contents,
+            metadatas,
         )
 
         # 批量插入向量到 FAISS
@@ -104,8 +108,7 @@ class FaissVecDB(BaseVecDB):
         rerank: bool = False,
         metadata_filters: dict | None = None,
     ) -> list[Result]:
-        """
-        搜索最相似的文档。
+        """搜索最相似的文档。
 
         Args:
             query (str): 查询文本
@@ -116,6 +119,7 @@ class FaissVecDB(BaseVecDB):
 
         Returns:
             List[Result]: 查询结果
+
         """
         embedding = await self.embedding_provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
@@ -128,7 +132,8 @@ class FaissVecDB(BaseVecDB):
         scores[0] = 1.0 - (scores[0] / 2.0)
         # NOTE: maybe the size is less than k.
         fetched_docs = await self.document_storage.get_documents(
-            metadata_filters=metadata_filters or {}, ids=indices[0]
+            metadata_filters=metadata_filters or {},
+            ids=indices[0],
         )
         if not fetched_docs:
             return []
@@ -149,7 +154,9 @@ class FaissVecDB(BaseVecDB):
             documents = [doc.data["text"] for doc in top_k_results]
             reranked_results = await self.rerank_provider.rerank(query, documents)
             reranked_results = sorted(
-                reranked_results, key=lambda x: x.relevance_score, reverse=True
+                reranked_results,
+                key=lambda x: x.relevance_score,
+                reverse=True,
             )
             top_k_results = [
                 top_k_results[reranked_result.index]
@@ -159,9 +166,7 @@ class FaissVecDB(BaseVecDB):
         return top_k_results
 
     async def delete(self, doc_id: str):
-        """
-        删除一条文档块（chunk）
-        """
+        """删除一条文档块（chunk）"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
         int_id = result["id"] if result else None
@@ -176,23 +181,23 @@ class FaissVecDB(BaseVecDB):
         await self.document_storage.close()
 
     async def count_documents(self, metadata_filter: dict | None = None) -> int:
-        """
-        计算文档数量
+        """计算文档数量
 
         Args:
             metadata_filter (dict | None): 元数据过滤器
+
         """
         count = await self.document_storage.count_documents(
-            metadata_filters=metadata_filter or {}
+            metadata_filters=metadata_filter or {},
         )
         return count
 
     async def delete_documents(self, metadata_filters: dict):
-        """
-        根据元数据过滤器删除文档
-        """
+        """根据元数据过滤器删除文档"""
         docs = await self.document_storage.get_documents(
-            metadata_filters=metadata_filters, offset=None, limit=None
+            metadata_filters=metadata_filters,
+            offset=None,
+            limit=None,
         )
         doc_ids: list[int] = [doc["id"] for doc in docs]
         await self.embedding_storage.delete(doc_ids)

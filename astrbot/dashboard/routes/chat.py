@@ -1,16 +1,20 @@
-import uuid
+import asyncio
 import json
 import os
-import asyncio
+import uuid
 from contextlib import asynccontextmanager
-from .route import Route, Response, RouteContext
-from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from quart import request, Response as QuartResponse, g, make_response
-from astrbot.core.db import BaseDatabase
+
+from quart import Response as QuartResponse
+from quart import g, make_response, request
+
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from .route import Response, Route, RouteContext
 
 
 @asynccontextmanager
@@ -70,10 +74,9 @@ class ChatRoute(Route):
 
                 if filename_ext == ".wav":
                     return QuartResponse(f.read(), mimetype="audio/wav")
-                elif filename_ext[1:] in self.supported_imgs:
+                if filename_ext[1:] in self.supported_imgs:
                     return QuartResponse(f.read(), mimetype="image/jpeg")
-                else:
-                    return QuartResponse(f.read())
+                return QuartResponse(f.read())
 
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
@@ -96,7 +99,7 @@ class ChatRoute(Route):
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
-        filename = f"{str(uuid.uuid4())}"
+        filename = f"{uuid.uuid4()!s}"
         # 通过文件格式判断文件类型
         if file.content_type.startswith("audio"):
             filename += ".wav"
@@ -179,7 +182,7 @@ class ChatRoute(Route):
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}",
                                 )
                             client_disconnected = True
 
@@ -222,7 +225,7 @@ class ChatRoute(Route):
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                 },
-            )
+            ),
         )
 
         response = await make_response(
@@ -243,7 +246,8 @@ class ChatRoute(Route):
         NOTE: 关于这里为什么要单独做一个 WebChat 的 Conversation ID 出来，这个是为了向前兼容。
         """
         conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin="webchat", conversation_id=conversation_id
+            unified_msg_origin="webchat",
+            conversation_id=conversation_id,
         )
         if not conversation:
             raise ValueError(f"Conversation with ID {conversation_id} not found.")
@@ -267,7 +271,9 @@ class ChatRoute(Route):
             conversation_id=conversation_id,
         )
         await self.platform_history_mgr.delete(
-            platform_id="webchat", user_id=webchat_conv_id, offset_sec=99999999
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            offset_sec=99999999,
         )
         return Response().ok().__dict__
 
@@ -314,7 +320,10 @@ class ChatRoute(Route):
 
         # Get platform message history
         history_ls = await self.platform_history_mgr.get(
-            platform_id="webchat", user_id=webchat_conv_id, page=1, page_size=1000
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            page=1,
+            page_size=1000,
         )
 
         history_res = [history.model_dump() for history in history_ls]
@@ -325,7 +334,7 @@ class ChatRoute(Route):
                 data={
                     "history": history_res,
                     "is_running": self.running_convs.get(webchat_conv_id, False),
-                }
+                },
             )
             .__dict__
         )

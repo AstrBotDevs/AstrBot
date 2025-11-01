@@ -1,13 +1,14 @@
 import os
 import uuid
+from typing import TypedDict, TypeVar
+
 from astrbot.core import AstrBotConfig, logger
-from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
-from typing import TypeVar, TypedDict
+from astrbot.core.utils.shared_preferences import SharedPreferences
 
 _VT = TypeVar("_VT")
 
@@ -48,7 +49,10 @@ class AstrBotConfigManager:
         """获取所有的 abconf 数据"""
         if self.abconf_data is None:
             self.abconf_data = self.sp.get(
-                "abconf_mapping", {}, scope="global", scope_id="global"
+                "abconf_mapping",
+                {},
+                scope="global",
+                scope_id="global",
             )
         return self.abconf_data
 
@@ -64,7 +68,7 @@ class AstrBotConfigManager:
                 self.confs[uuid_] = conf
             else:
                 logger.warning(
-                    f"Config file {conf_path} for UUID {uuid_} does not exist, skipping."
+                    f"Config file {conf_path} for UUID {uuid_} does not exist, skipping.",
                 )
                 continue
 
@@ -73,6 +77,7 @@ class AstrBotConfigManager:
 
         Returns:
             ConfInfo: 包含配置文件的 uuid, 路径和名称等信息, 是一个 dict 类型
+
         """
         # uuid -> { "path": str, "name": str }
         abconf_data = self._get_abconf_data()
@@ -103,7 +108,10 @@ class AstrBotConfigManager:
     ) -> None:
         """保存配置文件的映射关系"""
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         random_word = abconf_name or uuid.uuid4().hex[:8]
         abconf_data[abconf_id] = {
@@ -177,13 +185,17 @@ class AstrBotConfigManager:
 
         Raises:
             ValueError: 如果试图删除默认配置文件
+
         """
         if conf_id == "default":
             raise ValueError("不能删除默认配置文件")
 
         # 从映射中移除
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -191,7 +203,8 @@ class AstrBotConfigManager:
 
         # 获取配置文件路径
         conf_path = os.path.join(
-            get_astrbot_config_path(), abconf_data[conf_id]["path"]
+            get_astrbot_config_path(),
+            abconf_data[conf_id]["path"],
         )
 
         # 删除配置文件
@@ -224,12 +237,16 @@ class AstrBotConfigManager:
 
         Returns:
             bool: 更新是否成功
+
         """
         if conf_id == "default":
             raise ValueError("不能更新默认配置文件的信息")
 
         abconf_data = self.sp.get(
-            "abconf_mapping", {}, scope="global", scope_id="global"
+            "abconf_mapping",
+            {},
+            scope="global",
+            scope_id="global",
         )
         if conf_id not in abconf_data:
             logger.warning(f"配置文件 {conf_id} 不存在于映射中")
@@ -246,7 +263,10 @@ class AstrBotConfigManager:
         return True
 
     def g(
-        self, umo: str | None = None, key: str | None = None, default: _VT = None
+        self,
+        umo: str | None = None,
+        key: str | None = None,
+        default: _VT = None,
     ) -> _VT:
         """获取配置项。umo 为 None 时使用默认配置"""
         if umo is None:

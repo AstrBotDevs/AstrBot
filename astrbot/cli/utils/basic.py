@@ -21,8 +21,9 @@ def get_astrbot_root() -> Path:
 
 async def check_dashboard(astrbot_root: Path) -> None:
     """检查是否安装了dashboard"""
-    from astrbot.core.utils.io import get_dashboard_version, download_dashboard
     from astrbot.core.config.default import VERSION
+    from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+
     from .version_comparator import VersionComparator
 
     try:
@@ -48,19 +49,18 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
                     click.echo("管理面板已是最新版本")
                     return
-                else:
-                    try:
-                        version = dashboard_version.split("v")[1]
-                        click.echo(f"管理面板版本: {version}")
-                        await download_dashboard(
-                            path="data/dashboard.zip",
-                            extract_path=str(astrbot_root),
-                            version=f"v{VERSION}",
-                            latest=False,
-                        )
-                    except Exception as e:
-                        click.echo(f"下载管理面板失败: {e}")
-                        return
+                try:
+                    version = dashboard_version.split("v")[1]
+                    click.echo(f"管理面板版本: {version}")
+                    await download_dashboard(
+                        path="data/dashboard.zip",
+                        extract_path=str(astrbot_root),
+                        version=f"v{VERSION}",
+                        latest=False,
+                    )
+                except Exception as e:
+                    click.echo(f"下载管理面板失败: {e}")
+                    return
     except FileNotFoundError:
         click.echo("初始化管理面板目录...")
         try:

@@ -1,15 +1,15 @@
-import uuid
-import time
-import json
-import re
-import hashlib
-import random
 import asyncio
+import hashlib
+import json
+import random
+import re
+import time
+import uuid
 from pathlib import Path
-from typing import Dict
 from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
+
 from astrbot.core.config.default import VERSION
 
 from ..entities import ProviderType
@@ -21,7 +21,7 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class OTTSProvider:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -58,7 +58,7 @@ class OTTSProvider:
         path = re.sub(r"^https?://[^/]+", "", self.api_url) or "/"
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
-    async def get_audio(self, text: str, voice_params: Dict) -> str:
+    async def get_audio(self, text: str, voice_params: dict) -> str:
         file_path = TEMP_DIR / f"otts-{uuid.uuid4()}.wav"
         signature = await self._generate_signature()
         for attempt in range(self.retry_count):
@@ -86,7 +86,7 @@ class OTTSProvider:
                 return str(file_path.resolve())
             except Exception as e:
                 if attempt == self.retry_count - 1:
-                    raise RuntimeError(f"OTTS请求失败: {str(e)}") from e
+                    raise RuntimeError(f"OTTS请求失败: {e!s}") from e
                 await asyncio.sleep(0.5 * (attempt + 1))
 
 
@@ -94,7 +94,8 @@ class AzureNativeProvider(TTSProvider):
     def __init__(self, provider_config: dict, provider_settings: dict):
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get(
-            "azure_tts_subscription_key", ""
+            "azure_tts_subscription_key",
+            "",
         ).strip()
         if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
@@ -119,7 +120,7 @@ class AzureNativeProvider(TTSProvider):
                 "User-Agent": f"AstrBot/{VERSION}",
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
-            }
+            },
         )
         return self
 
@@ -132,7 +133,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )
         response = await self.client.post(
-            token_url, headers={"Ocp-Apim-Subscription-Key": self.subscription_key}
+            token_url,
+            headers={"Ocp-Apim-Subscription-Key": self.subscription_key},
         )
         response.raise_for_status()
         self.token = response.text

@@ -5,16 +5,16 @@ from astrbot.core import logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 
+from ..persona_mgr import PersonaManager
 from .entities import ProviderType
 from .provider import (
+    EmbeddingProvider,
     Provider,
+    RerankProvider,
     STTProvider,
     TTSProvider,
-    EmbeddingProvider,
-    RerankProvider,
 )
 from .register import llm_tools, provider_cls_map
-from ..persona_mgr import PersonaManager
 
 
 class ProviderManager:
@@ -76,7 +76,10 @@ class ProviderManager:
         return self.persona_mgr.selected_default_persona_v3
 
     async def set_provider(
-        self, provider_id: str, provider_type: ProviderType, umo: str | None = None
+        self,
+        provider_id: str,
+        provider_type: ProviderType,
+        umo: str | None = None,
     ):
         """设置提供商。
 
@@ -86,6 +89,7 @@ class ProviderManager:
             umo (str, optional): 用户会话 ID，用于提供商会话隔离。
 
         Version 4.0.0: 这个版本下已经默认隔离提供商
+
         """
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
@@ -100,17 +104,20 @@ class ProviderManager:
 
         prov = self.inst_map[provider_id]
         if provider_type == ProviderType.TEXT_TO_SPEECH and isinstance(
-            prov, TTSProvider
+            prov,
+            TTSProvider,
         ):
             self.curr_tts_provider_inst = prov
             sp.put("curr_provider_tts", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.SPEECH_TO_TEXT and isinstance(
-            prov, STTProvider
+            prov,
+            STTProvider,
         ):
             self.curr_stt_provider_inst = prov
             sp.put("curr_provider_stt", provider_id, scope="global", scope_id="global")
         elif provider_type == ProviderType.CHAT_COMPLETION and isinstance(
-            prov, Provider
+            prov,
+            Provider,
         ):
             self.curr_provider_inst = prov
             sp.put("curr_provider", provider_id, scope="global", scope_id="global")
@@ -120,7 +127,9 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+        self,
+        provider_type: ProviderType,
+        umo=None,
     ) -> Provider | STTProvider | TTSProvider | None:
         """获取正在使用的提供商实例。
 
@@ -130,6 +139,7 @@ class ProviderManager:
 
         Returns:
             Provider: 正在使用的提供商实例。
+
         """
         provider = None
         if umo:
@@ -219,7 +229,7 @@ class ProviderManager:
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ..."
+            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
         )
 
         # 动态导入
@@ -321,18 +331,18 @@ class ProviderManager:
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。"
+                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
             )
             return
         except Exception as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因"
+                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
             )
             return
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
-                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。"
+                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
             )
             return
 
@@ -358,7 +368,7 @@ class ProviderManager:
                 ):
                     self.curr_stt_provider_inst = inst
                     logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。"
+                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
                     )
                 if not self.curr_stt_provider_inst:
                     self.curr_stt_provider_inst = inst
@@ -374,7 +384,7 @@ class ProviderManager:
                 if self.provider_settings.get("provider_id") == provider_config["id"]:
                     self.curr_tts_provider_inst = inst
                     logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。"
+                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
                     )
                 if not self.curr_tts_provider_inst:
                     self.curr_tts_provider_inst = inst
@@ -397,7 +407,7 @@ class ProviderManager:
                 ):
                     self.curr_provider_inst = inst
                     logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。"
+                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
                     )
                 if not self.curr_provider_inst:
                     self.curr_provider_inst = inst
@@ -416,10 +426,10 @@ class ProviderManager:
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
             logger.error(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}"
+                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
             )
             raise Exception(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}"
+                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
             )
 
     async def reload(self, provider_config: dict):
@@ -439,7 +449,7 @@ class ProviderManager:
         elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
             self.curr_provider_inst = self.provider_insts[0]
             logger.info(
-                f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。"
+                f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。",
             )
 
         if len(self.stt_provider_insts) == 0:
@@ -447,7 +457,7 @@ class ProviderManager:
         elif self.curr_stt_provider_inst is None and len(self.stt_provider_insts) > 0:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
             logger.info(
-                f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。"
+                f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。",
             )
 
         if len(self.tts_provider_insts) == 0:
@@ -455,7 +465,7 @@ class ProviderManager:
         elif self.curr_tts_provider_inst is None and len(self.tts_provider_insts) > 0:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
             logger.info(
-                f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。"
+                f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
             )
 
     def get_insts(self):
@@ -464,7 +474,7 @@ class ProviderManager:
     async def terminate_provider(self, provider_id: str):
         if provider_id in self.inst_map:
             logger.info(
-                f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ..."
+                f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
             )
 
             if self.inst_map[provider_id] in self.provider_insts:
@@ -491,7 +501,7 @@ class ProviderManager:
                 await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
-                f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})"
+                f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
             )
             del self.inst_map[provider_id]
 

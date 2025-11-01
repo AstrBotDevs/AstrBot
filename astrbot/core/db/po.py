@@ -1,15 +1,15 @@
 import uuid
-
-from datetime import datetime, timezone
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import TypedDict
+
 from sqlmodel import (
+    JSON,
+    Field,
     SQLModel,
     Text,
-    JSON,
     UniqueConstraint,
-    Field,
 )
-from typing import Optional, TypedDict
 
 
 class PlatformStat(SQLModel, table=True):
@@ -40,7 +40,8 @@ class ConversationV2(SQLModel, table=True):
     __tablename__ = "conversations"
 
     inner_conversation_id: int = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     conversation_id: str = Field(
         max_length=36,
@@ -50,14 +51,14 @@ class ConversationV2(SQLModel, table=True):
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
-    content: Optional[list] = Field(default=None, sa_type=JSON)
+    content: list | None = Field(default=None, sa_type=JSON)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
     )
-    title: Optional[str] = Field(default=None, max_length=255)
-    persona_id: Optional[str] = Field(default=None)
+    title: str | None = Field(default=None, max_length=255)
+    persona_id: str | None = Field(default=None)
 
     __table_args__ = (
         UniqueConstraint(
@@ -76,13 +77,15 @@ class Persona(SQLModel, table=True):
     __tablename__ = "personas"
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     persona_id: str = Field(max_length=255, nullable=False)
     system_prompt: str = Field(sa_type=Text, nullable=False)
-    begin_dialogs: Optional[list] = Field(default=None, sa_type=JSON)
+    begin_dialogs: list | None = Field(default=None, sa_type=JSON)
     """a list of strings, each representing a dialog to start with"""
-    tools: Optional[list] = Field(default=None, sa_type=JSON)
+    tools: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
@@ -104,7 +107,9 @@ class Preference(SQLModel, table=True):
     __tablename__ = "preferences"
 
     id: int | None = Field(
-        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     scope: str = Field(nullable=False)
     """Scope of the preference, such as 'global', 'umo', 'plugin'."""
@@ -138,13 +143,15 @@ class PlatformMessageHistory(SQLModel, table=True):
     __tablename__ = "platform_message_history"
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)  # An id of group, user in platform
-    sender_id: Optional[str] = Field(default=None)  # ID of the sender in the platform
-    sender_name: Optional[str] = Field(
-        default=None
+    sender_id: str | None = Field(default=None)  # ID of the sender in the platform
+    sender_name: str | None = Field(
+        default=None,
     )  # Name of the sender in the platform
     content: dict = Field(sa_type=JSON, nullable=False)  # a message chain list
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -163,7 +170,9 @@ class Attachment(SQLModel, table=True):
     __tablename__ = "attachments"
 
     inner_attachment_id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     attachment_id: str = Field(
         max_length=36,

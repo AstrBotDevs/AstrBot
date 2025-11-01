@@ -1,12 +1,13 @@
-"""
-企业微信智能机器人 HTTP 服务器
+"""企业微信智能机器人 HTTP 服务器
 处理企业微信智能机器人的 HTTP 回调请求
 """
 
 import asyncio
-from typing import Dict, Any, Optional, Callable
+from collections.abc import Callable
+from typing import Any
 
 import quart
+
 from astrbot.api import logger
 
 from .wecomai_api import WecomAIBotAPIClient
@@ -21,9 +22,7 @@ class WecomAIBotServer:
         host: str,
         port: int,
         api_client: WecomAIBotAPIClient,
-        message_handler: Optional[
-            Callable[[Dict[str, Any], Dict[str, str]], Any]
-        ] = None,
+        message_handler: Callable[[dict[str, Any], dict[str, str]], Any] | None = None,
     ):
         """初始化服务器
 
@@ -32,6 +31,7 @@ class WecomAIBotServer:
             port: 监听端口
             api_client: API客户端实例
             message_handler: 消息处理回调函数
+
         """
         self.host = host
         self.port = port
@@ -45,7 +45,6 @@ class WecomAIBotServer:
 
     def _setup_routes(self):
         """设置 Quart 路由"""
-
         # 使用 Quart 的 add_url_rule 方法添加路由
         self.app.add_url_rule(
             "/webhook/wecom-ai-bot",
@@ -98,7 +97,7 @@ class WecomAIBotServer:
         assert nonce is not None
 
         logger.debug(
-            f"收到消息回调，msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}"
+            f"收到消息回调，msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}",
         )
 
         try:
@@ -111,7 +110,10 @@ class WecomAIBotServer:
 
             # 解密消息
             ret_code, message_data = await self.api_client.decrypt_message(
-                post_data, msg_signature, timestamp, nonce
+                post_data,
+                msg_signature,
+                timestamp,
+                nonce,
             )
 
             if ret_code != WecomAIBotConstants.SUCCESS or not message_data:
@@ -123,7 +125,8 @@ class WecomAIBotServer:
             if self.message_handler:
                 try:
                     response = await self.message_handler(
-                        message_data, {"nonce": nonce, "timestamp": timestamp}
+                        message_data,
+                        {"nonce": nonce, "timestamp": timestamp},
                     )
                 except Exception as e:
                     logger.error("消息处理器执行异常: %s", e)
@@ -131,8 +134,7 @@ class WecomAIBotServer:
 
             if response:
                 return response, 200, {"Content-Type": "text/plain"}
-            else:
-                return "success", 200, {"Content-Type": "text/plain"}
+            return "success", 200, {"Content-Type": "text/plain"}
 
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)

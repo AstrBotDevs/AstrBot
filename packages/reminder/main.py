@@ -1,13 +1,13 @@
-import os
-import json
 import datetime
+import json
+import os
 import uuid
 import zoneinfo
-import astrbot.api.star as star
-from astrbot.api.event import filter
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api import llm_tool, logger
+
+from astrbot.api import llm_tool, logger, star
+from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
@@ -31,7 +31,7 @@ class Main(star.Star):
         if not os.path.exists(reminder_file):
             with open(reminder_file, "w", encoding="utf-8") as f:
                 f.write("{}")
-        with open(reminder_file, "r", encoding="utf-8") as f:
+        with open(reminder_file, encoding="utf-8") as f:
             self.reminder_data = json.load(f)
 
         self._init_scheduler()
@@ -56,7 +56,8 @@ class Main(star.Star):
                         trigger="date",
                         args=[group, reminder],
                         run_date=datetime.datetime.strptime(
-                            reminder["datetime"], "%Y-%m-%d %H:%M"
+                            reminder["datetime"],
+                            "%Y-%m-%d %H:%M",
                         ),
                         misfire_grace_time=60,
                     )
@@ -74,7 +75,8 @@ class Main(star.Star):
         """Check if the reminder is outdated."""
         if "datetime" in reminder:
             reminder_time = datetime.datetime.strptime(
-                reminder["datetime"], "%Y-%m-%d %H:%M"
+                reminder["datetime"],
+                "%Y-%m-%d %H:%M",
             ).replace(tzinfo=self.timezone)
             return reminder_time < datetime.datetime.now(self.timezone)
         return False
@@ -111,6 +113,7 @@ class Main(star.Star):
             datetime_str(string): Required when user's reminder is a single reminder. The datetime string of the reminder, Must format with %Y-%m-%d %H:%M
             cron_expression(string): Required when user's reminder is a repeated reminder. The cron expression of the reminder. Monday is 0 and Sunday is 6.
             human_readable_cron(string): Optional. The human readable cron expression of the reminder.
+
         """
         if event.get_platform_name() == "qq_official":
             yield event.plain_result("reminder 暂不支持 QQ 官方机器人。")
@@ -121,7 +124,7 @@ class Main(star.Star):
 
         if not cron_expression and not datetime_str:
             raise ValueError(
-                "The cron_expression and datetime_str cannot be both None."
+                "The cron_expression and datetime_str cannot be both None.",
             )
         reminder_time = ""
 
@@ -150,7 +153,8 @@ class Main(star.Star):
             d = {"text": text, "datetime": datetime_str, "id": str(uuid.uuid4())}
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(
-                datetime_str, "%Y-%m-%d %H:%M"
+                datetime_str,
+                "%Y-%m-%d %H:%M",
             )
             self.scheduler.add_job(
                 self._reminder_callback,
@@ -167,13 +171,12 @@ class Main(star.Star):
             + text
             + "\n时间: "
             + reminder_time
-            + "\n\n使用 /reminder ls 查看所有待办事项。\n使用 /tool off reminder 关闭此功能。"
+            + "\n\n使用 /reminder ls 查看所有待办事项。\n使用 /tool off reminder 关闭此功能。",
         )
 
     @filter.command_group("reminder")
     def reminder(self):
         """The command group of the reminder."""
-        pass
 
     async def get_upcoming_reminders(self, unified_msg_origin: str):
         """Get upcoming reminders."""
@@ -186,7 +189,8 @@ class Main(star.Star):
             for reminder in reminders
             if "datetime" not in reminder
             or datetime.datetime.strptime(
-                reminder["datetime"], "%Y-%m-%d %H:%M"
+                reminder["datetime"],
+                "%Y-%m-%d %H:%M",
             ).replace(tzinfo=self.timezone)
             >= now
         ]
@@ -233,7 +237,7 @@ class Main(star.Star):
             except Exception as e:
                 logger.error(f"Remove job error: {e}")
                 yield event.plain_result(
-                    f"成功移除对应的待办事项。删除定时任务失败: {str(e)} 可能需要重启 AstrBot 以取消该提醒任务。"
+                    f"成功移除对应的待办事项。删除定时任务失败: {e!s} 可能需要重启 AstrBot 以取消该提醒任务。",
                 )
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])
@@ -248,7 +252,7 @@ class Main(star.Star):
                 + d["text"]
                 + "\n时间: "
                 + d.get("datetime", "")
-                + d.get("cron_h", "")
+                + d.get("cron_h", ""),
             ),
         )
 

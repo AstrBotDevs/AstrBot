@@ -1,6 +1,8 @@
-import discord
-from astrbot import logger
 import sys
+
+import discord
+
+from astrbot import logger
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -41,7 +43,8 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True
+                    f"[Discord] on_ready_once_callback 执行失败: {e}",
+                    exc_info=True,
                 )
 
     def _create_message_data(self, message: discord.Message) -> dict:
@@ -84,7 +87,7 @@ class DiscordBotClient(discord.Bot):
             return
 
         logger.debug(
-            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}"
+            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}",
         )
 
         if self.on_message_received:
@@ -103,12 +106,12 @@ class DiscordBotClient(discord.Bot):
             command_name = interaction_data.get("name", "")
             if options := interaction_data.get("options", []):
                 params = " ".join(
-                    [f"{opt['name']}:{opt.get('value', '')}" for opt in options]
+                    [f"{opt['name']}:{opt.get('value', '')}" for opt in options],
                 )
                 return f"/{command_name} {params}"
             return f"/{command_name}"
 
-        elif interaction_type == discord.InteractionType.component:
+        if interaction_type == discord.InteractionType.component:
             custom_id = interaction_data.get("custom_id", "")
             component_type = interaction_data.get("component_type", "")
             return f"component:{custom_id}:{component_type}"

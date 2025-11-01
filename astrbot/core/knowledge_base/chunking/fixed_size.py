@@ -18,6 +18,7 @@ class FixedSizeChunker(BaseChunker):
         Args:
             chunk_size: 块的大小(字符数)
             chunk_overlap: 块之间的重叠字符数
+
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -32,6 +33,7 @@ class FixedSizeChunker(BaseChunker):
 
         Returns:
             list[str]: 分块后的文本列表
+
         """
         chunk_size = kwargs.get("chunk_size", self.chunk_size)
         chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)

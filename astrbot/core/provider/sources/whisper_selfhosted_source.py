@@ -1,14 +1,17 @@
-import uuid
-import os
 import asyncio
+import os
+import uuid
+
 import whisper
-from ..provider import STTProvider
-from ..entities import ProviderType
-from astrbot.core.utils.io import download_file
-from ..register import register_provider_adapter
+
 from astrbot.core import logger
-from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -23,14 +26,16 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.set_model(provider_config.get("model", None))
+        self.set_model(provider_config.get("model"))
         self.model = None
 
     async def initialize(self):
         loop = asyncio.get_event_loop()
         logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
-            None, whisper.load_model, self.model_name
+            None,
+            whisper.load_model,
+            self.model_name,
         )
         logger.info("Whisper 模型加载完成。")
 
@@ -41,8 +46,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
         if silk_header in file_header:
             return True
-        else:
-            return False
+        return False
 
     async def get_text(self, audio_url: str) -> str:
         loop = asyncio.get_event_loop()

@@ -1,17 +1,22 @@
 import json
 import os
 import uuid
+from collections.abc import AsyncIterator
+
 import aiohttp
-from typing import Dict, List, Union, AsyncIterator
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 from astrbot.api import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "minimax_tts_api", "MiniMax TTS API", provider_type=ProviderType.TEXT_TO_SPEECH
+    "minimax_tts_api",
+    "MiniMax TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderMiniMaxTTSAPI(TTSProvider):
     def __init__(
@@ -22,19 +27,21 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.api_base: str = provider_config.get(
-            "api_base", "https://api.minimax.chat/v1/t2a_v2"
+            "api_base",
+            "https://api.minimax.chat/v1/t2a_v2",
         )
         self.group_id: str = provider_config.get("minimax-group-id", "")
         self.set_model(provider_config.get("model", ""))
         self.lang_boost: str = provider_config.get("minimax-langboost", "auto")
         self.is_timber_weight: bool = provider_config.get(
-            "minimax-is-timber-weight", False
+            "minimax-is-timber-weight",
+            False,
         )
-        self.timber_weight: List[Dict[str, Union[str, int]]] = json.loads(
+        self.timber_weight: list[dict[str, str | int]] = json.loads(
             provider_config.get(
                 "minimax-timber-weight",
                 '[{"voice_id": "Chinese (Mandarin)_Warm_Girl", "weight": 1}]',
-            )
+            ),
         )
 
         self.voice_setting: dict = {
@@ -47,7 +54,8 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "emotion": provider_config.get("minimax-voice-emotion", "neutral"),
             "latex_read": provider_config.get("minimax-voice-latex", False),
             "english_normalization": provider_config.get(
-                "minimax-voice-english-normalization", False
+                "minimax-voice-english-normalization",
+                False,
             ),
         }
 
@@ -66,7 +74,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
 
     def _build_tts_stream_body(self, text: str):
         """构建流式请求体"""
-        dict_body: Dict[str, object] = {
+        dict_body: dict[str, object] = {
             "model": self.model_name,
             "text": text,
             "stream": True,
@@ -82,44 +90,46 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
     async def _call_tts_stream(self, text: str) -> AsyncIterator[bytes]:
         """进行流式请求"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
                     self.concat_base_url,
                     headers=self.headers,
                     data=self._build_tts_stream_body(text),
                     timeout=aiohttp.ClientTimeout(total=60),
-                ) as response:
-                    response.raise_for_status()
+                ) as response,
+            ):
+                response.raise_for_status()
 
-                    buffer = b""
-                    while True:
-                        chunk = await response.content.read(8192)
-                        if not chunk:
-                            break
+                buffer = b""
+                while True:
+                    chunk = await response.content.read(8192)
+                    if not chunk:
+                        break
 
-                        buffer += chunk
+                    buffer += chunk
 
-                        while b"\n\n" in buffer:
-                            try:
-                                message, buffer = buffer.split(b"\n\n", 1)
-                                if message.startswith(b"data: "):
-                                    try:
-                                        data = json.loads(message[6:])
-                                        if "extra_info" in data:
-                                            continue
-                                        audio = data.get("data", {}).get("audio")
-                                        if audio is not None:
-                                            yield audio
-                                    except json.JSONDecodeError:
-                                        logger.warning(
-                                            "Failed to parse JSON data from SSE message"
-                                        )
+                    while b"\n\n" in buffer:
+                        try:
+                            message, buffer = buffer.split(b"\n\n", 1)
+                            if message.startswith(b"data: "):
+                                try:
+                                    data = json.loads(message[6:])
+                                    if "extra_info" in data:
                                         continue
-                            except ValueError:
-                                buffer = buffer[-1024:]
+                                    audio = data.get("data", {}).get("audio")
+                                    if audio is not None:
+                                        yield audio
+                                except json.JSONDecodeError:
+                                    logger.warning(
+                                        "Failed to parse JSON data from SSE message",
+                                    )
+                                    continue
+                        except ValueError:
+                            buffer = buffer[-1024:]
 
         except aiohttp.ClientError as e:
-            raise Exception(f"MiniMax TTS API请求失败: {str(e)}")
+            raise Exception(f"MiniMax TTS API请求失败: {e!s}")
 
     async def _audio_play(self, audio_stream: AsyncIterator[str]) -> bytes:
         """解码数据流到 audio 比特流"""

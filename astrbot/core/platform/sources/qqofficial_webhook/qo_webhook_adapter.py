@@ -1,19 +1,21 @@
-import botpy
-import logging
 import asyncio
+import logging
+
+import botpy
 import botpy.message
 import botpy.types
 import botpy.types.message
-
 from botpy import Client
-from astrbot.api.platform import Platform, AstrBotMessage, MessageType, PlatformMetadata
-from astrbot.api.event import MessageChain
-from astrbot.core.platform.astr_message_event import MessageSesion
-from .qo_webhook_event import QQOfficialWebhookMessageEvent
-from ...register import register_platform_adapter
-from .qo_webhook_server import QQOfficialWebhook
-from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
+
 from astrbot import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.platform import AstrBotMessage, MessageType, Platform, PlatformMetadata
+from astrbot.core.platform.astr_message_event import MessageSesion
+
+from ...register import register_platform_adapter
+from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
+from .qo_webhook_event import QQOfficialWebhookMessageEvent
+from .qo_webhook_server import QQOfficialWebhook
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -28,7 +30,8 @@ class botClient(Client):
     # 收到群消息
     async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
             abm.sender.user_id if self.platform.unique_session else message.group_openid
@@ -38,7 +41,8 @@ class botClient(Client):
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.GROUP_MESSAGE
+            message,
+            MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
             abm.sender.user_id if self.platform.unique_session else message.channel_id
@@ -48,7 +52,8 @@ class botClient(Client):
     # 收到私聊消息
     async def on_direct_message_create(self, message: botpy.message.DirectMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self._commit(abm)
@@ -56,7 +61,8 @@ class botClient(Client):
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
-            message, MessageType.FRIEND_MESSAGE
+            message,
+            MessageType.FRIEND_MESSAGE,
         )
         abm.session_id = abm.sender.user_id
         self._commit(abm)
@@ -64,15 +70,22 @@ class botClient(Client):
     def _commit(self, abm: AstrBotMessage):
         self.platform.commit_event(
             QQOfficialWebhookMessageEvent(
-                abm.message_str, abm, self.platform.meta(), abm.session_id, self
-            )
+                abm.message_str,
+                abm,
+                self.platform.meta(),
+                abm.session_id,
+                self,
+            ),
         )
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")
 class QQOfficialWebhookPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -83,7 +96,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.unique_session = platform_settings["unique_session"]
 
         intents = botpy.Intents(
-            public_messages=True, public_guild_messages=True, direct_message=True
+            public_messages=True,
+            public_guild_messages=True,
+            direct_message=True,
         )
         self.client = botClient(
             intents=intents,  # 已经无用
@@ -93,7 +108,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.client.set_platform(self)
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
@@ -106,7 +123,9 @@ class QQOfficialWebhookPlatformAdapter(Platform):
 
     async def run(self):
         self.webhook_helper = QQOfficialWebhook(
-            self.config, self._event_queue, self.client
+            self.config,
+            self._event_queue,
+            self.client,
         )
         await self.webhook_helper.initialize()
         await self.webhook_helper.start_polling()

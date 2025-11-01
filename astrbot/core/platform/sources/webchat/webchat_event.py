@@ -1,11 +1,13 @@
+import base64
 import os
 import uuid
-import base64
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.api.message_components import Image, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_image_by_url
+
 from .webchat_queue_mgr import webchat_queue_mgr
 
 imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
@@ -26,7 +28,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "type": "end",
                     "data": "",
                     "streaming": False,
-                }  # end means this request is finished
+                },  # end means this request is finished
             )
             return ""
 
@@ -41,7 +43,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "chain_type": message.type,
-                    }
+                    },
                 )
             elif isinstance(comp, Image):
                 # save image to local
@@ -70,7 +72,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,
-                    }
+                    },
                 )
             elif isinstance(comp, Record):
                 # save record to local
@@ -94,7 +96,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,
-                    }
+                    },
                 )
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
@@ -118,12 +120,14 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": final_data,
                         "streaming": True,
                         "cid": cid,
-                    }
+                    },
                 )
                 final_data = ""
                 continue
             final_data += await WebChatMessageEvent._send(
-                chain, session_id=self.session_id, streaming=True
+                chain,
+                session_id=self.session_id,
+                streaming=True,
             )
 
         await web_chat_back_queue.put(
@@ -132,6 +136,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "streaming": True,
                 "cid": cid,
-            }
+            },
         )
         await super().send_streaming(generator, use_fallback)

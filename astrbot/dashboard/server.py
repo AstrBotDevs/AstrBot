@@ -39,7 +39,7 @@ class AstrBotDashboard:
             self.data_path = os.path.abspath(webui_dir)
         else:
             self.data_path = os.path.abspath(
-                os.path.join(get_astrbot_data_path(), "dist")
+                os.path.join(get_astrbot_data_path(), "dist"),
             )
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
@@ -53,11 +53,15 @@ class AstrBotDashboard:
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
         self.ur = UpdateRoute(
-            self.context, core_lifecycle.astrbot_updator, core_lifecycle
+            self.context,
+            core_lifecycle.astrbot_updator,
+            core_lifecycle,
         )
         self.sr = StatRoute(self.context, db, core_lifecycle)
         self.pr = PluginRoute(
-            self.context, core_lifecycle, core_lifecycle.plugin_manager
+            self.context,
+            core_lifecycle,
+            core_lifecycle.plugin_manager,
         )
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
@@ -68,7 +72,9 @@ class AstrBotDashboard:
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
-            self.context, db, core_lifecycle
+            self.context,
+            db,
+            core_lifecycle,
         )
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
@@ -85,9 +91,7 @@ class AstrBotDashboard:
         self._init_jwt_secret()
 
     async def srv_plug_route(self, subpath, *args, **kwargs):
-        """
-        插件路由
-        """
+        """插件路由"""
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
@@ -97,18 +101,17 @@ class AstrBotDashboard:
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
-            return
+            return None
         allowed_endpoints = ["/api/auth/login", "/api/file"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
-            return
+            return None
         # claim jwt
         token = request.headers.get("Authorization")
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        if token.startswith("Bearer "):
-            token = token[7:]
+        token = token.removeprefix("Bearer ")
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
@@ -122,9 +125,7 @@ class AstrBotDashboard:
             return r
 
     def check_port_in_use(self, port: int) -> bool:
-        """
-        跨平台检测端口是否被占用
-        """
+        """跨平台检测端口是否被占用"""
         try:
             # 创建 IPv4 TCP Socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -136,7 +137,7 @@ class AstrBotDashboard:
             # result 为 0 表示端口被占用
             return result == 0
         except Exception as e:
-            logger.warning(f"检查端口 {port} 时发生错误: {str(e)}")
+            logger.warning(f"检查端口 {port} 时发生错误: {e!s}")
             # 如果出现异常，保守起见认为端口可能被占用
             return True
 
@@ -157,10 +158,10 @@ class AstrBotDashboard:
                         ]
                         return "\n           ".join(proc_info)
                     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                        return f"无法获取进程详细信息(可能需要管理员权限): {str(e)}"
+                        return f"无法获取进程详细信息(可能需要管理员权限): {e!s}"
             return "未找到占用进程"
         except Exception as e:
-            return f"获取进程信息失败: {str(e)}"
+            return f"获取进程信息失败: {e!s}"
 
     def _init_jwt_secret(self):
         if not self.config.get("dashboard", {}).get("jwt_secret", None):
@@ -182,13 +183,13 @@ class AstrBotDashboard:
 
         if not enable:
             logger.info("WebUI 已被禁用")
-            return
+            return None
 
         logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
 
         if host == "0.0.0.0":
             logger.info(
-                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）"
+                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
             )
 
         if host not in ["localhost", "127.0.0.1"]:
@@ -207,7 +208,7 @@ class AstrBotDashboard:
                 f"请确保：\n"
                 f"1. 没有其他 AstrBot 实例正在运行\n"
                 f"2. 端口 {port} 没有被其他程序占用\n"
-                f"3. 如需使用其他端口，请修改配置文件"
+                f"3. 如需使用其他端口，请修改配置文件",
             )
 
             raise Exception(f"端口 {port} 已被占用")
@@ -226,7 +227,9 @@ class AstrBotDashboard:
         logger.info(display)
 
         return self.app.run_task(
-            host=host, port=port, shutdown_trigger=self.shutdown_trigger
+            host=host,
+            port=port,
+            shutdown_trigger=self.shutdown_trigger,
         )
 
     async def shutdown_trigger(self):

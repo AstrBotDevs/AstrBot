@@ -1,10 +1,11 @@
+from astrbot.core import html_renderer
+from astrbot.core.provider import Provider
+from astrbot.core.star.star_tools import StarTools
+from astrbot.core.utils.command_parser import CommandParserMixin
+
+from .context import Context
 from .star import StarMetadata, star_map, star_registry
 from .star_manager import PluginManager
-from .context import Context
-from astrbot.core.provider import Provider
-from astrbot.core.utils.command_parser import CommandParserMixin
-from astrbot.core import html_renderer
-from astrbot.core.star.star_tools import StarTools
 
 
 class Star(CommandParserMixin):
@@ -36,24 +37,28 @@ class Star(CommandParserMixin):
         )
 
     async def html_render(
-        self, tmpl: str, data: dict, return_url=True, options: dict | None = None
+        self,
+        tmpl: str,
+        data: dict,
+        return_url=True,
+        options: dict | None = None,
     ) -> str:
         """渲染 HTML"""
         return await html_renderer.render_custom_template(
-            tmpl, data, return_url=return_url, options=options
+            tmpl,
+            data,
+            return_url=return_url,
+            options=options,
         )
 
     async def initialize(self):
         """当插件被激活时会调用这个方法"""
-        pass
 
     async def terminate(self):
         """当插件被禁用、重载插件时会调用这个方法"""
-        pass
 
     def __del__(self):
         """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
-        pass
 
 
-__all__ = ["Star", "StarMetadata", "PluginManager", "Context", "Provider", "StarTools"]
+__all__ = ["Context", "PluginManager", "Provider", "Star", "StarMetadata", "StarTools"]

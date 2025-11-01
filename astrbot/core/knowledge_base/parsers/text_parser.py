@@ -26,6 +26,7 @@ class TextParser(BaseParser):
 
         Raises:
             ValueError: 如果无法解码文件
+
         """
         # 尝试多种编码
         for encoding in ["utf-8", "gbk", "gb2312", "gb18030"]:

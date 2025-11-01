@@ -1,18 +1,19 @@
-import traceback
 import asyncio
-from astrbot.core.config.astrbot_config import AstrBotConfig
-from .platform import Platform
-from typing import List
+import traceback
 from asyncio import Queue
-from .register import platform_cls_map
+
 from astrbot.core import logger
-from astrbot.core.star.star_handler import star_handlers_registry, star_map, EventType
+from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+
+from .platform import Platform
+from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue):
-        self.platform_insts: List[Platform] = []
+        self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
         self._inst_map = {}
@@ -36,7 +37,7 @@ class PlatformManager:
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
         asyncio.create_task(
-            self._task_wrapper(asyncio.create_task(webchat_inst.run(), name="webchat"))
+            self._task_wrapper(asyncio.create_task(webchat_inst.run(), name="webchat")),
         )
 
     async def load_platform(self, platform_config: dict):
@@ -47,7 +48,7 @@ class PlatformManager:
                 return
 
             logger.info(
-                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ..."
+                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
             )
             match platform_config["type"]:
                 case "aiocqhttp":
@@ -106,14 +107,14 @@ class PlatformManager:
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。"
+                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。",
             )
         except Exception as e:
             logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
-                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误"
+                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误",
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]
@@ -129,16 +130,16 @@ class PlatformManager:
                 asyncio.create_task(
                     inst.run(),
                     name=f"platform_{platform_config['type']}_{platform_config['id']}",
-                )
-            )
+                ),
+            ),
         )
         handlers = star_handlers_registry.get_handlers_by_event_type(
-            EventType.OnPlatformLoadedEvent
+            EventType.OnPlatformLoadedEvent,
         )
         for handler in handlers:
             try:
                 logger.info(
-                    f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}"
+                    f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
             except Exception:
@@ -180,7 +181,7 @@ class PlatformManager:
                         inst
                         for inst in self.platform_insts
                         if inst.client_self_id == client_id
-                    )
+                    ),
                 )
             except Exception:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")

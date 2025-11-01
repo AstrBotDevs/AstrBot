@@ -1,19 +1,20 @@
-import pytest
 import os
+from asyncio import Queue
 from unittest.mock import MagicMock
-from astrbot.core.star.star_manager import PluginManager
-from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.star.star import star_registry
-from astrbot.core.star.context import Context
+
+import pytest
+
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.sqlite import SQLiteDatabase
-from asyncio import Queue
+from astrbot.core.star.context import Context
+from astrbot.core.star.star import star_registry
+from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.star.star_manager import PluginManager
 
 
 @pytest.fixture
 def plugin_manager_pm(tmp_path):
-    """
-    Provides a fully isolated PluginManager instance for testing.
+    """Provides a fully isolated PluginManager instance for testing.
     - Uses a temporary directory for plugins.
     - Uses a temporary database.
     - Creates a fresh context for each test.
@@ -53,7 +54,7 @@ def plugin_manager_pm(tmp_path):
 
     # Create the PluginManager instance
     manager = PluginManager(star_context, config)
-    yield manager
+    return manager
 
 
 def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
@@ -75,7 +76,8 @@ async def test_install_plugin(plugin_manager_pm: PluginManager):
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_info = await plugin_manager_pm.install_plugin(test_repo)
     plugin_path = os.path.join(
-        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential"
+        plugin_manager_pm.plugin_store_path,
+        "astrbot_plugin_essential",
     )
 
     assert plugin_info is not None
@@ -90,7 +92,7 @@ async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
     """Tests that installing a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
         await plugin_manager_pm.install_plugin(
-            "https://github.com/Soulter/non_existent_repo"
+            "https://github.com/Soulter/non_existent_repo",
         )
 
 
@@ -119,7 +121,8 @@ async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     await plugin_manager_pm.install_plugin(test_repo)
     plugin_path = os.path.join(
-        plugin_manager_pm.plugin_store_path, "astrbot_plugin_essential"
+        plugin_manager_pm.plugin_store_path,
+        "astrbot_plugin_essential",
     )
     assert os.path.exists(plugin_path)  # Pre-condition
 

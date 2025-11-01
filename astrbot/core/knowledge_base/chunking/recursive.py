@@ -1,4 +1,5 @@
 from collections.abc import Callable
+
 from .base import BaseChunker
 
 
@@ -11,8 +12,7 @@ class RecursiveCharacterChunker(BaseChunker):
         is_separator_regex: bool = False,
         separators: list[str] | None = None,
     ):
-        """
-        初始化递归字符文本分割器
+        """初始化递归字符文本分割器
 
         Args:
             chunk_size: 每个文本块的最大大小
@@ -20,6 +20,7 @@ class RecursiveCharacterChunker(BaseChunker):
             length_function: 计算文本长度的函数
             is_separator_regex: 分隔符是否为正则表达式
             separators: 用于分割文本的分隔符列表，按优先级排序
+
         """
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -39,8 +40,7 @@ class RecursiveCharacterChunker(BaseChunker):
         ]
 
     async def chunk(self, text: str, **kwargs) -> list[str]:
-        """
-        递归地将文本分割成块
+        """递归地将文本分割成块
 
         Args:
             text: 要分割的文本
@@ -49,6 +49,7 @@ class RecursiveCharacterChunker(BaseChunker):
 
         Returns:
             分割后的文本块列表
+
         """
         if not text:
             return []
@@ -90,7 +91,7 @@ class RecursiveCharacterChunker(BaseChunker):
                                     combined_text,
                                     chunk_size=chunk_size,
                                     chunk_overlap=overlap,
-                                )
+                                ),
                             )
                             current_chunk = []
                             current_chunk_length = 0
@@ -98,8 +99,10 @@ class RecursiveCharacterChunker(BaseChunker):
                         # 递归分割过大的部分
                         final_chunks.extend(
                             await self.chunk(
-                                split, chunk_size=chunk_size, chunk_overlap=overlap
-                            )
+                                split,
+                                chunk_size=chunk_size,
+                                chunk_overlap=overlap,
+                            ),
                         )
                     # 如果添加这部分会使当前块超过chunk_size
                     elif current_chunk_length + split_length > chunk_size:
@@ -132,16 +135,19 @@ class RecursiveCharacterChunker(BaseChunker):
         return [text]
 
     def _split_by_character(
-        self, text: str, chunk_size: int | None = None, overlap: int | None = None
+        self,
+        text: str,
+        chunk_size: int | None = None,
+        overlap: int | None = None,
     ) -> list[str]:
-        """
-        按字符级别分割文本
+        """按字符级别分割文本
 
         Args:
             text: 要分割的文本
 
         Returns:
             分割后的文本块列表
+
         """
         chunk_size = chunk_size or self.chunk_size
         overlap = overlap or self.chunk_overlap

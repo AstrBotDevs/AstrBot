@@ -1,5 +1,4 @@
-"""
-AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。
+"""AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。
 
 工作流程:
 1. 初始化核心生命周期, 传递数据库和日志代理实例到核心生命周期
@@ -8,10 +7,10 @@ AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。
 
 import asyncio
 import traceback
-from astrbot.core import logger
+
+from astrbot.core import LogBroker, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core import LogBroker
 from astrbot.dashboard.server import AstrBotDashboard
 
 
@@ -39,7 +38,10 @@ class InitialLoader:
         webui_dir = self.webui_dir
 
         self.dashboard_server = AstrBotDashboard(
-            core_lifecycle, self.db, core_lifecycle.dashboard_shutdown_event, webui_dir
+            core_lifecycle,
+            self.db,
+            core_lifecycle.dashboard_shutdown_event,
+            webui_dir,
         )
 
         coro = self.dashboard_server.run()

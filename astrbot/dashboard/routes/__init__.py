@@ -1,31 +1,31 @@
 from .auth import AuthRoute
-from .plugin import PluginRoute
-from .config import ConfigRoute
-from .update import UpdateRoute
-from .stat import StatRoute
-from .log import LogRoute
-from .static_file import StaticFileRoute
 from .chat import ChatRoute
-from .tools import ToolsRoute
+from .config import ConfigRoute
 from .conversation import ConversationRoute
 from .file import FileRoute
-from .session_management import SessionManagementRoute
-from .persona import PersonaRoute
 from .knowledge_base import KnowledgeBaseRoute
+from .log import LogRoute
+from .persona import PersonaRoute
+from .plugin import PluginRoute
+from .session_management import SessionManagementRoute
+from .stat import StatRoute
+from .static_file import StaticFileRoute
+from .tools import ToolsRoute
+from .update import UpdateRoute
 
 __all__ = [
     "AuthRoute",
-    "PluginRoute",
-    "ConfigRoute",
-    "UpdateRoute",
-    "StatRoute",
-    "LogRoute",
-    "StaticFileRoute",
     "ChatRoute",
-    "ToolsRoute",
+    "ConfigRoute",
     "ConversationRoute",
     "FileRoute",
-    "SessionManagementRoute",
-    "PersonaRoute",
     "KnowledgeBaseRoute",
+    "LogRoute",
+    "PersonaRoute",
+    "PluginRoute",
+    "SessionManagementRoute",
+    "StatRoute",
+    "StaticFileRoute",
+    "ToolsRoute",
+    "UpdateRoute",
 ]

@@ -1,8 +1,11 @@
 import asyncio
 import json
+
 from quart import make_response
-from astrbot.core import logger, LogBroker
-from .route import Route, RouteContext, Response
+
+from astrbot.core import LogBroker, logger
+
+from .route import Response, Route, RouteContext
 
 
 class LogRoute(Route):
@@ -11,7 +14,9 @@ class LogRoute(Route):
         self.log_broker = log_broker
         self.app.add_url_rule("/api/live-log", view_func=self.log, methods=["GET"])
         self.app.add_url_rule(
-            "/api/log-history", view_func=self.log_history, methods=["GET"]
+            "/api/log-history",
+            view_func=self.log_history,
+            methods=["GET"],
         )
 
     async def log(self):
@@ -55,7 +60,7 @@ class LogRoute(Route):
                 .ok(
                     data={
                         "logs": logs,
-                    }
+                    },
                 )
                 .__dict__
             )

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 

@@ -1,11 +1,11 @@
-from typing import AsyncGenerator, Union
+from collections.abc import AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
@@ -30,10 +30,12 @@ class WakingCheckStage(Stage):
 
         Args:
             ctx (PipelineContext): 消息管道上下文对象, 包括配置和插件管理器
+
         """
         self.ctx = ctx
         self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
-            "no_permission_reply", True
+            "no_permission_reply",
+            True,
         )
         # 私聊是否需要 wake_prefix 才能唤醒机器人
         self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
@@ -41,15 +43,18 @@ class WakingCheckStage(Stage):
         ].get("friend_message_needs_wake_prefix", False)
         # 是否忽略机器人自己发送的消息
         self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_bot_self_message", False
+            "ignore_bot_self_message",
+            False,
         )
         self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_at_all", False
+            "ignore_at_all",
+            False,
         )
 
     async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         if (
             self.ignore_bot_self_message
             and event.get_self_id() == event.get_sender_id()
@@ -123,7 +128,8 @@ class WakingCheckStage(Stage):
         logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
 
         for handler in star_handlers_registry.get_handlers_by_event_type(
-            EventType.AdapterMessageEvent, plugins_name=event.plugins_name
+            EventType.AdapterMessageEvent,
+            plugins_name=event.plugins_name,
         ):
             # filter 需满足 AND 逻辑关系
             passed = True
@@ -138,15 +144,14 @@ class WakingCheckStage(Stage):
                         if not filter.filter(event, self.ctx.astrbot_config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
-                    else:
-                        if not filter.filter(event, self.ctx.astrbot_config):
-                            passed = False
-                            break
+                    elif not filter.filter(event, self.ctx.astrbot_config):
+                        passed = False
+                        break
                 except Exception as e:
                     await event.send(
                         MessageEventResult().message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}"
-                        )
+                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                        ),
                     )
                     event.stop_event()
                     passed = False
@@ -159,11 +164,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。"
-                            )
+                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                            ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。"
+                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
                     )
                     event.stop_event()
                     return
@@ -185,7 +190,8 @@ class WakingCheckStage(Stage):
 
         # 根据会话配置过滤插件处理器
         activated_handlers = SessionPluginManager.filter_handlers_by_session(
-            event, activated_handlers
+            event,
+            activated_handlers,
         )
 
         event.set_extra("activated_handlers", activated_handlers)

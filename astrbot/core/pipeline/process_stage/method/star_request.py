@@ -1,16 +1,17 @@
-"""
-本地 Agent 模式的 AstrBot 插件调用 Stage
-"""
+"""本地 Agent 模式的 AstrBot 插件调用 Stage"""
+
+import traceback
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from astrbot.core import logger
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.star import star_map
+from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from ...context import PipelineContext, call_handler
 from ..stage import Stage
-from typing import Dict, Any, List, AsyncGenerator, Union
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.message.message_event_result import MessageEventResult
-from astrbot.core import logger
-from astrbot.core.star.star_handler import StarHandlerMetadata
-from astrbot.core.star.star import star_map
-import traceback
 
 
 class StarRequestSubStage(Stage):
@@ -21,13 +22,14 @@ class StarRequestSubStage(Stage):
         self.ctx = ctx
 
     async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
-        activated_handlers: List[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers"
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
+        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
+            "activated_handlers",
         )
-        handlers_parsed_params: Dict[str, Dict[str, Any]] = event.get_extra(
-            "handlers_parsed_params"
+        handlers_parsed_params: dict[str, dict[str, Any]] = event.get_extra(
+            "handlers_parsed_params",
         )
         if not handlers_parsed_params:
             handlers_parsed_params = {}
@@ -37,7 +39,7 @@ class StarRequestSubStage(Stage):
             md = star_map.get(handler.handler_module_path)
             if not md:
                 logger.warning(
-                    f"Cannot find plugin for given handler module path: {handler.handler_module_path}"
+                    f"Cannot find plugin for given handler module path: {handler.handler_module_path}",
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")

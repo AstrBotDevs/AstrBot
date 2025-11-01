@@ -2,9 +2,10 @@ try:
     import faiss
 except ModuleNotFoundError:
     raise ImportError(
-        "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。"
+        "faiss 未安装。请使用 'pip install faiss-cpu' 或 'pip install faiss-gpu' 安装。",
     )
 import os
+
 import numpy as np
 
 
@@ -27,11 +28,12 @@ class EmbeddingStorage:
             id (int): 向量的ID
         Raises:
             ValueError: 如果向量的维度与存储的维度不匹配
+
         """
         assert self.index is not None, "FAISS index is not initialized."
         if vector.shape[0] != self.dimension:
             raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}"
+                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
             )
         self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
         await self.save_index()
@@ -44,11 +46,12 @@ class EmbeddingStorage:
             ids (list[int]): 向量的ID列表
         Raises:
             ValueError: 如果向量的维度与存储的维度不匹配
+
         """
         assert self.index is not None, "FAISS index is not initialized."
         if vectors.shape[1] != self.dimension:
             raise ValueError(
-                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}"
+                f"向量维度不匹配, 期望: {self.dimension}, 实际: {vectors.shape[1]}",
             )
         self.index.add_with_ids(vectors, np.array(ids))
         await self.save_index()
@@ -61,6 +64,7 @@ class EmbeddingStorage:
             k (int): 返回的最相似向量的数量
         Returns:
             tuple: (距离, 索引)
+
         """
         assert self.index is not None, "FAISS index is not initialized."
         faiss.normalize_L2(vector)
@@ -72,6 +76,7 @@ class EmbeddingStorage:
 
         Args:
             ids (list[int]): 要删除的向量ID列表
+
         """
         assert self.index is not None, "FAISS index is not initialized."
         id_array = np.array(ids, dtype=np.int64)
@@ -83,5 +88,6 @@ class EmbeddingStorage:
 
         Args:
             path (str): 保存索引的路径
+
         """
         faiss.write_index(self.index, self.path)

@@ -1,29 +1,26 @@
+import base64
+import logging
 import os
-from pathlib import Path
-import ssl
 import shutil
 import socket
+import ssl
 import time
-import aiohttp
-import base64
-import zipfile
 import uuid
-import psutil
-import logging
+import zipfile
+from pathlib import Path
 
+import aiohttp
 import certifi
-
-
+import psutil
 from PIL import Image
+
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 
 
 def on_error(func, path, exc_info):
-    """
-    a callback of the rmtree function.
-    """
+    """A callback of the rmtree function."""
     import stat
 
     if not os.access(path, os.W_OK):
@@ -78,35 +75,35 @@ def save_temp_img(img: Image.Image | str) -> str:
 
 
 async def download_image_by_url(
-    url: str, post: bool = False, post_data: dict = None, path=None
+    url: str,
+    post: bool = False,
+    post_data: dict = None,
+    path=None,
 ) -> str:
-    """
-    下载图片, 返回 path
-    """
+    """下载图片, 返回 path"""
     try:
         ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
+            cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
         async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
+            trust_env=True,
+            connector=connector,
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
-                    else:
-                        with open(path, "wb") as f:
-                            f.write(await resp.read())
-                        return path
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
             else:
                 async with session.get(url) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
-                    else:
-                        with open(path, "wb") as f:
-                            f.write(await resp.read())
-                        return path
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证
         ssl_context = ssl.create_default_context()
@@ -123,16 +120,15 @@ async def download_image_by_url(
 
 
 async def download_file(url: str, path: str, show_progress: bool = False):
-    """
-    从指定 url 下载文件到指定路径 path
-    """
+    """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
+            cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
+            trust_env=True,
+            connector=connector,
         ) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
@@ -227,7 +223,6 @@ async def download_dashboard(
     proxy: str | None = None,
 ) -> None:
     """下载管理面板文件"""
-
     if path is None:
         zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
     else:
@@ -237,11 +232,13 @@ async def download_dashboard(
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
         logger.info(
-            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}"
+            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
         )
         try:
             await download_file(
-                dashboard_release_url, str(zip_path), show_progress=True
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
             )
         except BaseException as _:
             if latest:
@@ -251,7 +248,9 @@ async def download_dashboard(
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
             await download_file(
-                dashboard_release_url, str(zip_path), show_progress=True
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
             )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"

@@ -1,6 +1,9 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any, Literal
+
 from deprecated import deprecated
-from typing import Awaitable, Callable, Literal, Any, Optional
+
 from .mcp_client import MCPClient
 
 
@@ -49,7 +52,8 @@ class ToolSet:
     """A set of function tools that can be used in function calling.
 
     This class provides methods to add, remove, and retrieve tools, as well as
-    convert the tools to different API formats (OpenAI, Anthropic, Google GenAI)."""
+    convert the tools to different API formats (OpenAI, Anthropic, Google GenAI).
+    """
 
     def __init__(self, tools: list[FunctionTool] | None = None):
         self.tools: list[FunctionTool] = tools or []
@@ -71,7 +75,7 @@ class ToolSet:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
-    def get_tool(self, name: str) -> Optional[FunctionTool]:
+    def get_tool(self, name: str) -> FunctionTool | None:
         """Get a tool by its name."""
         for tool in self.tools:
             if tool.name == name:
@@ -132,10 +136,8 @@ class ToolSet:
             }
 
             if (
-                tool.parameters
-                and tool.parameters.get("properties")
-                or not omit_empty_parameter_field
-            ):
+                tool.parameters and tool.parameters.get("properties")
+            ) or not omit_empty_parameter_field:
                 func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
@@ -185,7 +187,8 @@ class ToolSet:
             if "type" in schema and schema["type"] in supported_types:
                 result["type"] = schema["type"]
                 if "format" in schema and schema["format"] in supported_formats.get(
-                    result["type"], set()
+                    result["type"],
+                    set(),
                 ):
                     result["format"] = schema["format"]
             else:

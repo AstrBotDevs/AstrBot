@@ -1,26 +1,29 @@
-import traceback
-import os
+import asyncio
 import inspect
-from .route import Route, Response, RouteContext
-from astrbot.core.provider.entities import ProviderType
+import os
+import traceback
+
 from quart import request
+
+from astrbot.core import file_token_service, logger
+from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
-    DEFAULT_CONFIG,
     CONFIG_METADATA_2,
-    DEFAULT_VALUE_MAP,
     CONFIG_METADATA_3,
     CONFIG_METADATA_3_SYSTEM,
+    DEFAULT_CONFIG,
+    DEFAULT_VALUE_MAP,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_path
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.platform.register import platform_registry, platform_cls_map
+from astrbot.core.platform.register import platform_cls_map, platform_registry
+from astrbot.core.provider import Provider
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import RerankProvider
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core import logger, file_token_service
-from astrbot.core.provider import Provider
-from astrbot.core.provider.provider import RerankProvider
-import asyncio
+from astrbot.core.utils.astrbot_path import get_astrbot_path
+
+from .route import Response, Route, RouteContext
 
 
 def try_cast(value: str, type_: str):
@@ -33,9 +36,7 @@ def try_cast(value: str, type_: str):
         type_ == "float"
         and isinstance(value, str)
         and value.replace(".", "", 1).isdigit()
-    ):
-        return float(value)
-    elif type_ == "float" and isinstance(value, int):
+    ) or (type_ == "float" and isinstance(value, int)):
         return float(value)
     elif type_ == "float":
         try:
@@ -61,7 +62,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 continue
             if meta["type"] == "list" and not isinstance(value, list):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
                 )
             elif (
                 meta["type"] == "list"
@@ -80,31 +81,31 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 casted = try_cast(value, "int")
                 if casted is None:
                     errors.append(
-                        f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}"
+                        f"错误的类型 {path}{key}: 期望是 int, 得到了 {type(value).__name__}",
                     )
                 data[key] = casted
             elif meta["type"] == "float" and not isinstance(value, float):
                 casted = try_cast(value, "float")
                 if casted is None:
                     errors.append(
-                        f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}"
+                        f"错误的类型 {path}{key}: 期望是 float, 得到了 {type(value).__name__}",
                     )
                 data[key] = casted
             elif meta["type"] == "bool" and not isinstance(value, bool):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] in ["string", "text"] and not isinstance(value, str):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] == "list" and not isinstance(value, list):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
                 )
             elif meta["type"] == "object" and not isinstance(value, dict):
                 errors.append(
-                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}"
+                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}",
                 )
 
     if is_core:
@@ -127,7 +128,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
     try:
         if is_core:
             errors, post_config = validate_config(
-                post_config, CONFIG_METADATA_2, is_core
+                post_config,
+                CONFIG_METADATA_2,
+                is_core,
             )
         else:
             errors, post_config = validate_config(post_config, config.schema, is_core)
@@ -143,7 +146,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
 
 class ConfigRoute(Route):
     def __init__(
-        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+        self,
+        context: RouteContext,
+        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -199,7 +204,7 @@ class ConfigRoute(Route):
             return Response().ok(message="更新成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+            return Response().error(f"更新路由表失败: {e!s}").__dict__
 
     async def update_ucr(self):
         """更新 UMOP 配置路由表"""
@@ -218,7 +223,7 @@ class ConfigRoute(Route):
             return Response().ok(message="更新成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {str(e)}").__dict__
+            return Response().error(f"更新路由表失败: {e!s}").__dict__
 
     async def delete_ucr(self):
         """删除 UMOP 配置路由表中的一项"""
@@ -238,7 +243,7 @@ class ConfigRoute(Route):
             return Response().ok(message="删除成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"删除路由表项失败: {str(e)}").__dict__
+            return Response().error(f"删除路由表项失败: {e!s}").__dict__
 
     async def get_default_config(self):
         """获取默认配置文件"""
@@ -305,13 +310,12 @@ class ConfigRoute(Route):
             success = self.acm.delete_conf(conf_id)
             if success:
                 return Response().ok(message="删除成功").__dict__
-            else:
-                return Response().error("删除失败").__dict__
+            return Response().error("删除失败").__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"删除配置文件失败: {str(e)}").__dict__
+            return Response().error(f"删除配置文件失败: {e!s}").__dict__
 
     async def update_abconf(self):
         """更新指定 AstrBot 配置文件信息"""
@@ -329,13 +333,12 @@ class ConfigRoute(Route):
             success = self.acm.update_conf_info(conf_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
-            else:
-                return Response().error("更新失败").__dict__
+            return Response().error("更新失败").__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"更新配置文件失败: {str(e)}").__dict__
+            return Response().error(f"更新配置文件失败: {e!s}").__dict__
 
     async def _test_single_provider(self, provider):
         """辅助函数：测试单个 provider 的可用性"""
@@ -352,17 +355,18 @@ class ConfigRoute(Route):
             "error": None,
         }
         logger.debug(
-            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})"
+            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})",
         )
 
         if provider_capability_type == ProviderType.CHAT_COMPLETION:
             try:
                 logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
                 response = await asyncio.wait_for(
-                    provider.text_chat(prompt="REPLY `PONG` ONLY"), timeout=45.0
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
+                    timeout=45.0,
                 )
                 logger.debug(
-                    f"Received response from {status_info['name']}: {response}"
+                    f"Received response from {status_info['name']}: {response}",
                 )
                 if response is not None:
                     status_info["status"] = "available"
@@ -386,14 +390,14 @@ class ConfigRoute(Route):
                         except Exception as _:
                             pass
                     logger.info(
-                        f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'"
+                        f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'",
                     )
                 else:
                     status_info["error"] = (
                         "Test call returned None, but expected an LLMResponse object."
                     )
                     logger.warning(
-                        f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None."
+                        f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.",
                     )
 
             except asyncio.TimeoutError:
@@ -401,16 +405,16 @@ class ConfigRoute(Route):
                     "Connection timed out after 45 seconds during test call."
                 )
                 logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) timed out."
+                    f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.",
                 )
             except Exception as e:
                 error_message = str(e)
                 status_info["error"] = error_message
                 logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}"
+                    f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}",
                 )
                 logger.debug(
-                    f"Traceback for {status_info['name']}:\n{traceback.format_exc()}"
+                    f"Traceback for {status_info['name']}:\n{traceback.format_exc()}",
                 )
 
         elif provider_capability_type == ProviderType.EMBEDDING:
@@ -432,7 +436,7 @@ class ConfigRoute(Route):
                     exc_info=True,
                 )
                 status_info["status"] = "unavailable"
-                status_info["error"] = f"Embedding test failed: {str(e)}"
+                status_info["error"] = f"Embedding test failed: {e!s}"
 
         elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
             try:
@@ -447,17 +451,20 @@ class ConfigRoute(Route):
                     )
             except Exception as e:
                 logger.error(
-                    f"Error testing TTS provider {provider_name}: {e}", exc_info=True
+                    f"Error testing TTS provider {provider_name}: {e}",
+                    exc_info=True,
                 )
                 status_info["status"] = "unavailable"
-                status_info["error"] = f"TTS test failed: {str(e)}"
+                status_info["error"] = f"TTS test failed: {e!s}"
         elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
             try:
                 logger.debug(
-                    f"Sending health check audio to provider: {status_info['name']}"
+                    f"Sending health check audio to provider: {status_info['name']}",
                 )
                 sample_audio_path = os.path.join(
-                    get_astrbot_path(), "samples", "stt_health_check.wav"
+                    get_astrbot_path(),
+                    "samples",
+                    "stt_health_check.wav",
                 )
                 if not os.path.exists(sample_audio_path):
                     status_info["status"] = "unavailable"
@@ -465,7 +472,7 @@ class ConfigRoute(Route):
                         "STT test failed: sample audio file not found."
                     )
                     logger.warning(
-                        f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}"
+                        f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}",
                     )
                 else:
                     text_result = await provider.get_text(sample_audio_path)
@@ -477,7 +484,7 @@ class ConfigRoute(Route):
                             else text_result
                         )
                         logger.info(
-                            f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'"
+                            f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'",
                         )
                     else:
                         status_info["status"] = "unavailable"
@@ -485,14 +492,15 @@ class ConfigRoute(Route):
                             f"STT test failed: unexpected result type {type(text_result)}"
                         )
                         logger.warning(
-                            f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}"
+                            f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}",
                         )
             except Exception as e:
                 logger.error(
-                    f"Error testing STT provider {provider_name}: {e}", exc_info=True
+                    f"Error testing STT provider {provider_name}: {e}",
+                    exc_info=True,
                 )
                 status_info["status"] = "unavailable"
-                status_info["error"] = f"STT test failed: {str(e)}"
+                status_info["error"] = f"STT test failed: {e!s}"
         elif provider_capability_type == ProviderType.RERANK:
             try:
                 assert isinstance(provider, RerankProvider)
@@ -504,11 +512,11 @@ class ConfigRoute(Route):
                     exc_info=True,
                 )
                 status_info["status"] = "unavailable"
-                status_info["error"] = f"Rerank test failed: {str(e)}"
+                status_info["error"] = f"Rerank test failed: {e!s}"
 
         else:
             logger.debug(
-                f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}"
+                f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}",
             )
             status_info["status"] = "available"
             status_info["error"] = (
@@ -518,7 +526,10 @@ class ConfigRoute(Route):
         return status_info
 
     def _error_response(
-        self, message: str, status_code: int = 500, log_fn=logger.error
+        self,
+        message: str,
+        status_code: int = 500,
+        log_fn=logger.error,
     ):
         log_fn(message)
         # 记录更详细的traceback信息，但只在是严重错误时
@@ -531,7 +542,9 @@ class ConfigRoute(Route):
         provider_id = request.args.get("id")
         if not provider_id:
             return self._error_response(
-                "Missing provider_id parameter", 400, logger.warning
+                "Missing provider_id parameter",
+                400,
+                logger.warning,
             )
 
         logger.info(f"API call: /config/provider/check_one id={provider_id}")
@@ -541,7 +554,7 @@ class ConfigRoute(Route):
 
             if not target:
                 logger.warning(
-                    f"Provider with id '{provider_id}' not found in provider_manager."
+                    f"Provider with id '{provider_id}' not found in provider_manager.",
                 )
                 return (
                     Response()
@@ -554,7 +567,8 @@ class ConfigRoute(Route):
 
         except Exception as e:
             return self._error_response(
-                f"Critical error checking provider {provider_id}: {e}", 500
+                f"Critical error checking provider {provider_id}: {e}",
+                500,
             )
 
     async def get_configs(self):
@@ -646,13 +660,13 @@ class ConfigRoute(Route):
             dim = len(vec)
 
             logger.info(
-                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}"
+                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",
             )
 
             return Response().ok({"embedding_dimensions": dim}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"获取嵌入维度失败: {str(e)}").__dict__
+            return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
 
     async def get_platform_list(self):
         """获取所有平台的列表"""
@@ -693,7 +707,7 @@ class ConfigRoute(Route):
         try:
             save_config(self.config, self.config, is_core=True)
             await self.core_lifecycle.platform_manager.load_platform(
-                new_platform_config
+                new_platform_config,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -705,7 +719,7 @@ class ConfigRoute(Route):
         try:
             save_config(self.config, self.config, is_core=True)
             await self.core_lifecycle.provider_manager.load_provider(
-                new_provider_config
+                new_provider_config,
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
@@ -802,9 +816,9 @@ class ConfigRoute(Route):
             if cache_key in self._logo_token_cache:
                 cached_token = self._logo_token_cache[cache_key]
                 # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl:
-                    platform_default_tmpl[platform.name] = {}
-                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                if platform.name not in platform_default_tmpl or not isinstance(
+                    platform_default_tmpl[platform.name], dict
+                ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
                 logger.debug(f"Using cached logo token for platform {platform.name}")
@@ -826,13 +840,14 @@ class ConfigRoute(Route):
             # 检查文件是否存在并注册令牌
             if os.path.exists(logo_file_path):
                 logo_token = await file_token_service.register_file(
-                    logo_file_path, timeout=3600
+                    logo_file_path,
+                    timeout=3600,
                 )
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
-                if platform.name not in platform_default_tmpl:
-                    platform_default_tmpl[platform.name] = {}
-                elif not isinstance(platform_default_tmpl[platform.name], dict):
+                if platform.name not in platform_default_tmpl or not isinstance(
+                    platform_default_tmpl[platform.name], dict
+                ):
                     platform_default_tmpl[platform.name] = {}
 
                 platform_default_tmpl[platform.name]["logo_token"] = logo_token
@@ -843,18 +858,18 @@ class ConfigRoute(Route):
                 logger.debug(f"Logo token registered for platform {platform.name}")
             else:
                 logger.warning(
-                    f"Platform {platform.name} logo file not found: {logo_file_path}"
+                    f"Platform {platform.name} logo file not found: {logo_file_path}",
                 )
 
         except (ImportError, AttributeError) as e:
             logger.warning(
-                f"Failed to import required modules for platform {platform.name}: {e}"
+                f"Failed to import required modules for platform {platform.name}: {e}",
             )
         except OSError as e:
             logger.warning(f"File system error for platform {platform.name} logo: {e}")
         except Exception as e:
             logger.warning(
-                f"Unexpected error registering logo for platform {platform.name}: {e}"
+                f"Unexpected error registering logo for platform {platform.name}: {e}",
             )
 
     async def _get_astrbot_config(self):
@@ -873,7 +888,7 @@ class ConfigRoute(Route):
                 # 收集logo注册任务
                 if platform.logo_path:
                     logo_registration_tasks.append(
-                        self._register_platform_logo(platform, platform_default_tmpl)
+                        self._register_platform_logo(platform, platform_default_tmpl),
                     )
 
         # 并行执行logo注册
@@ -905,7 +920,7 @@ class ConfigRoute(Route):
                         "description": f"{plugin_name} 配置",
                         "type": "object",
                         "items": plugin_md.config.schema,  # 初始化时通过 __setattr__ 存入了 schema
-                    }
+                    },
                 }
                 break
 

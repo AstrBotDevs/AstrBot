@@ -1,16 +1,19 @@
-import uuid
-import aiofiles
 import json
+import uuid
 from pathlib import Path
-from .models import KnowledgeBase, KBDocument, KBMedia
-from .kb_db_sqlite import KBSQLiteDatabase
+
+import aiofiles
+
+from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
-from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.provider.manager import ProviderManager
-from .parsers.util import select_parser
+from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+
 from .chunking.base import BaseChunker
-from astrbot.core import logger
+from .kb_db_sqlite import KBSQLiteDatabase
+from .models import KBDocument, KBMedia, KnowledgeBase
+from .parsers.util import select_parser
 
 
 class KBHelper:
@@ -45,11 +48,11 @@ class KBHelper:
         if not self.kb.embedding_provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
-            self.kb.embedding_provider_id
+            self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
             raise ValueError(
-                f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider"
+                f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
             )
         return ep
 
@@ -57,11 +60,11 @@ class KBHelper:
         if not self.kb.rerank_provider_id:
             return None
         rp: RerankProvider = await self.prov_mgr.get_provider_by_id(
-            self.kb.rerank_provider_id
+            self.kb.rerank_provider_id,
         )  # type: ignore
         if not rp:
             raise ValueError(
-                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider"
+                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
             )
         return rp
 
@@ -122,6 +125,7 @@ class KBHelper:
                 - stage: 当前阶段 ('parsing', 'chunking', 'embedding')
                 - current: 当前进度
                 - total: 总数
+
         """
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
@@ -162,7 +166,9 @@ class KBHelper:
                 await progress_callback("chunking", 0, 100)
 
             chunks_text = await self.chunker.chunk(
-                text_content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+                text_content,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
             )
             contents = []
             metadatas = []
@@ -173,7 +179,7 @@ class KBHelper:
                         "kb_id": self.kb.kb_id,
                         "kb_doc_id": doc_id,
                         "chunk_index": idx,
-                    }
+                    },
                 )
 
             if progress_callback:
@@ -234,7 +240,9 @@ class KBHelper:
             raise e
 
     async def list_documents(
-        self, offset: int = 0, limit: int = 100
+        self,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         docs = await self.kb_db.list_documents_by_kb(self.kb.kb_id, offset, limit)
@@ -288,12 +296,17 @@ class KBHelper:
             await session.refresh(doc)
 
     async def get_chunks_by_doc_id(
-        self, doc_id: str, offset: int = 0, limit: int = 100
+        self,
+        doc_id: str,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[dict]:
         """获取文档的所有块及其元数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         chunks = await vec_db.document_storage.get_documents(
-            metadata_filters={"kb_doc_id": doc_id}, offset=offset, limit=limit
+            metadata_filters={"kb_doc_id": doc_id},
+            offset=offset,
+            limit=limit,
         )
         result = []
         for chunk in chunks:
@@ -306,7 +319,7 @@ class KBHelper:
                     "chunk_index": chunk_md["chunk_index"],
                     "content": chunk["text"],
                     "char_count": len(chunk["text"]),
-                }
+                },
             )
         return result
 

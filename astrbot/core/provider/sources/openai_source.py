@@ -1,29 +1,30 @@
+import asyncio
 import base64
+import inspect
 import json
 import os
-import inspect
 import random
-import asyncio
-import astrbot.core.message.components as Comp
+from collections.abc import AsyncGenerator
 
-from openai import AsyncOpenAI, AsyncAzureOpenAI
-from openai.types.chat.chat_completion import ChatCompletion
-
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
-from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.message.message_event_result import MessageChain
+from openai.types.chat.chat_completion import ChatCompletion
 
-from astrbot.api.provider import Provider
+import astrbot.core.message.components as Comp
 from astrbot import logger
-from astrbot.core.provider.func_tool_manager import ToolSet
-from typing import List, AsyncGenerator
-from ..register import register_provider_adapter
+from astrbot.api.provider import Provider
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.utils.io import download_image_by_url
+
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "openai_chat_completion", "OpenAI API Chat Completion 提供商适配器"
+    "openai_chat_completion",
+    "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
     def __init__(
@@ -38,7 +39,7 @@ class ProviderOpenAIOfficial(Provider):
             default_persona,
         )
         self.chosen_api_key = None
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
@@ -61,7 +62,7 @@ class ProviderOpenAIOfficial(Provider):
             )
 
         self.default_params = inspect.signature(
-            self.client.chat.completions.create
+            self.client.chat.completions.create,
         ).parameters.keys()
 
         model_config = provider_config.get("model_config", {})
@@ -106,7 +107,7 @@ class ProviderOpenAIOfficial(Provider):
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
             tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field
+                omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:
                 payloads["tools"] = tool_list
@@ -114,7 +115,7 @@ class ProviderOpenAIOfficial(Provider):
         # 不在默认参数中的参数放在 extra_body 中
         extra_body = {}
         to_del = []
-        for key in payloads.keys():
+        for key in payloads:
             if key not in self.default_params:
                 extra_body[key] = payloads[key]
                 to_del.append(key)
@@ -133,12 +134,14 @@ class ProviderOpenAIOfficial(Provider):
             del payloads["tools"]
 
         completion = await self.client.chat.completions.create(
-            **payloads, stream=False, extra_body=extra_body
+            **payloads,
+            stream=False,
+            extra_body=extra_body,
         )
 
         if not isinstance(completion, ChatCompletion):
             raise Exception(
-                f"API 返回的 completion 类型错误：{type(completion)}: {completion}。"
+                f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
             )
 
         logger.debug(f"completion: {completion}")
@@ -148,14 +151,16 @@ class ProviderOpenAIOfficial(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet
+        self,
+        payloads: dict,
+        tools: ToolSet,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
             tool_list = tools.get_func_desc_openai_style(
-                omit_empty_parameter_field=omit_empty_param_field
+                omit_empty_parameter_field=omit_empty_param_field,
             )
             if tool_list:
                 payloads["tools"] = tool_list
@@ -169,7 +174,7 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
 
         to_del = []
-        for key in payloads.keys():
+        for key in payloads:
             if key not in self.default_params:
                 extra_body[key] = payloads[key]
                 to_del.append(key)
@@ -177,7 +182,9 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
 
         stream = await self.client.chat.completions.create(
-            **payloads, stream=True, extra_body=extra_body
+            **payloads,
+            stream=True,
+            extra_body=extra_body,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -196,7 +203,7 @@ class ProviderOpenAIOfficial(Provider):
             if delta.content:
                 completion_text = delta.content
                 llm_response.result_chain = MessageChain(
-                    chain=[Comp.Plain(completion_text)]
+                    chain=[Comp.Plain(completion_text)],
                 )
                 yield llm_response
 
@@ -247,7 +254,7 @@ class ProviderOpenAIOfficial(Provider):
 
         if choice.finish_reason == "content_filter":
             raise Exception(
-                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。"
+                "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
 
         if llm_response.completion_text is None and not llm_response.tools_call_args:
@@ -305,14 +312,14 @@ class ProviderOpenAIOfficial(Provider):
         context_query: list,
         func_tool: ToolSet,
         chosen_key: str,
-        available_api_keys: List[str],
+        available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
     ) -> tuple:
         """处理API错误并尝试恢复"""
         if "429" in str(e):
             logger.warning(
-                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}"
+                f"API 调用过于频繁，尝试使用其他 Key 重试。当前 Key: {chosen_key[:12]}",
             )
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
@@ -328,11 +335,10 @@ class ProviderOpenAIOfficial(Provider):
                     context_query,
                     func_tool,
                 )
-            else:
-                raise e
-        elif "maximum context length" in str(e):
+            raise e
+        if "maximum context length" in str(e):
             logger.warning(
-                f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}"
+                f"上下文长度超过限制。尝试弹出最早的记录然后重试。当前记录条数: {len(context_query)}",
             )
             await self.pop_record(context_query)
             payloads["messages"] = context_query
@@ -344,7 +350,7 @@ class ProviderOpenAIOfficial(Provider):
                 context_query,
                 func_tool,
             )
-        elif "The model is not a VLM" in str(e):  # siliconcloud
+        if "The model is not a VLM" in str(e):  # siliconcloud
             # 尝试删除所有 image
             new_contexts = await self._remove_image_from_context(context_query)
             payloads["messages"] = new_contexts
@@ -357,32 +363,30 @@ class ProviderOpenAIOfficial(Provider):
                 context_query,
                 func_tool,
             )
-        elif (
+        if (
             "Function calling is not enabled" in str(e)
             or ("tool" in str(e).lower() and "support" in str(e).lower())
             or ("function" in str(e).lower() and "support" in str(e).lower())
         ):
             # openai, ollama, gemini openai, siliconcloud 的错误提示与 code 不统一，只能通过字符串匹配
             logger.info(
-                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。"
+                f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
             )
-            if "tools" in payloads:
-                del payloads["tools"]
+            payloads.pop("tools", None)
             return False, chosen_key, available_api_keys, payloads, context_query, None
-        else:
-            logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
+        logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
 
-            if "tool" in str(e).lower() and "support" in str(e).lower():
-                logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
+        if "tool" in str(e).lower() and "support" in str(e).lower():
+            logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
-            if "Connection error." in str(e):
-                proxy = os.environ.get("http_proxy", None)
-                if proxy:
-                    logger.error(
-                        f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}"
-                    )
+        if "Connection error." in str(e):
+            proxy = os.environ.get("http_proxy", None)
+            if proxy:
+                logger.error(
+                    f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}",
+                )
 
-            raise e
+        raise e
 
     async def text_chat(
         self,
@@ -522,10 +526,8 @@ class ProviderOpenAIOfficial(Provider):
                 raise Exception("未知错误")
             raise last_exception
 
-    async def _remove_image_from_context(self, contexts: List):
-        """
-        从上下文中删除所有带有 image 的记录
-        """
+    async def _remove_image_from_context(self, contexts: list):
+        """从上下文中删除所有带有 image 的记录"""
         new_contexts = []
 
         for context in contexts:
@@ -546,14 +548,16 @@ class ProviderOpenAIOfficial(Provider):
     def get_current_key(self) -> str:
         return self.client.api_key
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         return self.api_keys
 
     def set_key(self, key):
         self.client.api_key = key
 
     async def assemble_context(
-        self, text: str, image_urls: List[str] | None = None
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         if image_urls:
@@ -577,16 +581,13 @@ class ProviderOpenAIOfficial(Provider):
                     {
                         "type": "image_url",
                         "image_url": {"url": image_data},
-                    }
+                    },
                 )
             return user_content
-        else:
-            return {"role": "user", "content": text}
+        return {"role": "user", "content": text}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """
-        将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:

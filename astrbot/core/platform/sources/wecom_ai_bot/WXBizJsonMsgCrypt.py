@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- encoding:utf-8 -*-
 
 """对企业微信发送给企业后台的消息加解密示例代码.
 @copyright: Copyright (c) 1998-2020 Tencent Inc.
@@ -7,15 +6,16 @@
 """
 # ------------------------------------------------------------------------
 
-import logging
 import base64
-import random
 import hashlib
-import time
-import struct
-from Crypto.Cipher import AES
-import socket
 import json
+import logging
+import random
+import socket
+import struct
+import time
+
+from Crypto.Cipher import AES
 
 from . import ierror
 
@@ -31,7 +31,7 @@ class FormatException(Exception):
 
 
 def throw_exception(message, exception_class=FormatException):
-    """my define raise exception function"""
+    """My define raise exception function"""
     raise exception_class(message)
 
 
@@ -136,7 +136,7 @@ class PKCS7Encoder:
         return decrypted[:-pad]
 
 
-class Prpcrypt(object):
+class Prpcrypt:
     """提供接收和推送给企业微信消息的加解密接口"""
 
     def __init__(self, key):
@@ -210,7 +210,7 @@ class Prpcrypt(object):
         return str(random.randint(1000000000000000, 9999999999999999)).encode()
 
 
-class WXBizJsonMsgCrypt(object):
+class WXBizJsonMsgCrypt:
     # 构造函数
     def __init__(self, sToken, sEncodingAESKey, sReceiveId):
         try:

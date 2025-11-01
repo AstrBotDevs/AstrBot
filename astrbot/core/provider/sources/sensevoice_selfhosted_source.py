@@ -1,21 +1,23 @@
-"""
-Author: diudiu62
+"""Author: diudiu62
 Date: 2025-02-24 18:04:18
 LastEditTime: 2025-02-25 14:06:30
 """
 
 import asyncio
-from datetime import datetime
 import os
 import re
+from datetime import datetime
+
 from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
-from ..provider import STTProvider
-from ..entities import ProviderType
-from astrbot.core.utils.io import download_file
-from ..register import register_provider_adapter
+
 from astrbot.core import logger
+from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -30,7 +32,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.set_model(provider_config.get("stt_model", None))
+        self.set_model(provider_config.get("stt_model"))
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
@@ -39,7 +41,8 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
         # 将模型加载放到线程池中执行
         self.model = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16)
+            None,
+            lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
         )
 
         logger.info("SenseVoice 模型加载完成。")
@@ -55,8 +58,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
         if silk_header in file_header:
             return True
-        else:
-            return False
+        return False
 
     async def get_text(self, audio_url: str) -> str:
         try:

@@ -1,21 +1,21 @@
-import os
-import json
-import shutil
-import aiohttp
-import uuid
 import asyncio
+import json
+import os
 import re
-import aiodocker
+import shutil
 import time
-import astrbot.api.star as star
+import uuid
 from collections import defaultdict
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.api import llm_tool, logger
-from astrbot.api.event import filter
+
+import aiodocker
+import aiohttp
+
+from astrbot.api import llm_tool, logger, star
+from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
+from astrbot.api.message_components import File, Image
 from astrbot.api.provider import ProviderRequest
-from astrbot.api.message_components import Image, File
-from astrbot.core.utils.io import download_image_by_url, download_file
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_file, download_image_by_url
 
 PROMPT = """
 ## Task
@@ -120,23 +120,21 @@ class Main(star.Star):
             self.config = DEFAULT_CONFIG
             self._save_config()
         else:
-            with open(PATH, "r") as f:
+            with open(PATH) as f:
                 self.config = json.load(f)
 
     async def initialize(self):
         ok = await self.is_docker_available()
         if not ok:
             logger.info(
-                "Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。"
+                "Docker 不可用，代码解释器将无法使用，astrbot-python-interpreter 将自动禁用。",
             )
             # await self.context._star_manager.turn_off_plugin(
             #     "astrbot-python-interpreter"
             # )
 
     async def file_upload(self, file_path: str):
-        """
-        上传图像文件到 S3
-        """
+        """上传图像文件到 S3"""
         ext = os.path.splitext(file_path)[1]
         S3_URL = "https://s3.neko.soulter.top/astrbot-s3"
         with open(file_path, "rb") as f:
@@ -144,13 +142,16 @@ class Main(star.Star):
 
         s3_file_url = f"{S3_URL}/{uuid.uuid4().hex}{ext}"
 
-        async with aiohttp.ClientSession(
-            headers={"Accept": "application/json"}, trust_env=True
-        ) as session:
-            async with session.put(s3_file_url, data=file) as resp:
-                if resp.status != 200:
-                    raise Exception(f"Failed to upload image: {resp.status}")
-                return s3_file_url
+        async with (
+            aiohttp.ClientSession(
+                headers={"Accept": "application/json"},
+                trust_env=True,
+            ) as session,
+            session.put(s3_file_url, data=file) as resp,
+        ):
+            if resp.status != 200:
+                raise Exception(f"Failed to upload image: {resp.status}")
+            return s3_file_url
 
     async def is_docker_available(self) -> bool:
         """Check if docker is available"""
@@ -177,7 +178,10 @@ class Main(star.Star):
         return uuid.uuid4().hex[:8]
 
     async def download_image(
-        self, image_url: str, workplace_path: str, filename: str
+        self,
+        image_url: str,
+        workplace_path: str,
+        filename: str,
     ) -> str:
         """Download image from url to workplace_path"""
         async with aiohttp.ClientSession(trust_env=True) as session:
@@ -247,7 +251,7 @@ class Main(star.Star):
         """设置 Docker 宿主机绝对路径"""
         if not path:
             yield event.plain_result(
-                f"当前 Docker 宿主机绝对路径: {self.config.get('docker_host_astrbot_abs_path', '')}"
+                f"当前 Docker 宿主机绝对路径: {self.config.get('docker_host_astrbot_abs_path', '')}",
             )
         else:
             self.config["docker_host_astrbot_abs_path"] = path
@@ -290,7 +294,7 @@ class Main(star.Star):
         await asyncio.sleep(60)
         if uid in self.user_waiting:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 未在规定时间内上传{tip}。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 未在规定时间内上传{tip}。",
             )
             self.user_waiting.pop(uid)
 
@@ -301,11 +305,11 @@ class Main(star.Star):
         if uid in self.user_waiting:
             self.user_waiting.pop(uid)
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 已清理。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 已清理。",
             )
         else:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有等待上传文件。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有等待上传文件。",
             )
 
     @pi.command("list")
@@ -315,11 +319,11 @@ class Main(star.Star):
         if uid in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[uid]
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 上传的文件: {files}"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 上传的文件: {files}",
             )
         else:
             yield event.plain_result(
-                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有上传文件。"
+                f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 没有上传文件。",
             )
 
     @llm_tool("python_interpreter")
@@ -373,11 +377,12 @@ class Main(star.Star):
             )
             provider = self.context.get_using_provider()
             llm_response = await provider.text_chat(
-                prompt=PROMPT_, session_id=f"{event.session_id}_{magic_code}_{str(i)}"
+                prompt=PROMPT_,
+                session_id=f"{event.session_id}_{magic_code}_{i!s}",
             )
 
             logger.debug(
-                "code interpreter llm gened code:" + llm_response.completion_text
+                "code interpreter llm gened code:" + llm_response.completion_text,
             )
 
             # 整理代码并保存
@@ -398,21 +403,25 @@ class Main(star.Star):
                 await docker.images.pull(image_name)
 
             yield event.plain_result(
-                f"使用沙箱执行代码中，请稍等...(尝试次数: {i + 1}/{n})"
+                f"使用沙箱执行代码中，请稍等...(尝试次数: {i + 1}/{n})",
             )
 
             self.docker_host_astrbot_abs_path = self.config.get(
-                "docker_host_astrbot_abs_path", ""
+                "docker_host_astrbot_abs_path",
+                "",
             )
             if self.docker_host_astrbot_abs_path:
                 host_shared = os.path.join(
-                    self.docker_host_astrbot_abs_path, self.shared_path
+                    self.docker_host_astrbot_abs_path,
+                    self.shared_path,
                 )
                 host_output = os.path.join(
-                    self.docker_host_astrbot_abs_path, output_path
+                    self.docker_host_astrbot_abs_path,
+                    output_path,
                 )
                 host_workplace = os.path.join(
-                    self.docker_host_astrbot_abs_path, workplace_path
+                    self.docker_host_astrbot_abs_path,
+                    workplace_path,
                 )
 
             else:
@@ -421,7 +430,7 @@ class Main(star.Star):
                 host_workplace = os.path.abspath(workplace_path)
 
             logger.debug(
-                f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}"
+                f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}",
             )
 
             container = await docker.containers.run(
@@ -435,11 +444,11 @@ class Main(star.Star):
                             f"{host_shared}:/astrbot_sandbox/shared:ro",
                             f"{host_output}:/astrbot_sandbox/output:rw",
                             f"{host_workplace}:/astrbot_sandbox:rw",
-                        ]
+                        ],
                     },
                     "Env": [f"MAGIC_CODE={magic_code}"],
                     "AutoRemove": True,
-                }
+                },
             )
 
             logger.debug(f"Container {container.id} created.")
@@ -479,7 +488,7 @@ class Main(star.Star):
                     obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occurred:\n\n{traceback}\n Need to improve/fix the code."
                 else:
                     logger.warning(
-                        f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}"
+                        f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}",
                     )
                     break
             else:
@@ -488,7 +497,7 @@ class Main(star.Star):
                 return
 
         yield event.plain_result(
-            "经过多次尝试后，未从沙箱输出中捕获到合法的输出，请更换问法或者查看日志。"
+            "经过多次尝试后，未从沙箱输出中捕获到合法的输出，请更换问法或者查看日志。",
         )
 
     @pi.command("cleanfile")
@@ -504,7 +513,9 @@ class Main(star.Star):
         yield event.plain_result(f"用户 {event.get_session_id()} 上传的文件已清理。")
 
     async def run_container(
-        self, container: aiodocker.docker.DockerContainer, timeout: int = 20
+        self,
+        container: aiodocker.docker.DockerContainer,
+        timeout: int = 20,
     ) -> list[str]:
         """Run the container and get the output"""
         try:

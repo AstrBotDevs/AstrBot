@@ -1,17 +1,17 @@
 import abc
 import asyncio
-from typing import List
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from dataclasses import dataclass
+
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
     LLMResponse,
-    ToolCallsResult,
     ProviderType,
     RerankResult,
+    ToolCallsResult,
 )
 from astrbot.core.provider.register import provider_cls_map
-from astrbot.core.db.po import Personality
-from dataclasses import dataclass
 
 
 @dataclass
@@ -65,21 +65,21 @@ class Provider(AbstractProvider):
 
     @abc.abstractmethod
     def get_current_key(self) -> str:
-        raise NotImplementedError()
+        raise NotImplementedError
 
-    def get_keys(self) -> List[str]:
+    def get_keys(self) -> list[str]:
         """获得提供商 Key"""
         keys = self.provider_config.get("key", [""])
         return keys or [""]
 
     @abc.abstractmethod
     def set_key(self, key: str):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
-    async def get_models(self) -> List[str]:
+    async def get_models(self) -> list[str]:
         """获得支持的模型列表"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     async def text_chat(
@@ -108,6 +108,7 @@ class Provider(AbstractProvider):
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
+
         """
         ...
 
@@ -137,23 +138,20 @@ class Provider(AbstractProvider):
         Notes:
             - 如果传入了 image_urls，将会在对话时附上图片。如果模型不支持图片输入，将会抛出错误。
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
-        """
-        ...
 
-    async def pop_record(self, context: List):
         """
-        弹出 context 第一条非系统提示词对话记录
-        """
+
+    async def pop_record(self, context: list):
+        """弹出 context 第一条非系统提示词对话记录"""
         poped = 0
         indexs_to_pop = []
         for idx, record in enumerate(context):
             if record["role"] == "system":
                 continue
-            else:
-                indexs_to_pop.append(idx)
-                poped += 1
-                if poped == 2:
-                    break
+            indexs_to_pop.append(idx)
+            poped += 1
+            if poped == 2:
+                break
 
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
@@ -168,7 +166,7 @@ class STTProvider(AbstractProvider):
     @abc.abstractmethod
     async def get_text(self, audio_url: str) -> str:
         """获取音频的文本"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class TTSProvider(AbstractProvider):
@@ -180,7 +178,7 @@ class TTSProvider(AbstractProvider):
     @abc.abstractmethod
     async def get_audio(self, text: str) -> str:
         """获取文本的音频，返回音频文件路径"""
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class EmbeddingProvider(AbstractProvider):
@@ -223,6 +221,7 @@ class EmbeddingProvider(AbstractProvider):
 
         Returns:
             向量列表
+
         """
         semaphore = asyncio.Semaphore(tasks_limit)
         all_embeddings: list[list[float]] = []
@@ -246,7 +245,7 @@ class EmbeddingProvider(AbstractProvider):
                             # 最后一次重试失败，记录失败的批次
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
-                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {str(e)}"
+                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {e!s}",
                             )
                         # 等待一段时间后重试，使用指数退避
                         await asyncio.sleep(2**attempt)
@@ -279,7 +278,10 @@ class RerankProvider(AbstractProvider):
 
     @abc.abstractmethod
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None = None,
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...

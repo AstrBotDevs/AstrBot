@@ -1,10 +1,12 @@
-import aiohttp
-import sys
 import os
 import socket
+import sys
 import uuid
-from astrbot.core.config import VERSION
+
+import aiohttp
+
 from astrbot.core import db_helper, logger
+from astrbot.core.config import VERSION
 
 
 class Metric:
@@ -21,7 +23,7 @@ class Metric:
 
         if os.path.exists(id_file):
             try:
-                with open(id_file, "r") as f:
+                with open(id_file) as f:
                     Metric._iid_cache = f.read().strip()
                     return Metric._iid_cache
             except Exception:
@@ -39,8 +41,7 @@ class Metric:
 
     @staticmethod
     async def upload(**kwargs):
-        """
-        上传相关非敏感的指标以更好地了解 AstrBot 的使用情况。上传的指标不会包含任何有关消息文本、用户信息等敏感信息。
+        """上传相关非敏感的指标以更好地了解 AstrBot 的使用情况。上传的指标不会包含任何有关消息文本、用户信息等敏感信息。
 
         Powered by TickStats.
         """
@@ -64,7 +65,6 @@ class Metric:
                 )
         except Exception as e:
             logger.error(f"保存指标到数据库失败: {e}")
-            pass
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:

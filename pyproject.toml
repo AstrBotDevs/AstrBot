@@ -1,9 +1,16 @@
 [project]
 name = "AstrBot"
-version = "4.5.1"
+dynamic = ["version"]
 description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
+
+keywords = [
+    "Astrbot",
+    "Astrbot Module",
+    "Astrbot Plugin"
+]
+
 dependencies = [
     "aiocqhttp>=1.4.4",
     "aiodocker>=0.24.0",
@@ -58,35 +65,6 @@ dependencies = [
     "xinference-client",
 ]
 
-[project.scripts]
-astrbot = "astrbot.cli.__main__:cli"
-
-[build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
-build-backend = "hatchling.build"
-
-[tool.ruff]
-exclude = [
-  "astrbot/core/utils/t2i/local_strategy.py",
-  "astrbot/api/all.py",
-]
-line-length = 88
-lint.ignore = [
-    "F403", 
-    "F405", 
-    "E501",
-    "ASYNC230" # TODO: handle ASYNC230 in AstrBot
-]
-lint.select = [
-  "F", # Pyflakes
-  "W", # pycodestyle warnings
-  "E", # pycodestyle errors
-  "ASYNC", # flake8-async
-  "C4", # flake8-comprehensions
-  "Q", # flake8-quotes
-]
-target-version = "py310"
-
 [dependency-groups]
 dev = [
     "commitizen>=4.9.1",
@@ -95,3 +73,54 @@ dev = [
     "pytest-cov>=6.2.1",
     "ruff>=0.12.8",
 ]
+
+[project.scripts]
+astrbot = "astrbot.cli.__main__:cli"
+
+[tool.ruff]
+exclude = [
+  "astrbot/core/utils/t2i/local_strategy.py",
+  "astrbot/api/all.py",
+]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "F", # Pyflakes
+  "W", # pycodestyle warnings
+  "E", # pycodestyle errors
+  "ASYNC", # flake8-async
+  "C4", # flake8-comprehensions
+  "Q", # flake8-quotes
+  "I", # import-order
+  "UP", # pyupgrade
+  # "SIM", # flake8-simplify 
+]
+ignore = [
+    "F403", 
+    "F405", 
+    "E501",
+    "ASYNC230" # TODO: handle ASYNC230 in AstrBot
+]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+reportMissingTypeStubs = false
+reportMissingImports = false
+include = ["astrbot","packages"]
+exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+

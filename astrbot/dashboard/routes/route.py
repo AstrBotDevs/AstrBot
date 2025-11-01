@@ -1,6 +1,8 @@
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from dataclasses import dataclass
+
 from quart import Quart
+
+from astrbot.core.config.astrbot_config import AstrBotConfig
 
 
 @dataclass

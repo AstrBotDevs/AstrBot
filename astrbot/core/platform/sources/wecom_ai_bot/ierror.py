@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 #########################################################################
 # Author: jonyqin
 # Created Time: Thu 11 Sep 2014 01:53:58 PM CST

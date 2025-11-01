@@ -1,9 +1,9 @@
 import random
-from bs4 import BeautifulSoup
-from aiohttp import ClientSession
-from dataclasses import dataclass
-from typing import List
 import urllib.parse
+from dataclasses import dataclass
+
+from aiohttp import ClientSession
+from bs4 import BeautifulSoup
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1; rv:84.0) Gecko/20100101 Firefox/84.0",
@@ -38,9 +38,7 @@ class SearchResult:
 
 
 class SearchEngine:
-    """
-    搜索引擎爬虫基类
-    """
+    """搜索引擎爬虫基类"""
 
     def __init__(self) -> None:
         self.TIMEOUT = 10
@@ -48,37 +46,44 @@ class SearchEngine:
         self.headers = HEADERS
 
     def _set_selector(self, selector: str) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _get_next_page(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     async def _get_html(self, url: str, data: dict = None) -> str:
         headers = self.headers
         headers["Referer"] = url
         headers["User-Agent"] = random.choice(USER_AGENTS)
         if data:
-            async with ClientSession() as session:
-                async with session.post(
-                    url, headers=headers, data=data, timeout=self.TIMEOUT
-                ) as resp:
-                    ret = await resp.text(encoding="utf-8")
-                    return ret
+            async with (
+                ClientSession() as session,
+                session.post(
+                    url,
+                    headers=headers,
+                    data=data,
+                    timeout=self.TIMEOUT,
+                ) as resp,
+            ):
+                ret = await resp.text(encoding="utf-8")
+                return ret
         else:
-            async with ClientSession() as session:
-                async with session.get(
-                    url, headers=headers, timeout=self.TIMEOUT
-                ) as resp:
-                    ret = await resp.text(encoding="utf-8")
-                    return ret
+            async with (
+                ClientSession() as session,
+                session.get(
+                    url,
+                    headers=headers,
+                    timeout=self.TIMEOUT,
+                ) as resp,
+            ):
+                ret = await resp.text(encoding="utf-8")
+                return ret
 
     def tidy_text(self, text: str) -> str:
-        """
-        清理文本，去除空格、换行符等
-        """
+        """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
-    async def search(self, query: str, num_results: int) -> List[SearchResult]:
+    async def search(self, query: str, num_results: int) -> list[SearchResult]:
         query = urllib.parse.quote(query)
 
         try:
@@ -88,7 +93,7 @@ class SearchEngine:
             results = []
             for link in links:
                 title = self.tidy_text(
-                    link.select_one(self._set_selector("title")).text
+                    link.select_one(self._set_selector("title")).text,
                 )
                 url = link.select_one(self._set_selector("url"))
                 snippet = ""

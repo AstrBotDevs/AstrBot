@@ -1,12 +1,14 @@
-import traceback
 import asyncio
 import random
-from typing import Union, AsyncGenerator
-from ..stage import Stage, register_stage
-from ..context import PipelineContext
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+import traceback
+from collections.abc import AsyncGenerator
+
 from astrbot.core import logger
-from astrbot.core.message.components import Plain, Record, Image
+from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -20,8 +22,9 @@ class PreProcessStage(Stage):
         self.platform_settings: dict = self.config.get("platform_settings", {})
 
     async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
         # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark"}
@@ -68,7 +71,7 @@ class PreProcessStage(Stage):
             stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
                 logger.warning(
-                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型。"
+                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",
                 )
                 return
             message_chain = event.get_messages()

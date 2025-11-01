@@ -1,31 +1,34 @@
 import sys
 import traceback
 import typing as T
-from .base import BaseAgentRunner, AgentResponse, AgentState
-from ..hooks import BaseAgentRunHooks
-from ..tool_executor import BaseFunctionToolExecutor
-from ..run_context import ContextWrapper, TContext
-from ..response import AgentResponseData
-from astrbot.core.provider.provider import Provider
+
+from mcp.types import (
+    BlobResourceContents,
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+    TextResourceContents,
+)
+
+from astrbot import logger
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
 from astrbot.core.provider.entities import (
-    ProviderRequest,
-    LLMResponse,
-    ToolCallMessageSegment,
     AssistantMessageSegment,
+    LLMResponse,
+    ProviderRequest,
+    ToolCallMessageSegment,
     ToolCallsResult,
 )
-from mcp.types import (
-    TextContent,
-    ImageContent,
-    EmbeddedResource,
-    TextResourceContents,
-    BlobResourceContents,
-    CallToolResult,
-)
-from astrbot import logger
+from astrbot.core.provider.provider import Provider
+
+from ..hooks import BaseAgentRunHooks
+from ..response import AgentResponseData
+from ..run_context import ContextWrapper, TContext
+from ..tool_executor import BaseFunctionToolExecutor
+from .base import AgentResponse, AgentState, BaseAgentRunner
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -70,8 +73,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     @override
     async def step(self):
-        """
-        Process a single step of the agent.
+        """Process a single step of the agent.
         This method should return the result of the step.
         """
         if not self.req:
@@ -99,7 +101,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain().message(llm_response.completion_text)
+                            chain=MessageChain().message(llm_response.completion_text),
                         ),
                     )
                 continue
@@ -120,8 +122,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 type="err",
                 data=AgentResponseData(
                     chain=MessageChain().message(
-                        f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
-                    )
+                        f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}",
+                    ),
                 ),
             )
 
@@ -144,7 +146,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield AgentResponse(
                 type="llm_result",
                 data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text)
+                    chain=MessageChain().message(llm_resp.completion_text),
                 ),
             )
 
@@ -155,7 +157,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield AgentResponse(
                     type="tool_call",
                     data=AgentResponseData(
-                        chain=MessageChain().message(f"🔨 调用工具: {tool_call_name}")
+                        chain=MessageChain().message(f"🔨 调用工具: {tool_call_name}"),
                     ),
                 )
             async for result in self._handle_function_tools(self.req, llm_resp):
@@ -205,7 +207,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             role="tool",
                             tool_call_id=func_tool_id,
                             content=f"error: 未找到工具 {func_tool_name}",
-                        )
+                        ),
                     )
                     continue
 
@@ -214,7 +216,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # 获取实际的 handler 函数
                 if func_tool.handler:
                     logger.debug(
-                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}"
+                        f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}",
                     )
                     if func_tool.parameters and func_tool.parameters.get("properties"):
                         expected_params = set(func_tool.parameters["properties"].keys())
@@ -227,11 +229,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                     # 记录被忽略的参数
                     ignored_params = set(func_tool_args.keys()) - set(
-                        valid_params.keys()
+                        valid_params.keys(),
                     )
                     if ignored_params:
                         logger.warning(
-                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}"
+                            f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
                         )
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
@@ -240,7 +242,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                 try:
                     await self.agent_hooks.on_tool_start(
-                        self.run_context, func_tool, valid_params
+                        self.run_context,
+                        func_tool,
+                        valid_params,
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
@@ -262,7 +266,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     role="tool",
                                     tool_call_id=func_tool_id,
                                     content=res.content[0].text,
-                                )
+                                ),
                             )
                             yield MessageChain().message(res.content[0].text)
                         elif isinstance(res.content[0], ImageContent):
@@ -271,10 +275,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     role="tool",
                                     tool_call_id=func_tool_id,
                                     content="返回了图片(已直接发送给用户)",
-                                )
+                                ),
                             )
                             yield MessageChain(type="tool_direct_result").base64_image(
-                                res.content[0].data
+                                res.content[0].data,
                             )
                         elif isinstance(res.content[0], EmbeddedResource):
                             resource = res.content[0].resource
@@ -284,7 +288,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         role="tool",
                                         tool_call_id=func_tool_id,
                                         content=resource.text,
-                                    )
+                                    ),
                                 )
                                 yield MessageChain().message(resource.text)
                             elif (
@@ -297,10 +301,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         role="tool",
                                         tool_call_id=func_tool_id,
                                         content="返回了图片(已直接发送给用户)",
-                                    )
+                                    ),
                                 )
                                 yield MessageChain(
-                                    type="tool_direct_result"
+                                    type="tool_direct_result",
                                 ).base64_image(resource.blob)
                             else:
                                 tool_call_result_blocks.append(
@@ -308,7 +312,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         role="tool",
                                         tool_call_id=func_tool_id,
                                         content="返回的数据类型不受支持",
-                                    )
+                                    ),
                                 )
                                 yield MessageChain().message("返回的数据类型不受支持。")
 
@@ -319,17 +323,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         if res := self.run_context.event.get_result():
                             if res.chain:
                                 yield MessageChain(
-                                    chain=res.chain, type="tool_direct_result"
+                                    chain=res.chain,
+                                    type="tool_direct_result",
                                 )
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。"
+                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。",
                         )
 
                 try:
                     await self.agent_hooks.on_tool_end(
-                        self.run_context, func_tool, func_tool_args, _final_resp
+                        self.run_context,
+                        func_tool,
+                        func_tool_args,
+                        _final_resp,
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
@@ -341,8 +349,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ToolCallMessageSegment(
                         role="tool",
                         tool_call_id=func_tool_id,
-                        content=f"error: {str(e)}",
-                    )
+                        content=f"error: {e!s}",
+                    ),
                 )
 
         # 处理函数调用响应

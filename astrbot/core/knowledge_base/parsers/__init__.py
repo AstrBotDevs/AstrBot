@@ -1,15 +1,13 @@
-"""
-文档解析器模块
-"""
+"""文档解析器模块"""
 
 from .base import BaseParser, MediaItem, ParseResult
-from .text_parser import TextParser
 from .pdf_parser import PDFParser
+from .text_parser import TextParser
 
 __all__ = [
     "BaseParser",
     "MediaItem",
+    "PDFParser",
     "ParseResult",
     "TextParser",
-    "PDFParser",
 ]

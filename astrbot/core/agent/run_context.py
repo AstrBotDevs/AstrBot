@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Generic
+
 from typing_extensions import TypeVar
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

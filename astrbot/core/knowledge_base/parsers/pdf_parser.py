@@ -29,6 +29,7 @@ class PDFParser(BaseParser):
 
         Returns:
             ParseResult: 包含文本和图片的解析结果
+
         """
         pdf_file = io.BytesIO(file_content)
         reader = PdfReader(pdf_file)
@@ -87,7 +88,7 @@ class PDFParser(BaseParser):
                                 file_name=f"page_{page_num}_img_{image_counter}.{ext}",
                                 content=image_data,
                                 mime_type=mime_type,
-                            )
+                            ),
                         )
                     except Exception:
                         # 单个图片提取失败不影响整体

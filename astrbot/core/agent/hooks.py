@@ -1,9 +1,12 @@
-import mcp
 from dataclasses import dataclass
-from .run_context import ContextWrapper, TContext
 from typing import Generic
-from astrbot.core.provider.entities import LLMResponse
+
+import mcp
+
 from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.provider.entities import LLMResponse
+
+from .run_context import ContextWrapper, TContext
 
 
 @dataclass
@@ -23,5 +26,7 @@ class BaseAgentRunHooks(Generic[TContext]):
         tool_result: mcp.types.CallToolResult | None,
     ): ...
     async def on_agent_done(
-        self, run_context: ContextWrapper[TContext], llm_response: LLMResponse
+        self,
+        run_context: ContextWrapper[TContext],
+        llm_response: LLMResponse,
     ): ...

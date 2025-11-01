@@ -1,16 +1,19 @@
 """知识库管理 API 路由"""
 
-import uuid
-import aiofiles
+import asyncio
 import os
 import traceback
-import asyncio
+import uuid
+
+import aiofiles
 from quart import request
+
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from .route import Route, Response, RouteContext
-from ..utils import generate_tsne_visualization
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+
+from ..utils import generate_tsne_visualization
+from .route import Response, Route, RouteContext
 
 
 class KnowledgeBaseRoute(Route):
@@ -108,7 +111,7 @@ class KnowledgeBaseRoute(Route):
                             "stage": "parsing",
                             "current": 0,
                             "total": 100,
-                        }
+                        },
                     )
 
                     # 创建进度回调函数
@@ -122,7 +125,7 @@ class KnowledgeBaseRoute(Route):
                                     "stage": stage,
                                     "current": current,
                                     "total": total,
-                                }
+                                },
                             )
 
                     doc = await kb_helper.upload_document(
@@ -141,7 +144,7 @@ class KnowledgeBaseRoute(Route):
                 except Exception as e:
                     logger.error(f"上传文档 {file_info['file_name']} 失败: {e}")
                     failed_docs.append(
-                        {"file_name": file_info["file_name"], "error": str(e)}
+                        {"file_name": file_info["file_name"], "error": str(e)},
                     )
 
             # 更新任务完成状态
@@ -202,7 +205,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取知识库列表失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取知识库列表失败: {str(e)}").__dict__
+            return Response().error(f"获取知识库列表失败: {e!s}").__dict__
 
     async def create_kb(self):
         """创建知识库
@@ -240,7 +243,7 @@ class KnowledgeBaseRoute(Route):
             if not embedding_provider_id:
                 return Response().error("缺少参数 embedding_provider_id").__dict__
             prv = await kb_manager.provider_manager.get_provider_by_id(
-                embedding_provider_id
+                embedding_provider_id,
             )  # type: ignore
             if not prv or not isinstance(prv, EmbeddingProvider):
                 return (
@@ -250,15 +253,15 @@ class KnowledgeBaseRoute(Route):
                 vec = await prv.get_embedding("astrbot")
                 if len(vec) != prv.get_dim():
                     raise ValueError(
-                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}"
+                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}",
                     )
             except Exception as e:
-                return Response().error(f"测试嵌入模型失败: {str(e)}").__dict__
+                return Response().error(f"测试嵌入模型失败: {e!s}").__dict__
             # pre-check rerank
             if rerank_provider_id:
                 rerank_prv: RerankProvider = (
                     await kb_manager.provider_manager.get_provider_by_id(
-                        rerank_provider_id
+                        rerank_provider_id,
                     )
                 )  # type: ignore
                 if not rerank_prv:
@@ -266,14 +269,15 @@ class KnowledgeBaseRoute(Route):
                 # 检查重排序模型可用性
                 try:
                     res = await rerank_prv.rerank(
-                        query="astrbot", documents=["astrbot knowledge base"]
+                        query="astrbot",
+                        documents=["astrbot knowledge base"],
                     )
                     if not res:
                         raise ValueError("重排序模型返回结果异常")
                 except Exception as e:
                     return (
                         Response()
-                        .error(f"测试重排序模型失败: {str(e)}，请检查控制台日志输出。")
+                        .error(f"测试重排序模型失败: {e!s}，请检查控制台日志输出。")
                         .__dict__
                     )
 
@@ -298,7 +302,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"创建知识库失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"创建知识库失败: {str(e)}").__dict__
+            return Response().error(f"创建知识库失败: {e!s}").__dict__
 
     async def get_kb(self):
         """获取知识库详情
@@ -324,7 +328,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取知识库详情失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取知识库详情失败: {str(e)}").__dict__
+            return Response().error(f"获取知识库详情失败: {e!s}").__dict__
 
     async def update_kb(self):
         """更新知识库
@@ -404,7 +408,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"更新知识库失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"更新知识库失败: {str(e)}").__dict__
+            return Response().error(f"更新知识库失败: {e!s}").__dict__
 
     async def delete_kb(self):
         """删除知识库
@@ -431,7 +435,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"删除知识库失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"删除知识库失败: {str(e)}").__dict__
+            return Response().error(f"删除知识库失败: {e!s}").__dict__
 
     async def get_kb_stats(self):
         """获取知识库统计信息
@@ -466,7 +470,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取知识库统计失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取知识库统计失败: {str(e)}").__dict__
+            return Response().error(f"获取知识库统计失败: {e!s}").__dict__
 
     # ===== 文档管理 API =====
 
@@ -508,7 +512,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取文档列表失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取文档列表失败: {str(e)}").__dict__
+            return Response().error(f"获取文档列表失败: {e!s}").__dict__
 
     async def upload_document(self):
         """上传文档
@@ -597,7 +601,7 @@ class KnowledgeBaseRoute(Route):
                             "file_name": file_name,
                             "file_content": file_content,
                             "file_type": file_type,
-                        }
+                        },
                     )
                 finally:
                     # 清理临时文件
@@ -630,7 +634,7 @@ class KnowledgeBaseRoute(Route):
                     batch_size=batch_size,
                     tasks_limit=tasks_limit,
                     max_retries=max_retries,
-                )
+                ),
             )
 
             return (
@@ -640,7 +644,7 @@ class KnowledgeBaseRoute(Route):
                         "task_id": task_id,
                         "file_count": len(files_to_upload),
                         "message": "task created, processing in background",
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -650,7 +654,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"上传文档失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"上传文档失败: {str(e)}").__dict__
+            return Response().error(f"上传文档失败: {e!s}").__dict__
 
     async def get_upload_progress(self):
         """获取上传进度和结果
@@ -703,7 +707,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取上传进度失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取上传进度失败: {str(e)}").__dict__
+            return Response().error(f"获取上传进度失败: {e!s}").__dict__
 
     async def get_document(self):
         """获取文档详情
@@ -734,7 +738,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取文档详情失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取文档详情失败: {str(e)}").__dict__
+            return Response().error(f"获取文档详情失败: {e!s}").__dict__
 
     async def delete_document(self):
         """删除文档
@@ -766,7 +770,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"删除文档失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"删除文档失败: {str(e)}").__dict__
+            return Response().error(f"删除文档失败: {e!s}").__dict__
 
     async def delete_chunk(self):
         """删除文本块
@@ -801,7 +805,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"删除文本块失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"删除文本块失败: {str(e)}").__dict__
+            return Response().error(f"删除文本块失败: {e!s}").__dict__
 
     async def list_chunks(self):
         """获取块列表
@@ -827,7 +831,9 @@ class KnowledgeBaseRoute(Route):
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
             chunk_list = await kb_helper.get_chunks_by_doc_id(
-                doc_id=doc_id, offset=offset, limit=limit
+                doc_id=doc_id,
+                offset=offset,
+                limit=limit,
             )
             return (
                 Response()
@@ -837,7 +843,7 @@ class KnowledgeBaseRoute(Route):
                         "page": page,
                         "page_size": page_size,
                         "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
-                    }
+                    },
                 )
                 .__dict__
             )
@@ -846,7 +852,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"获取块列表失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"获取块列表失败: {str(e)}").__dict__
+            return Response().error(f"获取块列表失败: {e!s}").__dict__
 
     # ===== 检索 API =====
 
@@ -893,7 +899,9 @@ class KnowledgeBaseRoute(Route):
             if debug:
                 try:
                     img_base64 = await generate_tsne_visualization(
-                        query, kb_names, kb_manager
+                        query,
+                        kb_names,
+                        kb_manager,
                     )
                     if img_base64:
                         response_data["visualization"] = img_base64
@@ -909,7 +917,7 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"检索失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"检索失败: {str(e)}").__dict__
+            return Response().error(f"检索失败: {e!s}").__dict__
 
     # ===== 会话知识库配置 API =====
 
@@ -945,7 +953,7 @@ class KnowledgeBaseRoute(Route):
 
         except Exception as e:
             logger.error(f"[KB配置] 获取配置时出错: {e}", exc_info=True)
-            return Response().error(f"获取会话知识库配置失败: {str(e)}").__dict__
+            return Response().error(f"获取会话知识库配置失败: {e!s}").__dict__
 
     async def set_session_kb_config(self):
         """设置会话的知识库配置
@@ -1024,13 +1032,12 @@ class KnowledgeBaseRoute(Route):
                     )
                     .__dict__
                 )
-            else:
-                logger.error("[KB配置] 配置保存失败，验证不匹配")
-                return Response().error("配置保存失败").__dict__
+            logger.error("[KB配置] 配置保存失败，验证不匹配")
+            return Response().error("配置保存失败").__dict__
 
         except Exception as e:
             logger.error(f"[KB配置] 设置配置时出错: {e}", exc_info=True)
-            return Response().error(f"设置会话知识库配置失败: {str(e)}").__dict__
+            return Response().error(f"设置会话知识库配置失败: {e!s}").__dict__
 
     async def delete_session_kb_config(self):
         """删除会话的知识库配置
@@ -1062,4 +1069,4 @@ class KnowledgeBaseRoute(Route):
         except Exception as e:
             logger.error(f"删除会话知识库配置失败: {e}")
             logger.error(traceback.format_exc())
-            return Response().error(f"删除会话知识库配置失败: {str(e)}").__dict__
+            return Response().error(f"删除会话知识库配置失败: {e!s}").__dict__

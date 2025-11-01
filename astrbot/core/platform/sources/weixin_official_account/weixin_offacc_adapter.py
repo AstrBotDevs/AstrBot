@@ -1,28 +1,28 @@
+import asyncio
 import sys
 import uuid
-import asyncio
-import quart
 
+import quart
+from requests import Response
+from wechatpy import WeChatClient, parse_message
+from wechatpy.crypto import WeChatCrypto
+from wechatpy.exceptions import InvalidSignatureException
+from wechatpy.messages import BaseMessage, ImageMessage, TextMessage, VoiceMessage
+from wechatpy.utils import check_signature
+
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, Record
-from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
 from astrbot.core import logger
-from requests import Response
+from astrbot.core.platform.astr_message_event import MessageSesion
 
-from wechatpy.utils import check_signature
-from wechatpy.crypto import WeChatCrypto
-from wechatpy import WeChatClient
-from wechatpy.messages import TextMessage, ImageMessage, VoiceMessage, BaseMessage
-from wechatpy.exceptions import InvalidSignatureException
-from wechatpy import parse_message
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
 
 if sys.version_info >= (3, 12):
@@ -40,10 +40,14 @@ class WecomServer:
         self.encoding_aes_key = config.get("encoding_aes_key")
         self.appid = config.get("appid")
         self.server.add_url_rule(
-            "/callback/command", view_func=self.verify, methods=["GET"]
+            "/callback/command",
+            view_func=self.verify,
+            methods=["GET"],
         )
         self.server.add_url_rule(
-            "/callback/command", view_func=self.callback_command, methods=["POST"]
+            "/callback/command",
+            view_func=self.callback_command,
+            methods=["POST"],
         )
         self.crypto = WeChatCrypto(self.token, self.encoding_aes_key, self.appid)
 
@@ -97,7 +101,7 @@ class WecomServer:
 
     async def start_polling(self):
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。"
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。",
         )
         await self.server.run_task(
             host=self.callback_server_host,
@@ -112,22 +116,25 @@ class WecomServer:
 @register_platform_adapter("weixin_official_account", "微信公众平台 适配器")
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
-            "api_base_url", "https://api.weixin.qq.com/cgi-bin/"
+            "api_base_url",
+            "https://api.weixin.qq.com/cgi-bin/",
         )
         self.active_send_mode = self.config.get("active_send_mode", False)
 
         if not self.api_base_url:
             self.api_base_url = "https://api.weixin.qq.com/cgi-bin/"
 
-        if self.api_base_url.endswith("/"):
-            self.api_base_url = self.api_base_url[:-1]
+        self.api_base_url = self.api_base_url.removesuffix("/")
         if not self.api_base_url.endswith("/cgi-bin"):
             self.api_base_url += "/cgi-bin"
 
@@ -161,7 +168,8 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         await self.convert_message(msg, future)
                     # I love shield so much!
                     result = await asyncio.wait_for(
-                        asyncio.shield(future), 60
+                        asyncio.shield(future),
+                        60,
                     )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
                     self.wexin_event_workers.pop(msg.id, None)
@@ -175,7 +183,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         await super().send_by_session(session, message_chain)
 
@@ -192,7 +202,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         await self.server.start_polling()
 
     async def convert_message(
-        self, msg, future: asyncio.Future = None
+        self,
+        msg,
+        future: asyncio.Future = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
@@ -224,7 +236,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             assert isinstance(msg, VoiceMessage)
 
             resp: Response = await asyncio.get_event_loop().run_in_executor(
-                None, self.client.media.download, msg.media_id
+                None,
+                self.client.media.download,
+                msg.media_id,
             )
             path = f"data/temp/wecom_{msg.media_id}.amr"
             with open(path, "wb") as f:
@@ -238,7 +252,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 audio.export(path_wav, format="wav")
             except Exception as e:
                 logger.error(
-                    f"转换音频失败: {e}。如果没有安装 pydub 和 ffmpeg 请先安装。"
+                    f"转换音频失败: {e}。如果没有安装 pydub 和 ffmpeg 请先安装。",
                 )
                 path_wav = path
                 return

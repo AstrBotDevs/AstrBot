@@ -1,7 +1,8 @@
 from openai import AsyncOpenAI
+
+from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
-from ..entities import ProviderType
 
 
 @register_provider_adapter(
@@ -17,23 +18,20 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
             base_url=provider_config.get(
-                "embedding_api_base", "https://api.openai.com/v1"
+                "embedding_api_base",
+                "https://api.openai.com/v1",
             ),
             timeout=int(provider_config.get("timeout", 20)),
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
 
     async def get_embedding(self, text: str) -> list[float]:
-        """
-        获取文本的嵌入
-        """
+        """获取文本的嵌入"""
         embedding = await self.client.embeddings.create(input=text, model=self.model)
         return embedding.data[0].embedding
 
     async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """
-        批量获取文本的嵌入
-        """
+        """批量获取文本的嵌入"""
         embeddings = await self.client.embeddings.create(input=texts, model=self.model)
         return [item.embedding for item in embeddings.data]
 

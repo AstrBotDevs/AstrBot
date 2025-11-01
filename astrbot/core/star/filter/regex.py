@@ -1,7 +1,9 @@
 import re
-from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+from . import HandlerFilter
 
 
 # 正则表达式过滤器不会受到 wake_prefix 的制约。

@@ -1,24 +1,23 @@
-import traceback
-import aiohttp
-import os
 import json
+import os
+import ssl
+import traceback
 from datetime import datetime
 
-import ssl
+import aiohttp
 import certifi
-
-from .route import Route, Response, RouteContext
-from astrbot.core import logger, file_token_service
 from quart import request
-from astrbot.core.star.star_manager import PluginManager
+
+from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star.star_handler import EventType
-from astrbot.core import DEMO_MODE
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star_manager import PluginManager
+
+from .route import Response, Route, RouteContext
 
 
 class PluginRoute(Route):
@@ -106,29 +105,33 @@ class PluginRoute(Route):
 
         for url in urls:
             try:
-                async with aiohttp.ClientSession(
-                    trust_env=True, connector=connector
-                ) as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            remote_data = await response.json()
+                async with (
+                    aiohttp.ClientSession(
+                        trust_env=True,
+                        connector=connector,
+                    ) as session,
+                    session.get(url) as response,
+                ):
+                    if response.status == 200:
+                        remote_data = await response.json()
 
-                            # 检查远程数据是否为空
-                            if not remote_data or (
-                                isinstance(remote_data, dict) and len(remote_data) == 0
-                            ):
-                                logger.warning(f"远程插件市场数据为空: {url}")
-                                continue  # 继续尝试其他URL或使用缓存
+                        # 检查远程数据是否为空
+                        if not remote_data or (
+                            isinstance(remote_data, dict) and len(remote_data) == 0
+                        ):
+                            logger.warning(f"远程插件市场数据为空: {url}")
+                            continue  # 继续尝试其他URL或使用缓存
 
-                            logger.info("成功获取远程插件市场数据")
-                            # 获取最新的MD5并保存到缓存
-                            current_md5 = await self._get_remote_md5()
-                            self._save_plugin_cache(
-                                cache_file, remote_data, current_md5
-                            )
-                            return Response().ok(remote_data).__dict__
-                        else:
-                            logger.error(f"请求 {url} 失败，状态码：{response.status}")
+                        logger.info("成功获取远程插件市场数据")
+                        # 获取最新的MD5并保存到缓存
+                        current_md5 = await self._get_remote_md5()
+                        self._save_plugin_cache(
+                            cache_file,
+                            remote_data,
+                            current_md5,
+                        )
+                        return Response().ok(remote_data).__dict__
+                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
 
@@ -165,7 +168,7 @@ class PluginRoute(Route):
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
-                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}"
+                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}",
             )
             return is_valid
 
@@ -179,18 +182,20 @@ class PluginRoute(Route):
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=connector
-            ) as session:
-                async with session.get(
-                    "https://api.soulter.top/astrbot/plugins-md5"
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return data.get("md5", "")
-                    else:
-                        logger.error(f"获取MD5失败，状态码：{response.status}")
-                        return ""
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(
+                    "https://api.soulter.top/astrbot/plugins-md5",
+                ) as response,
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("md5", "")
+                logger.error(f"获取MD5失败，状态码：{response.status}")
+                return ""
         except Exception as e:
             logger.error(f"获取远程MD5失败: {e}")
             return ""
@@ -204,7 +209,7 @@ class PluginRoute(Route):
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
-                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}"
+                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}",
                         )
                         return cache_data["data"]
         except Exception as e:
@@ -260,7 +265,7 @@ class PluginRoute(Route):
                 "activated": plugin.activated,
                 "online_vesion": "",
                 "handlers": await self.get_plugin_handlers_info(
-                    plugin.star_handler_full_names
+                    plugin.star_handler_full_names,
                 ),
                 "display_name": plugin.display_name,
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
@@ -279,13 +284,15 @@ class PluginRoute(Route):
         for handler_full_name in handler_full_names:
             info = {}
             handler = star_handlers_registry.star_handlers_map.get(
-                handler_full_name, None
+                handler_full_name,
+                None,
             )
             if handler is None:
                 continue
             info["event_type"] = handler.event_type.name
             info["event_type_h"] = self.translated_event_type.get(
-                handler.event_type, handler.event_type.name
+                handler.event_type,
+                handler.event_type.name,
             )
             info["handler_full_name"] = handler.handler_full_name
             info["desc"] = handler.desc
@@ -308,7 +315,7 @@ class PluginRoute(Route):
                         info["cmd"] = filter.get_complete_command_names()[0]
                         info["cmd"] = info["cmd"].strip()
                         info["sub_command"] = filter.print_cmd_tree(
-                            filter.sub_command_filters
+                            filter.sub_command_filters,
                         )
                     elif isinstance(filter, RegexFilter):
                         info["type"] = "正则匹配"
@@ -474,7 +481,8 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
         plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path, plugin_obj.root_dir_name
+            self.plugin_manager.plugin_store_path,
+            plugin_obj.root_dir_name,
         )
 
         if not os.path.isdir(plugin_dir):
@@ -498,4 +506,4 @@ class PluginRoute(Route):
             )
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
-            return Response().error(f"读取README文件失败: {str(e)}").__dict__
+            return Response().error(f"读取README文件失败: {e!s}").__dict__

@@ -1,14 +1,17 @@
-import re
 import asyncio
 import functools
-from .. import Provider, Personality
-from ..entities import LLMResponse
-from ..register import register_provider_adapter
-from astrbot.core.message.message_event_result import MessageChain
-from .openai_source import ProviderOpenAIOfficial
-from astrbot.core import logger, sp
+import re
+
 from dashscope import Application
 from dashscope.app.application_response import ApplicationResponse
+
+from astrbot.core import logger, sp
+from astrbot.core.message.message_event_result import MessageChain
+
+from .. import Personality, Provider
+from ..entities import LLMResponse
+from ..register import register_provider_adapter
+from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter("dashscope", "Dashscope APP 适配器。")
@@ -50,6 +53,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
 
         Returns:
             bool: 是否有 RAG 选项
+
         """
         if self.rag_options and (
             len(self.rag_options.get("pipeline_ids", [])) > 0
@@ -127,12 +131,12 @@ class ProviderDashscope(ProviderOpenAIOfficial):
 
         if response.status_code != 200:
             logger.error(
-                f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code"
+                f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code",
             )
             return LLMResponse(
                 role="err",
                 result_chain=MessageChain().message(
-                    f"阿里云百炼请求失败: message={response.message} code={response.status_code}"
+                    f"阿里云百炼请求失败: message={response.message} code={response.status_code}",
                 ),
             )
 

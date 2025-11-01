@@ -2,12 +2,12 @@
 
 import os
 import shutil
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
 
 
 class TemplateManager:
-    """
-    负责管理 t2i HTML 模板的 CRUD 和重置操作。
+    """负责管理 t2i HTML 模板的 CRUD 和重置操作。
     采用“用户覆盖内置”策略：用户模板存储在 data 目录中，并优先于内置模板加载。
     所有创建、更新、删除操作仅影响用户目录，以确保更新框架时用户数据安全。
     """
@@ -16,7 +16,12 @@ class TemplateManager:
 
     def __init__(self):
         self.builtin_template_dir = os.path.join(
-            get_astrbot_path(), "astrbot", "core", "utils", "t2i", "template"
+            get_astrbot_path(),
+            "astrbot",
+            "core",
+            "utils",
+            "t2i",
+            "template",
         )
         self.user_template_dir = os.path.join(get_astrbot_data_path(), "t2i_templates")
 
@@ -43,12 +48,11 @@ class TemplateManager:
 
     def _read_file(self, path: str) -> str:
         """读取文件内容。"""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return f.read()
 
     def list_templates(self) -> list[dict]:
-        """
-        列出所有可用模板。
+        """列出所有可用模板。
         该列表是内置模板和用户模板的合并视图，用户模板将覆盖同名的内置模板。
         """
         dirs_to_scan = [self.builtin_template_dir, self.user_template_dir]
@@ -63,8 +67,7 @@ class TemplateManager:
         ]
 
     def get_template(self, name: str) -> str:
-        """
-        获取指定模板的内容。
+        """获取指定模板的内容。
         优先从用户目录加载，如果不存在则回退到内置目录。
         """
         user_path = self._get_user_template_path(name)
@@ -86,8 +89,7 @@ class TemplateManager:
             f.write(content)
 
     def update_template(self, name: str, content: str):
-        """
-        更新一个模板。此操作始终写入用户目录。
+        """更新一个模板。此操作始终写入用户目录。
         如果更新的是一个内置模板，此操作实际上会在用户目录中创建一个修改后的副本，
         从而实现对内置模板的“覆盖”。
         """
@@ -96,8 +98,7 @@ class TemplateManager:
             f.write(content)
 
     def delete_template(self, name: str):
-        """
-        仅删除用户目录中的模板文件。
+        """仅删除用户目录中的模板文件。
         如果删除的是一个覆盖了内置模板的用户模板，这将有效地“恢复”到内置版本。
         """
         path = self._get_user_template_path(name)
@@ -106,7 +107,5 @@ class TemplateManager:
         os.remove(path)
 
     def reset_default_template(self):
-        """
-        将核心模板从内置目录强制重置到用户目录。
-        """
+        """将核心模板从内置目录强制重置到用户目录。"""
         self._copy_core_templates(overwrite=True)

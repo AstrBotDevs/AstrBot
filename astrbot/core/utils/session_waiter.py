@@ -1,24 +1,22 @@
-"""
-会话控制
-"""
+"""会话控制"""
 
 import abc
 import asyncio
-import time
-import functools
 import copy
+import functools
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 import astrbot.core.message.components as Comp
-from typing import Dict, Any, Callable, Awaitable, List
 from astrbot.core.platform import AstrMessageEvent
 
-USER_SESSIONS: Dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
-FILTERS: List["SessionFilter"] = []  # 存储 SessionFilter 实例
+USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
+FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 
 
 class SessionController:
-    """
-    控制一个 Session 是否已经结束
-    """
+    """控制一个 Session 是否已经结束"""
 
     def __init__(self):
         self.future = asyncio.Future()
@@ -29,7 +27,7 @@ class SessionController:
         self.timeout: float | int = None
         """上次保持(keep)开始时的超时时间"""
 
-        self.history_chains: List[List[Comp.BaseMessageComponent]] = []
+        self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
     def stop(self, error: Exception = None):
         """立即结束这个会话"""
@@ -39,13 +37,14 @@ class SessionController:
             else:
                 self.future.set_result(None)
 
-    def keep(self, timeout: float | int = 0, reset_timeout=False):
+    def keep(self, timeout: float = 0, reset_timeout=False):
         """保持这个会话
 
         Args:
             timeout (float): 必填。会话超时时间。
             当 reset_timeout 设置为 True 时, 代表重置超时时间, timeout 必须 > 0, 如果 <= 0 则立即结束会话。
             当 reset_timeout 设置为 False 时, 代表继续维持原来的超时时间, 新 timeout = 原来剩余的timeout + timeout (可以 < 0)
+
         """
         new_ts = time.time()
 
@@ -81,7 +80,7 @@ class SessionController:
             pass  # 避免报错
         # finally:
 
-    def get_history_chains(self) -> List[List[Comp.BaseMessageComponent]]:
+    def get_history_chains(self) -> list[list[Comp.BaseMessageComponent]]:
         """获取历史消息链"""
         return self.history_chains
 
@@ -92,7 +91,6 @@ class SessionFilter:
     @abc.abstractmethod
     def filter(self, event: AstrMessageEvent) -> str:
         """根据事件返回一个会话标识符"""
-        pass
 
 
 class DefaultSessionFilter(SessionFilter):
@@ -120,7 +118,9 @@ class SessionWaiter:
         """需要保证一个 session 同时只有一个 trigger"""
 
     async def register_wait(
-        self, handler: Callable[[str], Awaitable[Any]], timeout: int = 30
+        self,
+        handler: Callable[[str], Awaitable[Any]],
+        timeout: int = 30,
     ) -> Any:
         """等待外部输入并处理"""
         self.handler = handler
@@ -149,7 +149,7 @@ class SessionWaiter:
     @classmethod
     async def trigger(cls, session_id: str, event: AstrMessageEvent):
         """外部输入触发会话处理"""
-        session = USER_SESSIONS.get(session_id, None)
+        session = USER_SESSIONS.get(session_id)
         if not session or session.session_controller.future.done():
             return
 
@@ -157,7 +157,7 @@ class SessionWaiter:
             if not session.session_controller.future.done():
                 if session.record_history_chains:
                     session.session_controller.history_chains.append(
-                        [copy.deepcopy(comp) for comp in event.get_messages()]
+                        [copy.deepcopy(comp) for comp in event.get_messages()],
                     )
                 try:
                     # TODO: 这里使用 create_task，跟踪 task，防止超时后这里 handler 仍然在执行
@@ -167,8 +167,7 @@ class SessionWaiter:
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
-    """
-    装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
+    """装饰器：自动将函数注册为 SessionWaiter 处理函数，并等待外部输入触发执行。
 
     :param timeout: 超时时间（秒）
     :param record_history_chain: 是否自动记录历史消息链。可以通过 controller.get_history_chains() 获取。深拷贝。

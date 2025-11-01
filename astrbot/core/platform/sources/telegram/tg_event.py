@@ -1,22 +1,24 @@
+import asyncio
 import os
 import re
-import asyncio
+
 import telegramify_markdown
+from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram.ext import ExtBot
+
+from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata, MessageType
 from astrbot.api.message_components import (
-    Plain,
-    Image,
-    Reply,
     At,
     File,
+    Image,
+    Plain,
     Record,
+    Reply,
 )
-from telegram.ext import ExtBot
-from astrbot.core.utils.io import download_file
-from astrbot import logger
+from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from telegram import ReactionTypeEmoji, ReactionTypeCustomEmoji
+from astrbot.core.utils.io import download_file
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -68,7 +70,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_client(
-        cls, client: ExtBot, message: MessageChain, user_name: str
+        cls,
+        client: ExtBot,
+        message: MessageChain,
+        user_name: str,
     ):
         image_path = None
 
@@ -104,14 +109,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 for chunk in chunks:
                     try:
                         md_text = telegramify_markdown.markdownify(
-                            chunk, max_line_length=None, normalize_whitespace=False
+                            chunk,
+                            max_line_length=None,
+                            normalize_whitespace=False,
                         )
                         await client.send_message(
-                            text=md_text, parse_mode="MarkdownV2", **payload
+                            text=md_text,
+                            parse_mode="MarkdownV2",
+                            **payload,
                         )
                     except Exception as e:
                         logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead."
+                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
                         )
                         await client.send_message(text=chunk, **payload)
             elif isinstance(i, Image):
@@ -137,8 +146,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await super().send(message)
 
     async def react(self, emoji: str | None, big: bool = False):
-        """
-        给原消息添加 Telegram 反应：
+        """给原消息添加 Telegram 反应：
         - 普通 emoji：传入 '👍'、'😂' 等
         - 自定义表情：传入其 custom_emoji_id（纯数字字符串）
         - 取消本机器人的反应：传入 None 或空字符串
@@ -216,7 +224,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             i.file = path
 
                         await self.client.send_document(
-                            document=i.file, filename=i.name, **payload
+                            document=i.file,
+                            filename=i.name,
+                            **payload,
                         )
                         continue
                     elif isinstance(i, Record):
@@ -263,7 +273,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if delta and current_content != delta:
                 try:
                     markdown_text = telegramify_markdown.markdownify(
-                        delta, max_line_length=None, normalize_whitespace=False
+                        delta,
+                        max_line_length=None,
+                        normalize_whitespace=False,
                     )
                     await self.client.edit_message_text(
                         text=markdown_text,
@@ -274,7 +286,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
                     await self.client.edit_message_text(
-                        text=delta, chat_id=payload["chat_id"], message_id=message_id
+                        text=delta,
+                        chat_id=payload["chat_id"],
+                        message_id=message_id,
                     )
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")

@@ -1,8 +1,10 @@
 import aiohttp
+
 from astrbot import logger
+
+from ..entities import ProviderType, RerankResult
 from ..provider import RerankProvider
 from ..register import register_provider_adapter
-from ..entities import ProviderType, RerankResult
 
 
 @register_provider_adapter(
@@ -30,7 +32,10 @@ class VLLMRerankProvider(RerankProvider):
         )
 
     async def rerank(
-        self, query: str, documents: list[str], top_n: int | None = None
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None = None,
     ) -> list[RerankResult]:
         payload = {
             "query": query,
@@ -40,14 +45,15 @@ class VLLMRerankProvider(RerankProvider):
         if top_n is not None:
             payload["top_n"] = top_n
         async with self.client.post(
-            f"{self.base_url}/v1/rerank", json=payload
+            f"{self.base_url}/v1/rerank",
+            json=payload,
         ) as response:
             response_data = await response.json()
             results = response_data.get("results", [])
 
             if not results:
                 logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}"
+                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}",
                 )
 
             return [

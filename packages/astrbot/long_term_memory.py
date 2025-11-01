@@ -1,13 +1,14 @@
 import datetime
-import uuid
 import random
-import astrbot.api.star as star
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.platform import MessageType
-from astrbot.api.provider import ProviderRequest, Provider
-from astrbot.api.message_components import Plain, Image
-from astrbot import logger
+import uuid
 from collections import defaultdict
+
+from astrbot import logger
+from astrbot.api import star
+from astrbot.api.event import AstrMessageEvent
+from astrbot.api.message_components import Image, Plain
+from astrbot.api.platform import MessageType
+from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -66,7 +67,10 @@ class LongTermMemory:
         return cnt
 
     async def get_image_caption(
-        self, image_url: str, image_caption_provider_id: str, image_caption_prompt: str
+        self,
+        image_url: str,
+        image_caption_provider_id: str,
+        image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()

@@ -1,10 +1,13 @@
-import jwt
-import datetime
 import asyncio
-from .route import Route, Response, RouteContext
+import datetime
+
+import jwt
 from quart import request
-from astrbot.core import DEMO_MODE
+
 from astrbot import logger
+from astrbot.core import DEMO_MODE
+
+from .route import Response, Route, RouteContext
 
 
 class AuthRoute(Route):
@@ -37,13 +40,12 @@ class AuthRoute(Route):
                         "token": self.generate_jwt(username),
                         "username": username,
                         "change_pwd_hint": change_pwd_hint,
-                    }
+                    },
                 )
                 .__dict__
             )
-        else:
-            await asyncio.sleep(3)
-            return Response().error("用户名或密码错误").__dict__
+        await asyncio.sleep(3)
+        return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):
         if DEMO_MODE:

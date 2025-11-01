@@ -1,6 +1,7 @@
 """Misskey 平台适配器通用工具函数"""
 
-from typing import Dict, Any, List, Tuple, Optional, Union
+from typing import Any
+
 import astrbot.api.message_components as Comp
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 
@@ -9,7 +10,7 @@ class FileIDExtractor:
     """从 API 响应中提取文件 ID 的帮助类（无状态）。"""
 
     @staticmethod
-    def extract_file_id(result: Any) -> Optional[str]:
+    def extract_file_id(result: Any) -> str | None:
         if not isinstance(result, dict):
             return None
 
@@ -34,8 +35,10 @@ class MessagePayloadBuilder:
 
     @staticmethod
     def build_chat_payload(
-        user_id: str, text: Optional[str], file_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        user_id: str,
+        text: str | None,
+        file_id: str | None = None,
+    ) -> dict[str, Any]:
         payload = {"toUserId": user_id}
         if text:
             payload["text"] = text
@@ -45,8 +48,10 @@ class MessagePayloadBuilder:
 
     @staticmethod
     def build_room_payload(
-        room_id: str, text: Optional[str], file_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        room_id: str,
+        text: str | None,
+        file_id: str | None = None,
+    ) -> dict[str, Any]:
         payload = {"toRoomId": room_id}
         if text:
             payload["text"] = text
@@ -56,9 +61,11 @@ class MessagePayloadBuilder:
 
     @staticmethod
     def build_note_payload(
-        text: Optional[str], file_ids: Optional[List[str]] = None, **kwargs
-    ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {}
+        text: str | None,
+        file_ids: list[str] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
         if text:
             payload["text"] = text
         if file_ids:
@@ -67,7 +74,7 @@ class MessagePayloadBuilder:
         return payload
 
 
-def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
+def serialize_message_chain(chain: list[Any]) -> tuple[str, bool]:
     """将消息链序列化为文本字符串"""
     text_parts = []
     has_at = False
@@ -76,27 +83,25 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
         nonlocal has_at
         if isinstance(component, Comp.Plain):
             return component.text
-        elif isinstance(component, Comp.File):
+        if isinstance(component, Comp.File):
             # 为文件组件返回占位符，但适配器仍会处理原组件
             return "[文件]"
-        elif isinstance(component, Comp.Image):
+        if isinstance(component, Comp.Image):
             # 为图片组件返回占位符，但适配器仍会处理原组件
             return "[图片]"
-        elif isinstance(component, Comp.At):
+        if isinstance(component, Comp.At):
             has_at = True
             # 优先使用name字段（用户名），如果没有则使用qq字段
             # 这样可以避免在Misskey中生成 @<user_id> 这样的无效提及
             if hasattr(component, "name") and component.name:
                 return f"@{component.name}"
-            else:
-                return f"@{component.qq}"
-        elif hasattr(component, "text"):
+            return f"@{component.qq}"
+        if hasattr(component, "text"):
             text = getattr(component, "text", "")
             if "@" in text:
                 has_at = True
             return text
-        else:
-            return str(component)
+        return str(component)
 
     for component in chain:
         if isinstance(component, Comp.Node) and component.content:
@@ -113,12 +118,12 @@ def serialize_message_chain(chain: List[Any]) -> Tuple[str, bool]:
 
 
 def resolve_message_visibility(
-    user_id: Optional[str] = None,
-    user_cache: Optional[Dict[str, Any]] = None,
-    self_id: Optional[str] = None,
-    raw_message: Optional[Dict[str, Any]] = None,
+    user_id: str | None = None,
+    user_cache: dict[str, Any] | None = None,
+    self_id: str | None = None,
+    raw_message: dict[str, Any] | None = None,
     default_visibility: str = "public",
-) -> Tuple[str, Optional[List[str]]]:
+) -> tuple[str, list[str] | None]:
     """解析 Misskey 消息的可见性设置
 
     可以从 user_cache 或 raw_message 中解析，支持两种调用方式：
@@ -169,13 +174,14 @@ def resolve_message_visibility(
 
 # 保留旧函数名作为向后兼容的别名
 def resolve_visibility_from_raw_message(
-    raw_message: Dict[str, Any], self_id: Optional[str] = None
-) -> Tuple[str, Optional[List[str]]]:
+    raw_message: dict[str, Any],
+    self_id: str | None = None,
+) -> tuple[str, list[str] | None]:
     """从原始消息数据中解析可见性设置（已弃用，使用 resolve_message_visibility 替代）"""
     return resolve_message_visibility(raw_message=raw_message, self_id=self_id)
 
 
-def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
+def is_valid_user_session_id(session_id: str | Any) -> bool:
     """检查 session_id 是否是有效的聊天用户 session_id (仅限chat%前缀)"""
     if not isinstance(session_id, str) or "%" not in session_id:
         return False
@@ -189,7 +195,7 @@ def is_valid_user_session_id(session_id: Union[str, Any]) -> bool:
     )
 
 
-def is_valid_room_session_id(session_id: Union[str, Any]) -> bool:
+def is_valid_room_session_id(session_id: str | Any) -> bool:
     """检查 session_id 是否是有效的房间 session_id (仅限room%前缀)"""
     if not isinstance(session_id, str) or "%" not in session_id:
         return False
@@ -203,7 +209,7 @@ def is_valid_room_session_id(session_id: Union[str, Any]) -> bool:
     )
 
 
-def is_valid_chat_session_id(session_id: Union[str, Any]) -> bool:
+def is_valid_chat_session_id(session_id: str | Any) -> bool:
     """检查 session_id 是否是有效的聊天 session_id (仅限chat%前缀)"""
     if not isinstance(session_id, str) or "%" not in session_id:
         return False
@@ -236,7 +242,9 @@ def extract_room_id_from_session_id(session_id: str) -> str:
 
 
 def add_at_mention_if_needed(
-    text: str, user_info: Optional[Dict[str, Any]], has_at: bool = False
+    text: str,
+    user_info: dict[str, Any] | None,
+    has_at: bool = False,
 ) -> str:
     """如果需要且没有@用户，则添加@用户
 
@@ -258,7 +266,7 @@ def add_at_mention_if_needed(
     return text
 
 
-def create_file_component(file_info: Dict[str, Any]) -> Tuple[Any, str]:
+def create_file_component(file_info: dict[str, Any]) -> tuple[Any, str]:
     """创建文件组件和描述文本"""
     file_url = file_info.get("url", "")
     file_name = file_info.get("name", "未知文件")
@@ -266,16 +274,17 @@ def create_file_component(file_info: Dict[str, Any]) -> Tuple[Any, str]:
 
     if file_type.startswith("image/"):
         return Comp.Image(url=file_url, file=file_name), f"图片[{file_name}]"
-    elif file_type.startswith("audio/"):
+    if file_type.startswith("audio/"):
         return Comp.Record(url=file_url, file=file_name), f"音频[{file_name}]"
-    elif file_type.startswith("video/"):
+    if file_type.startswith("video/"):
         return Comp.Video(url=file_url, file=file_name), f"视频[{file_name}]"
-    else:
-        return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
+    return Comp.File(name=file_name, url=file_url), f"文件[{file_name}]"
 
 
 def process_files(
-    message: AstrBotMessage, files: list, include_text_parts: bool = True
+    message: AstrBotMessage,
+    files: list,
+    include_text_parts: bool = True,
 ) -> list:
     """处理文件列表，添加到消息组件中并返回文本描述"""
     file_parts = []
@@ -287,7 +296,7 @@ def process_files(
     return file_parts
 
 
-def format_poll(poll: Dict[str, Any]) -> str:
+def format_poll(poll: dict[str, Any]) -> str:
     """将 Misskey 的 poll 对象格式化为可读字符串。"""
     if not poll or not isinstance(poll, dict):
         return ""
@@ -304,8 +313,9 @@ def format_poll(poll: Dict[str, Any]) -> str:
 
 
 def extract_sender_info(
-    raw_data: Dict[str, Any], is_chat: bool = False
-) -> Dict[str, Any]:
+    raw_data: dict[str, Any],
+    is_chat: bool = False,
+) -> dict[str, Any]:
     """提取发送者信息"""
     if is_chat:
         sender = raw_data.get("fromUser", {})
@@ -323,11 +333,11 @@ def extract_sender_info(
 
 
 def create_base_message(
-    raw_data: Dict[str, Any],
-    sender_info: Dict[str, Any],
+    raw_data: dict[str, Any],
+    sender_info: dict[str, Any],
     client_self_id: str,
     is_chat: bool = False,
-    room_id: Optional[str] = None,
+    room_id: str | None = None,
     unique_session: bool = False,
 ) -> AstrBotMessage:
     """创建基础消息对象"""
@@ -366,8 +376,11 @@ def create_base_message(
 
 
 def process_at_mention(
-    message: AstrBotMessage, raw_text: str, bot_username: str, client_self_id: str
-) -> Tuple[List[str], str]:
+    message: AstrBotMessage,
+    raw_text: str,
+    bot_username: str,
+    client_self_id: str,
+) -> tuple[list[str], str]:
     """处理@提及逻辑，返回消息部分列表和处理后的文本"""
     message_parts = []
 
@@ -382,16 +395,15 @@ def process_at_mention(
             message.message.append(Comp.Plain(remaining_text))
             message_parts.append(remaining_text)
         return message_parts, remaining_text
-    else:
-        message.message.append(Comp.Plain(raw_text))
-        message_parts.append(raw_text)
-        return message_parts, raw_text
+    message.message.append(Comp.Plain(raw_text))
+    message_parts.append(raw_text)
+    return message_parts, raw_text
 
 
 def cache_user_info(
-    user_cache: Dict[str, Any],
-    sender_info: Dict[str, Any],
-    raw_data: Dict[str, Any],
+    user_cache: dict[str, Any],
+    sender_info: dict[str, Any],
+    raw_data: dict[str, Any],
     client_self_id: str,
     is_chat: bool = False,
 ):
@@ -417,7 +429,9 @@ def cache_user_info(
 
 
 def cache_room_info(
-    user_cache: Dict[str, Any], raw_data: Dict[str, Any], client_self_id: str
+    user_cache: dict[str, Any],
+    raw_data: dict[str, Any],
+    client_self_id: str,
 ):
     """缓存房间信息"""
     room_data = raw_data.get("toRoom")
@@ -437,7 +451,7 @@ def cache_room_info(
 
 async def resolve_component_url_or_path(
     comp: Any,
-) -> Tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """尝试从组件解析可上传的远程 URL 或本地路径。
 
     返回 (url_candidate, local_path)。两者可能都为 None。
@@ -468,8 +482,7 @@ async def resolve_component_url_or_path(
                     if value.startswith("http"):
                         url_candidate = value
                         break
-                    else:
-                        local_path = value
+                    local_path = value
             except Exception:
                 continue
 
@@ -491,9 +504,8 @@ async def resolve_component_url_or_path(
                         if value.startswith("http"):
                             url_candidate = value
                             break
-                        else:
-                            local_path = value
-                            break
+                        local_path = value
+                        break
                 except Exception:
                     continue
 
@@ -503,7 +515,7 @@ async def resolve_component_url_or_path(
     return url_candidate, local_path
 
 
-def summarize_component_for_log(comp: Any) -> Dict[str, Any]:
+def summarize_component_for_log(comp: Any) -> dict[str, Any]:
     """生成适合日志的组件属性字典（尽量不抛异常）。"""
     attrs = {}
     for a in ("file", "url", "path", "src", "source", "name"):
@@ -519,15 +531,15 @@ def summarize_component_for_log(comp: Any) -> Dict[str, Any]:
 async def upload_local_with_retries(
     api: Any,
     local_path: str,
-    preferred_name: Optional[str],
-    folder_id: Optional[str],
-) -> Optional[str]:
+    preferred_name: str | None,
+    folder_id: str | None,
+) -> str | None:
     """尝试本地上传，返回 file id 或 None。如果文件类型不允许则直接失败。"""
     try:
         res = await api.upload_file(local_path, preferred_name, folder_id)
         if isinstance(res, dict):
             fid = res.get("id") or (res.get("raw") or {}).get("createdFile", {}).get(
-                "id"
+                "id",
             )
             if fid:
                 return str(fid)

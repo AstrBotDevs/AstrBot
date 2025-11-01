@@ -1,34 +1,42 @@
-import time
 import asyncio
-import uuid
-import aiohttp
-import re
 import base64
-from typing import Awaitable, Any
-from slack_sdk.web.async_client import AsyncWebClient
+import re
+import time
+import uuid
+from collections.abc import Awaitable
+from typing import Any
+
+import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
+from slack_sdk.web.async_client import AsyncWebClient
+
+from astrbot.api import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import *
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
-from .slack_event import SlackMessageEvent
-from .client import SlackWebhookClient, SlackSocketClient
-from astrbot.api.message_components import *  # noqa: F403
-from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+
 from ...register import register_platform_adapter
+from .client import SlackSocketClient, SlackWebhookClient
+from .slack_event import SlackMessageEvent
 
 
 @register_platform_adapter(
-    "slack", "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。"
+    "slack",
+    "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
 )
 class SlackAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -43,7 +51,8 @@ class SlackAdapter(Platform):
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
-            "slack_webhook_path", "/astrbot-slack-webhook/callback"
+            "slack_webhook_path",
+            "/astrbot-slack-webhook/callback",
         )
 
         if not self.bot_token:
@@ -69,10 +78,13 @@ class SlackAdapter(Platform):
         self.bot_self_id = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         blocks, text = SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain, web_client=self.web_client
+            message_chain=message_chain,
+            web_client=self.web_client,
         )
 
         try:
@@ -150,7 +162,7 @@ class SlackAdapter(Platform):
         abm.message = []
 
         # 优先使用 blocks 字段解析消息
-        if "blocks" in event and event["blocks"]:
+        if event.get("blocks"):
             abm.message = self._parse_blocks(event["blocks"])
             # 更新 message_str
             abm.message_str = ""
@@ -166,7 +178,8 @@ class SlackAdapter(Platform):
                         mentioned_user = await self.web_client.users_info(user=mention)
                         user_data = mentioned_user["user"]
                         user_name = user_data.get("real_name") or user_data.get(
-                            "name", mention
+                            "name",
+                            mention,
                         )
                         abm.message.append(At(qq=mention, name=user_name))
                     except Exception:
@@ -189,7 +202,7 @@ class SlackAdapter(Platform):
                 else:
                     # TODO: 下载鉴权
                     abm.message.append(
-                        File(name=file_name, file=file_url, url=file_url)
+                        File(name=file_name, file=file_url, url=file_url),
                     )
 
         abm.raw_message = event
@@ -224,7 +237,7 @@ class SlackAdapter(Platform):
                                     # 将之前的文本内容先添加到组件中
                                     if text_content.strip():
                                         message_components.append(
-                                            Plain(text=text_content)
+                                            Plain(text=text_content),
                                         )
                                         text_content = ""
                                     # 添加@提及组件
@@ -307,11 +320,10 @@ class SlackAdapter(Platform):
                     content = await resp.read()
                     base64_content = base64.b64encode(content).decode("utf-8")
                     return base64_content
-                else:
-                    logger.error(
-                        f"Failed to download slack file: {resp.status} {await resp.text()}"
-                    )
-                    raise Exception(f"下载文件失败: {resp.status}")
+                logger.error(
+                    f"Failed to download slack file: {resp.status} {await resp.text()}",
+                )
+                raise Exception(f"下载文件失败: {resp.status}")
 
     async def run(self) -> Awaitable[Any]:
         self.bot_self_id = await self.get_bot_user_id()
@@ -323,7 +335,9 @@ class SlackAdapter(Platform):
 
             # 创建 Socket 客户端
             self.socket_client = SlackSocketClient(
-                self.web_client, self.app_token, self._handle_socket_event
+                self.web_client,
+                self.app_token,
+                self._handle_socket_event,
             )
 
             logger.info("Slack 适配器 (Socket Mode) 启动中...")
@@ -344,13 +358,13 @@ class SlackAdapter(Platform):
             )
 
             logger.info(
-                f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}..."
+                f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
             )
             await self.webhook_client.start()
 
         else:
             raise ValueError(
-                f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'"
+                f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'",
             )
 
     async def _handle_webhook_event(self, event_data: dict):

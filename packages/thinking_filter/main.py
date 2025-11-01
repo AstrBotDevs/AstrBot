@@ -1,12 +1,13 @@
-import re
 import json
 import logging
-from typing import Any, Tuple
+import re
+from typing import Any
 
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star
-from astrbot.api.provider import LLMResponse
 from openai.types.chat.chat_completion import ChatCompletion
+
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import LLMResponse
+from astrbot.api.star import Context, Star
 
 try:
     # 谨慎引入，避免在未安装 google-genai 的环境下报错
@@ -22,7 +23,8 @@ class R1Filter(Star):
     @filter.on_llm_response()
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
         cfg = self.context.get_config(umo=event.unified_msg_origin).get(
-            "provider_settings", {}
+            "provider_settings",
+            {},
         )
         show_reasoning = cfg.get("display_reasoning_text", False)
 
@@ -30,10 +32,11 @@ class R1Filter(Star):
         # Gemini 可能在 parts 中注入 {"thought": true, "text": "..."}
         # 官方 SDK 默认不会返回此字段。
         if GenerateContentResponse is not None and isinstance(
-            response.raw_completion, GenerateContentResponse
+            response.raw_completion,
+            GenerateContentResponse,
         ):
             thought_text, answer_text = self._extract_gemini_texts(
-                response.raw_completion
+                response.raw_completion,
             )
 
             if thought_text or answer_text:
@@ -46,11 +49,10 @@ class R1Filter(Star):
                     if merged:
                         response.completion_text = merged
                         return
-                else:
-                    # 默认隐藏思考内容，仅保留正文
-                    if answer_text:
-                        response.completion_text = answer_text
-                        return
+                # 默认隐藏思考内容，仅保留正文
+                elif answer_text:
+                    response.completion_text = answer_text
+                    return
 
         # --- 非 Gemini 或无明确 thought:true 情况 ---
         if show_reasoning:
@@ -88,7 +90,10 @@ class R1Filter(Star):
             if r"<think>" in completion_text or r"</think>" in completion_text:
                 # 移除配对的标签及其内容
                 completion_text = re.sub(
-                    r"<think>.*?</think>", "", completion_text, flags=re.DOTALL
+                    r"<think>.*?</think>",
+                    "",
+                    completion_text,
+                    flags=re.DOTALL,
                 ).strip()
 
                 # 移除可能残留的单个标签
@@ -126,7 +131,7 @@ class R1Filter(Star):
                     continue
                 except Exception as e:
                     logging.exception(
-                        f"Unexpected error when calling {getter} on {type(p).__name__}: {e}"
+                        f"Unexpected error when calling {getter} on {type(p).__name__}: {e}",
                     )
                     continue
         try:
@@ -137,7 +142,7 @@ class R1Filter(Star):
             pass
         except Exception as e:
             logging.exception(
-                f"Unexpected error when accessing __dict__ on {type(p).__name__}: {e}"
+                f"Unexpected error when accessing __dict__ on {type(p).__name__}: {e}",
             )
         return {}
 
@@ -175,7 +180,7 @@ class R1Filter(Star):
                     continue
         return False
 
-    def _extract_gemini_texts(self, resp: Any) -> Tuple[str, str]:
+    def _extract_gemini_texts(self, resp: Any) -> tuple[str, str]:
         """从 GenerateContentResponse 中提取 (思考文本, 正文文本)。"""
         try:
             cand0 = next(iter(getattr(resp, "candidates", []) or []), None)

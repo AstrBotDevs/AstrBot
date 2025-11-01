@@ -1,30 +1,35 @@
-import base64
 import asyncio
+import base64
 import json
 import re
 import uuid
-import astrbot.api.message_components as Comp
 
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import *
+
+import astrbot.api.message_components as Comp
+from astrbot import logger
+from astrbot.api.event import MessageChain
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
-from .lark_event import LarkMessageEvent
+
 from ...register import register_platform_adapter
-from astrbot import logger
-import lark_oapi as lark
-from lark_oapi.api.im.v1 import *
+from .lark_event import LarkMessageEvent
 
 
 @register_platform_adapter("lark", "飞书机器人官方 API 适配器")
 class LarkPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -65,14 +70,16 @@ class LarkPlatformAdapter(Platform):
         )
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
         wrapped = {
             "zh_cn": {
                 "title": "",
                 "content": res,
-            }
+            },
         }
 
         if session.message_type == MessageType.GROUP_MESSAGE:
@@ -91,7 +98,7 @@ class LarkPlatformAdapter(Platform):
                 .content(json.dumps(wrapped))
                 .msg_type("post")
                 .uuid(str(uuid.uuid4()))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -160,7 +167,7 @@ class LarkPlatformAdapter(Platform):
             content_json_b = _ls
         elif message.message_type == "image":
             content_json_b = [
-                {"tag": "img", "image_key": content_json_b["image_key"], "style": []}
+                {"tag": "img", "image_key": content_json_b["image_key"], "style": []},
             ]
 
         if message.message_type in ("post", "image"):
@@ -200,11 +207,10 @@ class LarkPlatformAdapter(Platform):
                 abm.session_id = abm.group_id
             else:
                 abm.session_id = abm.sender.user_id
+        elif abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = f"{abm.sender.user_id}%{abm.group_id}"  # 也保留群组id
         else:
-            if abm.type == MessageType.GROUP_MESSAGE:
-                abm.session_id = f"{abm.sender.user_id}%{abm.group_id}"  # 也保留群组id
-            else:
-                abm.session_id = abm.sender.user_id
+            abm.session_id = abm.sender.user_id
 
         logger.debug(abm)
         await self.handle_msg(abm)

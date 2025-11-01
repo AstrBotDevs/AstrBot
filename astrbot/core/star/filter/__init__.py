@@ -1,7 +1,8 @@
 import abc
-from astrbot.core.platform.message_type import MessageType
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 
 
 class HandlerFilter(abc.ABC):
@@ -11,4 +12,4 @@ class HandlerFilter(abc.ABC):
         raise NotImplementedError
 
 
-__all__ = ["HandlerFilter", "MessageType", "AstrMessageEvent", "AstrBotConfig"]
+__all__ = ["AstrBotConfig", "AstrMessageEvent", "HandlerFilter", "MessageType"]

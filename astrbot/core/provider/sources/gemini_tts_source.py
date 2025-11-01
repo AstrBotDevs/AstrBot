@@ -13,7 +13,9 @@ from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "gemini_tts", "Gemini TTS API", provider_type=ProviderType.TEXT_TO_SPEECH
+    "gemini_tts",
+    "Gemini TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderGeminiTTSAPI(TTSProvider):
     def __init__(
@@ -28,13 +30,13 @@ class ProviderGeminiTTSAPI(TTSProvider):
         http_options = types.HttpOptions(timeout=timeout * 1000)
 
         if api_base:
-            if api_base.endswith("/"):
-                api_base = api_base[:-1]
+            api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
         self.model: str = provider_config.get(
-            "gemini_tts_model", "gemini-2.5-flash-preview-tts"
+            "gemini_tts_model",
+            "gemini-2.5-flash-preview-tts",
         )
         self.prefix: str | None = provider_config.get(
             "gemini_tts_prefix",
@@ -54,8 +56,8 @@ class ProviderGeminiTTSAPI(TTSProvider):
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
                             voice_name=self.voice_name,
-                        )
-                    )
+                        ),
+                    ),
                 ),
             ),
         )

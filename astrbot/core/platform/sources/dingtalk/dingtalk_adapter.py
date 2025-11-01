@@ -1,26 +1,28 @@
 import asyncio
 import os
+import threading
 import uuid
+
 import aiohttp
 import dingtalk_stream
-import threading
+from dingtalk_stream import AckMessage
 
+from astrbot import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain, At
 from astrbot.core.platform.astr_message_event import MessageSesion
-from .dingtalk_event import DingtalkMessageEvent
-from ...register import register_platform_adapter
-from astrbot import logger
-from dingtalk_stream import AckMessage
-from astrbot.core.utils.io import download_file
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_file
+
+from ...register import register_platform_adapter
+from .dingtalk_event import DingtalkMessageEvent
 
 
 class MyEventHandler(dingtalk_stream.EventHandler):
@@ -38,7 +40,10 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 @register_platform_adapter("dingtalk", "钉钉机器人官方 API 适配器")
 class DingtalkPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -64,12 +69,15 @@ class DingtalkPlatformAdapter(Platform):
         client = dingtalk_stream.DingTalkStreamClient(credential, logger=logger)
         client.register_all_event_handler(MyEventHandler())
         client.register_callback_handler(
-            dingtalk_stream.ChatbotMessage.TOPIC, self.client
+            dingtalk_stream.ChatbotMessage.TOPIC,
+            self.client,
         )
         self.client_ = client  # 用于 websockets 的 client
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         raise NotImplementedError("钉钉机器人适配器不支持 send_by_session")
 
@@ -81,7 +89,8 @@ class DingtalkPlatformAdapter(Platform):
         )
 
     async def convert_msg(
-        self, message: dingtalk_stream.ChatbotMessage
+        self,
+        message: dingtalk_stream.ChatbotMessage,
     ) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.message = []
@@ -93,7 +102,8 @@ class DingtalkPlatformAdapter(Platform):
             else MessageType.FRIEND_MESSAGE
         )
         abm.sender = MessageMember(
-            user_id=message.sender_id, nickname=message.sender_nick
+            user_id=message.sender_id,
+            nickname=message.sender_nick,
         )
         abm.self_id = message.chatbot_user_id
         abm.message_id = message.message_id
@@ -139,7 +149,10 @@ class DingtalkPlatformAdapter(Platform):
         return abm  # 别忘了返回转换后的消息对象
 
     async def download_ding_file(
-        self, download_code: str, robot_code: str, ext: str
+        self,
+        download_code: str,
+        robot_code: str,
+        ext: str,
     ) -> str:
         """下载钉钉文件
 
@@ -159,20 +172,22 @@ class DingtalkPlatformAdapter(Platform):
         }
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
         f_path = os.path.join(temp_dir, f"dingtalk_file_{uuid.uuid4()}.{ext}")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
                 "https://api.dingtalk.com/v1.0/robot/messageFiles/download",
                 headers=headers,
                 json=payload,
-            ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"下载钉钉文件失败: {resp.status}, {await resp.text()}"
-                    )
-                    return None
-                resp_data = await resp.json()
-                download_url = resp_data["data"]["downloadUrl"]
-                await download_file(download_url, f_path)
+            ) as resp,
+        ):
+            if resp.status != 200:
+                logger.error(
+                    f"下载钉钉文件失败: {resp.status}, {await resp.text()}",
+                )
+                return None
+            resp_data = await resp.json()
+            download_url = resp_data["data"]["downloadUrl"]
+            await download_file(download_url, f_path)
         return f_path
 
     async def get_access_token(self) -> str:
@@ -187,7 +202,7 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}"
+                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}",
                     )
                     return None
                 return (await resp.json())["data"]["accessToken"]

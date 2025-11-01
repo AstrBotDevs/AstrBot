@@ -1,9 +1,6 @@
-"""
-会话插件管理器 - 负责管理每个会话的插件启停状态
-"""
+"""会话插件管理器 - 负责管理每个会话的插件启停状态"""
 
-from astrbot.core import sp, logger
-from typing import Dict, List
+from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
@@ -20,10 +17,14 @@ class SessionPluginManager:
 
         Returns:
             bool: True表示启用，False表示禁用
+
         """
         # 获取会话插件配置
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         session_config = session_plugin_config.get(session_id, {})
 
@@ -43,7 +44,9 @@ class SessionPluginManager:
 
     @staticmethod
     def set_plugin_status_for_session(
-        session_id: str, plugin_name: str, enabled: bool
+        session_id: str,
+        plugin_name: str,
+        enabled: bool,
     ) -> None:
         """设置插件在指定会话中的启停状态
 
@@ -51,10 +54,14 @@ class SessionPluginManager:
             session_id: 会话ID (unified_msg_origin)
             plugin_name: 插件名称
             enabled: True表示启用，False表示禁用
+
         """
         # 获取当前配置
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         if session_id not in session_plugin_config:
             session_plugin_config[session_id] = {
@@ -91,11 +98,11 @@ class SessionPluginManager:
         )
 
         logger.info(
-            f"会话 {session_id} 的插件 {plugin_name} 状态已更新为: {'启用' if enabled else '禁用'}"
+            f"会话 {session_id} 的插件 {plugin_name} 状态已更新为: {'启用' if enabled else '禁用'}",
         )
 
     @staticmethod
-    def get_session_plugin_config(session_id: str) -> Dict[str, List[str]]:
+    def get_session_plugin_config(session_id: str) -> dict[str, list[str]]:
         """获取指定会话的插件配置
 
         Args:
@@ -103,16 +110,21 @@ class SessionPluginManager:
 
         Returns:
             Dict[str, List[str]]: 包含enabled_plugins和disabled_plugins的字典
+
         """
         session_plugin_config = sp.get(
-            "session_plugin_config", {}, scope="umo", scope_id=session_id
+            "session_plugin_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         return session_plugin_config.get(
-            session_id, {"enabled_plugins": [], "disabled_plugins": []}
+            session_id,
+            {"enabled_plugins": [], "disabled_plugins": []},
         )
 
     @staticmethod
-    def filter_handlers_by_session(event: AstrMessageEvent, handlers: List) -> List:
+    def filter_handlers_by_session(event: AstrMessageEvent, handlers: list) -> list:
         """根据会话配置过滤处理器列表
 
         Args:
@@ -121,6 +133,7 @@ class SessionPluginManager:
 
         Returns:
             List: 过滤后的处理器列表
+
         """
         from astrbot.core.star.star import star_map
 
@@ -145,12 +158,13 @@ class SessionPluginManager:
 
             # 检查插件是否在当前会话中启用
             if SessionPluginManager.is_plugin_enabled_for_session(
-                session_id, plugin.name
+                session_id,
+                plugin.name,
             ):
                 filtered_handlers.append(handler)
             else:
                 logger.debug(
-                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}"
+                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
                 )
 
         return filtered_handlers

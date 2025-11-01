@@ -1,6 +1,4 @@
-"""
-会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态
-"""
+"""会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -22,10 +20,14 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示启用，False表示禁用
+
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的LLM状态，返回该状态
@@ -43,13 +45,17 @@ class SessionServiceManager:
         Args:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
+
         """
         session_config = (
             sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
         )
         session_config["llm_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
     @staticmethod
@@ -61,6 +67,7 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示应该处理，False表示跳过
+
         """
         session_id = event.unified_msg_origin
         return SessionServiceManager.is_llm_enabled_for_session(session_id)
@@ -78,10 +85,14 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示启用，False表示禁用
+
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的TTS状态，返回该状态
@@ -99,17 +110,21 @@ class SessionServiceManager:
         Args:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
+
         """
         session_config = (
             sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
         )
         session_config["tts_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
-            f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}"
+            f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}",
         )
 
     @staticmethod
@@ -121,6 +136,7 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示应该处理，False表示跳过
+
         """
         session_id = event.unified_msg_origin
         return SessionServiceManager.is_tts_enabled_for_session(session_id)
@@ -138,10 +154,14 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示启用，False表示禁用
+
         """
         # 获取会话服务配置
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
 
         # 如果配置了该会话的整体状态，返回该状态
@@ -159,17 +179,21 @@ class SessionServiceManager:
         Args:
             session_id: 会话ID (unified_msg_origin)
             enabled: True表示启用，False表示禁用
+
         """
         session_config = (
             sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
         )
         session_config["session_enabled"] = enabled
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
-            f"会话 {session_id} 的整体状态已更新为: {'启用' if enabled else '禁用'}"
+            f"会话 {session_id} 的整体状态已更新为: {'启用' if enabled else '禁用'}",
         )
 
     @staticmethod
@@ -181,6 +205,7 @@ class SessionServiceManager:
 
         Returns:
             bool: True表示应该处理，False表示跳过
+
         """
         session_id = event.unified_msg_origin
         return SessionServiceManager.is_session_enabled(session_id)
@@ -198,9 +223,13 @@ class SessionServiceManager:
 
         Returns:
             str: 自定义名称，如果没有设置则返回None
+
         """
         session_services = sp.get(
-            "session_service_config", {}, scope="umo", scope_id=session_id
+            "session_service_config",
+            {},
+            scope="umo",
+            scope_id=session_id,
         )
         return session_services.get("custom_name")
 
@@ -211,6 +240,7 @@ class SessionServiceManager:
         Args:
             session_id: 会话ID (unified_msg_origin)
             custom_name: 自定义名称，可以为空字符串来清除名称
+
         """
         session_config = (
             sp.get("session_service_config", {}, scope="umo", scope_id=session_id) or {}
@@ -221,11 +251,14 @@ class SessionServiceManager:
             # 如果传入空名称，则删除自定义名称
             session_config.pop("custom_name", None)
         sp.put(
-            "session_service_config", session_config, scope="umo", scope_id=session_id
+            "session_service_config",
+            session_config,
+            scope="umo",
+            scope_id=session_id,
         )
 
         logger.info(
-            f"会话 {session_id} 的自定义名称已更新为: {custom_name.strip() if custom_name and custom_name.strip() else '已清除'}"
+            f"会话 {session_id} 的自定义名称已更新为: {custom_name.strip() if custom_name and custom_name.strip() else '已清除'}",
         )
 
     @staticmethod
@@ -237,6 +270,7 @@ class SessionServiceManager:
 
         Returns:
             str: 显示名称
+
         """
         custom_name = SessionServiceManager.get_session_custom_name(session_id)
         if custom_name:

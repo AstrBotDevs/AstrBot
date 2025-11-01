@@ -1,15 +1,18 @@
-import uuid
 import os
+import uuid
+
 import aiohttp
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
 )
-from ..provider import STTProvider
-from ..entities import ProviderType
-from ..register import register_provider_adapter
+
 from astrbot.core import logger
-from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+
+from ..entities import ProviderType
+from ..provider import STTProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -28,7 +31,8 @@ class ProviderXinferenceSTT(STTProvider):
         self.model_name = provider_config.get("model", "whisper-large-v3")
         self.api_key = provider_config.get("api_key")
         self.launch_model_if_not_running = provider_config.get(
-            "launch_model_if_not_running", False
+            "launch_model_if_not_running",
+            False,
         )
         self.client = None
         self.model_uid = None
@@ -46,7 +50,7 @@ class ProviderXinferenceSTT(STTProvider):
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}"
+                        f"Model '{self.model_name}' is already running with UID: {uid}",
                     )
                     self.model_uid = uid
                     break
@@ -55,19 +59,21 @@ class ProviderXinferenceSTT(STTProvider):
                 if self.launch_model_if_not_running:
                     logger.info(f"Launching {self.model_name} model...")
                     self.model_uid = await self.client.launch_model(
-                        model_name=self.model_name, model_type="audio"
+                        model_name=self.model_name,
+                        model_type="audio",
                     )
                     logger.info("Model launched.")
                 else:
                     logger.warning(
-                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available."
+                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
                     )
                     return
 
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
-                f"Xinference initialization failed with exception: {e}", exc_info=True
+                f"Xinference initialization failed with exception: {e}",
+                exc_info=True,
             )
 
     async def get_text(self, audio_url: str) -> str:
@@ -90,16 +96,15 @@ class ProviderXinferenceSTT(STTProvider):
                             audio_bytes = await resp.read()
                         else:
                             logger.error(
-                                f"Failed to download audio from {audio_url}, status: {resp.status}"
+                                f"Failed to download audio from {audio_url}, status: {resp.status}",
                             )
                             return ""
+            elif os.path.exists(audio_url):
+                with open(audio_url, "rb") as f:
+                    audio_bytes = f.read()
             else:
-                if os.path.exists(audio_url):
-                    with open(audio_url, "rb") as f:
-                        audio_bytes = f.read()
-                else:
-                    logger.error(f"File not found: {audio_url}")
-                    return ""
+                logger.error(f"File not found: {audio_url}")
+                return ""
 
             if not audio_bytes:
                 logger.error("Audio bytes are empty.")
@@ -145,23 +150,28 @@ class ProviderXinferenceSTT(STTProvider):
             data = aiohttp.FormData()
             data.add_field("model", self.model_uid)
             data.add_field(
-                "file", audio_bytes, filename="audio.wav", content_type="audio/wav"
+                "file",
+                audio_bytes,
+                filename="audio.wav",
+                content_type="audio/wav",
             )
 
             async with self.client.session.post(
-                url, data=data, headers=headers, timeout=self.timeout
+                url,
+                data=data,
+                headers=headers,
+                timeout=self.timeout,
             ) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     text = result.get("text", "")
                     logger.debug(f"Xinference STT result: {text}")
                     return text
-                else:
-                    error_text = await resp.text()
-                    logger.error(
-                        f"Xinference STT transcription failed with status {resp.status}: {error_text}"
-                    )
-                    return ""
+                error_text = await resp.text()
+                logger.error(
+                    f"Xinference STT transcription failed with status {resp.status}: {error_text}",
+                )
+                return ""
 
         except Exception as e:
             logger.error(f"Xinference STT failed: {e}")

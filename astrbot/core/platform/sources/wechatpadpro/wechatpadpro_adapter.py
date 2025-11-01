@@ -2,24 +2,24 @@ import asyncio
 import base64
 import json
 import os
-import traceback
 import time
-from typing import Optional
+import traceback
 
 import aiohttp
 import anyio
 import websockets
+
 from astrbot import logger
-from astrbot.api.message_components import Plain, Image, At, Record
+from astrbot.api.message_components import At, Image, Plain, Record
 from astrbot.api.platform import Platform, PlatformMetadata
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.astrbot_message import (
     AstrBotMessage,
     MessageMember,
     MessageType,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
 from .wechatpadpro_message_event import WeChatPadProMessageEvent
@@ -28,14 +28,17 @@ try:
     from .xml_data_parser import GeweDataParser
 except ImportError as e:
     logger.warning(
-        f"警告: 可能未安装 defusedxml 依赖库，将导致无法解析微信的 表情包、引用 类型的消息: {str(e)}"
+        f"警告: 可能未安装 defusedxml 依赖库，将导致无法解析微信的 表情包、引用 类型的消息: {e!s}",
     )
 
 
 @register_platform_adapter("wechatpadpro", "WeChatPadPro 消息平台适配器")
 class WeChatPadProAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self._shutdown_event = None
@@ -55,16 +58,19 @@ class WeChatPadProAdapter(Platform):
         self.host = self.config.get("host")
         self.port = self.config.get("port")
         self.active_mesasge_poll: bool = self.config.get(
-            "wpp_active_message_poll", False
+            "wpp_active_message_poll",
+            False,
         )
         self.active_message_poll_interval: int = self.config.get(
-            "wpp_active_message_poll_interval", 5
+            "wpp_active_message_poll_interval",
+            5,
         )
         self.base_url = f"http://{self.host}:{self.port}"
         self.auth_key = None  # 用于保存生成的授权码
         self.wxid = None  # 用于保存登录成功后的 wxid
         self.credentials_file = os.path.join(
-            get_astrbot_data_path(), "wechatpadpro_credentials.json"
+            get_astrbot_data_path(),
+            "wechatpadpro_credentials.json",
         )  # 持久化文件路径
         self.ws_handle_task = None
 
@@ -81,9 +87,7 @@ class WeChatPadProAdapter(Platform):
         self.max_text_cache = 100
 
     async def run(self) -> None:
-        """
-        启动平台适配器的运行实例。
-        """
+        """启动平台适配器的运行实例。"""
         logger.info("WeChatPadPro 适配器正在启动...")
 
         if loaded_credentials := self.load_credentials():
@@ -132,12 +136,10 @@ class WeChatPadProAdapter(Platform):
         logger.info("WeChatPadPro 适配器已停止。")
 
     def load_credentials(self):
-        """
-        从文件中加载 auth_key 和 wxid。
-        """
+        """从文件中加载 auth_key 和 wxid。"""
         if os.path.exists(self.credentials_file):
             try:
-                with open(self.credentials_file, "r") as f:
+                with open(self.credentials_file) as f:
                     credentials = json.load(f)
                     logger.info("成功加载 WeChatPadPro 凭据。")
                     return credentials
@@ -146,9 +148,7 @@ class WeChatPadProAdapter(Platform):
         return None
 
     def save_credentials(self):
-        """
-        将 auth_key 和 wxid 保存到文件。
-        """
+        """将 auth_key 和 wxid 保存到文件。"""
         credentials = {
             "auth_key": self.auth_key,
             "wxid": self.wxid,
@@ -163,9 +163,7 @@ class WeChatPadProAdapter(Platform):
             logger.error(f"保存 WeChatPadPro 凭据失败: {e}")
 
     async def check_online_status(self):
-        """
-        检查 WeChatPadPro 设备是否在线。
-        """
+        """检查 WeChatPadPro 设备是否在线。"""
         if not self.auth_key:
             return False
         url = f"{self.base_url}/login/GetLoginStatus"
@@ -182,25 +180,23 @@ class WeChatPadProAdapter(Platform):
                             logger.info("WeChatPadPro 设备当前在线。")
                             return True
                         # login_state == 3 为离线状态
-                        elif login_state == 3:
+                        if login_state == 3:
                             logger.info("WeChatPadPro 设备不在线。")
                             return False
-                        else:
-                            logger.error(f"未知的在线状态: {response_data}")
-                            return False
+                        logger.error(f"未知的在线状态: {response_data}")
+                        return False
                     # Code == 300 为微信退出状态。
-                    elif response.status == 200 and response_data.get("Code") == 300:
+                    if response.status == 200 and response_data.get("Code") == 300:
                         logger.info("WeChatPadPro 设备已退出。")
                         return False
-                    elif response.status == 200 and response_data.get("Code") == -2:
+                    if response.status == 200 and response_data.get("Code") == -2:
                         # 该链接不存在
                         self.auth_key = None
                         return False
-                    else:
-                        logger.error(
-                            f"检查在线状态失败: {response.status}, {response_data}"
-                        )
-                        return False
+                    logger.error(
+                        f"检查在线状态失败: {response.status}, {response_data}",
+                    )
+                    return False
 
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
@@ -221,9 +217,7 @@ class WeChatPadProAdapter(Platform):
         return None
 
     async def generate_auth_key(self):
-        """
-        生成授权码。
-        """
+        """生成授权码。"""
         url = f"{self.base_url}/admin/GenAuthKey1"
         params = {"key": self.admin_key}
         payload = {"Count": 1, "Days": 365}  # 生成一个有效期365天的授权码
@@ -235,7 +229,7 @@ class WeChatPadProAdapter(Platform):
                 async with session.post(url, params=params, json=payload) as response:
                     if response.status != 200:
                         logger.error(
-                            f"生成授权码失败: {response.status}, {await response.text()}"
+                            f"生成授权码失败: {response.status}, {await response.text()}",
                         )
                         return
 
@@ -248,7 +242,7 @@ class WeChatPadProAdapter(Platform):
                             logger.info("成功获取授权码")
                         else:
                             logger.error(
-                                f"生成授权码成功但未找到授权码: {response_data}"
+                                f"生成授权码成功但未找到授权码: {response_data}",
                             )
                     else:
                         logger.error(f"生成授权码失败: {response_data}")
@@ -258,9 +252,7 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"生成授权码时发生错误: {e}")
 
     async def get_login_qr_code(self):
-        """
-        获取登录二维码地址。
-        """
+        """获取登录二维码地址。"""
         url = f"{self.base_url}/login/GetLoginQrCodeNew"
         params = {"key": self.auth_key}
         payload = {}  # 根据文档，这个接口的 body 可以为空
@@ -272,26 +264,24 @@ class WeChatPadProAdapter(Platform):
                     if response.status == 200 and response_data.get("Code") == 200:
                         # 二维码地址在 Data.QrCodeUrl 字段中
                         if response_data.get("Data") and response_data["Data"].get(
-                            "QrCodeUrl"
+                            "QrCodeUrl",
                         ):
                             return response_data["Data"]["QrCodeUrl"]
-                        else:
-                            logger.error(
-                                f"获取登录二维码成功但未找到二维码地址: {response_data}"
-                            )
-                            return None
-                    elif "该 key 无效" in response_data.get("Text"):
                         logger.error(
-                            "授权码无效，已经清除。请重新启动 AstrBot 或者本消息适配器。原因也可能是 WeChatPadPro 的 MySQL 服务没有启动成功，请检查 WeChatPadPro 服务的日志。"
+                            f"获取登录二维码成功但未找到二维码地址: {response_data}",
+                        )
+                        return None
+                    if "该 key 无效" in response_data.get("Text"):
+                        logger.error(
+                            "授权码无效，已经清除。请重新启动 AstrBot 或者本消息适配器。原因也可能是 WeChatPadPro 的 MySQL 服务没有启动成功，请检查 WeChatPadPro 服务的日志。",
                         )
                         self.auth_key = None
                         self.save_credentials()
                         return None
-                    else:
-                        logger.error(
-                            f"获取登录二维码失败: {response.status}, {response_data}"
-                        )
-                        return None
+                    logger.error(
+                        f"获取登录二维码失败: {response.status}, {response_data}",
+                    )
+                    return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return None
@@ -300,8 +290,7 @@ class WeChatPadProAdapter(Platform):
                 return None
 
     async def check_login_status(self):
-        """
-        循环检测扫码状态。
+        """循环检测扫码状态。
         尝试 6 次后跳出循环，添加倒计时。
         返回 True 如果登录成功，否则返回 False。
         """
@@ -325,31 +314,31 @@ class WeChatPadProAdapter(Platform):
                             ):
                                 status = response_data["Data"]["state"]
                                 logger.info(
-                                    f"第 {attempts + 1} 次尝试，当前登录状态: {status}，还剩{countdown - attempts * 5}秒"
+                                    f"第 {attempts + 1} 次尝试，当前登录状态: {status}，还剩{countdown - attempts * 5}秒",
                                 )
                                 if status == 2:  # 状态 2 表示登录成功
                                     self.wxid = response_data["Data"].get("wxid")
                                     self.wxnewpass = response_data["Data"].get(
-                                        "wxnewpass"
+                                        "wxnewpass",
                                     )
                                     logger.info(
-                                        f"登录成功，wxid: {self.wxid}, wxnewpass: {self.wxnewpass}"
+                                        f"登录成功，wxid: {self.wxid}, wxnewpass: {self.wxnewpass}",
                                     )
                                     self.save_credentials()  # 登录成功后保存凭据
                                     return True
-                                elif status == -2:  # 二维码过期
+                                if status == -2:  # 二维码过期
                                     logger.error("二维码已过期，请重新获取。")
                                     return False
                             else:
                                 logger.error(
-                                    f"检测登录状态成功但未找到登录状态: {response_data}"
+                                    f"检测登录状态成功但未找到登录状态: {response_data}",
                                 )
                         elif response_data.get("Code") == 300:
                             # "不存在状态"
                             pass
                         else:
                             logger.info(
-                                f"检测登录状态失败: {response.status}, {response_data}"
+                                f"检测登录状态失败: {response.status}, {response_data}",
                             )
 
                 except aiohttp.ClientConnectorError as e:
@@ -368,13 +357,11 @@ class WeChatPadProAdapter(Platform):
         return False
 
     async def connect_websocket(self):
-        """
-        建立 WebSocket 连接并处理接收到的消息。
-        """
+        """建立 WebSocket 连接并处理接收到的消息。"""
         os.environ["no_proxy"] = f"localhost,127.0.0.1,{self.host}"
         ws_url = f"ws://{self.host}:{self.port}/ws/GetSyncMsg?key={self.auth_key}"
         logger.info(
-            f"正在连接 WebSocket: ws://{self.host}:{self.port}/ws/GetSyncMsg?key=***"
+            f"正在连接 WebSocket: ws://{self.host}:{self.port}/ws/GetSyncMsg?key=***",
         )
         while True:
             try:
@@ -389,7 +376,8 @@ class WeChatPadProAdapter(Platform):
                     while True:
                         try:
                             message = await asyncio.wait_for(
-                                websocket.recv(), timeout=wait_time
+                                websocket.recv(),
+                                timeout=wait_time,
                             )
                             # logger.debug(message) # 不显示原始消息内容
                             asyncio.create_task(self.handle_websocket_message(message))
@@ -404,14 +392,12 @@ class WeChatPadProAdapter(Platform):
                             break
             except Exception as e:
                 logger.error(
-                    f"WebSocket 连接失败: {e}, 请检查WeChatPadPro服务状态，或尝试重启WeChatPadPro适配器。"
+                    f"WebSocket 连接失败: {e}, 请检查WeChatPadPro服务状态，或尝试重启WeChatPadPro适配器。",
                 )
                 await asyncio.sleep(5)
 
     async def handle_websocket_message(self, message: str):
-        """
-        处理从 WebSocket 接收到的消息。
-        """
+        """处理从 WebSocket 接收到的消息。"""
         logger.debug(f"收到 WebSocket 消息: {message}")
         try:
             message_data = json.loads(message)
@@ -441,9 +427,7 @@ class WeChatPadProAdapter(Platform):
             logger.error(f"处理 WebSocket 消息时发生错误: {e}")
 
     async def convert_message(self, raw_message: dict) -> AstrBotMessage | None:
-        """
-        将 WeChatPadPro 原始消息转换为 AstrBotMessage。
-        """
+        """将 WeChatPadPro 原始消息转换为 AstrBotMessage。"""
         abm = AstrBotMessage()
         abm.raw_message = raw_message
         abm.message_id = str(raw_message.get("msg_id"))
@@ -452,7 +436,7 @@ class WeChatPadProAdapter(Platform):
 
         if int(time.time()) - abm.timestamp > 180:
             logger.warning(
-                f"忽略 3 分钟前的旧消息：消息时间戳 {abm.timestamp} 超过当前时间 {int(time.time())}。"
+                f"忽略 3 分钟前的旧消息：消息时间戳 {abm.timestamp} 超过当前时间 {int(time.time())}。",
             )
             return None
 
@@ -476,7 +460,12 @@ class WeChatPadProAdapter(Platform):
 
         # 先判断群聊/私聊并设置基本属性
         if await self._process_chat_type(
-            abm, raw_message, from_user_name, to_user_name, content, push_content
+            abm,
+            raw_message,
+            from_user_name,
+            to_user_name,
+            content,
+            push_content,
         ):
             # 再根据消息类型处理消息内容
             await self._process_message_content(abm, raw_message, msg_type, content)
@@ -493,9 +482,7 @@ class WeChatPadProAdapter(Platform):
         content: str,
         push_content: str,
     ):
-        """
-        判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。
-        """
+        """判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。"""
         if from_user_name == "weixin":
             return False
         at_me = False
@@ -510,7 +497,8 @@ class WeChatPadProAdapter(Platform):
             # 获取群聊发送者的nickname
             if sender_wxid:
                 accurate_nickname = await self._get_group_member_nickname(
-                    abm.group_id, sender_wxid
+                    abm.group_id,
+                    sender_wxid,
                 )
                 if accurate_nickname:
                     abm.sender.nickname = accurate_nickname
@@ -539,11 +527,11 @@ class WeChatPadProAdapter(Platform):
         return True
 
     async def _get_group_member_nickname(
-        self, group_id: str, member_wxid: str
-    ) -> Optional[str]:
-        """
-        通过接口获取群成员的昵称。
-        """
+        self,
+        group_id: str,
+        member_wxid: str,
+    ) -> str | None:
+        """通过接口获取群成员的昵称。"""
         url = f"{self.base_url}/group/GetChatroomMemberDetail"
         params = {"key": self.auth_key}
         payload = {
@@ -565,11 +553,11 @@ class WeChatPadProAdapter(Platform):
                             if member.get("user_name") == member_wxid:
                                 return member.get("nick_name")
                         logger.warning(
-                            f"在群 {group_id} 中未找到成员 {member_wxid} 的昵称"
+                            f"在群 {group_id} 中未找到成员 {member_wxid} 的昵称",
                         )
                     else:
                         logger.error(
-                            f"获取群成员详情失败: {response.status}, {response_data}"
+                            f"获取群成员详情失败: {response.status}, {response_data}",
                         )
                     return None
             except aiohttp.ClientConnectorError as e:
@@ -580,7 +568,10 @@ class WeChatPadProAdapter(Platform):
                 return None
 
     async def _download_raw_image(
-        self, from_user_name: str, to_user_name: str, msg_id: int
+        self,
+        from_user_name: str,
+        to_user_name: str,
+        msg_id: int,
     ):
         """下载原始图片。"""
         url = f"{self.base_url}/message/GetMsgBigImg"
@@ -598,9 +589,8 @@ class WeChatPadProAdapter(Platform):
                 async with session.post(url, params=params, json=payload) as response:
                     if response.status == 200:
                         return await response.json()
-                    else:
-                        logger.error(f"下载图片失败: {response.status}")
-                        return None
+                    logger.error(f"下载图片失败: {response.status}")
+                    return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return None
@@ -609,7 +599,11 @@ class WeChatPadProAdapter(Platform):
                 return None
 
     async def download_voice(
-        self, to_user_name: str, new_msg_id: str, bufid: str, length: int
+        self,
+        to_user_name: str,
+        new_msg_id: str,
+        bufid: str,
+        length: int,
     ):
         """下载原始音频。"""
         url = f"{self.base_url}/message/GetMsgVoice"
@@ -635,11 +629,13 @@ class WeChatPadProAdapter(Platform):
                 return None
 
     async def _process_message_content(
-        self, abm: AstrBotMessage, raw_message: dict, msg_type: int, content: str
+        self,
+        abm: AstrBotMessage,
+        raw_message: dict,
+        msg_type: int,
+        content: str,
     ):
-        """
-        根据消息类型处理消息内容，填充 AstrBotMessage 的 message 列表。
-        """
+        """根据消息类型处理消息内容，填充 AstrBotMessage 的 message 列表。"""
         if msg_type == 1:  # 文本消息
             abm.message_str = content
             if abm.type == MessageType.GROUP_MESSAGE:
@@ -671,10 +667,12 @@ class WeChatPadProAdapter(Platform):
                     if at_me:
                         # 被@了，在消息开头插入At组件（参考gewechat的做法）
                         bot_nickname = await self._get_group_member_nickname(
-                            abm.group_id, abm.self_id
+                            abm.group_id,
+                            abm.self_id,
                         )
                         abm.message.insert(
-                            0, At(qq=abm.self_id, name=bot_nickname or abm.self_id)
+                            0,
+                            At(qq=abm.self_id, name=bot_nickname or abm.self_id),
                         )
 
                         # 只有当消息内容不仅仅是@时才添加Plain组件
@@ -727,7 +725,9 @@ class WeChatPadProAdapter(Platform):
             to_user_name = raw_message.get("to_user_name", {}).get("str", "")
             msg_id = raw_message.get("msg_id")
             image_resp = await self._download_raw_image(
-                from_user_name, to_user_name, msg_id
+                from_user_name,
+                to_user_name,
+                msg_id,
             )
             image_bs64_data = (
                 image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
@@ -789,7 +789,8 @@ class WeChatPadProAdapter(Platform):
                 voice_bs64_data = base64.b64decode(voice_bs64_data)
                 temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                 file_path = os.path.join(
-                    temp_dir, f"wechatpadpro_voice_{abm.message_id}.silk"
+                    temp_dir,
+                    f"wechatpadpro_voice_{abm.message_id}.silk",
                 )
 
                 async with await anyio.open_file(file_path, "wb") as f:
@@ -819,9 +820,7 @@ class WeChatPadProAdapter(Platform):
             logger.warning(f"收到未处理的消息类型: {msg_type}。")
 
     async def terminate(self):
-        """
-        终止一个平台的运行实例。
-        """
+        """终止一个平台的运行实例。"""
         logger.info("终止 WeChatPadPro 适配器。")
         try:
             if self.ws_handle_task:
@@ -831,13 +830,13 @@ class WeChatPadProAdapter(Platform):
             pass
 
     def meta(self) -> PlatformMetadata:
-        """
-        得到一个平台的元数据。
-        """
+        """得到一个平台的元数据。"""
         return self.metadata
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         dummy_message_obj = AstrBotMessage()
         dummy_message_obj.session_id = session.session_id
@@ -864,9 +863,7 @@ class WeChatPadProAdapter(Platform):
         await sending_event.send(message_chain)
 
     async def get_contact_list(self):
-        """
-        获取联系人列表。
-        """
+        """获取联系人列表。"""
         url = f"{self.base_url}/friend/GetContactList"
         params = {"key": self.auth_key}
         payload = {"CurrentChatRoomContactSeq": 0, "CurrentWxcontactSeq": 0}
@@ -884,9 +881,8 @@ class WeChatPadProAdapter(Platform):
                             .get("contactUsernameList", [])
                         )
                         return contact_list
-                    else:
-                        logger.error(f"获取联系人列表失败: {result}")
-                        return None
+                    logger.error(f"获取联系人列表失败: {result}")
+                    return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return None
@@ -895,11 +891,11 @@ class WeChatPadProAdapter(Platform):
                 return None
 
     async def get_contact_details_list(
-        self, room_wx_id_list: list[str] = None, user_names: list[str] = None
-    ) -> Optional[dict]:
-        """
-        获取联系人详情列表。
-        """
+        self,
+        room_wx_id_list: list[str] = None,
+        user_names: list[str] = None,
+    ) -> dict | None:
+        """获取联系人详情列表。"""
         if room_wx_id_list is None:
             room_wx_id_list = []
         if user_names is None:
@@ -917,9 +913,8 @@ class WeChatPadProAdapter(Platform):
                     if result.get("Code") == 200 and result.get("Data"):
                         contact_list = result.get("Data", {}).get("contactList", {})
                         return contact_list
-                    else:
-                        logger.error(f"获取联系人详情列表失败: {result}")
-                        return None
+                    logger.error(f"获取联系人详情列表失败: {result}")
+                    return None
             except aiohttp.ClientConnectorError as e:
                 logger.error(f"连接到 WeChatPadPro 服务失败: {e}")
                 return None

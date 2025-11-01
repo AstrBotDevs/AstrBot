@@ -3,13 +3,15 @@
 使用 BM25 算法进行基于关键词的文档检索
 """
 
-import jieba
-import os
 import json
+import os
 from dataclasses import dataclass
+
+import jieba
 from rank_bm25 import BM25Okapi
-from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
+
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 
 
 @dataclass
@@ -37,6 +39,7 @@ class SparseRetriever:
 
         Args:
             kb_db: 知识库数据库实例
+
         """
         self.kb_db = kb_db
         self._index_cache = {}  # 缓存 BM25 索引
@@ -64,6 +67,7 @@ class SparseRetriever:
 
         Returns:
             List[SparseResult]: 检索结果列表
+
         """
         # 1. 获取所有相关块
         top_k_sparse = 0
@@ -73,7 +77,9 @@ class SparseRetriever:
             if not vec_db:
                 continue
             result = await vec_db.document_storage.get_documents(
-                metadata_filters={}, limit=None, offset=None
+                metadata_filters={},
+                limit=None,
+                offset=None,
             )
             chunk_mds = [json.loads(doc["metadata"]) for doc in result]
             result = [
@@ -122,7 +128,7 @@ class SparseRetriever:
                     kb_id=chunk["kb_id"],
                     content=chunk["text"],
                     score=float(score),
-                )
+                ),
             )
 
         results.sort(key=lambda x: x.score, reverse=True)

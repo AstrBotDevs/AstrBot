@@ -1,17 +1,18 @@
 from __future__ import annotations
+
+import asyncio
 import json
 import os
-import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 import aiohttp
 
-from typing import Dict, List, Awaitable, Callable, Any
 from astrbot import logger
 from astrbot.core import sp
-
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.agent.mcp_client import MCPClient
-from astrbot.core.agent.tool import ToolSet, FunctionTool
-
+from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
@@ -30,7 +31,7 @@ FuncTool = FunctionTool
 
 def _prepare_config(config: dict) -> dict:
     """准备配置，处理嵌套格式"""
-    if "mcpServers" in config and config["mcpServers"]:
+    if config.get("mcpServers"):
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
     config.pop("active", None)
@@ -72,8 +73,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    else:
-                        return False, f"HTTP {response.status}: {response.reason}"
+                    return False, f"HTTP {response.status}: {response.reason}"
             else:
                 async with session.get(
                     url,
@@ -85,8 +85,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    else:
-                        return False, f"HTTP {response.status}: {response.reason}"
+                    return False, f"HTTP {response.status}: {response.reason}"
 
     except asyncio.TimeoutError:
         return False, f"连接超时: {timeout}秒"
@@ -96,10 +95,10 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
 class FunctionToolManager:
     def __init__(self) -> None:
-        self.func_list: List[FuncTool] = []
-        self.mcp_client_dict: Dict[str, MCPClient] = {}
+        self.func_list: list[FuncTool] = []
+        self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
-        self.mcp_client_event: Dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, asyncio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -150,14 +149,12 @@ class FunctionToolManager:
                 func_args=func_args,
                 desc=desc,
                 handler=handler,
-            )
+            ),
         )
         logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
-        """
-        删除一个函数调用工具。
-        """
+        """删除一个函数调用工具。"""
         for i, f in enumerate(self.func_list):
             if f.name == name:
                 self.func_list.pop(i)
@@ -202,16 +199,16 @@ class FunctionToolManager:
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
-        mcp_server_json_obj: Dict[str, Dict] = json.load(
-            open(mcp_json_file, "r", encoding="utf-8")
+        mcp_server_json_obj: dict[str, dict] = json.load(
+            open(mcp_json_file, encoding="utf-8"),
         )["mcpServers"]
 
-        for name in mcp_server_json_obj.keys():
+        for name in mcp_server_json_obj:
             cfg = mcp_server_json_obj[name]
             if cfg.get("active", True):
                 event = asyncio.Event()
                 asyncio.create_task(
-                    self._init_mcp_client_task_wrapper(name, cfg, event)
+                    self._init_mcp_client_task_wrapper(name, cfg, event),
                 )
                 self.mcp_client_event[name] = event
 
@@ -325,9 +322,11 @@ class FunctionToolManager:
             event (asyncio.Event): Event to signal when the MCP client is ready.
             ready_future (asyncio.Future): Future to signal when the MCP client is ready.
             timeout (int): Timeout for the initialization.
+
         Raises:
             TimeoutError: If the initialization does not complete within the specified timeout.
             Exception: If there is an error during initialization.
+
         """
         if not event:
             event = asyncio.Event()
@@ -336,7 +335,7 @@ class FunctionToolManager:
         if name in self.mcp_client_dict:
             return
         asyncio.create_task(
-            self._init_mcp_client_task_wrapper(name, config, event, ready_future)
+            self._init_mcp_client_task_wrapper(name, config, event, ready_future),
         )
         try:
             await asyncio.wait_for(ready_future, timeout=timeout)
@@ -349,13 +348,16 @@ class FunctionToolManager:
                 raise exc
 
     async def disable_mcp_server(
-        self, name: str | None = None, timeout: float = 10
+        self,
+        name: str | None = None,
+        timeout: float = 10,
     ) -> None:
         """Disable an MCP server by its name.
 
         Args:
             name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
             timeout (int): Timeout.
+
         """
         if name:
             if name not in self.mcp_client_event:
@@ -389,27 +391,21 @@ class FunctionToolManager:
                 self.func_list = [f for f in self.func_list if f.origin != "mcp"]
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
-        """
-        获得 OpenAI API 风格的**已经激活**的工具描述
-        """
+        """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.openai_schema(
-            omit_empty_parameter_field=omit_empty_parameter_field
+            omit_empty_parameter_field=omit_empty_parameter_field,
         )
 
     def get_func_desc_anthropic_style(self) -> list:
-        """
-        获得 Anthropic API 风格的**已经激活**的工具描述
-        """
+        """获得 Anthropic API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
-        """
-        获得 Google GenAI API 风格的**已经激活**的工具描述
-        """
+        """获得 Google GenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.google_schema()
@@ -418,13 +414,18 @@ class FunctionToolManager:
         """停用一个已经注册的函数调用工具。
 
         Returns:
-            如果没找到，会返回 False"""
+            如果没找到，会返回 False
+
+        """
         func_tool = self.get_func(name)
         if func_tool is not None:
             func_tool.active = False
 
             inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools", [], scope="global", scope_id="global"
+                "inactivated_llm_tools",
+                [],
+                scope="global",
+                scope_id="global",
             )
             if name not in inactivated_llm_tools:
                 inactivated_llm_tools.append(name)
@@ -445,13 +446,16 @@ class FunctionToolManager:
             if func_tool.handler_module_path in star_map:
                 if not star_map[func_tool.handler_module_path].activated:
                     raise ValueError(
-                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。"
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
                     )
 
             func_tool.active = True
 
             inactivated_llm_tools: list = sp.get(
-                "inactivated_llm_tools", [], scope="global", scope_id="global"
+                "inactivated_llm_tools",
+                [],
+                scope="global",
+                scope_id="global",
             )
             if name in inactivated_llm_tools:
                 inactivated_llm_tools.remove(name)
@@ -479,7 +483,7 @@ class FunctionToolManager:
             return DEFAULT_MCP_CONFIG
 
         try:
-            with open(self.mcp_config_path, "r", encoding="utf-8") as f:
+            with open(self.mcp_config_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"加载 MCP 配置失败: {e}")
@@ -509,7 +513,8 @@ class FunctionToolManager:
                     if response.status == 200:
                         data = await response.json()
                         mcp_server_list = data.get("data", {}).get(
-                            "mcp_server_list", []
+                            "mcp_server_list",
+                            [],
                         )
                         local_mcp_config = self.load_mcp_config()
 
@@ -541,23 +546,23 @@ class FunctionToolManager:
                                     self.enable_mcp_server(
                                         name=name,
                                         config=local_mcp_config["mcpServers"][name],
-                                    )
+                                    ),
                                 )
                             await asyncio.gather(*tasks)
                             logger.info(
-                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器"
+                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器",
                             )
                         else:
                             logger.warning("没有找到可用的 ModelScope MCP 服务器")
                     else:
                         raise Exception(
-                            f"ModelScope API 请求失败: HTTP {response.status}"
+                            f"ModelScope API 请求失败: HTTP {response.status}",
                         )
 
         except aiohttp.ClientError as e:
-            raise Exception(f"网络连接错误: {str(e)}")
+            raise Exception(f"网络连接错误: {e!s}")
         except Exception as e:
-            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {str(e)}")
+            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
 
     def __str__(self):
         return str(self.func_list)

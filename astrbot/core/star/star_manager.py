@@ -1,6 +1,4 @@
-"""
-插件的重载、启停、安装、卸载等操作。
-"""
+"""插件的重载、启停、安装、卸载等操作。"""
 
 import asyncio
 import functools
@@ -15,6 +13,7 @@ from types import ModuleType
 import yaml
 
 from astrbot.core import logger, pip_installer, sp
+from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -22,7 +21,6 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
 )
 from astrbot.core.utils.io import remove_dir
-from astrbot.core.agent.handoff import HandoffTool, FunctionTool
 
 from . import StarMetadata
 from .context import Context
@@ -52,8 +50,9 @@ class PluginManager:
         """存储插件配置的路径。data/config"""
         self.reserved_plugin_path = os.path.abspath(
             os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "../../../packages"
-            )
+                os.path.dirname(os.path.abspath(__file__)),
+                "../../../packages",
+            ),
         )
         """保留插件的路径。在 packages 目录下"""
         self.conf_schema_fname = "_conf_schema.json"
@@ -80,7 +79,7 @@ class PluginManager:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.error(f"插件热重载监视任务异常: {str(e)}")
+            logger.error(f"插件热重载监视任务异常: {e!s}")
             logger.error(traceback.format_exc())
 
     async def _handle_file_changes(self, changes):
@@ -95,11 +94,13 @@ class PluginManager:
                 continue
             if star.reserved:
                 plugin_dir_path = os.path.join(
-                    self.reserved_plugin_path, star.root_dir_name
+                    self.reserved_plugin_path,
+                    star.root_dir_name,
                 )
             else:
                 plugin_dir_path = os.path.join(
-                    self.plugin_store_path, star.root_dir_name
+                    self.plugin_store_path,
+                    star.root_dir_name,
                 )
             plugins_to_check.append((plugin_dir_path, star.name))
         reloaded_plugins = set()
@@ -143,14 +144,14 @@ class PluginManager:
                     logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
                     continue
                 if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
-                    os.path.join(path, d, d + ".py")
+                    os.path.join(path, d, d + ".py"),
                 ):
                     modules.append(
                         {
                             "pname": d,
                             "module": module_str,
                             "module_path": os.path.join(path, d, module_str),
-                        }
+                        },
                     )
         return modules
 
@@ -186,7 +187,7 @@ class PluginManager:
                 try:
                     await pip_installer.install(requirements_path=pth)
                 except Exception as e:
-                    logger.error(f"更新插件 {p} 的依赖失败。Code: {str(e)}")
+                    logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
 
     @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
@@ -201,7 +202,8 @@ class PluginManager:
 
         if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
             with open(
-                os.path.join(plugin_path, "metadata.yaml"), encoding="utf-8"
+                os.path.join(plugin_path, "metadata.yaml"),
+                encoding="utf-8",
             ) as f:
                 metadata = yaml.safe_load(f)
         elif plugin_obj and hasattr(plugin_obj, "info"):
@@ -219,7 +221,7 @@ class PluginManager:
                 or "author" not in metadata
             ):
                 raise Exception(
-                    "插件元数据信息不完整。name, desc, version, author 是必须的字段。"
+                    "插件元数据信息不完整。name, desc, version, author 是必须的字段。",
                 )
             metadata = StarMetadata(
                 name=metadata["name"],
@@ -234,7 +236,8 @@ class PluginManager:
 
     @staticmethod
     def _get_plugin_related_modules(
-        plugin_root_dir: str, is_reserved: bool = False
+        plugin_root_dir: str,
+        is_reserved: bool = False,
     ) -> list[str]:
         """获取与指定插件相关的所有已加载模块名
 
@@ -246,6 +249,7 @@ class PluginManager:
 
         Returns:
             list[str]: 与该插件相关的模块名列表
+
         """
         prefix = "packages." if is_reserved else "data.plugins."
         return [
@@ -268,6 +272,7 @@ class PluginManager:
             module_patterns: 要移除的模块名模式列表（例如 ["data.plugins", "packages"]）
             root_dir_name: 插件根目录名，用于移除与该插件相关的所有模块
             is_reserved: 插件是否为保留插件（影响模块路径前缀）
+
         """
         if module_patterns:
             for pattern in module_patterns:
@@ -278,7 +283,8 @@ class PluginManager:
 
         if root_dir_name:
             for module_name in self._get_plugin_related_modules(
-                root_dir_name, is_reserved
+                root_dir_name,
+                is_reserved,
             ):
                 try:
                     del sys.modules[module_name]
@@ -297,6 +303,7 @@ class PluginManager:
             tuple: 返回 load() 方法的结果，包含 (success, error_message)
                 - success (bool): 重载是否成功
                 - error_message (str|None): 错误信息，成功时为 None
+
         """
         async with self._pm_lock:
             specified_module_path = None
@@ -315,7 +322,7 @@ class PluginManager:
                     except Exception as e:
                         logger.warning(traceback.format_exc())
                         logger.warning(
-                            f"插件 {smd.name} 未被正常终止: {str(e)}, 可能会导致该插件运行不正常。"
+                            f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常。",
                         )
                     if smd.name and smd.module_path:
                         await self._unbind_plugin(smd.name, smd.module_path)
@@ -332,7 +339,7 @@ class PluginManager:
                     except Exception as e:
                         logger.warning(traceback.format_exc())
                         logger.warning(
-                            f"插件 {smd.name} 未被正常终止: {str(e)}, 可能会导致该插件运行不正常。"
+                            f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常。",
                         )
                     if smd.name:
                         await self._unbind_plugin(smd.name, specified_module_path)
@@ -353,6 +360,7 @@ class PluginManager:
             tuple: (success, error_message)
                 - success (bool): 是否全部加载成功
                 - error_message (str|None): 错误信息，成功时为 None
+
         """
         inactivated_plugins = await sp.global_get("inactivated_plugins", [])
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
@@ -371,7 +379,8 @@ class PluginManager:
                 # module_path = plugin_module['module_path']
                 root_dir_name = plugin_module["pname"]  # 插件的目录名
                 reserved = plugin_module.get(
-                    "reserved", False
+                    "reserved",
+                    False,
                 )  # 是否是保留插件。目前在 packages/ 目录下的都是保留插件。保留插件不可以卸载。
 
                 path = "data.plugins." if not reserved else "packages."
@@ -394,7 +403,7 @@ class PluginManager:
                     module = __import__(path, fromlist=[module_str])
                 except Exception as e:
                     logger.error(traceback.format_exc())
-                    logger.error(f"插件 {root_dir_name} 导入失败。原因：{str(e)}")
+                    logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
                     continue
 
                 # 检查 _conf_schema.json
@@ -405,14 +414,16 @@ class PluginManager:
                     else os.path.join(self.reserved_plugin_path, root_dir_name)
                 )
                 plugin_schema_path = os.path.join(
-                    plugin_dir_path, self.conf_schema_fname
+                    plugin_dir_path,
+                    self.conf_schema_fname,
                 )
                 if os.path.exists(plugin_schema_path):
                     # 加载插件配置
                     with open(plugin_schema_path, encoding="utf-8") as f:
                         plugin_config = AstrBotConfig(
                             config_path=os.path.join(
-                                self.plugin_config_path, f"{root_dir_name}_config.json"
+                                self.plugin_config_path,
+                                f"{root_dir_name}_config.json",
                             ),
                             schema=json.loads(f.read()),
                         )
@@ -425,7 +436,7 @@ class PluginManager:
                     try:
                         # yaml 文件的元数据优先
                         metadata_yaml = self._load_plugin_metadata(
-                            plugin_path=plugin_dir_path
+                            plugin_path=plugin_dir_path,
                         )
                         if metadata_yaml:
                             metadata.name = metadata_yaml.name
@@ -436,7 +447,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                     except Exception as e:
                         logger.warning(
-                            f"插件 {root_dir_name} 元数据载入失败: {str(e)}。使用默认元数据。"
+                            f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
                         )
                     logger.info(metadata)
                     metadata.config = plugin_config
@@ -445,15 +456,16 @@ class PluginManager:
                         if plugin_config and metadata.star_cls_type:
                             try:
                                 metadata.star_cls = metadata.star_cls_type(
-                                    context=self.context, config=plugin_config
+                                    context=self.context,
+                                    config=plugin_config,
                                 )
                             except TypeError as _:
                                 metadata.star_cls = metadata.star_cls_type(
-                                    context=self.context
+                                    context=self.context,
                                 )
                         elif metadata.star_cls_type:
                             metadata.star_cls = metadata.star_cls_type(
-                                context=self.context
+                                context=self.context,
                             )
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
@@ -469,7 +481,7 @@ class PluginManager:
                     # 绑定 handler
                     related_handlers = (
                         star_handlers_registry.get_handlers_by_module_name(
-                            metadata.module_path
+                            metadata.module_path,
                         )
                     )
                     for handler in related_handlers:
@@ -505,7 +517,7 @@ class PluginManager:
                 else:
                     # v3.4.0 以前的方式注册插件
                     logger.debug(
-                        f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。"
+                        f"插件 {path} 未通过装饰器注册。尝试通过旧版本方式载入。",
                     )
                     classes = self._get_classes(module)
 
@@ -514,19 +526,21 @@ class PluginManager:
                         if plugin_config:
                             try:
                                 obj = getattr(module, classes[0])(
-                                    context=self.context, config=plugin_config
+                                    context=self.context,
+                                    config=plugin_config,
                                 )  # 实例化插件类
                             except TypeError as _:
                                 obj = getattr(module, classes[0])(
-                                    context=self.context
+                                    context=self.context,
                                 )  # 实例化插件类
                         else:
                             obj = getattr(module, classes[0])(
-                                context=self.context
+                                context=self.context,
                             )  # 实例化插件类
 
                     metadata = self._load_plugin_metadata(
-                        plugin_path=plugin_dir_path, plugin_obj=obj
+                        plugin_path=plugin_dir_path,
+                        plugin_obj=obj,
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
@@ -552,7 +566,7 @@ class PluginManager:
 
                 full_names = []
                 for handler in star_handlers_registry.get_handlers_by_module_name(
-                    metadata.module_path
+                    metadata.module_path,
                 ):
                     full_names.append(handler.handler_full_name)
 
@@ -562,7 +576,8 @@ class PluginManager:
                         and handler.handler_name in alter_cmd[metadata.name]
                     ):
                         cmd_type = alter_cmd[metadata.name][handler.handler_name].get(
-                            "permission", "member"
+                            "permission",
+                            "member",
                         )
                         found_permission_filter = False
                         for filter_ in handler.event_filters:
@@ -578,12 +593,12 @@ class PluginManager:
                                 PermissionTypeFilter(
                                     PermissionType.ADMIN
                                     if cmd_type == "admin"
-                                    else PermissionType.MEMBER
-                                )
+                                    else PermissionType.MEMBER,
+                                ),
                             )
 
                         logger.debug(
-                            f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。"
+                            f"插入权限过滤器 {cmd_type} 到 {metadata.name} 的 {handler.handler_name} 方法。",
                         )
 
                 metadata.star_handler_full_names = full_names
@@ -598,7 +613,7 @@ class PluginManager:
                 for line in errors.split("\n"):
                     logger.error(f"| {line}")
                 logger.error("----------------------------------")
-                fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {str(e)}。\n"
+                fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -606,9 +621,8 @@ class PluginManager:
 
         if not fail_rec:
             return True, None
-        else:
-            self.failed_plugin_info = fail_rec
-            return False, fail_rec
+        self.failed_plugin_info = fail_rec
+        return False, fail_rec
 
     async def install_plugin(self, repo_url: str, proxy=""):
         """从仓库 URL 安装插件
@@ -624,6 +638,7 @@ class PluginManager:
                 - repo: 插件的仓库 URL
                 - readme: README.md 文件的内容(如果存在)
                 如果找不到插件元数据则返回 None。
+
         """
         async with self._pm_lock:
             plugin_path = await self.updator.install(repo_url, proxy)
@@ -652,7 +667,7 @@ class PluginManager:
                         readme_content = f.read()
                 except Exception as e:
                     logger.warning(
-                        f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}"
+                        f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}",
                     )
 
             plugin_info = None
@@ -673,6 +688,7 @@ class PluginManager:
 
         Raises:
             Exception: 当插件不存在、是保留插件时，或删除插件文件夹失败时抛出异常
+
         """
         async with self._pm_lock:
             plugin = self.context.get_registered_star(plugin_name)
@@ -689,7 +705,7 @@ class PluginManager:
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 logger.warning(
-                    f"插件 {plugin_name} 未被正常终止 {str(e)}, 可能会导致资源泄露等问题。"
+                    f"插件 {plugin_name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
                 )
 
             # 从 star_registry 和 star_map 中删除
@@ -702,7 +718,7 @@ class PluginManager:
                 remove_dir(os.path.join(ppath, root_dir_name))
             except Exception as e:
                 raise Exception(
-                    f"移除插件成功，但是删除插件文件夹失败: {str(e)}。您可以手动删除该文件夹，位于 addons/plugins/ 下。"
+                    f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 )
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):
@@ -711,6 +727,7 @@ class PluginManager:
         Args:
             plugin_name: 要解绑的插件名称
             plugin_module_path: 插件的完整模块路径
+
         """
         plugin = None
         del star_map[plugin_module_path]
@@ -720,10 +737,10 @@ class PluginManager:
                 del star_registry[i]
                 break
         for handler in star_handlers_registry.get_handlers_by_module_name(
-            plugin_module_path
+            plugin_module_path,
         ):
             logger.info(
-                f"移除了插件 {plugin_name} 的处理函数 {handler.handler_name} ({len(star_handlers_registry)})"
+                f"移除了插件 {plugin_name} 的处理函数 {handler.handler_name} ({len(star_handlers_registry)})",
             )
             star_handlers_registry.remove(handler)
 
@@ -738,7 +755,8 @@ class PluginManager:
             return
 
         self._purge_modules(
-            root_dir_name=plugin.root_dir_name, is_reserved=plugin.reserved
+            root_dir_name=plugin.root_dir_name,
+            is_reserved=plugin.reserved,
         )
 
     async def update_plugin(self, plugin_name: str, proxy=""):
@@ -753,8 +771,7 @@ class PluginManager:
         await self.reload(plugin_name)
 
     async def turn_off_plugin(self, plugin_name: str):
-        """
-        禁用一个插件。
+        """禁用一个插件。
         调用插件的 terminate() 方法，
         将插件的 module_path 加入到 data/shared_preferences.json 的 inactivated_plugins 列表中。
         并且同时将插件启用的 llm_tool 禁用。
@@ -773,7 +790,7 @@ class PluginManager:
                 inactivated_plugins.append(plugin.module_path)
 
             inactivated_llm_tools: list = list(
-                set(await sp.global_get("inactivated_llm_tools", []))
+                set(await sp.global_get("inactivated_llm_tools", [])),
             )  # 后向兼容
 
             # 禁用插件启用的 llm_tool
@@ -803,7 +820,8 @@ class PluginManager:
 
         if "__del__" in star_metadata.star_cls_type.__dict__:
             asyncio.get_event_loop().run_in_executor(
-                None, star_metadata.star_cls.__del__
+                None,
+                star_metadata.star_cls.__del__,
             )
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
@@ -842,7 +860,7 @@ class PluginManager:
         try:
             os.remove(zip_file_path)
         except BaseException as e:
-            logger.warning(f"删除插件压缩包失败: {str(e)}")
+            logger.warning(f"删除插件压缩包失败: {e!s}")
         # await self.reload()
         await self.load(specified_dir_name=dir_name)
 
@@ -866,7 +884,7 @@ class PluginManager:
                 with open(readme_path, encoding="utf-8") as f:
                     readme_content = f.read()
             except Exception as e:
-                logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {str(e)}")
+                logger.warning(f"读取插件 {dir_name} 的 README.md 文件失败: {e!s}")
 
         plugin_info = None
         if plugin:
