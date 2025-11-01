@@ -10,7 +10,7 @@ import aiohttp
 
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.mcp_client import MCPClient
+from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -254,18 +254,15 @@ class FunctionToolManager:
         self.func_list = [
             f
             for f in self.func_list
-            if not (f.origin == "mcp" and f.mcp_server_name == name)
+            if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
         ]
 
         # 将 MCP 工具转换为 FuncTool 并添加到 func_list
         for tool in mcp_client.tools:
-            func_tool = FuncTool(
-                name=tool.name,
-                parameters=tool.inputSchema,
-                description=tool.description,
-                origin="mcp",
-                mcp_server_name=name,
+            func_tool = MCPTool(
+                mcp_tool=tool,
                 mcp_client=mcp_client,
+                mcp_server_name=name,
             )
             self.func_list.append(func_tool)
 
@@ -284,7 +281,7 @@ class FunctionToolManager:
             self.func_list = [
                 f
                 for f in self.func_list
-                if not (f.origin == "mcp" and f.mcp_server_name == name)
+                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
             ]
             logger.info(f"已关闭 MCP 服务 {name}")
 
@@ -374,7 +371,7 @@ class FunctionToolManager:
                 self.func_list = [
                     f
                     for f in self.func_list
-                    if f.origin != "mcp" or f.mcp_server_name != name
+                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
         else:
             running_events = [
@@ -388,7 +385,9 @@ class FunctionToolManager:
             finally:
                 self.mcp_client_event.clear()
                 self.mcp_client_dict.clear()
-                self.func_list = [f for f in self.func_list if f.origin != "mcp"]
+                self.func_list = [
+                    f for f in self.func_list if not isinstance(f, MCPTool)
+                ]
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""

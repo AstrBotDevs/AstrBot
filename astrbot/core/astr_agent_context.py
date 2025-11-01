@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 
@@ -10,4 +11,4 @@ class AstrAgentContext:
     first_provider_request: ProviderRequest
     curr_provider_request: ProviderRequest
     streaming: bool
-    tool_call_timeout: int = 60  # Default tool call timeout in seconds
+    event: AstrMessageEvent

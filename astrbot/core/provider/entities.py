@@ -4,15 +4,17 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from anthropic.types import Message
+from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_message_tool_call import (
-    ChatCompletionMessageToolCall,
-)
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
+from astrbot.core.agent.message import (
+    AssistantMessageSegment,
+    ToolCall,
+    ToolCallMessageSegment,
+)
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
@@ -32,52 +34,14 @@ class ProviderMetaData:
     type: str
     """提供商适配器名称，如 openai, ollama"""
     desc: str = ""
-    """提供商适配器描述."""
+    """提供商适配器描述"""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    cls_type: type | None = None
+    cls_type: Any = None
 
     default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
     provider_display_name: str | None = None
     """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
-
-
-@dataclass
-class ToolCallMessageSegment:
-    """OpenAI 格式的上下文中 role 为 tool 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
-
-    tool_call_id: str
-    content: str
-    role: str = "tool"
-
-    def to_dict(self):
-        return {
-            "tool_call_id": self.tool_call_id,
-            "content": self.content,
-            "role": self.role,
-        }
-
-
-@dataclass
-class AssistantMessageSegment:
-    """OpenAI 格式的上下文中 role 为 assistant 的消息段。参考: https://platform.openai.com/docs/guides/function-calling"""
-
-    content: str | None = None
-    tool_calls: list[ChatCompletionMessageToolCall | dict] = field(default_factory=list)
-    role: str = "assistant"
-
-    def to_dict(self):
-        ret: dict[str, str | list[dict]] = {
-            "role": self.role,
-        }
-        if self.content:
-            ret["content"] = self.content
-        if self.tool_calls:
-            tool_calls_dict = [
-                tc if isinstance(tc, dict) else tc.to_dict() for tc in self.tool_calls
-            ]
-            ret["tool_calls"] = tool_calls_dict
-        return ret
 
 
 @dataclass
@@ -91,8 +55,8 @@ class ToolCallsResult:
 
     def to_openai_messages(self) -> list[dict]:
         ret = [
-            self.tool_calls_info.to_dict(),
-            *[item.to_dict() for item in self.tool_calls_result],
+            self.tool_calls_info.model_dump(),
+            *[item.model_dump() for item in self.tool_calls_result],
         ]
         return ret
 
@@ -108,16 +72,16 @@ class ProviderRequest:
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
-    """上下文。格式与 openai 的上下文格式一致：
+    """
+    OpenAI 格式上下文列表。
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
     """系统提示词"""
     conversation: Conversation | None = None
-
+    """关联的对话对象"""
     tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
-
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
 
@@ -227,7 +191,9 @@ class LLMResponse:
     tools_call_ids: list[str] = field(default_factory=list)
     """工具调用 ID"""
 
-    raw_completion: ChatCompletion | GenerateContentResponse | Message | None = None
+    raw_completion: (
+        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+    ) = None
     _new_record: dict[str, Any] | None = None
 
     _completion_text: str = ""
@@ -243,7 +209,10 @@ class LLMResponse:
         tools_call_args: list[dict[str, Any]] | None = None,
         tools_call_name: list[str] | None = None,
         tools_call_ids: list[str] | None = None,
-        raw_completion: ChatCompletion | None = None,
+        raw_completion: ChatCompletion
+        | GenerateContentResponse
+        | AnthropicMessage
+        | None = None,
         _new_record: dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):
@@ -294,7 +263,7 @@ class LLMResponse:
             self._completion_text = value
 
     def to_openai_tool_calls(self) -> list[dict]:
-        """将工具调用信息转换为 OpenAI 格式"""
+        """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             ret.append(
@@ -306,6 +275,21 @@ class LLMResponse:
                     },
                     "type": "function",
                 },
+            )
+        return ret
+
+    def to_openai_to_calls_model(self) -> list[ToolCall]:
+        """The same as to_openai_tool_calls but return pydantic model."""
+        ret = []
+        for idx, tool_call_arg in enumerate(self.tools_call_args):
+            ret.append(
+                ToolCall(
+                    id=self.tools_call_ids[idx],
+                    function=ToolCall.FunctionBody(
+                        name=self.tools_call_name[idx],
+                        arguments=json.dumps(tool_call_arg),
+                    ),
+                ),
             )
         return ret
 

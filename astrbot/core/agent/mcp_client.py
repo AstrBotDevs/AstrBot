@@ -2,9 +2,14 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
+from typing import Generic
 
 from astrbot import logger
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
+
+from .run_context import TContext
+from .tool import FunctionTool
 
 try:
     import mcp
@@ -221,3 +226,34 @@ class MCPClient:
         """Clean up resources"""
         await self.exit_stack.aclose()
         self.running_event.set()  # Set the running event to indicate cleanup is done
+
+
+class MCPTool(FunctionTool, Generic[TContext]):
+    """A function tool that calls an MCP service."""
+
+    def __init__(
+        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+    ):
+        super().__init__(
+            name=mcp_tool.name,
+            description=mcp_tool.description or "",
+            parameters=mcp_tool.inputSchema,
+        )
+        self.mcp_tool = mcp_tool
+        self.mcp_client = mcp_client
+        self.mcp_server_name = mcp_server_name
+
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs
+    ) -> mcp.types.CallToolResult:
+        session = self.mcp_client.session
+        if not session:
+            raise ValueError("MCP session is not available for MCP function tools.")
+        res = await session.call_tool(
+            name=self.mcp_tool.name,
+            arguments=kwargs,
+            read_timeout_seconds=timedelta(
+                seconds=context.tool_call_timeout,
+            ),
+        )
+        return res
