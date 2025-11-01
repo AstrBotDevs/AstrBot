@@ -46,7 +46,10 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     causing the handler's __module__ to be functools
     """
     active: bool = True
-    """Whether the tool is active."""
+    """
+    Whether the tool is active. This field is a special field for AstrBot.
+    You can ignore it when integrating with other frameworks.
+    """
 
     def __repr__(self):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"

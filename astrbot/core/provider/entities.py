@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from anthropic.types import Message
+from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
 
@@ -12,6 +12,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
+    Message,
     ToolCall,
     ToolCallMessageSegment,
 )
@@ -71,17 +72,17 @@ class ProviderRequest:
     """图片 URL 列表"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
-    contexts: list[dict] = field(default_factory=list)
-    """上下文。格式与 openai 的上下文格式一致：
+    contexts: list[dict] | list[Message] = field(default_factory=list)
+    """
+    OpenAI 格式上下文列表。
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages
     """
     system_prompt: str = ""
     """系统提示词"""
     conversation: Conversation | None = None
-
+    """关联的对话对象"""
     tool_calls_result: list[ToolCallsResult] | ToolCallsResult | None = None
     """附加的上次请求后工具调用的结果。参考: https://platform.openai.com/docs/guides/function-calling#handling-function-calls"""
-
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
 
@@ -191,7 +192,9 @@ class LLMResponse:
     tools_call_ids: list[str] = field(default_factory=list)
     """工具调用 ID"""
 
-    raw_completion: ChatCompletion | GenerateContentResponse | Message | None = None
+    raw_completion: (
+        ChatCompletion | GenerateContentResponse | AnthropicMessage | None
+    ) = None
     _new_record: dict[str, Any] | None = None
 
     _completion_text: str = ""
@@ -207,7 +210,10 @@ class LLMResponse:
         tools_call_args: list[dict[str, Any]] | None = None,
         tools_call_name: list[str] | None = None,
         tools_call_ids: list[str] | None = None,
-        raw_completion: ChatCompletion | None = None,
+        raw_completion: ChatCompletion
+        | GenerateContentResponse
+        | AnthropicMessage
+        | None = None,
         _new_record: dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):

@@ -16,15 +16,14 @@ from astrbot.core.message.message_event_result import (
     MessageChain,
 )
 from astrbot.core.provider.entities import (
-    AssistantMessageSegment,
     LLMResponse,
     ProviderRequest,
-    ToolCallMessageSegment,
     ToolCallsResult,
 )
 from astrbot.core.provider.provider import Provider
 
 from ..hooks import BaseAgentRunHooks
+from ..message import AssistantMessageSegment, ToolCallMessageSegment
 from ..response import AgentResponseData
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
