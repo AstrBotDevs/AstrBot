@@ -52,11 +52,14 @@ class DocumentStorage:
         """
         raise AttributeError(
             "DocumentStorage.connection attribute was removed in AstrBot 4.5.0. "
-            "The database now uses async operations with self.engine. "
-            "If you're seeing this error, please: "
-            "1. Clear Python cache files: find data/plugins -name '*.pyc' -delete "
-            "2. Update any custom plugins that use DocumentStorage "
-            "3. Restart AstrBot"
+            "The database now uses async operations with self.engine and async context managers. "
+            "\n\nIf you're seeing this error, please: "
+            "\n1. Clear Python cache files: find data/plugins -name '*.pyc' -delete && find data/plugins -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true "
+            "\n2. Update any custom plugins that use DocumentStorage: "
+            "\n   - Replace 'self.connection' with 'self.engine' "
+            "\n   - Use 'async with self.get_session() as session' for database operations "
+            "\n   - See DocumentStorage source code for examples "
+            "\n3. Restart AstrBot"
         )
 
     async def initialize(self):
