@@ -1,8 +1,11 @@
 """Test image component validation for empty base64 data."""
 
+import os
+
 import pytest
 
 from astrbot.core.message.components import Image, Record
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class TestImageValidation:
@@ -31,10 +34,6 @@ class TestImageValidation:
     @pytest.mark.asyncio
     async def test_valid_base64_in_convert_to_file_path(self, tmp_path):
         """Test that valid base64 data works correctly in convert_to_file_path."""
-        import os
-
-        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
         # Ensure temp directory exists
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(temp_dir, exist_ok=True)
