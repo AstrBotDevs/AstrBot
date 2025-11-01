@@ -12,7 +12,6 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
-    Message,
     ToolCall,
     ToolCallMessageSegment,
 )
@@ -72,7 +71,7 @@ class ProviderRequest:
     """图片 URL 列表"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
-    contexts: list[dict] | list[Message] = field(default_factory=list)
+    contexts: list[dict] = field(default_factory=list)
     """
     OpenAI 格式上下文列表。
     参考 https://platform.openai.com/docs/api-reference/chat/create#chat-create-messages

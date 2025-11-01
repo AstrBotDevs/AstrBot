@@ -25,6 +25,7 @@ class ProviderMeta:
 
 class AbstractProvider(abc.ABC):
     """Provider Abstract Class"""
+
     def __init__(self, provider_config: dict) -> None:
         super().__init__()
         self.model_name = ""
@@ -55,6 +56,7 @@ class AbstractProvider(abc.ABC):
 
 class Provider(AbstractProvider):
     """Chat Provider"""
+
     def __init__(
         self,
         provider_config: dict,
