@@ -63,7 +63,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
         }
 
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> Any:
-        """Run the tool with the given arguments. The handler field is prioritary."""
+        """Run the tool with the given arguments. The handler field has priority."""
         ...
 
 
