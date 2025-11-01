@@ -11,14 +11,14 @@ class DiscordEmbed(BaseMessageComponent):
 
     def __init__(
         self,
-        title: str = None,
-        description: str = None,
-        color: int = None,
-        url: str = None,
-        thumbnail: str = None,
-        image: str = None,
-        footer: str = None,
-        fields: list[dict] = None,
+        title: str | None = None,
+        description: str | None = None,
+        color: int | None = None,
+        url: str | None = None,
+        thumbnail: str | None = None,
+        image: str | None = None,
+        footer: str | None = None,
+        fields: list[dict] | None = None,
     ):
         self.title = title
         self.description = description

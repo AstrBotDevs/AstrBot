@@ -178,7 +178,7 @@ def set_config(key: str, value: str):
 
 @conf.command(name="get")
 @click.argument("key", required=False)
-def get_config(key: str = None):
+def get_config(key: str | None = None):
     """获取配置项的值，不提供key则显示所有可配置项"""
     config = _load_config()
 
