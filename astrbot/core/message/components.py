@@ -152,6 +152,8 @@ class Record(BaseMessageComponent):
             return os.path.abspath(file_path)
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
+            if not bs64_data:
+                raise ValueError(f"Base64 data is empty for record: {self.file}")
             image_bytes = base64.b64decode(bs64_data)
             temp_dir = os.path.join(get_astrbot_data_path(), "temp")
             file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
@@ -184,6 +186,9 @@ class Record(BaseMessageComponent):
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
+        # Validate that the base64 data is not empty
+        if not bs64_data:
+            raise ValueError(f"Base64 data is empty for record: {self.file}")
         return bs64_data
 
     async def register_to_file_service(self) -> str:
@@ -441,6 +446,8 @@ class Image(BaseMessageComponent):
             return os.path.abspath(image_file_path)
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
+            if not bs64_data:
+                raise ValueError(f"Base64 data is empty for image: {url}")
             image_bytes = base64.b64decode(bs64_data)
             temp_dir = os.path.join(get_astrbot_data_path(), "temp")
             image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
@@ -474,6 +481,8 @@ class Image(BaseMessageComponent):
         else:
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
+        if not bs64_data:
+            raise ValueError(f"Base64 data is empty for image: {url}")
         return bs64_data
 
     async def register_to_file_service(self) -> str:
