@@ -186,7 +186,8 @@ class Record(BaseMessageComponent):
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
-        if not bs64_data:
+        # Validate that the base64 data is not empty
+        if bs64_data == "":
             raise ValueError(f"Base64 data is empty for record: {self.file}")
         return bs64_data
 
