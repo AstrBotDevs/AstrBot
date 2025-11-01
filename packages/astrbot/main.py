@@ -24,7 +24,6 @@ from .commands import (
 )
 from .long_term_memory import LongTermMemory
 from .process_llm_request import ProcessLLMRequest
-from .tools.my_tool import HelloSoulterTool, HelloWorldTool
 
 
 class Main(star.Star):
@@ -50,7 +49,6 @@ class Main(star.Star):
         self.tts_c = TTSCommand(self.context)
         self.sid_c = SIDCommand(self.context)
         self.proc_llm_req = ProcessLLMRequest(self.context)
-        self.context.add_llm_tools(HelloWorldTool(), HelloSoulterTool())
 
     def ltm_enabled(self, event: AstrMessageEvent):
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[

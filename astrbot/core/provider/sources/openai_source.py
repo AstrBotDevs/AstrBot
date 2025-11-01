@@ -134,6 +134,8 @@ class ProviderOpenAIOfficial(Provider):
         if model == "deepseek-reasoner" and "tools" in payloads:
             del payloads["tools"]
 
+        print(payloads)
+
         completion = await self.client.chat.completions.create(
             **payloads,
             stream=False,
@@ -281,10 +283,12 @@ class ProviderOpenAIOfficial(Provider):
         """准备聊天所需的有效载荷和上下文"""
         if contexts is None:
             contexts = []
-        new_record = []
+        new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*self._ensure_message_to_dicts(contexts), new_record]
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 

@@ -584,10 +584,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
-        new_record = []
+        new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*self._ensure_message_to_dicts(contexts), new_record]
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -635,10 +637,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
             contexts = []
-        new_record = []
+        new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*self._ensure_message_to_dicts(contexts), new_record]
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 

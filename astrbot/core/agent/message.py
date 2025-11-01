@@ -1,13 +1,56 @@
-# Partially inspired by MoonshotAI/kosong
+# Inspired by MoonshotAI/kosong
 
-from typing import Literal
+from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel
+from pydantic import BaseModel, GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 
 class ContentPart(BaseModel):
+    """A part of the content in a message."""
+
+    __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
+
     type: str
     ...
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        invalid_subclass_error_msg = f"ContentPart subclass {cls.__name__} must have a `type` field of type `str`"
+
+        type_value = getattr(cls, "type", None)
+        if type_value is None or not isinstance(type_value, str):
+            raise ValueError(invalid_subclass_error_msg)
+
+        cls.__content_part_registry[type_value] = cls
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        # If we're dealing with the base ContentPart class, use custom validation
+        if cls.__name__ == "ContentPart":
+
+            def validate_content_part(value: Any) -> Any:
+                # if it's already an instance of a ContentPart subclass, return it
+                if hasattr(value, "__class__") and issubclass(value.__class__, cls):
+                    return value
+
+                # if it's a dict with a type field, dispatch to the appropriate subclass
+                if isinstance(value, dict) and "type" in value:
+                    type_value: Any | None = cast(dict[str, Any], value).get("type")
+                    if not isinstance(type_value, str):
+                        raise ValueError(f"Cannot validate {value} as ContentPart")
+                    target_class = cls.__content_part_registry[type_value]
+                    return target_class.model_validate(value)
+
+                raise ValueError(f"Cannot validate {value} as ContentPart")
+
+            return core_schema.no_info_plain_validator_function(validate_content_part)
+
+        # for subclasses, use the default schema
+        return handler(source_type)
 
 
 class TextPart(ContentPart):
