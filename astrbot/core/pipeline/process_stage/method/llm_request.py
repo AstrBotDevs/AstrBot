@@ -186,7 +186,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         is_override_call = False
         for ty in type(tool).mro():
             if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
-                print("Found call in:", ty)
+                logger.debug(f"Found call in: {ty}")
                 is_override_call = True
                 break
 
