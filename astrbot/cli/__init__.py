@@ -1,1 +1,3 @@
-__version__ = "3.5.23"
+from astrbot.core.utils.version import get_version
+
+__version__ = get_version()
