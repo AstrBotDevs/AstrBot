@@ -751,6 +751,18 @@ class PluginManager:
         ]:
             del star_handlers_registry.star_handlers_map[k]
 
+        # 移除插件注册的函数调用工具
+        removed_tools = []
+        for func_tool in list(llm_tools.func_list):
+            if (
+                func_tool.handler_module_path == plugin_module_path
+                and func_tool.origin != "mcp"
+            ):
+                llm_tools.func_list.remove(func_tool)
+                removed_tools.append(func_tool.name)
+        if removed_tools:
+            logger.info(f"移除了插件 {plugin_name} 的函数调用工具: {removed_tools}")
+
         if plugin is None:
             return
 
