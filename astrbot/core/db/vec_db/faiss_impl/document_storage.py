@@ -43,6 +43,22 @@ class DocumentStorage:
             "sqlite_init.sql",
         )
 
+    @property
+    def connection(self):
+        """Compatibility property for old code trying to access .connection attribute.
+
+        This was removed in AstrBot 4.5.0 when the database was migrated to async operations.
+        External plugins or cached bytecode may still reference this attribute.
+        """
+        raise AttributeError(
+            "DocumentStorage.connection attribute was removed in AstrBot 4.5.0. "
+            "The database now uses async operations with self.engine. "
+            "If you're seeing this error, please: "
+            "1. Clear Python cache files: find data/plugins -name '*.pyc' -delete "
+            "2. Update any custom plugins that use DocumentStorage "
+            "3. Restart AstrBot"
+        )
+
     async def initialize(self):
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
