@@ -11,7 +11,10 @@ from astrbot.core import logger
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
     decoder = codecs.getincrementaldecoder("utf-8")()
     buffer = ""
-    async for chunk in resp.content.iter_chunked(8192):
+    # Use iter_any() instead of iter_chunked() to avoid TransferEncodingError
+    # when handling large responses with chunked transfer encoding
+    # See: https://github.com/aio-libs/aiohttp/issues/4630
+    async for chunk in resp.content.iter_any():
         buffer += decoder.decode(chunk)
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
