@@ -105,9 +105,10 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             if post:
                 async with session.get(url, ssl=ssl_context) as resp:
@@ -157,9 +158,10 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                                 end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))

@@ -10,7 +10,7 @@ import base64
 import hashlib
 import json
 import logging
-import random
+import secrets
 import socket
 import struct
 import time
@@ -207,7 +207,7 @@ class Prpcrypt:
         """随机生成16位字符串
         @return: 16位字符串
         """
-        return str(random.randint(1000000000000000, 9999999999999999)).encode()
+        return str(secrets.randbelow(9000000000000000) + 1000000000000000).encode()
 
 
 class WXBizJsonMsgCrypt:
