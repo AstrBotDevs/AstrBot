@@ -1,43 +1,65 @@
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Any, Literal
 
+import jsonschema
 from deprecated import deprecated
+from pydantic import model_validator
+from pydantic.dataclasses import dataclass
 
 from .mcp_client import MCPClient
 
+ParametersType = dict[str, Any]
+
 
 @dataclass
-class FunctionTool:
-    """A class representing a function tool that can be used in function calling."""
+class ToolSchema:
+    """A class representing the schema of a tool for function calling."""
 
     name: str
-    parameters: dict | None = None
-    description: str | None = None
-    handler: Callable[..., Awaitable[Any]] | None = None
-    """处理函数, 当 origin 为 mcp 时，这个为空"""
-    handler_module_path: str | None = None
-    """处理函数的模块路径，当 origin 为 mcp 时，这个为空
+    """The name of the tool."""
 
-    必须要保留这个字段, handler 在初始化会被 functools.partial 包装，导致 handler 的 __module__ 为 functools
+    description: str
+    """The description of the tool."""
+
+    parameters: ParametersType
+    """The parameters of the tool, in JSON Schema format."""
+
+    @model_validator(mode="after")
+    def validate_parameters(self) -> "ToolSchema":
+        jsonschema.validate(
+            self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
+        )
+        return self
+
+
+@dataclass
+class FunctionTool(ToolSchema):
+    """A class representing a function tool that can be used in function calling."""
+
+    handler: Callable[..., Awaitable[Any]] | None = None
+    """a callable that implements the tool's functionality. It should be an async function."""
+
+    handler_module_path: str | None = None
+    """
+    The module path of the handler function. This is empty when the origin is mcp.
+    This field must be retained, as the handler will be wrapped in functools.partial during initialization,
+    causing the handler's __module__ to be functools
     """
     active: bool = True
-    """是否激活"""
+    """Whether the tool is active."""
 
     origin: Literal["local", "mcp"] = "local"
-    """函数工具的来源, local 为本地函数工具, mcp 为 MCP 服务"""
+    """The origin of the function tool, local for local function tools, mcp for MCP services."""
 
-    # MCP 相关字段
     mcp_server_name: str | None = None
-    """MCP 服务名称，当 origin 为 mcp 时有效"""
+    """MCP server name, valid when origin is mcp."""
     mcp_client: MCPClient | None = None
-    """MCP 客户端，当 origin 为 mcp 时有效"""
+    """MCP client, valid when origin is mcp."""
 
     def __repr__(self):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description}, active={self.active}, origin={self.origin})"
 
     def __dict__(self) -> dict[str, Any]:
-        """将 FunctionTool 转换为字典格式"""
         return {
             "name": self.name,
             "parameters": self.parameters,
@@ -46,6 +68,10 @@ class FunctionTool:
             "origin": self.origin,
             "mcp_server_name": self.mcp_server_name,
         }
+
+    async def run(self, **kwargs) -> Any:
+        """Run the tool with the given arguments. The handler field is prioritary."""
+        ...
 
 
 class ToolSet:
@@ -225,7 +251,7 @@ class ToolSet:
 
         tools = []
         for tool in self.tools:
-            d = {
+            d: dict[str, Any] = {
                 "name": tool.name,
                 "description": tool.description,
             }

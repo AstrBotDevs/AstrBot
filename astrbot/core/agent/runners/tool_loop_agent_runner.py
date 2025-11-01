@@ -171,8 +171,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 将结果添加到上下文中
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
-                    role="assistant",
-                    tool_calls=llm_resp.to_openai_tool_calls(),
+                    tool_calls=llm_resp.to_openai_to_calls_model(),
                     content=llm_resp.completion_text,
                 ),
                 tool_calls_result=tool_call_result_blocks,

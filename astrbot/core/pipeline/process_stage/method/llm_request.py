@@ -179,8 +179,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             raise ValueError("Event must be provided for local function tools.")
 
         # 检查 tool 下有没有 run 方法
-        if not tool.handler and not hasattr(tool, "run"):
-            raise ValueError("Tool must have a valid handler or 'run' method.")
+        if not tool.handler and tool.run is FunctionTool.run:
+            raise ValueError("Tool must have a valid handler or override 'run' method.")
         awaitable = tool.handler or tool.run
 
         wrapper = call_handler(
