@@ -28,7 +28,7 @@ async def test_add_message_pair_basic(conversation_manager):
     conv_id = await conversation_manager.new_conversation(unified_msg_origin)
 
     # Action: Add a message pair
-    user_message = "提醒我检查洗手间"
+    user_message = "提醒我检查邮件"
     assistant_message = "好的，我已经设置了提醒"
 
     await conversation_manager.add_message_pair(
