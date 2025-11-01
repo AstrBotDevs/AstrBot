@@ -414,8 +414,12 @@ class LLMRequestSubStage(Stage):
             # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_path = await comp.convert_to_file_path()
-                    req.image_urls.append(image_path)
+                    try:
+                        image_path = await comp.convert_to_file_path()
+                        req.image_urls.append(image_path)
+                    except ValueError as e:
+                        logger.warning(f"跳过无效图片: {e}")
+                        continue
 
             conversation = await self._get_session_conv(event)
             req.conversation = conversation
