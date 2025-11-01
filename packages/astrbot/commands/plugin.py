@@ -20,9 +20,10 @@ class PluginCommands:
                 line += " (未启用)"
             parts.append(line + "\n")
 
-        plugin_list_info = "".join(parts)
-        if plugin_list_info.strip() == "已加载的插件：":
+        if len(parts) == 1:
             plugin_list_info = "没有加载任何插件。"
+        else:
+            plugin_list_info = "".join(parts)
 
         plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
         event.set_result(

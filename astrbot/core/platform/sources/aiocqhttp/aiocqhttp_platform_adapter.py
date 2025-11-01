@@ -315,6 +315,7 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(a)
             elif t == "at":
                 first_at_self_processed = False
+                # Accumulate @ mentions for efficient string building
                 at_parts = []
 
                 for m in m_group:
