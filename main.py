@@ -11,7 +11,7 @@ from astrbot.core.initial_loader import InitialLoader
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
-# add parent path to sys.path
+# 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
 
 logo_tmpl = r"""
@@ -34,7 +34,7 @@ def check_env():
     os.makedirs("data/plugins", exist_ok=True)
     os.makedirs("data/temp", exist_ok=True)
 
-    # workaround for issue #181
+    # 针对问题 #181 的临时解决方案
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/javascript", ".mjs")
     mimetypes.add_type("application/json", ".json")
@@ -53,7 +53,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
     if os.path.exists(data_dist_path):
         v = await get_dashboard_version()
         if v is not None:
-            # has file
+            # 存在文件
             if v == f"v{VERSION}":
                 logger.info("WebUI 版本已是最新。")
             else:
@@ -88,16 +88,16 @@ if __name__ == "__main__":
 
     check_env()
 
-    # start log broker
+    # 启动日志代理
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
 
-    # check dashboard files
+    # 检查仪表板文件
     webui_dir = asyncio.run(check_dashboard_files(args.webui_dir))
 
     db = db_helper
 
-    # print logo
+    # 打印 logo
     logger.info(logo_tmpl)
 
     core_lifecycle = InitialLoader(db, log_broker)
