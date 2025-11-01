@@ -184,6 +184,8 @@ class Record(BaseMessageComponent):
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
+        if not bs64_data:
+            raise ValueError(f"Base64 data is empty for record: {self.file}")
         return bs64_data
 
     async def register_to_file_service(self) -> str:
@@ -474,6 +476,8 @@ class Image(BaseMessageComponent):
         else:
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
+        if not bs64_data:
+            raise ValueError(f"Base64 data is empty for image: {url}")
         return bs64_data
 
     async def register_to_file_service(self) -> str:
