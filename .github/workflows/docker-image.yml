@@ -60,17 +60,27 @@ jobs:
           username: ${{ env.GHCR_OWNER }}
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
+      - name: Build test image tags list
+        id: test-tags
+        run: |
+          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:test-latest
+          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:test-${{ steps.test-meta.outputs.short_sha }}"
+          if [ "${{ env.HAS_GHCR_TOKEN }}" = "true" ]; then
+            TAGS="$TAGS
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:test-latest
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:test-${{ steps.test-meta.outputs.short_sha }}"
+          fi
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Build and Push Test Image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ format('{0}/astrbot:test-latest', env.DOCKER_HUB_USERNAME) }}
-            ${{ format('{0}/astrbot:test-{1}', env.DOCKER_HUB_USERNAME, steps.test-meta.outputs.short_sha) }}
-            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:test-latest', env.GHCR_OWNER) || '' }}
-            ${{ env.HAS_GHCR_TOKEN == 'true' && format('ghcr.io/{0}/astrbot:test-{1}', env.GHCR_OWNER, steps.test-meta.outputs.short_sha) || '' }}
+          tags: ${{ steps.test-tags.outputs.tags }}
 
       - name: Post build notifications
         run: echo "Test Docker image has been built and pushed successfully"
