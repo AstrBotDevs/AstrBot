@@ -80,7 +80,7 @@ class ProviderManager:
     def provider_settings(self) -> dict:
         """动态获取最新的 provider_settings 配置"""
         config = self.acm.confs["default"]
-        return config["provider_settings"]
+        return config.get("provider_settings", {})
 
     @property
     def provider_stt_settings(self) -> dict:
