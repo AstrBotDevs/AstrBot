@@ -1,12 +1,12 @@
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal
+from typing import Any, Generic
 
 import jsonschema
 from deprecated import deprecated
 from pydantic import model_validator
 from pydantic.dataclasses import dataclass
 
-from .mcp_client import MCPClient
+from .run_context import ContextWrapper, TContext
 
 ParametersType = dict[str, Any]
 
@@ -33,8 +33,8 @@ class ToolSchema:
 
 
 @dataclass
-class FunctionTool(ToolSchema):
-    """A class representing a function tool that can be used in function calling."""
+class FunctionTool(ToolSchema, Generic[TContext]):
+    """A callable tool, for function calling."""
 
     handler: Callable[..., Awaitable[Any]] | None = None
     """a callable that implements the tool's functionality. It should be an async function."""
@@ -48,16 +48,8 @@ class FunctionTool(ToolSchema):
     active: bool = True
     """Whether the tool is active."""
 
-    origin: Literal["local", "mcp"] = "local"
-    """The origin of the function tool, local for local function tools, mcp for MCP services."""
-
-    mcp_server_name: str | None = None
-    """MCP server name, valid when origin is mcp."""
-    mcp_client: MCPClient | None = None
-    """MCP client, valid when origin is mcp."""
-
     def __repr__(self):
-        return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description}, active={self.active}, origin={self.origin})"
+        return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     def __dict__(self) -> dict[str, Any]:
         return {
@@ -65,11 +57,9 @@ class FunctionTool(ToolSchema):
             "parameters": self.parameters,
             "description": self.description,
             "active": self.active,
-            "origin": self.origin,
-            "mcp_server_name": self.mcp_server_name,
         }
 
-    async def run(self, **kwargs) -> Any:
+    async def call(self, context: ContextWrapper[TContext], **kwargs) -> Any:
         """Run the tool with the given arguments. The handler field is prioritary."""
         ...
 
