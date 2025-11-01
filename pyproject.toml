@@ -5,7 +5,6 @@ description = "易上手的多平台 LLM 聊天机器人及开发框架"
 readme = "README.md"
 requires-python = ">=3.10"
 
-
 keywords = [
     "Astrbot",
     "Astrbot Module",
@@ -76,11 +75,18 @@ dev = [
     "mypy>=1.5.1",
 ]
 
-
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
 [tool.ruff]
+exclude = [
+  "astrbot/core/utils/t2i/local_strategy.py",
+  "astrbot/api/all.py",
+]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
 select = [
   "F", # Pyflakes
   "W", # pycodestyle warnings
@@ -90,23 +96,14 @@ select = [
   "Q", # flake8-quotes
   "I", # import-order
   "UP", # pyupgrade
-  "SIM", # flake8-simplify 
+  # "SIM", # flake8-simplify 
 ]
-
-exclude = [
-  "astrbot/core/utils/t2i/local_strategy.py",
-  "astrbot/api/all.py",
-]
-line-length = 88
-lint.ignore = [
+ignore = [
     "F403", 
     "F405", 
     "E501",
     "ASYNC230" # TODO: handle ASYNC230 in AstrBot
 ]
-
-
-target-version = "py310"
 
 [tool.mypy]
 python_version = "3.10"
@@ -118,7 +115,6 @@ mypy_path = ["astrbot/","packages/"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
-
 disallow_untyped_defs = false
 check_untyped_defs = false
 disallow_incomplete_defs = false

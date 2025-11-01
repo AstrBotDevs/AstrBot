@@ -1,7 +1,6 @@
 import random
 import urllib.parse
 from dataclasses import dataclass
-from typing import List
 
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup

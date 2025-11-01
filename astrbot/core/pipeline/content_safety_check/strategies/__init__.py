@@ -1,5 +1,4 @@
 import abc
-from typing import Tuple
 
 
 class ContentSafetyStrategy(abc.ABC):

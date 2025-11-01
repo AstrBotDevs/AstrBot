@@ -79,7 +79,7 @@ class BaseMessageComponent(BaseModel):
                 k = "type"
             if isinstance(v, bool):
                 v = 1 if v else 0
-            output += ",%s=%s" % (
+            output += ",{}={}".format(
                 k,
                 str(v)
                 .replace("&", "&amp;")
