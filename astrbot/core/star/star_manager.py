@@ -754,10 +754,21 @@ class PluginManager:
         # 移除插件注册的函数调用工具
         removed_tools = []
         for func_tool in list(llm_tools.func_list):
-            if (
-                func_tool.handler_module_path == plugin_module_path
-                and func_tool.origin != "mcp"
-            ):
+            # 检查工具是否属于此插件：
+            # 1. 通过 handler_module_path 匹配（已绑定的工具）
+            # 2. 通过 handler.__module__ 匹配（未绑定的工具，例如在 __init__ 中通过 add_llm_tools 添加的）
+            should_remove = False
+            if func_tool.origin != "mcp":
+                if func_tool.handler_module_path == plugin_module_path:
+                    should_remove = True
+                elif (
+                    func_tool.handler
+                    and hasattr(func_tool.handler, "__module__")
+                    and func_tool.handler.__module__ == plugin_module_path
+                ):
+                    should_remove = True
+
+            if should_remove:
                 llm_tools.func_list.remove(func_tool)
                 removed_tools.append(func_tool.name)
         if removed_tools:
