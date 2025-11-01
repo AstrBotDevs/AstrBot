@@ -64,7 +64,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
 
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> Any:
         """Run the tool with the given arguments. The handler field has priority."""
-        ...
+        raise NotImplementedError("FunctionTool.call() must be implemented by subclasses or set a handler.")
 
 
 class ToolSet:
