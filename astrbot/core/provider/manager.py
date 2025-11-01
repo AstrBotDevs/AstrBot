@@ -74,7 +74,7 @@ class ProviderManager:
     def providers_config(self) -> list:
         """动态获取最新的 provider 配置列表"""
         config = self.acm.confs["default"]
-        return config["provider"]
+        return config.get("provider", [])
 
     @property
     def provider_settings(self) -> dict:
