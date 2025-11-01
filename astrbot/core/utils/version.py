@@ -6,10 +6,9 @@ from importlib.metadata import PackageNotFoundError, version
 def get_version() -> str:
     """
     Get the version from package metadata.
-    
+
     This version is dynamically set by uv-dynamic-versioning from VCS (git tags).
     Falls back to "0.0.0.dev0" if the package is not installed (e.g., during development).
-    
     Returns:
         str: The version string (e.g., "4.5.1")
     """
