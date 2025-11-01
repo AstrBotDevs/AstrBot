@@ -59,6 +59,14 @@ class SharedPreferences:
     @overload
     async def session_get(
         self,
+        umo: str,
+        key: str,
+        default: Any = None,
+    ) -> list[Preference]: ...
+
+    @overload
+    async def session_get(
+        self,
         umo: None,
         key: str,
         default: Any = None,
