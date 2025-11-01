@@ -64,8 +64,8 @@ class TextPart(ContentPart):
 
 class ImageURLPart(ContentPart):
     """
-    >>> ImagePart(image_url="http://example.com/image.jpg").model_dump()
-    {'type': 'image', 'image_url': 'http://example.com/image.jpg'}
+    >>> ImageURLPart(image_url="http://example.com/image.jpg").model_dump()
+    {'type': 'image_url', 'image_url': 'http://example.com/image.jpg'}
     """
 
     class ImageURL(BaseModel):
