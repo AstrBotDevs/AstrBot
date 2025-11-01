@@ -36,59 +36,35 @@ from astrbot.core.utils.io import download_file, download_image_by_url, file_to_
 
 
 class ComponentType(str, Enum):
-    Plain = "Plain"  # 纯文本消息
-    Face = "Face"  # QQ表情
-    Record = "Record"  # 语音
-    Video = "Video"  # 视频
-    At = "At"  # At
-    Node = "Node"  # 转发消息的一个节点
-    Nodes = "Nodes"  # 转发消息的多个节点
-    Poke = "Poke"  # QQ 戳一戳
-    Image = "Image"  # 图片
-    Reply = "Reply"  # 回复
-    Forward = "Forward"  # 转发消息
-    File = "File"  # 文件
+    # Basic Segment Types
+    Plain = "Plain"  # plain text message
+    Image = "Image"  # image
+    Record = "Record"  # audio
+    Video = "Video"  # video
+    File = "File"  # file attachment
 
+    # IM-specific Segment Types
+    Face = "Face"  # Emoji segment for Tencent QQ platform
+    At = "At"  # mention a user in IM apps
+    Node = "Node"  # a node in a forwarded message
+    Nodes = "Nodes"  # a forwarded message consisting of multiple nodes
+    Poke = "Poke"  # a poke message for Tencent QQ platform
+    Reply = "Reply"  # a reply message segment
+    Forward = "Forward"  # a forwarded message segment
     RPS = "RPS"  # TODO
     Dice = "Dice"  # TODO
     Shake = "Shake"  # TODO
-    Anonymous = "Anonymous"  # TODO
     Share = "Share"
     Contact = "Contact"  # TODO
     Location = "Location"  # TODO
     Music = "Music"
-    RedBag = "RedBag"
-    Xml = "Xml"
     Json = "Json"
-    CardImage = "CardImage"
-    TTS = "TTS"
     Unknown = "Unknown"
-
     WechatEmoji = "WechatEmoji"  # Wechat 下的 emoji 表情包
 
 
 class BaseMessageComponent(BaseModel):
     type: ComponentType
-
-    def toString(self):
-        output = f"[CQ:{self.type.lower()}"
-        for k, v in self.__dict__.items():
-            if k == "type" or v is None:
-                continue
-            if k == "_type":
-                k = "type"
-            if isinstance(v, bool):
-                v = 1 if v else 0
-            output += ",{}={}".format(
-                k,
-                str(v)
-                .replace("&", "&amp;")
-                .replace(",", "&#44;")
-                .replace("[", "&#91;")
-                .replace("]", "&#93;"),
-            )
-        output += "]"
-        return output
 
     def toDict(self):
         data = {}
@@ -108,17 +84,10 @@ class BaseMessageComponent(BaseModel):
 class Plain(BaseMessageComponent):
     type = ComponentType.Plain
     text: str
-    convert: bool | None = True  # 若为 False 则直接发送未转换 CQ 码的消息
+    convert: bool | None = True
 
     def __init__(self, text: str, convert: bool = True, **_):
         super().__init__(text=text, convert=convert, **_)
-
-    def toString(self):  # 没有 [CQ:plain] 这种东西，所以直接导出纯文本
-        if not self.convert:
-            return self.text
-        return (
-            self.text.replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;")
-        )
 
     def toDict(self):
         return {"type": "text", "data": {"text": self.text.strip()}}
@@ -369,14 +338,6 @@ class Shake(BaseMessageComponent):  # TODO
         super().__init__(**_)
 
 
-class Anonymous(BaseMessageComponent):  # TODO
-    type = ComponentType.Anonymous
-    ignore: bool | None = False
-
-    def __init__(self, **_):
-        super().__init__(**_)
-
-
 class Share(BaseMessageComponent):
     type = ComponentType.Share
     url: str
@@ -565,14 +526,6 @@ class Reply(BaseMessageComponent):
         super().__init__(**_)
 
 
-class RedBag(BaseMessageComponent):
-    type = ComponentType.RedBag
-    title: str
-
-    def __init__(self, **_):
-        super().__init__(**_)
-
-
 class Poke(BaseMessageComponent):
     type: str = ComponentType.Poke
     id: int | None = 0
@@ -671,15 +624,6 @@ class Nodes(BaseMessageComponent):
         return ret
 
 
-class Xml(BaseMessageComponent):
-    type = ComponentType.Xml
-    data: str
-    resid: int | None = 0
-
-    def __init__(self, **_):
-        super().__init__(**_)
-
-
 class Json(BaseMessageComponent):
     type = ComponentType.Json
     data: str | dict
@@ -691,39 +635,9 @@ class Json(BaseMessageComponent):
         super().__init__(data=data, **_)
 
 
-class CardImage(BaseMessageComponent):
-    type = ComponentType.CardImage
-    file: str
-    cache: bool | None = True
-    minwidth: int | None = 400
-    minheight: int | None = 400
-    maxwidth: int | None = 500
-    maxheight: int | None = 500
-    source: str | None = ""
-    icon: str | None = ""
-
-    def __init__(self, **_):
-        super().__init__(**_)
-
-    @staticmethod
-    def fromFileSystem(path, **_):
-        return CardImage(file=f"file:///{os.path.abspath(path)}", **_)
-
-
-class TTS(BaseMessageComponent):
-    type = ComponentType.TTS
-    text: str
-
-    def __init__(self, **_):
-        super().__init__(**_)
-
-
 class Unknown(BaseMessageComponent):
     type = ComponentType.Unknown
     text: str
-
-    def toString(self):
-        return ""
 
 
 class File(BaseMessageComponent):
@@ -867,32 +781,29 @@ class WechatEmoji(BaseMessageComponent):
 
 
 ComponentTypes = {
+    # Basic Message Segments
     "plain": Plain,
     "text": Plain,
-    "face": Face,
+    "image": Image,
     "record": Record,
     "video": Video,
+    "file": File,
+    # IM-specific Message Segments
+    "face": Face,
     "at": At,
     "rps": RPS,
     "dice": Dice,
     "shake": Shake,
-    "anonymous": Anonymous,
     "share": Share,
     "contact": Contact,
     "location": Location,
     "music": Music,
-    "image": Image,
     "reply": Reply,
-    "redbag": RedBag,
     "poke": Poke,
     "forward": Forward,
     "node": Node,
     "nodes": Nodes,
-    "xml": Xml,
     "json": Json,
-    "cardimage": CardImage,
-    "tts": TTS,
     "unknown": Unknown,
-    "file": File,
     "WechatEmoji": WechatEmoji,
 }
