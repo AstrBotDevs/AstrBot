@@ -33,3 +33,4 @@ pytest.ini
 .astrbot
 
 uv.lock
+astrbot.lock
