@@ -3,8 +3,9 @@
 import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.version import get_version
 
-VERSION = "4.5.1"
+VERSION = get_version()
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
