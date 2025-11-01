@@ -105,7 +105,7 @@ class AstrBotDashboard:
         allowed_endpoints = ["/api/auth/login", "/api/file"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        # claim jwt
+        # 声明 JWT
         token = request.headers.get("Authorization")
         if not token:
             r = jsonify(Response().error("未授权").__dict__)

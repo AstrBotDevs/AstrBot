@@ -134,10 +134,10 @@ class ChatRoute(Route):
         if not conversation_id:
             return Response().error("conversation_id is empty").__dict__
 
-        # append user message
+        # 追加用户消息
         webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
 
-        # Get conversation-specific queues
+        # 获取会话特定的队列
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
         new_his = {"type": "user", "message": message}
@@ -200,7 +200,7 @@ class ChatRoute(Route):
                             or not streaming
                             or type == "break"
                         ):
-                            # append bot message
+                            # 追加机器人消息
                             new_his = {"type": "bot", "message": result_text}
                             await self.platform_history_mgr.insert(
                                 platform_id="webchat",
@@ -212,7 +212,7 @@ class ChatRoute(Route):
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
 
-        # Put message to conversation-specific queue
+        # 将消息放入会话特定的队列
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
         await chat_queue.put(
             (
