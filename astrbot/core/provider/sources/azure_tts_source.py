@@ -1,8 +1,8 @@
 import asyncio
 import hashlib
 import json
-import random
 import re
+import secrets
 import time
 import uuid
 from pathlib import Path
@@ -54,7 +54,9 @@ class OTTSProvider:
     async def _generate_signature(self) -> str:
         await self._sync_time()
         timestamp = int(time.time()) + self.time_offset
-        nonce = "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=10))
+        nonce = "".join(
+            secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(10)
+        )
         path = re.sub(r"^https?://[^/]+", "", self.api_url) or "/"
         return f"{timestamp}-{nonce}-0-{hashlib.md5(f'{path}-{timestamp}-{nonce}-0-{self.skey}'.encode()).hexdigest()}"
 
