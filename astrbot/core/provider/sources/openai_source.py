@@ -592,7 +592,7 @@ class ProviderOpenAIOfficial(Provider):
             base64_data = image_url.replace("base64://", "")
             if not base64_data:
                 logger.warning(f"Base64 data is empty for image_url: {image_url}")
-                return ""
+                raise ValueError(f"Base64 data is empty for image_url: {image_url}")
             return "data:image/jpeg;base64," + base64_data
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
