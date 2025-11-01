@@ -134,8 +134,6 @@ class ProviderOpenAIOfficial(Provider):
         if model == "deepseek-reasoner" and "tools" in payloads:
             del payloads["tools"]
 
-        print(payloads)
-
         completion = await self.client.chat.completions.create(
             **payloads,
             stream=False,
