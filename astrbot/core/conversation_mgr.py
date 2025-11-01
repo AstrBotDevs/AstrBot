@@ -319,6 +319,65 @@ class ConversationManager:
             persona_id=persona_id,
         )
 
+    async def add_message_pair(
+        self,
+        unified_msg_origin: str,
+        user_message: str,
+        assistant_message: str,
+        conversation_id: str | None = None,
+    ) -> None:
+        """添加一对用户消息和助手回复到对话历史.
+
+        此方法专为插件主动发送消息设计，允许插件将主动生成的对话（用户提示词 + AI 回复）
+        持久化到对话历史中，以便后续对话能够引用这些内容。
+
+        Args:
+            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            user_message (str): 用户消息内容（通常是触发主动回复的提示词）
+            assistant_message (str): 助手回复内容（AI 生成的主动回复）
+            conversation_id (str | None): 对话 ID, 是 uuid 格式的字符串。如果为 None，则使用当前会话的对话
+
+        """
+        if not conversation_id:
+            # 如果没有提供 conversation_id，则获取当前的
+            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
+
+        if not conversation_id:
+            # 如果仍然没有对话 ID，说明该会话还没有对话，无法添加消息
+            from astrbot.core import logger
+
+            logger.warning(
+                f"无法添加消息对：会话 {unified_msg_origin} 没有对话",
+            )
+            return
+
+        # 获取当前对话
+        conversation = await self.get_conversation(
+            unified_msg_origin,
+            conversation_id,
+        )
+        if not conversation:
+            from astrbot.core import logger
+
+            logger.warning(
+                f"无法添加消息对：对话 {conversation_id} 不存在",
+            )
+            return
+
+        # 解析现有历史
+        current_history = json.loads(conversation.history)
+
+        # 添加用户消息和助手回复
+        current_history.append({"role": "user", "content": user_message})
+        current_history.append({"role": "assistant", "content": assistant_message})
+
+        # 更新对话历史
+        await self.update_conversation(
+            unified_msg_origin=unified_msg_origin,
+            conversation_id=conversation_id,
+            history=current_history,
+        )
+
     async def get_human_readable_context(
         self,
         unified_msg_origin: str,
