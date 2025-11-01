@@ -75,6 +75,14 @@ class PluginRoute(Route):
             return Response().error(str(e)).__dict__
 
     async def get_online_plugins(self):
+        """获取在线插件市场数据，支持缓存机制
+
+        时间复杂度:
+        - 最优情况 (缓存命中): O(1)，直接返回缓存数据
+        - 最坏情况 (需要远程获取): O(u * r)，u 是 URL 数量，r 是网络请求时间
+        空间复杂度: O(p)，其中 p 是插件市场数据的大小
+        注意: 网络 I/O 时间不计入算法复杂度，但会影响实际运行时间
+        """
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
 
@@ -247,6 +255,13 @@ class PluginRoute(Route):
             return None
 
     async def get_plugins(self):
+        """获取所有插件信息
+
+        时间复杂度: O(n * h)，其中 n 是插件数量，h 是每个插件的 handler 数量
+        - 遍历所有插件: O(n)
+        - 对每个插件调用 get_plugin_handlers_info: O(h)
+        空间复杂度: O(n * h)，存储所有插件及其 handlers 的信息
+        """
         _plugin_resp = []
         plugin_name = request.args.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
@@ -278,7 +293,15 @@ class PluginRoute(Route):
         )
 
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
-        """解析插件行为"""
+        """解析插件行为
+
+        时间复杂度: O(n * f)，其中 n 是 handler 数量，f 是每个 handler 的 filter 数量
+        - 外层循环遍历所有 handler: O(n)
+        - 字典查找: O(1)
+        - 内层循环遍历 filters: O(f)，正常情况下 f 通常为 1-2，可视为常数
+        整体时间复杂度: O(n)，因为 f 通常很小
+        空间复杂度: O(n)，存储所有 handler 的信息
+        """
         handlers = []
 
         for handler_full_name in handler_full_names:
@@ -301,9 +324,9 @@ class PluginRoute(Route):
             if handler.event_type == EventType.AdapterMessageEvent:
                 # 处理平台适配器消息事件
                 has_admin = False
-                for filter in (
-                    handler.event_filters
-                ):  # 正常handler就只有 1~2 个 filter，因此这里时间复杂度不会太高
+                # 时间复杂度: O(f)，f 为 filter 数量
+                # 正常 handler 只有 1~2 个 filter，因此这里时间复杂度不会太高
+                for filter in handler.event_filters:
                     if isinstance(filter, CommandFilter):
                         info["type"] = "指令"
                         info["cmd"] = (

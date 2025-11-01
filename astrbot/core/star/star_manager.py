@@ -83,7 +83,13 @@ class PluginManager:
             logger.error(traceback.format_exc())
 
     async def _handle_file_changes(self, changes):
-        """处理文件变化"""
+        """处理文件变化
+
+        时间复杂度: O(n * m)，其中 n 是激活的插件数量，m 是文件变化数量
+        - 构建 plugins_to_check: O(n)
+        - 处理文件变化的嵌套循环: O(m * n)，但通过 break 提前退出，实际情况下通常较快
+        空间复杂度: O(n)，存储 plugins_to_check 和 reloaded_plugins
+        """
         logger.info(f"检测到文件变化: {changes}")
         plugins_to_check = []
 
@@ -130,6 +136,13 @@ class PluginManager:
 
     @staticmethod
     def _get_modules(path):
+        """扫描目录获取插件模块信息
+
+        时间复杂度: O(n)，其中 n 是目录中的条目数量
+        - os.listdir: O(n)
+        - 每个条目的 os.path 操作: O(1)
+        空间复杂度: O(k)，其中 k 是找到的有效插件模块数量
+        """
         modules = []
 
         dirs = os.listdir(path)
@@ -169,6 +182,12 @@ class PluginManager:
     async def _check_plugin_dept_update(self, target_plugin: str | None = None):
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
+
+        时间复杂度: O(n)，其中 n 是需要检查的插件数量
+        - 单个插件: O(1)
+        - 所有插件: O(n)，遍历所有插件
+        空间复杂度: O(n)，存储 to_update 列表
+        注意: pip install 的时间不计入，因为它是 I/O 操作
         """
         plugin_dir = self.plugin_store_path
         if not os.path.exists(plugin_dir):
@@ -250,6 +269,10 @@ class PluginManager:
         Returns:
             list[str]: 与该插件相关的模块名列表
 
+        时间复杂度: O(m)，其中 m 是 sys.modules 中的模块总数
+        - 遍历所有已加载的模块: O(m)
+        - 字符串前缀检查: O(k)，k 为前缀长度，通常很小
+        空间复杂度: O(n)，其中 n 是匹配的模块数量
         """
         prefix = "packages." if is_reserved else "data.plugins."
         return [

@@ -17,7 +17,14 @@ class StarHandlerRegistry(Generic[T]):
         self._handlers: list[StarHandlerMetadata] = []
 
     def append(self, handler: StarHandlerMetadata):
-        """添加一个 Handler，并保持按优先级有序"""
+        """添加一个 Handler，并保持按优先级有序
+
+        时间复杂度: O(n log n)，其中 n 是已注册的 handler 数量
+        - 字典插入: O(1)
+        - 列表追加: O(1) 摊销
+        - 列表排序: O(n log n)
+        空间复杂度: O(1)，不包括存储 handler 本身的空间
+        """
         if "priority" not in handler.extras_configs:
             handler.extras_configs["priority"] = 0
 
@@ -35,6 +42,14 @@ class StarHandlerRegistry(Generic[T]):
         only_activated=True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata]:
+        """按事件类型获取符合条件的 handlers
+
+        时间复杂度: O(n * m)，其中 n 是 handler 数量，m 是插件白名单长度
+        - 遍历所有 handlers: O(n)
+        - 每次迭代中的字典查找: O(1)
+        - 白名单检查 (plugins_name not in): O(m)
+        空间复杂度: O(k)，其中 k 是符合条件的 handler 数量
+        """
         handlers = []
         for handler in self._handlers:
             # 过滤事件类型
@@ -64,12 +79,22 @@ class StarHandlerRegistry(Generic[T]):
         return handlers
 
     def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata | None:
+        """通过完整名称获取 handler
+
+        时间复杂度: O(1)，字典查找
+        空间复杂度: O(1)
+        """
         return self.star_handlers_map.get(full_name, None)
 
     def get_handlers_by_module_name(
         self,
         module_name: str,
     ) -> list[StarHandlerMetadata]:
+        """通过模块名称获取所有 handlers
+
+        时间复杂度: O(n)，其中 n 是 handler 总数，需要遍历所有 handler
+        空间复杂度: O(k)，其中 k 是匹配的 handler 数量
+        """
         return [
             handler
             for handler in self._handlers
@@ -77,10 +102,22 @@ class StarHandlerRegistry(Generic[T]):
         ]
 
     def clear(self):
+        """清空所有 handlers
+
+        时间复杂度: O(n)，其中 n 是 handler 数量，需要清理所有引用
+        空间复杂度: O(1)
+        """
         self.star_handlers_map.clear()
         self._handlers.clear()
 
     def remove(self, handler: StarHandlerMetadata):
+        """移除指定的 handler
+
+        时间复杂度: O(n)，其中 n 是 handler 数量
+        - 字典删除: O(1)
+        - 列表过滤重建: O(n)
+        空间复杂度: O(n)，需要创建新的列表
+        """
         self.star_handlers_map.pop(handler.handler_full_name, None)
         self._handlers = [h for h in self._handlers if h != handler]
 
