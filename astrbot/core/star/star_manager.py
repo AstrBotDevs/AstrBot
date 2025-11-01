@@ -751,6 +751,41 @@ class PluginManager:
         ]:
             del star_handlers_registry.star_handlers_map[k]
 
+        # 移除插件注册的函数调用工具
+        def _should_remove_tool(func_tool):
+            """检查工具是否属于此插件
+
+            通过两种方式匹配工具：
+            1. handler_module_path 匹配：适用于已完成绑定的工具（在插件加载后，handler 被 functools.partial 包装）
+            2. handler.__module__ 匹配：适用于尚未绑定的工具（在 __init__ 中通过 add_llm_tools 添加的工具）
+
+            注意：MCP 工具由 MCP 客户端管理，不在此移除
+            """
+            if func_tool.origin == "mcp":
+                return False
+            if func_tool.handler_module_path == plugin_module_path:
+                return True
+            if (
+                func_tool.handler
+                and hasattr(func_tool.handler, "__module__")
+                and func_tool.handler.__module__ == plugin_module_path
+            ):
+                return True
+            return False
+
+        # 一次遍历完成工具的分类和移除
+        removed_tools = []
+        remaining_tools = []
+        for func_tool in llm_tools.func_list:
+            if _should_remove_tool(func_tool):
+                removed_tools.append(func_tool.name)
+            else:
+                remaining_tools.append(func_tool)
+        llm_tools.func_list = remaining_tools
+
+        if removed_tools:
+            logger.info(f"移除了插件 {plugin_name} 的函数调用工具: {removed_tools}")
+
         if plugin is None:
             return
 
