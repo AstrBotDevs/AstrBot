@@ -154,13 +154,25 @@ class FunctionToolManager:
         logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
-        """删除一个函数调用工具。"""
+        """删除一个函数调用工具。
+
+        时间复杂度: O(n)，其中 n 是工具数量
+        - 遍历查找工具: O(n)
+        - 列表 pop 操作: O(n) 最坏情况（删除第一个元素）
+        空间复杂度: O(1)
+        """
         for i, f in enumerate(self.func_list):
             if f.name == name:
                 self.func_list.pop(i)
                 break
 
     def get_func(self, name) -> FuncTool | None:
+        """通过名称获取函数工具
+
+        时间复杂度: O(n)，其中 n 是工具数量，需要线性搜索
+        空间复杂度: O(1)
+        优化建议: 可以使用字典存储工具，将查找时间优化为 O(1)
+        """
         for f in self.func_list:
             if f.name == name:
                 return f
@@ -391,7 +403,13 @@ class FunctionToolManager:
                 self.func_list = [f for f in self.func_list if f.origin != "mcp"]
 
     def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
-        """获得 OpenAI API 风格的**已经激活**的工具描述"""
+        """获得 OpenAI API 风格的**已经激活**的工具描述
+
+        时间复杂度: O(n)，其中 n 是工具数量
+        - 过滤激活的工具: O(n)
+        - 生成 schema: O(n)
+        空间复杂度: O(k)，其中 k 是激活的工具数量
+        """
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.openai_schema(
@@ -399,13 +417,21 @@ class FunctionToolManager:
         )
 
     def get_func_desc_anthropic_style(self) -> list:
-        """获得 Anthropic API 风格的**已经激活**的工具描述"""
+        """获得 Anthropic API 风格的**已经激活**的工具描述
+
+        时间复杂度: O(n)，其中 n 是工具数量
+        空间复杂度: O(k)，其中 k 是激活的工具数量
+        """
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.anthropic_schema()
 
     def get_func_desc_google_genai_style(self) -> dict:
-        """获得 Google GenAI API 风格的**已经激活**的工具描述"""
+        """获得 Google GenAI API 风格的**已经激活**的工具描述
+
+        时间复杂度: O(n)，其中 n 是工具数量
+        空间复杂度: O(k)，其中 k 是激活的工具数量
+        """
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
         return toolset.google_schema()

@@ -38,6 +38,12 @@ class CommandGroupFilter(HandlerFilter):
         """遍历父节点获取完整的指令名。
 
         新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。
+        
+        时间复杂度: O(d * p * a)，其中 d 是指令组深度，p 是父级指令名数量，a 是别名数量
+        - 有缓存时: O(1)
+        - 无缓存时: O(d) 递归深度 * O(p * a) 生成笛卡尔积
+        - 实际场景中，d、p、a 通常都很小（< 5），可视为常数
+        空间复杂度: O(p * a)，存储生成的完整指令名
         """
         if self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
@@ -66,6 +72,12 @@ class CommandGroupFilter(HandlerFilter):
         event: AstrMessageEvent | None = None,
         cfg: AstrBotConfig | None = None,
     ) -> str:
+        """递归打印指令树结构
+        
+        时间复杂度: O(n)，其中 n 是所有子指令和指令组的总数
+        - 递归遍历所有节点: O(n)
+        空间复杂度: O(d + s)，其中 d 是递归深度（通常 < 10），s 是输出字符串大小
+        """
         result = ""
         for sub_filter in sub_command_filters:
             if isinstance(sub_filter, CommandFilter):

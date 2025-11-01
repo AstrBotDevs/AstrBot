@@ -73,13 +73,22 @@ class Context:
         self.kb_manager = knowledge_base_manager
 
     def get_registered_star(self, star_name: str) -> StarMetadata | None:
-        """根据插件名获取插件的 Metadata"""
+        """根据插件名获取插件的 Metadata
+
+        时间复杂度: O(n)，其中 n 是注册的插件数量，需要线性搜索
+        空间复杂度: O(1)
+        优化建议: 可以使用字典存储插件名到元数据的映射，将查找时间优化为 O(1)
+        """
         for star in star_registry:
             if star.name == star_name:
                 return star
 
     def get_all_stars(self) -> list[StarMetadata]:
-        """获取当前载入的所有插件 Metadata 的列表"""
+        """获取当前载入的所有插件 Metadata 的列表
+
+        时间复杂度: O(1)，直接返回引用
+        空间复杂度: O(1)
+        """
         return star_registry
 
     def get_llm_tool_manager(self) -> FunctionToolManager:
@@ -114,7 +123,11 @@ class Context:
     ) -> (
         Provider | TTSProvider | STTProvider | EmbeddingProvider | RerankProvider | None
     ):
-        """通过 ID 获取对应的 LLM Provider。"""
+        """通过 ID 获取对应的 LLM Provider。
+
+        时间复杂度: O(1)，字典查找
+        空间复杂度: O(1)
+        """
         prov = self.provider_manager.inst_map.get(provider_id)
         return prov
 
