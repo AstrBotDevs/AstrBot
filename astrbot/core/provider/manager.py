@@ -26,11 +26,6 @@ class ProviderManager:
     ):
         self.persona_mgr = persona_mgr
         self.acm = acm
-        config = acm.confs["default"]
-        self.providers_config: list = config["provider"]
-        self.provider_settings: dict = config["provider_settings"]
-        self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
-        self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
         # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
         self.default_persona_name = persona_mgr.default_persona
@@ -74,6 +69,30 @@ class ProviderManager:
     def selected_default_persona(self):
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
+
+    @property
+    def providers_config(self) -> list:
+        """动态获取最新的 provider 配置列表"""
+        config = self.acm.confs["default"]
+        return config["provider"]
+
+    @property
+    def provider_settings(self) -> dict:
+        """动态获取最新的 provider_settings 配置"""
+        config = self.acm.confs["default"]
+        return config["provider_settings"]
+
+    @property
+    def provider_stt_settings(self) -> dict:
+        """动态获取最新的 provider_stt_settings 配置"""
+        config = self.acm.confs["default"]
+        return config.get("provider_stt_settings", {})
+
+    @property
+    def provider_tts_settings(self) -> dict:
+        """动态获取最新的 provider_tts_settings 配置"""
+        config = self.acm.confs["default"]
+        return config.get("provider_tts_settings", {})
 
     async def set_provider(
         self,
