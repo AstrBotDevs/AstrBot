@@ -1,0 +1,51 @@
+name: Multi-Version Python Test
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'README.md'
+      - 'changelogs/**'
+      - 'dashboard/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install UV
+        run: pip install uv
+      
+      - name: Install dependencies
+        run: uv sync
+        timeout-minutes: 15
+
+      - name: Create required directories
+        run: |
+          mkdir -p data/plugins
+          mkdir -p data/config
+          mkdir -p data/temp
+
+      - name: Run tests
+        run: |
+          export TESTING=true
+          export ZHIPU_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          uv run pytest -v -o log_cli=true -o log_level=DEBUG

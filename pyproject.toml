@@ -11,6 +11,16 @@ keywords = [
     "Astrbot Plugin"
 ]
 
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+]
+
 dependencies = [
     "aiocqhttp>=1.4.4",
     "aiodocker>=0.24.0",
