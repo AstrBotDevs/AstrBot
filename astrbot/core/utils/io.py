@@ -166,6 +166,9 @@ async def download_file(url: str, path: str, show_progress: bool = False):
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
+            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+        )
+        logger.warning(
             f"SSL certificate verification failed for {url}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
