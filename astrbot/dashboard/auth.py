@@ -10,6 +10,8 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astrbot.core import logger
@@ -23,7 +25,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = None
 
     def __init__(self, user_db: SQLAlchemyUserDatabase, jwt_secret: str):
-        super().__init__(user_db)
+        # Use Argon2 for password hashing with salt
+        # The MD5 value from frontend will be treated as the "password" and hashed with Argon2
+        password_hash = PasswordHash((Argon2Hasher(),))
+        super().__init__(user_db, password_hash)
         self.reset_password_token_secret = jwt_secret
         self.verification_token_secret = jwt_secret
 

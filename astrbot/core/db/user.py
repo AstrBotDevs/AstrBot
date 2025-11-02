@@ -1,7 +1,6 @@
 """User models for fastapi-users authentication."""
 
 import uuid
-from typing import Optional
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlmodel import Field, SQLModel
@@ -55,6 +54,6 @@ class UserCreate(SQLModel):
 class UserUpdate(SQLModel):
     """Schema for updating user data."""
 
-    email: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
+    email: str | None = None
+    username: str | None = None
+    password: str | None = None
