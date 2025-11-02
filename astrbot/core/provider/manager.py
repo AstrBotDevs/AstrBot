@@ -71,28 +71,29 @@ class ProviderManager:
         return self.persona_mgr.selected_default_persona_v3
 
     @property
+    def _default_config(self) -> dict:
+        """私有属性，获取默认配置"""
+        return self.acm.confs["default"]
+
+    @property
     def providers_config(self) -> list:
         """动态获取最新的 provider 配置列表"""
-        config = self.acm.confs["default"]
-        return config.get("provider", [])
+        return self._default_config.get("provider", [])
 
     @property
     def provider_settings(self) -> dict:
         """动态获取最新的 provider_settings 配置"""
-        config = self.acm.confs["default"]
-        return config.get("provider_settings", {})
+        return self._default_config.get("provider_settings", {})
 
     @property
     def provider_stt_settings(self) -> dict:
         """动态获取最新的 provider_stt_settings 配置"""
-        config = self.acm.confs["default"]
-        return config.get("provider_stt_settings", {})
+        return self._default_config.get("provider_stt_settings", {})
 
     @property
     def provider_tts_settings(self) -> dict:
         """动态获取最新的 provider_tts_settings 配置"""
-        config = self.acm.confs["default"]
-        return config.get("provider_tts_settings", {})
+        return self._default_config.get("provider_tts_settings", {})
 
     async def set_provider(
         self,
