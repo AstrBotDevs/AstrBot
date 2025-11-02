@@ -147,7 +147,8 @@ class Provider(AbstractProvider):
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
-        ...
+        raise NotImplementedError
+        yield  # Makes this an async generator for type checking
 
     async def pop_record(self, context: list):
         """弹出 context 第一条非系统提示词对话记录"""

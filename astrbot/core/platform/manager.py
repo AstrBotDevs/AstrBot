@@ -37,9 +37,8 @@ class PlatformManager:
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
-        asyncio.create_task(
-            self._task_wrapper(asyncio.create_task(webchat_inst.run(), name="webchat")),
-        )
+        task = asyncio.create_task(webchat_inst.run(), name="webchat")
+        asyncio.create_task(self._task_wrapper(task))
 
     async def load_platform(self, platform_config: dict):
         """实例化一个平台"""
@@ -126,14 +125,11 @@ class PlatformManager:
         }
         self.platform_insts.append(inst)
 
-        asyncio.create_task(
-            self._task_wrapper(
-                asyncio.create_task(
-                    inst.run(),
-                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
-                ),
-            ),
+        task = asyncio.create_task(
+            inst.run(),
+            name=f"platform_{platform_config['type']}_{platform_config['id']}",
         )
+        asyncio.create_task(self._task_wrapper(task))
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnPlatformLoadedEvent,
         )
