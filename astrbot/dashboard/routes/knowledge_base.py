@@ -6,7 +6,7 @@ import traceback
 import uuid
 
 import aiofiles
-from quart import request
+from fastapi import Request, Body, Query
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

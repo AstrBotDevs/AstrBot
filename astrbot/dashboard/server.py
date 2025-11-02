@@ -48,7 +48,7 @@ class AstrBotDashboard:
 
         self.shutdown_event = shutdown_event
         self._init_jwt_secret()
-        
+
         # Create FastAPI app with lifespan
         @asynccontextmanager
         async def lifespan(app: FastAPI):
@@ -57,16 +57,16 @@ class AstrBotDashboard:
             yield
             # Shutdown
             logger.info("FastAPI application shutting down")
-        
+
         self.app = FastAPI(
             title="AstrBot Dashboard",
             version=VERSION,
             lifespan=lifespan,
         )
-        
+
         global APP
         APP = self.app
-        
+
         # Add CORS middleware
         self.app.add_middleware(
             CORSMiddleware,
@@ -75,13 +75,13 @@ class AstrBotDashboard:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        
+
         # Setup fastapi-users authentication
         self.fastapi_users, self.auth_backend = setup_fastapi_users(self._jwt_secret)
-        
+
         # Initialize route context
         self.context = RouteContext(self.config, self.app)
-        
+
         # Register routes from different modules
         self.ur = UpdateRoute(
             self.context,
@@ -115,16 +115,19 @@ class AstrBotDashboard:
         @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"])
         async def srv_plug_route(subpath: str):
             return await self._srv_plug_route(subpath)
-        
+
         # Mount static files (must be last)
         if os.path.exists(self.data_path):
-            self.app.mount("/", StaticFiles(directory=self.data_path, html=True), name="static")
+            self.app.mount(
+                "/", StaticFiles(directory=self.data_path, html=True), name="static"
+            )
 
     async def _srv_plug_route(self, subpath: str):
         """插件路由"""
         from fastapi import Request
+
         request = Request(scope={"type": "http"})
-        
+
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
@@ -243,15 +246,15 @@ class AstrBotDashboard:
             log_config=None,  # Disable uvicorn logging to use our logger
         )
         server = uvicorn.Server(config)
-        
+
         # Run server in background task
         server_task = asyncio.create_task(server.serve())
-        
+
         # Wait for shutdown event
         await self.shutdown_event.wait()
-        
+
         # Graceful shutdown
         server.should_exit = True
         await server_task
-        
+
         logger.info("AstrBot WebUI 已经被优雅地关闭")

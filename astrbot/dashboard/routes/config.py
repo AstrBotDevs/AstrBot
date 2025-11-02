@@ -3,7 +3,7 @@ import inspect
 import os
 import traceback
 
-from quart import request
+from fastapi import Request, Body, Query
 
 from astrbot.core import file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig

@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from fastapi import Request, Body, Query
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

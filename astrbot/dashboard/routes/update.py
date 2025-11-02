@@ -70,8 +70,9 @@ class UpdateRoute(Route):
             logger.error(f"迁移失败: {traceback.format_exc()}")
             return Response().error(f"迁移失败: {e!s}").__dict__
 
-    async def check_update(self, type_: Optional[str] = Query(default=None, alias="type")):
-
+    async def check_update(
+        self, type_: Optional[str] = Query(default=None, alias="type")
+    ):
         try:
             dv = await get_dashboard_version()
             if type_ == "dashboard":
@@ -155,7 +156,7 @@ class UpdateRoute(Route):
 
     async def update_dashboard(self):
         from fastapi.responses import JSONResponse
-        
+
         try:
             try:
                 await download_dashboard(version=f"v{VERSION}", latest=False)
@@ -163,8 +164,10 @@ class UpdateRoute(Route):
                 logger.error(f"下载管理面板文件失败: {e}。")
                 return Response().error(f"下载管理面板文件失败: {e}").__dict__
             return JSONResponse(
-                content=Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__,
-                headers=CLEAR_SITE_DATA_HEADERS
+                content=Response()
+                .ok(None, "更新成功。刷新页面即可应用新版本面板。")
+                .__dict__,
+                headers=CLEAR_SITE_DATA_HEADERS,
             )
         except Exception as e:
             logger.error(f"/api/update_dashboard: {traceback.format_exc()}")

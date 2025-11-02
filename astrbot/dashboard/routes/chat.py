@@ -4,8 +4,8 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
-from quart import Response as QuartResponse
-from quart import g, make_response, request
+# from quart import Response as QuartResponse
+# from quart import g, make_response, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from quart import request
+from fastapi import Request, Body, Query
 
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

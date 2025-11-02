@@ -1,7 +1,7 @@
 import json
 import traceback
 
-from quart import request
+from fastapi import Request, Body, Query
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -36,19 +36,19 @@ class ConversationRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def list_conversations(self):
+    async def list_conversations(
+        self,
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
+        platforms: str = Query(default=""),
+        message_types: str = Query(default=""),
+        search: str = Query(default="", alias="search"),
+        exclude_ids: str = Query(default=""),
+        exclude_platforms: str = Query(default=""),
+    ):
         """获取对话列表，支持分页、排序和筛选"""
         try:
-            # 获取分页参数
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("page_size", 20, type=int)
-
-            # 获取筛选参数
-            platforms = request.args.get("platforms", "")
-            message_types = request.args.get("message_types", "")
-            search_query = request.args.get("search", "")
-            exclude_ids = request.args.get("exclude_ids", "")
-            exclude_platforms = request.args.get("exclude_platforms", "")
+            search_query = search
 
             # 转换为列表
             platform_list = platforms.split(",") if platforms else []
@@ -101,10 +101,9 @@ class ConversationRoute(Route):
             logger.error(error_msg)
             return Response().error(f"获取对话列表失败: {e!s}").__dict__
 
-    async def get_conv_detail(self):
+    async def get_conv_detail(self, data: dict = Body(...)):
         """获取指定对话详情（通过POST请求）"""
         try:
-            data = await request.get_json()
             user_id = data.get("user_id")
             cid = data.get("cid")
 
@@ -138,10 +137,9 @@ class ConversationRoute(Route):
             logger.error(f"获取对话详情失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取对话详情失败: {e!s}").__dict__
 
-    async def upd_conv(self):
+    async def upd_conv(self, data: dict = Body(...)):
         """更新对话信息(标题和角色ID)"""
         try:
-            data = await request.get_json()
             user_id = data.get("user_id")
             cid = data.get("cid")
             title = data.get("title")
@@ -168,11 +166,9 @@ class ConversationRoute(Route):
             logger.error(f"更新对话信息失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新对话信息失败: {e!s}").__dict__
 
-    async def del_conv(self):
+    async def del_conv(self, data: dict = Body(...)):
         """删除对话"""
         try:
-            data = await request.get_json()
-
             # 检查是否是批量删除
             if "conversations" in data:
                 # 批量删除
@@ -237,10 +233,9 @@ class ConversationRoute(Route):
             logger.error(f"删除对话失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"删除对话失败: {e!s}").__dict__
 
-    async def update_history(self):
+    async def update_history(self, data: dict = Body(...)):
         """更新对话历史内容"""
         try:
-            data = await request.get_json()
             user_id = data.get("user_id")
             cid = data.get("cid")
             history = data.get("history")
