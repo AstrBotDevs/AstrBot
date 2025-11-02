@@ -1,8 +1,9 @@
 import abc
 import uuid
-from asyncio import Queue
 from collections.abc import Awaitable
 from typing import Any
+
+from anyio.streams.memory import MemoryObjectSendStream
 
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
@@ -13,7 +14,7 @@ from .platform_metadata import PlatformMetadata
 
 
 class Platform(abc.ABC):
-    def __init__(self, event_queue: Queue):
+    def __init__(self, event_queue: MemoryObjectSendStream):
         super().__init__()
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
@@ -45,7 +46,7 @@ class Platform(abc.ABC):
 
     def commit_event(self, event: AstrMessageEvent):
         """提交一个事件到事件队列。"""
-        self._event_queue.put_nowait(event)
+        self._event_queue.send_nowait(event)
 
     def get_client(self):
         """获取平台的客户端对象。"""

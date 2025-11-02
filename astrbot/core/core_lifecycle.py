@@ -14,7 +14,8 @@ import os
 import threading
 import time
 import traceback
-from asyncio import Queue
+
+import anyio
 
 from astrbot.core import LogBroker, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -104,7 +105,9 @@ class AstrBotCoreLifecycle:
             logger.error(traceback.format_exc())
 
         # 初始化事件队列
-        self.event_queue = Queue()
+        self._event_queue_send, self.event_queue = anyio.create_memory_object_stream[
+            object
+        ](0)
 
         # 初始化人格管理器
         self.persona_mgr = PersonaManager(self.db, self.astrbot_config_mgr)
@@ -118,7 +121,9 @@ class AstrBotCoreLifecycle:
         )
 
         # 初始化平台管理器
-        self.platform_manager = PlatformManager(self.astrbot_config, self.event_queue)
+        self.platform_manager = PlatformManager(
+            self.astrbot_config, self._event_queue_send
+        )
 
         # 初始化对话管理器
         self.conversation_manager = ConversationManager(self.db)
@@ -131,7 +136,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化提供给插件的上下文
         self.star_context = Context(
-            self.event_queue,
+            self._event_queue_send,
             self.astrbot_config,
             self.db,
             self.provider_manager,

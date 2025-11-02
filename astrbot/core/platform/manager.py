@@ -1,6 +1,7 @@
 import asyncio
 import traceback
-from asyncio import Queue
+
+from anyio.streams.memory import MemoryObjectSendStream
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -12,7 +13,7 @@ from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
 class PlatformManager:
-    def __init__(self, config: AstrBotConfig, event_queue: Queue):
+    def __init__(self, config: AstrBotConfig, event_queue: MemoryObjectSendStream):
         self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 

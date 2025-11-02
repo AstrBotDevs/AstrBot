@@ -216,7 +216,7 @@ class DingtalkPlatformAdapter(Platform):
             client=self.client,
         )
 
-        self._event_queue.put_nowait(event)
+        self._event_queue.send_nowait(event)
 
     async def run(self):
         # await self.client_.start()

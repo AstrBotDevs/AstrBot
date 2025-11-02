@@ -224,7 +224,7 @@ class LarkPlatformAdapter(Platform):
             bot=self.lark_api,
         )
 
-        self._event_queue.put_nowait(event)
+        self._event_queue.send_nowait(event)
 
     async def run(self):
         # self.client.start()

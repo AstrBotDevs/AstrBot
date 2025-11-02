@@ -1,7 +1,7 @@
-from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from anyio.streams.memory import MemoryObjectSendStream
 from deprecated import deprecated
 
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -47,7 +47,7 @@ class Context:
 
     def __init__(
         self,
-        event_queue: Queue,
+        event_queue: MemoryObjectSendStream,
         config: AstrBotConfig,
         db: BaseDatabase,
         provider_manager: ProviderManager,
@@ -190,7 +190,7 @@ class Context:
         """获取 AstrBot 数据库。"""
         return self._db
 
-    def get_event_queue(self) -> Queue:
+    def get_event_queue(self) -> MemoryObjectSendStream:
         """获取事件队列。"""
         return self._event_queue
 
