@@ -1,11 +1,13 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
-import os
+from importlib.metadata import version
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.base import AstrbotPaths
 
-VERSION = "4.5.1"
-DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+VERSION = version("astrbot")
+""" 警告,请使用version函数获取版本,此变量兼容保留 """
+
+DB_PATH = str(AstrbotPaths.astrbot_root / "data_v4.db")
 
 # 默认配置
 DEFAULT_CONFIG = {

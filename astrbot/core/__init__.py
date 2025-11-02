@@ -9,10 +9,6 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
 from .log import LogBroker, LogManager  # noqa
-from .utils.astrbot_path import get_astrbot_data_path
-
-# 初始化数据存储文件夹
-os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
 DEMO_MODE = os.getenv("DEMO_MODE", False)
 

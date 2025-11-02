@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
+from astrbot.base import AstrbotPaths
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
@@ -27,7 +28,7 @@ class Main(star.Star):
         self.scheduler = AsyncIOScheduler(timezone=self.timezone)
 
         # set and load config
-        reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
+        reminder_file = str(AstrbotPaths.astrbot_root / "astrbot-reminder.json")
         if not os.path.exists(reminder_file):
             with open(reminder_file, "w", encoding="utf-8") as f:
                 f.write("{}")

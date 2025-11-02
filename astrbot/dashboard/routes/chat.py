@@ -7,12 +7,12 @@ from contextlib import asynccontextmanager
 from quart import Response as QuartResponse
 from quart import g, make_response, request
 
+from astrbot.base import AstrbotPaths
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .route import Response, Route, RouteContext
 
@@ -47,7 +47,7 @@ class ChatRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        self.imgs_dir = str(AstrbotPaths.astrbot_root / "webchat" / "imgs")
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]

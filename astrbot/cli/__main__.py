@@ -1,27 +1,22 @@
 """AstrBot CLI入口"""
 
 import sys
+from importlib.metadata import version
 
 import click
 
-from . import __version__
+from astrbot.base import LOGO
+
 from .commands import conf, init, plug, run
 
-logo_tmpl = r"""
-     ___           _______.___________..______      .______     ______   .___________.
-    /   \         /       |           ||   _  \     |   _  \   /  __  \  |           |
-   /  ^  \       |   (----`---|  |----`|  |_)  |    |  |_)  | |  |  |  | `---|  |----`
-  /  /_\  \       \   \       |  |     |      /     |   _  <  |  |  |  |     |  |
- /  _____  \  .----)   |      |  |     |  |\  \----.|  |_)  | |  `--'  |     |  |
-/__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
-"""
+__version__ = version("astrbot")
 
 
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
     """The AstrBot CLI"""
-    click.echo(logo_tmpl)
+    click.echo(LOGO)
     click.echo("Welcome to AstrBot CLI!")
     click.echo(f"AstrBot CLI version: {__version__}")
 

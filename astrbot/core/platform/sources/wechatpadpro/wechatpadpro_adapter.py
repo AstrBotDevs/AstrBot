@@ -12,6 +12,7 @@ import websockets
 from astrbot import logger
 from astrbot.api.message_components import At, Image, Plain, Record
 from astrbot.api.platform import Platform, PlatformMetadata
+from astrbot.base import AstrbotPaths
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.astrbot_message import (
@@ -19,7 +20,6 @@ from astrbot.core.platform.astrbot_message import (
     MessageMember,
     MessageType,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...register import register_platform_adapter
 from .wechatpadpro_message_event import WeChatPadProMessageEvent
@@ -68,9 +68,8 @@ class WeChatPadProAdapter(Platform):
         self.base_url = f"http://{self.host}:{self.port}"
         self.auth_key = None  # 用于保存生成的授权码
         self.wxid = None  # 用于保存登录成功后的 wxid
-        self.credentials_file = os.path.join(
-            get_astrbot_data_path(),
-            "wechatpadpro_credentials.json",
+        self.credentials_file = str(
+            AstrbotPaths.astrbot_root / "wechatpadpro_credentials.json"
         )  # 持久化文件路径
         self.ws_handle_task = None
 
@@ -155,8 +154,8 @@ class WeChatPadProAdapter(Platform):
         }
         try:
             # 确保数据目录存在
-            data_dir = os.path.dirname(self.credentials_file)
-            os.makedirs(data_dir, exist_ok=True)
+            config_dir = AstrbotPaths.astrbot_root / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
             with open(self.credentials_file, "w") as f:
                 json.dump(credentials, f)
         except Exception as e:
@@ -787,10 +786,9 @@ class WeChatPadProAdapter(Platform):
             voice_bs64_data = voice_resp.get("Data", {}).get("Base64", None)
             if voice_bs64_data:
                 voice_bs64_data = base64.b64decode(voice_bs64_data)
-                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                file_path = os.path.join(
-                    temp_dir,
-                    f"wechatpadpro_voice_{abm.message_id}.silk",
+                temp_dir = str(AstrbotPaths.astrbot_root / "temp")
+                file_path = str(
+                    AstrbotPaths.astrbot_root / "temp" / f"wechatpadpro_voice_{abm.message_id}.silk"
                 )
 
                 async with await anyio.open_file(file_path, "wb") as f:

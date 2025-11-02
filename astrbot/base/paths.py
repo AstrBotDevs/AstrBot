@@ -19,12 +19,14 @@ if TYPE_CHECKING:
 
 
 class AstrbotPaths(IAstrbotPaths):
-    """Class to manage and provide paths used by Astrbot Canary."""
+    """统一化路径获取."""
 
     load_dotenv()
     astrbot_root: ClassVar[Path] = Path(
         getenv("ASTRBOT_ROOT", Path.home() / ".astrbot")
     ).absolute()
+
+    _instances: ClassVar[dict[str, AstrbotPaths]] = {}
 
     def __init__(self, name: str) -> None:
         self.name: str = name
@@ -35,8 +37,11 @@ class AstrbotPaths(IAstrbotPaths):
     def getPaths(cls, name: str) -> AstrbotPaths:
         """返回Paths实例,用于访问模块的各类目录."""
         normalized_name: NormalizedName = canonicalize_name(name)
+        if normalized_name in cls._instances:
+            return cls._instances[normalized_name]
         instance: AstrbotPaths = cls(normalized_name)
         instance.name = normalized_name
+        cls._instances[normalized_name] = instance
         return instance
 
     @property
@@ -68,7 +73,7 @@ class AstrbotPaths(IAstrbotPaths):
 
     @property
     def data(self) -> Path:
-        """返回模块数据目录."""
+        """返回模块/插件数据目录."""
         data_path = self.astrbot_root / "data" / self.name
         data_path.mkdir(parents=True, exist_ok=True)
         return data_path
@@ -79,6 +84,20 @@ class AstrbotPaths(IAstrbotPaths):
         log_path = self.astrbot_root / "logs" / self.name
         log_path.mkdir(parents=True, exist_ok=True)
         return log_path
+
+    @property
+    def temp(self) -> Path:
+        """返回模块临时文件目录."""
+        temp_path = self.astrbot_root / "temp" / self.name
+        temp_path.mkdir(parents=True, exist_ok=True)
+        return temp_path
+
+    @property
+    def plugins(self) -> Path:
+        """返回插件目录."""
+        plugin_path = self.astrbot_root / "plugins" / self.name
+        plugin_path.mkdir(parents=True, exist_ok=True)
+        return plugin_path
 
     @classmethod
     def is_root(cls, path: Path) -> bool:

@@ -3,11 +3,11 @@ import json
 import logging
 import os
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.base import AstrbotPaths
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
-ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+ASTRBOT_CONFIG_PATH = str(AstrbotPaths.astrbot_root / "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
 

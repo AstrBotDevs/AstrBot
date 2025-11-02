@@ -1,1 +1,1 @@
-__version__ = "3.5.23"
+"""AstrBot CLI入口"""

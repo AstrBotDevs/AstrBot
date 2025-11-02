@@ -43,6 +43,16 @@ class IAstrbotPaths(ABC):
     def log(self) -> Path:
         """获取模块日志目录."""
 
+    @property
+    @abstractmethod
+    def temp(self) -> Path:
+        """获取模块临时目录."""
+
+    @property
+    @abstractmethod
+    def plugins(self) -> Path:
+        """获取插件目录."""
+
     @abstractmethod
     def reload(self) -> None:
         """重新加载环境变量."""
