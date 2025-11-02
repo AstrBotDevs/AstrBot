@@ -36,11 +36,13 @@ class CommandFilter(HandlerFilter):
         command_name: str,
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
-        parent_command_names: list[str] = [""],
+        parent_command_names: list[str] | None = None,
     ):
         self.command_name = command_name
         self.alias = alias if alias else set()
-        self.parent_command_names = parent_command_names
+        self.parent_command_names = (
+            parent_command_names if parent_command_names is not None else [""]
+        )
         if handler_md:
             self.init_handler_md(handler_md)
         self.custom_filter_list: list[CustomFilter] = []
@@ -49,15 +51,15 @@ class CommandFilter(HandlerFilter):
         self._cmpl_cmd_names: list | None = None
 
     def print_types(self):
-        result = ""
+        parts = []
         for k, v in self.handler_params.items():
             if isinstance(v, type):
-                result += f"{k}({v.__name__}),"
+                parts.append(f"{k}({v.__name__}),")
             elif isinstance(v, types.UnionType) or typing.get_origin(v) is typing.Union:
-                result += f"{k}({v}),"
+                parts.append(f"{k}({v}),")
             else:
-                result += f"{k}({type(v).__name__})={v},"
-        result = result.rstrip(",")
+                parts.append(f"{k}({type(v).__name__})={v},")
+        result = "".join(parts).rstrip(",")
         return result
 
     def init_handler_md(self, handle_md: StarHandlerMetadata):

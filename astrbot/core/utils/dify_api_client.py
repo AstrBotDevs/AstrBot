@@ -46,9 +46,11 @@ class DifyAPIClient:
         user: str,
         response_mode: str = "streaming",
         conversation_id: str = "",
-        files: list[dict[str, Any]] = [],
+        files: list[dict[str, Any]] | None = None,
         timeout: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
+        if files is None:
+            files = []
         url = f"{self.api_base}/chat-messages"
         payload = locals()
         payload.pop("self")
@@ -73,9 +75,11 @@ class DifyAPIClient:
         inputs: dict,
         user: str,
         response_mode: str = "streaming",
-        files: list[dict[str, Any]] = [],
+        files: list[dict[str, Any]] | None = None,
         timeout: float = 60,
     ):
+        if files is None:
+            files = []
         url = f"{self.api_base}/workflows/run"
         payload = locals()
         payload.pop("self")
