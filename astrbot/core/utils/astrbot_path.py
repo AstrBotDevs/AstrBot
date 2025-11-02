@@ -28,7 +28,7 @@ def get_astrbot_path() -> str:
 def get_astrbot_root() -> str:
     """获取Astrbot根目录路径 --> get_astrbot_data_path"""
     warnings.warn(
-        "不要再使用本函数!实际上就是获取data目录!等效于: AstrbotPaths.getPaths('any!').root",
+        "不要再使用本函数!等效于: AstrbotPaths.astrbot_root",
         DeprecationWarning,
         stacklevel=2,
     )
