@@ -1,35 +1,49 @@
+# Python related
 __pycache__
-botpy.log
-.vscode
+.mypy_cache
 .venv*
-.idea
-data_v2.db
-data_v3.db
-configs/session
-configs/config.yaml
-**/.DS_Store
-temp
-cmd_config.json
-data
-cookies.json
-logs/
-addons/plugins
+.conda/
+uv.lock
 .coverage
 
+# IDE and editors
+.vscode
+.idea
 
+# Logs and temporary files
+botpy.log
+logs/
+temp
+cookies.json
+
+# Data files
+data_v2.db
+data_v3.db
+data
+configs/session
+configs/config.yaml
+cmd_config.json
+
+# Plugins and packages
+addons/plugins
+packages/python_interpreter/workplace
 tests/astrbot_plugin_openai
-chroma
+
+# Dashboard
 dashboard/node_modules/
 dashboard/dist/
-.DS_Store
 package-lock.json
 package.json
-venv/*
-packages/python_interpreter/workplace
-.venv/*
-.conda/
-.idea
-pytest.ini
-.astrbot
 
-uv.lock
+# Operating System
+**/.DS_Store
+.DS_Store
+
+# AstrBot specific
+.astrbot
+astrbot.lock
+
+# Other
+chroma
+venv/*
+pytest.ini
