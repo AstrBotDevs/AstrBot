@@ -386,7 +386,9 @@ class DiscordPlatformAdapter(Platform):
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
-        async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
+        async def dynamic_callback(
+            ctx: discord.ApplicationContext, params: str | None = None
+        ):
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
