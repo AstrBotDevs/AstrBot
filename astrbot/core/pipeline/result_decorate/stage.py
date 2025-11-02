@@ -226,12 +226,15 @@ class ResultDecorateStage(Stage):
                                     url = f"{callback_api_base}/api/file/{token}"
                                     logger.debug(f"已注册：{url}")
 
-                                new_chain.append(
-                                    Record(
-                                        file=url or audio_path,
-                                        url=url or audio_path,
-                                    ),
-                                )
+                                if url:
+                                    new_chain.append(
+                                        Record(
+                                            file=url,
+                                            url=url,
+                                        ),
+                                    )
+                                else:
+                                    new_chain.append(Record.fromFileSystem(audio_path))
                                 if dual_output:
                                     new_chain.append(comp)
                             except Exception:
