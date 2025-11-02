@@ -124,7 +124,7 @@ async def call_local_llm_tool(
     event = context.context.event
 
     try:
-        if method_name == "run":
+        if method_name == "run" or method_name == "decorator_handler":
             ready_to_call = handler(event, *args, **kwargs)
         elif method_name == "call":
             ready_to_call = handler(context, *args, **kwargs)

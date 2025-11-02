@@ -195,16 +195,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
         awaitable = None
+        method_name = ""
         if tool.handler:
             awaitable = tool.handler
+            method_name = "decorator_handler"
         elif is_override_call:
             awaitable = tool.call
+            method_name = "call"
         elif hasattr(tool, "run"):
             awaitable = getattr(tool, "run")
+            method_name = "run"
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        method_name = "run" if hasattr(tool, "run") else "call"
 
         wrapper = call_local_llm_tool(
             context=run_context,
