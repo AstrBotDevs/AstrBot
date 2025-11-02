@@ -1,7 +1,9 @@
 import asyncio
+import datetime
 import hashlib
 import uuid
 
+import jwt
 from fastapi import Body
 from pydantic import BaseModel
 
@@ -44,7 +46,8 @@ class AuthRoute(Route):
         username = self.config["dashboard"]["username"]
         password_hash = self.config["dashboard"]["password"]
 
-        # Hash the provided password (MD5 for legacy compatibility)
+        # Note: The password from frontend is already MD5 hashed
+        # So we compare the provided password (already MD5) with stored hash
         provided_hash = hashlib.md5(login_data.password.encode()).hexdigest()
 
         if login_data.username == username and provided_hash == password_hash:
@@ -58,10 +61,6 @@ class AuthRoute(Route):
                 logger.warning("为了保证安全，请尽快修改默认密码。")
 
             # Generate token using the same JWT secret
-            import datetime
-
-            import jwt
-
             payload = {
                 "username": username,
                 "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),
