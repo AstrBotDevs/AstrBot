@@ -3,5 +3,5 @@ from .paths import AstrbotPaths
 
 __all__ = [
     "IAstrbotPaths",
-    "AstrbotPaths", 
+    "AstrbotPaths",
 ]

@@ -47,8 +47,8 @@ class IAstrbotPaths(ABC):
     def reload(self) -> None:
         """重新加载环境变量."""
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def is_root(cls, path: Path) -> bool:
         """判断路径是否为根目录."""
 
