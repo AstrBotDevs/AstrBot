@@ -10,7 +10,7 @@ import base64
 import hashlib
 import json
 import logging
-import random
+import secrets
 import socket
 import struct
 import time
@@ -139,6 +139,12 @@ class PKCS7Encoder:
 class Prpcrypt:
     """提供接收和推送给企业微信消息的加解密接口"""
 
+    # 16位随机字符串的范围常量
+    # randbelow(RANDOM_RANGE) 返回 [0, 8999999999999999]（两端都包含，即包含0和8999999999999999）
+    # 加上 MIN_RANDOM_VALUE 后得到 [1000000000000000, 9999999999999999]（两端都包含）即16位数字
+    MIN_RANDOM_VALUE = 1000000000000000  # 最小值: 1000000000000000 (16位)
+    RANDOM_RANGE = 9000000000000000  # 范围大小: 确保最大值为 9999999999999999 (16位)
+
     def __init__(self, key):
         # self.key = base64.b64decode(key+"=")
         self.key = key
@@ -207,7 +213,9 @@ class Prpcrypt:
         """随机生成16位字符串
         @return: 16位字符串
         """
-        return str(random.randint(1000000000000000, 9999999999999999)).encode()
+        return str(
+            secrets.randbelow(self.RANDOM_RANGE) + self.MIN_RANDOM_VALUE
+        ).encode()
 
 
 class WXBizJsonMsgCrypt:

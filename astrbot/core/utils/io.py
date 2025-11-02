@@ -105,16 +105,31 @@ async def download_image_by_url(
                         f.write(await resp.read())
                     return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        logger.warning(
+            f"SSL certificate verification failed for {url}. "
+            "Disabling SSL verification (CERT_NONE) as a fallback. "
+            "This is insecure and exposes the application to man-in-the-middle attacks. "
+            "Please investigate and resolve certificate issues."
+        )
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             if post:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    return save_temp_img(await resp.read())
+                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
-                    return save_temp_img(await resp.read())
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
     except Exception as e:
         raise e
 
@@ -157,9 +172,19 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                                 end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        logger.warning(
+            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+        )
+        logger.warning(
+            f"SSL certificate verification failed for {url}. "
+            "Falling back to unverified connection (CERT_NONE). "
+            "This is insecure and exposes the application to man-in-the-middle attacks. "
+            "Please investigate certificate issues with the remote server."
+        )
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))

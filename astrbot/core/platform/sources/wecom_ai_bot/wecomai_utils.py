@@ -5,7 +5,7 @@
 import asyncio
 import base64
 import hashlib
-import random
+import secrets
 import string
 from typing import Any
 
@@ -53,7 +53,7 @@ def generate_random_string(length: int = 10) -> str:
 
     """
     letters = string.ascii_letters + string.digits
-    return "".join(random.choice(letters) for _ in range(length))
+    return "".join(secrets.choice(letters) for _ in range(length))
 
 
 def calculate_image_md5(image_data: bytes) -> str:
