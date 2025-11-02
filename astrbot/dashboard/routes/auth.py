@@ -2,7 +2,6 @@ import datetime
 import hashlib
 import uuid
 
-import anyio
 import jwt
 from fastapi import Body
 from pwdlib import PasswordHash
