@@ -58,7 +58,7 @@ class AuthRoute(Route):
         # Check if username matches
         if login_data.username != username:
             await anyio.sleep(3)
-            return Response().error("用户名或密码错误").__dict__
+            return Response.error("用户名或密码错误")
 
         # The password from frontend is already MD5 hashed
         # Treat this MD5 value as the password for verification
@@ -71,7 +71,7 @@ class AuthRoute(Route):
             )
             if not is_valid:
                 await anyio.sleep(3)
-                return Response().error("用户名或密码错误").__dict__
+                return Response.error("用户名或密码错误")
 
             # Update hash if needed (e.g., if algorithm parameters changed)
             if new_hash is not None:
@@ -107,14 +107,10 @@ class AuthRoute(Route):
             raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_secret, algorithm="HS256")
 
-        return (
-            Response()
-            .ok(
-                token=token,
-                username=username,
-                change_pwd_hint=change_pwd_hint,
-            )
-            .__dict__
+        return Response.ok(
+            token=token,
+            username=username,
+            change_pwd_hint=change_pwd_hint,
         )
 
     async def edit_account(self, edit_data: EditAccountRequest = Body(...)):
@@ -124,11 +120,7 @@ class AuthRoute(Route):
         Argon2 hash and update with a new Argon2 hash if password is changed.
         """
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         stored_password_hash = self.config["dashboard"]["password"]
         # The password from frontend is already MD5 hashed
@@ -140,7 +132,7 @@ class AuthRoute(Route):
                 provided_password, stored_password_hash
             )
             if not is_valid:
-                return Response().error("原密码错误").__dict__
+                return Response.error("原密码错误")
         except UnknownHashError:
             # Old password format - migrate by creating new hash
             logger.warning("检测到旧密码格式，正在迁移...")
@@ -151,9 +143,7 @@ class AuthRoute(Route):
             logger.info("密码已迁移到 Argon2 格式")
 
         if not edit_data.new_password and not edit_data.new_username:
-            return (
-                Response().error("新用户名和新密码不能同时为空，你改了个寂寞").__dict__
-            )
+            return Response.error("新用户名和新密码不能同时为空，你改了个寂寞")
 
         if edit_data.new_password:
             # Hash the new MD5 password with Argon2
@@ -164,4 +154,4 @@ class AuthRoute(Route):
 
         self.config.save_config()
 
-        return Response().ok(None, "修改成功").__dict__
+        return Response.ok(None, "修改成功")
