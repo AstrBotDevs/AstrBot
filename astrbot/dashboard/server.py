@@ -119,7 +119,11 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
 
         # Register plugin route
-        @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"], operation_id="plugin_web_api_route")
+        @self.app.api_route(
+            "/api/plug/{subpath:path}",
+            methods=["GET", "POST"],
+            operation_id="plugin_web_api_route",
+        )
         async def srv_plug_route(subpath: str):
             return await self._srv_plug_route(subpath)
 
