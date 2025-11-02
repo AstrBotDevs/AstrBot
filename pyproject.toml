@@ -63,6 +63,8 @@ dependencies = [
     "jieba>=0.42.1",
     "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
     "xinference-client",
+    "anyio>=4.11.0",
+    "uvloop>=0.22.1 ; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -98,8 +100,8 @@ select = [
   # "SIM", # flake8-simplify 
 ]
 ignore = [
-    "F403", 
-    "F405", 
+    "F403",
+    "F405",
     "E501",
     "ASYNC230" # TODO: handle ASYNC230 in AstrBot
 ]
@@ -112,6 +114,34 @@ reportMissingImports = false
 include = ["astrbot","packages"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+ignore_missing_imports = true
+explicit_package_bases = true
+namespace_packages = true
+files = ["astrbot", "packages"]
+exclude = [
+    "dashboard",
+    "node_modules",
+    "dist",
+    "data",
+    "tests",
+    "packages/.*/.*",
+]
+
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
@@ -123,4 +153,3 @@ bump = true
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
-

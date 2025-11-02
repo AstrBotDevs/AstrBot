@@ -817,7 +817,8 @@ class ConfigRoute(Route):
                 cached_token = self._logo_token_cache[cache_key]
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
@@ -846,7 +847,8 @@ class ConfigRoute(Route):
 
                 # 确保platform_default_tmpl[platform.name]存在且为字典
                 if platform.name not in platform_default_tmpl or not isinstance(
-                    platform_default_tmpl[platform.name], dict
+                    platform_default_tmpl[platform.name],
+                    dict,
                 ):
                     platform_default_tmpl[platform.name] = {}
 

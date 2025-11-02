@@ -12,6 +12,9 @@ from astrbot.core.initial_loader import InitialLoader
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
+# uvloop 仅在非 Windows 平台可用
+backend_options = {"use_uvloop": True} if sys.platform != "win32" else {}
+
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
 
@@ -94,7 +97,11 @@ if __name__ == "__main__":
     LogManager.set_queue_handler(logger, log_broker)
 
     # 检查仪表板文件
-    webui_dir = anyio.run(check_dashboard_files, args.webui_dir)
+    webui_dir = anyio.run(
+        check_dashboard_files,
+        args.webui_dir,
+        backend_options=backend_options,
+    )
 
     db = db_helper
 
@@ -103,4 +110,8 @@ if __name__ == "__main__":
 
     core_lifecycle = InitialLoader(db, log_broker)
     core_lifecycle.webui_dir = webui_dir
-    anyio.run(core_lifecycle.start)
+    logger.info(
+        "将按以下异步后端启动 AstrBot: %s",
+        backend_options if backend_options else "asyncio",
+    )
+    anyio.run(core_lifecycle.start, backend_options=backend_options)

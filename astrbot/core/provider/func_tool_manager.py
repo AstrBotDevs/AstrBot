@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aiohttp
+import anyio
 
 from astrbot import logger
 from astrbot.core import sp
@@ -98,7 +99,7 @@ class FunctionToolManager:
         self.func_list: list[FuncTool] = []
         self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
-        self.mcp_client_event: dict[str, asyncio.Event] = {}
+        self.mcp_client_event: dict[str, anyio.Event] = {}
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -206,7 +207,7 @@ class FunctionToolManager:
         for name in mcp_server_json_obj:
             cfg = mcp_server_json_obj[name]
             if cfg.get("active", True):
-                event = asyncio.Event()
+                event = anyio.Event()
                 asyncio.create_task(
                     self._init_mcp_client_task_wrapper(name, cfg, event),
                 )
@@ -216,7 +217,7 @@ class FunctionToolManager:
         self,
         name: str,
         cfg: dict,
-        event: asyncio.Event,
+        event: anyio.Event,
         ready_future: asyncio.Future | None = None,
     ) -> None:
         """初始化 MCP 客户端的包装函数，用于捕获异常"""
@@ -310,7 +311,7 @@ class FunctionToolManager:
         self,
         name: str,
         config: dict,
-        event: asyncio.Event | None = None,
+        event: anyio.Event | None = None,
         ready_future: asyncio.Future | None = None,
         timeout: int = 30,
     ) -> None:
@@ -319,7 +320,7 @@ class FunctionToolManager:
         Args:
             name (str): The name of the MCP server.
             config (dict): Configuration for the MCP server.
-            event (asyncio.Event): Event to signal when the MCP client is ready.
+            event (anyio.Event): Event to signal when the MCP client is ready.
             ready_future (asyncio.Future): Future to signal when the MCP client is ready.
             timeout (int): Timeout for the initialization.
 
@@ -329,7 +330,7 @@ class FunctionToolManager:
 
         """
         if not event:
-            event = asyncio.Event()
+            event = anyio.Event()
         if not ready_future:
             ready_future = asyncio.Future()
         if name in self.mcp_client_dict:

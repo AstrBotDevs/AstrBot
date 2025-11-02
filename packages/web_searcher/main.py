@@ -2,6 +2,7 @@ import asyncio
 import random
 
 import aiohttp
+import anyio
 from bs4 import BeautifulSoup
 from readability import Document
 
@@ -26,7 +27,7 @@ class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self.tavily_key_index = 0
-        self.tavily_key_lock = asyncio.Lock()
+        self.tavily_key_lock = anyio.Lock()
 
         # 将 str 类型的 key 迁移至 list[str]，并保存
         cfg = self.context.get_config()

@@ -2,10 +2,10 @@
 处理企业微信智能机器人的 HTTP 回调请求
 """
 
-import asyncio
 from collections.abc import Callable
 from typing import Any
 
+import anyio
 import quart
 
 from astrbot.api import logger
@@ -41,7 +41,7 @@ class WecomAIBotServer:
         self.app = quart.Quart(__name__)
         self._setup_routes()
 
-        self.shutdown_event = asyncio.Event()
+        self.shutdown_event = anyio.Event()
 
     def _setup_routes(self):
         """设置 Quart 路由"""

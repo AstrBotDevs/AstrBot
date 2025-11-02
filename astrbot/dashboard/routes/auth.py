@@ -1,6 +1,6 @@
-import asyncio
 import datetime
 
+import anyio
 import jwt
 from quart import request
 
@@ -44,7 +44,7 @@ class AuthRoute(Route):
                 )
                 .__dict__
             )
-        await asyncio.sleep(3)
+        await anyio.sleep(3)
         return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):

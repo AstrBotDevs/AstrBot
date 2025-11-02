@@ -164,14 +164,14 @@ class ConversationCommands:
                     "%m-%d %H:%M",
                 )
                 parts.append(
-                    f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
+                    f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n",
                 )
                 idx += 1
             if idx == 1:
                 parts.append("没有找到任何对话。")
             dify_cid = provider.conversation_ids.get(message.unified_msg_origin, None)
             parts.append(
-                f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+                f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。",
             )
             ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret))
@@ -211,7 +211,7 @@ class ConversationCommands:
                 persona_id = persona["name"]
             title = _titles.get(conv.cid, "新对话")
             parts.append(
-                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n",
             )
             global_index += 1
 

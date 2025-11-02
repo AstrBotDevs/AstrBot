@@ -96,7 +96,7 @@ class CommandGroupFilter(HandlerFilter):
                             prefix + "│   ",
                             event=event,
                             cfg=cfg,
-                        )
+                        ),
                     )
 
         return "".join(parts)

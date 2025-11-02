@@ -1,7 +1,8 @@
-import asyncio
 from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
+
+import anyio
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import RateLimitStrategy
@@ -19,11 +20,11 @@ class RateLimitStage(Stage):
     如果触发限流，将 stall 流水线，直到下一个时间窗口来临时自动唤醒。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # 存储每个会话的请求时间队列
         self.event_timestamps: defaultdict[str, deque[datetime]] = defaultdict(deque)
         # 为每个会话设置一个锁，避免并发冲突
-        self.locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self.locks: defaultdict[str, anyio.Lock] = defaultdict(anyio.Lock)
         # 限流参数
         self.rate_limit_count: int = 0
         self.rate_limit_time: timedelta = timedelta(0)
@@ -74,7 +75,7 @@ class RateLimitStage(Stage):
                         logger.info(
                             f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。",
                         )
-                        await asyncio.sleep(stall_duration)
+                        await anyio.sleep(stall_duration)
                         now = datetime.now()
                     case RateLimitStrategy.DISCARD.value:
                         logger.info(

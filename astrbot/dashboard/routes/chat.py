@@ -4,6 +4,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
+import anyio
 from quart import Response as QuartResponse
 from quart import g, make_response, request
 
@@ -188,8 +189,8 @@ class ChatRoute(Route):
 
                         try:
                             if not client_disconnected:
-                                await asyncio.sleep(0.05)
-                        except asyncio.CancelledError:
+                                await anyio.sleep(0.05)
+                        except anyio.get_cancelled_exc_class():
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
 

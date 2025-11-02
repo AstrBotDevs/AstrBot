@@ -9,6 +9,7 @@ from collections import defaultdict
 
 import aiodocker
 import aiohttp
+import anyio
 
 from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
@@ -291,7 +292,7 @@ class Main(star.Star):
         self.user_waiting[uid] = time.time()
         tip = "文件"
         yield event.plain_result(f"代码执行器: 请在 60s 内上传一个{tip}。")
-        await asyncio.sleep(60)
+        await anyio.sleep(60)
         if uid in self.user_waiting:
             yield event.plain_result(
                 f"代码执行器: {event.get_sender_name()}/{event.get_sender_id()} 未在规定时间内上传{tip}。",

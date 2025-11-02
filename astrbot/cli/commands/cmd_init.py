@@ -1,5 +1,4 @@
-import asyncio
-
+import anyio
 import click
 from filelock import FileLock, Timeout
 
@@ -47,7 +46,7 @@ def init() -> None:
 
     try:
         with lock.acquire():
-            asyncio.run(initialize_astrbot(astrbot_root))
+            anyio.run(initialize_astrbot, astrbot_root)
     except Timeout:
         raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
 

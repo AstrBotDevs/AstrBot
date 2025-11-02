@@ -271,7 +271,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(ConversationV2).where(
-                        col(ConversationV2.user_id) == user_id
+                        col(ConversationV2.user_id) == user_id,
                     ),
                 )
 

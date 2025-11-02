@@ -1,16 +1,16 @@
-import asyncio
 import os
 import sys
 import traceback
 from pathlib import Path
 
+import anyio
 import click
 from filelock import FileLock, Timeout
 
 from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 
-async def run_astrbot(astrbot_root: Path):
+async def run_astrbot(astrbot_root: Path) -> None:
     """运行 AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
@@ -53,7 +53,7 @@ def run(reload: bool, port: str) -> None:
         lock_file = astrbot_root / "astrbot.lock"
         lock = FileLock(lock_file, timeout=5)
         with lock.acquire():
-            asyncio.run(run_astrbot(astrbot_root))
+            anyio.run(run_astrbot, astrbot_root)
     except KeyboardInterrupt:
         click.echo("AstrBot 已关闭...")
     except Timeout:

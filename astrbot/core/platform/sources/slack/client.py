@@ -1,10 +1,10 @@
-import asyncio
 import hashlib
 import hmac
 import json
 import logging
 from collections.abc import Callable
 
+import anyio
 from quart import Quart, Response, request
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -40,7 +40,7 @@ class SlackWebhookClient:
         logging.getLogger("quart.app").setLevel(logging.WARNING)
         logging.getLogger("quart.serving").setLevel(logging.WARNING)
 
-        self.shutdown_event = asyncio.Event()
+        self.shutdown_event = anyio.Event()
 
     def _setup_routes(self):
         """设置路由"""

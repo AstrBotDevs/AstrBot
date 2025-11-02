@@ -1,17 +1,18 @@
-import asyncio
 import os
 import platform
 import time
 import uuid
 from urllib.parse import unquote, urlparse
 
+import anyio
+
 
 class FileTokenService:
     """维护一个简单的基于令牌的文件下载服务，支持超时和懒清除。"""
 
-    def __init__(self, default_timeout: float = 300):
-        self.lock = asyncio.Lock()
-        self.staged_files = {}  # token: (file_path, expire_time)
+    def __init__(self, default_timeout: float = 300) -> None:
+        self.lock = anyio.Lock()
+        self.staged_files: dict = {}  # token: (file_path, expire_time)
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self):
