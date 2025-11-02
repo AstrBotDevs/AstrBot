@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import mimetypes
 import os
 import sys
@@ -9,16 +8,8 @@ from astrbot.core import LogBroker, LogManager, db_helper, logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.async_runner import run_async
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
-
-# Import uvloop on Linux
-if sys.platform == "linux":
-    try:
-        import uvloop
-    except ImportError:
-        uvloop = None
-else:
-    uvloop = None
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -32,15 +23,6 @@ logo_tmpl = r"""
 /__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
 
 """
-
-
-def run_async(coro):
-    """Run async coroutine with uvloop on Linux if Python >= 3.11"""
-    if uvloop is not None and sys.version_info >= (3, 11):
-        with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
-            return runner.run(coro)
-    else:
-        return asyncio.run(coro)
 
 
 def check_env():
