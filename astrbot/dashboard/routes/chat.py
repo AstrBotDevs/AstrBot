@@ -5,9 +5,8 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import Body
+from fastapi.responses import StreamingResponse
 
-# from quart import Response as QuartResponse
-# from quart import g, make_response, request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -229,17 +228,15 @@ class ChatRoute(Route):
             ),
         )
 
-        response = await make_response(
+        return StreamingResponse(
             stream(),
-            {
-                "Content-Type": "text/event-stream",
+            media_type="text/event-stream",
+            headers={
                 "Cache-Control": "no-cache",
                 "Transfer-Encoding": "chunked",
                 "Connection": "keep-alive",
             },
         )
-        response.timeout = None  # fix SSE auto disconnect issue
-        return response
 
     async def _get_webchat_conv_id_from_conv_id(self, conversation_id: str) -> str:
         """从对话 ID 中提取 WebChat 会话 ID

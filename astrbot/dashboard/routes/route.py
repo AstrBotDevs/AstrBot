@@ -18,6 +18,8 @@ class RouteContext:
 
 
 class Route:
+    routes: dict[str, tuple[str, Any] | list[tuple[str, Any]]]
+
     def __init__(self, context: RouteContext):
         self.app = context.app
         self.config = context.config

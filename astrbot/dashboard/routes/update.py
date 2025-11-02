@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from fastapi import Query
 from pydantic import BaseModel
@@ -82,7 +83,7 @@ class UpdateRoute(Route):
                 )
             ret = await self.astrbot_updator.check_update(None, None, False)
             return Response(
-                status="success",
+                status="ok",
                 message=str(ret) if ret is not None else "已经是最新版本了。",
                 data={
                     "version": f"v{VERSION}",
@@ -112,9 +113,10 @@ class UpdateRoute(Route):
         else:
             latest = False
 
-        proxy: str = data.get("proxy", None)
-        if proxy:
-            proxy = proxy.removesuffix("/")
+        proxy_value: Any = self.config.get("http_proxy", "")
+        proxy: str = ""
+        if proxy_value and isinstance(proxy_value, str):
+            proxy = proxy_value.removesuffix("/")
 
         try:
             await self.astrbot_updator.update(

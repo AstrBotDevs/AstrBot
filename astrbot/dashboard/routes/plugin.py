@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from fastapi import Body, Query
+from fastapi import Body, Query, Request
 
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -72,9 +72,9 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def get_online_plugins(self):
-        custom = request.args.get("custom_registry")
-        force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+    async def get_online_plugins(self, request: Request):
+        custom = request.query_params.get("custom_registry")
+        force_refresh = request.query_params.get("force_refresh", "false").lower() == "true"
 
         cache_file = "data/plugins.json"
 
@@ -244,9 +244,9 @@ class PluginRoute(Route):
             logger.warning(f"获取插件 Logo 失败: {e}")
             return None
 
-    async def get_plugins(self):
+    async def get_plugins(self, request: Request):
         _plugin_resp = []
-        plugin_name = request.args.get("name")
+        plugin_name = request.query_params.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
             if plugin_name and plugin.name != plugin_name:
                 continue
@@ -344,7 +344,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = data
         repo_url = post_data["url"]
 
         proxy: str = post_data.get("proxy", None)
@@ -378,11 +378,10 @@ class PluginRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .model_dump()
             )
 
-        post_data = await request.json
-        plugin_name = post_data["name"]
+        plugin_name = data["name"]
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
             await self.plugin_manager.uninstall_plugin(plugin_name)
@@ -390,29 +389,29 @@ class PluginRoute(Route):
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
 
     async def update_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .model_dump()
             )
 
-        post_data = await request.json
-        plugin_name = post_data["name"]
-        proxy: str = post_data.get("proxy", None)
+        plugin_name = data["name"]
+        plugin_name = data["name"]
+        proxy: str = data.get("proxy", None)
         try:
             logger.info(f"正在更新插件 {plugin_name}")
             await self.plugin_manager.update_plugin(plugin_name, proxy)
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
             logger.info(f"更新插件 {plugin_name} 成功。")
-            return Response().ok(None, "更新成功。").__dict__
+            return Response().ok(None, "更新成功。").model_dump()
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
 
     async def off_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
@@ -427,10 +426,10 @@ class PluginRoute(Route):
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
             logger.info(f"停用插件 {plugin_name} 。")
-            return Response().ok(None, "停用成功。").__dict__
+            return Response().ok(None, "停用成功。").model_dump()
         except Exception as e:
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
 
     async def on_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
@@ -475,7 +474,7 @@ class PluginRoute(Route):
 
         if not os.path.isdir(plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
-            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").model_dump()
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
@@ -490,8 +489,8 @@ class PluginRoute(Route):
             return (
                 Response()
                 .ok({"content": readme_content}, "成功获取README内容")
-                .__dict__
+                .model_dump()
             )
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
-            return Response().error(f"读取README文件失败: {e!s}").__dict__
+            return Response().error(f"读取README文件失败: {e!s}").model_dump()

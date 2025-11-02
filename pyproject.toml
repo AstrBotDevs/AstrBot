@@ -71,6 +71,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "commitizen>=4.9.1",
+    "mypy>=1.18.2",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
@@ -133,7 +134,7 @@ show_error_codes = true
 ignore_missing_imports = true
 explicit_package_bases = true
 namespace_packages = true
-files = ["astrbot", "packages"]
+mypy_path = "astrbot/*,packages/*"
 exclude = [
     "dashboard",
     "node_modules",
