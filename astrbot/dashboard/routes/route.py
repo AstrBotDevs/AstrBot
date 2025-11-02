@@ -31,7 +31,9 @@ class Route:
 
         # 兼容字典和列表两种格式
         routes_to_register = (
-            self.routes.items() if isinstance(self.routes, dict) else self.routes
+            self.routes.items()
+            if hasattr(self, "routes") and isinstance(self.routes, dict)
+            else getattr(self, "routes", [])
         )
 
         for route, definition in routes_to_register:
