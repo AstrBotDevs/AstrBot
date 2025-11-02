@@ -38,9 +38,7 @@ class AstrBotDashboard:
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
-            self.data_path = os.path.abspath(
-                str(AstrbotPaths.astrbot_root / "dist")
-            )
+            self.data_path = os.path.abspath(str(AstrbotPaths.astrbot_root / "dist"))
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa

@@ -788,7 +788,9 @@ class WeChatPadProAdapter(Platform):
                 voice_bs64_data = base64.b64decode(voice_bs64_data)
                 temp_dir = str(AstrbotPaths.astrbot_root / "temp")
                 file_path = str(
-                    AstrbotPaths.astrbot_root / "temp" / f"wechatpadpro_voice_{abm.message_id}.silk"
+                    AstrbotPaths.astrbot_root
+                    / "temp"
+                    / f"wechatpadpro_voice_{abm.message_id}.silk"
                 )
 
                 async with await anyio.open_file(file_path, "wb") as f:
