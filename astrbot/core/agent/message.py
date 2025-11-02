@@ -145,7 +145,7 @@ class Message(BaseModel):
 class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
-    role: str = "assistant"
+    role: Literal["assistant"] = "assistant"
     tool_calls: list[ToolCall] | list[dict] | None = None
 
 
@@ -159,10 +159,10 @@ class ToolCallMessageSegment(Message):
 class UserMessageSegment(Message):
     """A message segment from the user."""
 
-    role: str = "user"
+    role: Literal["user"] = "user"
 
 
 class SystemMessageSegment(Message):
     """A message segment from the system."""
 
-    role: str = "system"
+    role: Literal["system"] = "system"
