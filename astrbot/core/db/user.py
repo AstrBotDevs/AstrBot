@@ -3,10 +3,10 @@
 import uuid
 
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
-from sqlmodel import Field, SQLModel
+from sqlmodel import SQLModel
 
 
-class User(SQLAlchemyBaseUserTableUUID, SQLModel, table=True):
+class User(SQLAlchemyBaseUserTableUUID):
     """User model for authentication with fastapi-users.
 
     This model extends SQLAlchemyBaseUserTableUUID which provides:
@@ -18,8 +18,6 @@ class User(SQLAlchemyBaseUserTableUUID, SQLModel, table=True):
     - is_verified: bool
     """
 
-    __tablename__ = "users"
-
     # The base class provides these fields automatically:
     # id: uuid.UUID
     # email: str
@@ -28,8 +26,7 @@ class User(SQLAlchemyBaseUserTableUUID, SQLModel, table=True):
     # is_superuser: bool = False
     # is_verified: bool = False
 
-    # Add custom fields
-    username: str = Field(nullable=False, unique=True, max_length=255)
+    __tablename__ = "user"
 
 
 class UserRead(SQLModel):

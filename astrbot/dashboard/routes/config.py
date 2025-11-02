@@ -3,7 +3,7 @@ import inspect
 import os
 import traceback
 
-from fastapi import Request, Body, Query
+from fastapi import Body, Query
 
 from astrbot.core import file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -190,7 +190,7 @@ class ConfigRoute(Route):
 
     async def update_ucr_all(self, post_data: dict = Body(...)):
         """更新 UMOP 配置路由表的全部内容"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         new_routing = post_data.get("routing", None)
@@ -207,7 +207,7 @@ class ConfigRoute(Route):
 
     async def update_ucr(self, post_data: dict = Body(...)):
         """更新 UMOP 配置路由表"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         umo = post_data.get("umo", None)
@@ -225,7 +225,7 @@ class ConfigRoute(Route):
 
     async def delete_ucr(self, post_data: dict = Body(...)):
         """删除 UMOP 配置路由表中的一项"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         umo = post_data.get("umo", None)
@@ -257,7 +257,7 @@ class ConfigRoute(Route):
 
     async def create_abconf(self, post_data: dict = Body(...)):
         """创建新的 AstrBot 配置文件"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
         name = post_data.get("name", None)
         config = post_data.get("config", DEFAULT_CONFIG)
@@ -293,7 +293,7 @@ class ConfigRoute(Route):
 
     async def delete_abconf(self, post_data: dict = Body(...)):
         """删除指定 AstrBot 配置文件"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         conf_id = post_data.get("id")
@@ -313,7 +313,7 @@ class ConfigRoute(Route):
 
     async def update_abconf(self, post_data: dict = Body(...)):
         """更新指定 AstrBot 配置文件信息"""
-                if not post_data:
+        if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         conf_id = post_data.get("id")
@@ -604,7 +604,7 @@ class ConfigRoute(Route):
 
     async def get_embedding_dim(self):
         """获取嵌入模型的维度"""
-                provider_config = post_data.get("provider_config", None)
+        provider_config = post_data.get("provider_config", None)
         if not provider_config:
             return Response().error("缺少参数 provider_config").__dict__
 

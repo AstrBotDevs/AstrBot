@@ -4,6 +4,8 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
+from fastapi import Body
+
 # from quart import Response as QuartResponse
 # from quart import g, make_response, request
 from astrbot.core import logger
