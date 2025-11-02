@@ -1,5 +1,6 @@
-import anyio
 from pathlib import Path
+
+import anyio
 import click
 from filelock import FileLock, Timeout
 
