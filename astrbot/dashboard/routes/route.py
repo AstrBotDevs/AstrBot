@@ -1,6 +1,11 @@
+from __future__ import annotations
+from collections.abc import AsyncIterable
 from dataclasses import dataclass
+from typing import Any, Generic, Literal, TypeVar, overload
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -38,21 +43,68 @@ class Route:
                 _add_route(route, method, func)
 
 
-@dataclass
-class Response:
-    status: str | None = None
+DataT = TypeVar("DataT")
+
+
+class Response(BaseModel, Generic[DataT]):
+    status: Literal["ok", "error"] = "ok"
     message: str | None = None
-    data: dict | list | None = None
+    data: DataT | None = None
 
-    def error(self, message: str):
-        self.status = "error"
-        self.message = message
-        return self
+    # 两个重载:
+    # 1) 调用者传入具体的 DataT,返回 Response[DataT]
+    @overload
+    @classmethod
+    def ok(cls, data: DataT, message: str | None = "ok") -> Response[DataT]: ...
 
-    def ok(self, data: dict | list | None = None, message: str | None = None):
-        self.status = "ok"
-        if data is None:
-            data = {}
-        self.data = data
-        self.message = message
-        return self
+    # 2) 调用者使用 kwargs 构建匿名 dict 数据,返回 Response[dict[str, Any]]
+    @overload
+    @classmethod
+    def ok(
+        cls,
+        data: None = None,
+        message: str | None = "ok",
+        **data_fields: object,
+    ) -> Response[dict[str, object]]: ...
+
+    @classmethod
+    def ok(
+        cls,
+        data: Any | None = None,
+        message: str | None = "ok",
+        **data_fields: Any,
+    ) -> Response[dict[str, Any]] | Response[DataT]:
+        """创建一个成功响应(OK)...
+
+        使用方式示例:
+        - Response[LoginResponse].ok(LoginResponse(...))
+        - Response[LoginResponse].ok({"username":..., "token": ...})
+        - Response[LoginResponse].ok(username=..., token=...)
+        """
+        if data is None and data_fields:
+            # 如果传入 kwargs,则把它们当作一个简单的 dict 作为 data
+            data = dict(data_fields)
+        return cls(status="ok", message=message, data=data)
+
+    @classmethod
+    def error(cls, message: str | None = "error") -> Response[DataT]:
+        return cls(status="error", message=message, data=None)
+
+    @staticmethod
+    def sse(
+        stream: AsyncIterable[str],
+        headers: dict[str, str] | None = None,
+    ) -> StreamingResponse:
+        r"""用于返回标准 SSE 响应.
+        stream: async 生成器,yield 每条 data: ...\n\n
+        headers: 可选自定义响应头(如 Content-Type,Cache-Control 等).
+        """
+        default_headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
+        }
+        if headers:
+            default_headers.update(headers)
+        return StreamingResponse(stream, headers=default_headers)
