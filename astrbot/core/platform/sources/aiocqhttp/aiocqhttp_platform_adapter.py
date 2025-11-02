@@ -222,7 +222,7 @@ class AiocqhttpAdapter(Platform):
             err = f"aiocqhttp: 无法识别的消息类型: {event.message!s}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
             logger.critical(err)
             try:
-                self.bot.send(event, err)
+                await self.bot.send(event, err)
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
             return None
