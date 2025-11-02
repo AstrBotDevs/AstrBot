@@ -1,7 +1,8 @@
-import asyncio
 import math
 import random
 from collections.abc import AsyncGenerator
+
+import anyio
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
@@ -221,7 +222,7 @@ class RespondStage(Stage):
                 async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                     for comp in result.chain:
                         i = await self._calc_comp_interval(comp)
-                        await asyncio.sleep(i)
+                        await anyio.sleep(i)
                         try:
                             if comp.type in need_separately:
                                 await event.send(MessageChain([comp]))

@@ -1,7 +1,8 @@
-import anyio
 import random
 import traceback
 from collections.abc import AsyncGenerator
+
+import anyio
 
 from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record

@@ -1,8 +1,8 @@
-import anyio
 import os
 import socket
 from contextlib import asynccontextmanager
 
+import anyio
 import psutil
 import uvicorn
 from fastapi import FastAPI
