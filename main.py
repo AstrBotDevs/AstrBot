@@ -11,6 +11,15 @@ from astrbot.core.initial_loader import InitialLoader
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
+# Import uvloop on Linux
+if sys.platform == "linux":
+    try:
+        import uvloop
+    except ImportError:
+        uvloop = None
+else:
+    uvloop = None
+
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
 
@@ -23,6 +32,15 @@ logo_tmpl = r"""
 /__/     \__\ |_______/       |__|     | _| `._____||______/   \______/      |__|
 
 """
+
+
+def run_async(coro):
+    """Run async coroutine with uvloop on Linux if Python >= 3.11"""
+    if uvloop is not None and sys.version_info >= (3, 11):
+        with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
+            return runner.run(coro)
+    else:
+        return asyncio.run(coro)
 
 
 def check_env():
@@ -93,7 +111,7 @@ if __name__ == "__main__":
     LogManager.set_queue_handler(logger, log_broker)
 
     # 检查仪表板文件
-    webui_dir = asyncio.run(check_dashboard_files(args.webui_dir))
+    webui_dir = run_async(check_dashboard_files(args.webui_dir))
 
     db = db_helper
 
@@ -102,4 +120,4 @@ if __name__ == "__main__":
 
     core_lifecycle = InitialLoader(db, log_broker)
     core_lifecycle.webui_dir = webui_dir
-    asyncio.run(core_lifecycle.start())
+    run_async(core_lifecycle.start())
