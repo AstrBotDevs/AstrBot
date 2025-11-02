@@ -86,9 +86,7 @@ class AstrbotPaths(IAstrbotPaths):
         if not path.exists() or not path.is_dir():
             return False
         # 检查此目录内是是否包含.astrbot标记文件
-        if not (path / ".astrbot").exists():
-            return False
-        return True
+        return bool((path / ".astrbot").exists())
 
     def reload(self) -> None:
         """重新加载环境变量."""
