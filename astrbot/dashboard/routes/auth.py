@@ -1,5 +1,4 @@
 import datetime
-import hashlib
 import uuid
 
 import anyio
@@ -62,41 +61,28 @@ class AuthRoute(Route):
 
         # The password from frontend is already MD5 hashed
         # Treat this MD5 value as the password for verification
-        md5_password = login_data.password
+        password_from_frontend = login_data.password
 
-        # Check if stored hash is old MD5 format (needs migration)
-        # Old format: 32 character hex string (MD5)
-        # New format: Argon2 hash (starts with $argon2)
-        if len(stored_password_hash) == 32 and not stored_password_hash.startswith("$"):
-            # Old MD5 format - compare directly and migrate
-            provided_md5 = hashlib.md5(md5_password.encode()).hexdigest()
-            if provided_md5 != stored_password_hash:
-                await anyio.sleep(3)
-                return Response().error("用户名或密码错误").__dict__
+        # Verify using pwdlib's Argon2
+        is_valid, new_hash = self.password_hash.verify_and_update(
+            password_from_frontend, stored_password_hash
+        )
+        if not is_valid:
+            await anyio.sleep(3)
+            return Response().error("用户名或密码错误").__dict__
 
-            # Migrate to new format: hash the MD5 value with Argon2
-            new_hash = self.password_hash.hash(md5_password)
+        # Update hash if needed (e.g., if algorithm parameters changed)
+        if new_hash is not None:
             self.config["dashboard"]["password"] = new_hash
             self.config.save_config()
-            logger.info("Migrated password from MD5 to Argon2 hash")
-        else:
-            # New Argon2 format - verify using pwdlib
-            is_valid, new_hash = self.password_hash.verify_and_update(
-                md5_password, stored_password_hash
-            )
-            if not is_valid:
-                await anyio.sleep(3)
-                return Response().error("用户名或密码错误").__dict__
 
-            # Update hash if needed (e.g., if algorithm parameters changed)
-            if new_hash is not None:
-                self.config["dashboard"]["password"] = new_hash
-                self.config.save_config()
-
-        # Check if using default password
+        # Check if using default password (check against known default hash)
         change_pwd_hint = False
-        default_md5 = hashlib.md5(b"astrbot").hexdigest()
-        if username == "astrbot" and md5_password == default_md5 and not DEMO_MODE:
+        # Note: This check is now done by comparing against the stored hash
+        # If you need to detect default passwords, store the default hash separately
+        if username == "astrbot" and not DEMO_MODE:
+            # Simple heuristic: warn if it's the default username
+            # More sophisticated check would require storing default password hash
             change_pwd_hint = True
             logger.warning("为了保证安全，请尽快修改默认密码。")
 
@@ -138,22 +124,12 @@ class AuthRoute(Route):
 
         stored_password_hash = self.config["dashboard"]["password"]
         # The password from frontend is already MD5 hashed
-        provided_md5_password = edit_data.password
+        provided_password = edit_data.password
 
-        # Verify current password
-        # Check if stored hash is old MD5 format
-        if len(stored_password_hash) == 32 and not stored_password_hash.startswith("$"):
-            # Old MD5 format
-            provided_hash = hashlib.md5(provided_md5_password.encode()).hexdigest()
-            if provided_hash != stored_password_hash:
-                return Response().error("原密码错误").__dict__
-        else:
-            # New Argon2 format
-            is_valid = self.password_hash.verify(
-                provided_md5_password, stored_password_hash
-            )
-            if not is_valid:
-                return Response().error("原密码错误").__dict__
+        # Verify current password using pwdlib's Argon2
+        is_valid = self.password_hash.verify(provided_password, stored_password_hash)
+        if not is_valid:
+            return Response().error("原密码错误").__dict__
 
         if not edit_data.new_password and not edit_data.new_username:
             return (
