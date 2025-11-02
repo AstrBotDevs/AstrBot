@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import random
 import traceback
 from collections.abc import AsyncGenerator
@@ -92,7 +92,7 @@ class PreProcessStage(Stage):
                             # napcat workaround
                             logger.warning(e)
                             logger.warning(f"重试中: {i + 1}/{retry}")
-                            await asyncio.sleep(0.5)
+                            await anyio.sleep(0.5)
                             continue
                         except BaseException as e:
                             logger.error(traceback.format_exc())

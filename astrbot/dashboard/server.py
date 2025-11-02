@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import os
 import socket
 from contextlib import asynccontextmanager
@@ -31,7 +31,7 @@ class AstrBotDashboard:
         self,
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase,
-        shutdown_event: asyncio.Event,
+        shutdown_event: anyio.Event,
         webui_dir: str | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle
@@ -119,7 +119,7 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
 
         # Register plugin route
-        @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"])
+        @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"], operation_id="plugin_web_api_route")
         async def srv_plug_route(subpath: str):
             return await self._srv_plug_route(subpath)
 
@@ -254,14 +254,14 @@ class AstrBotDashboard:
         )
         server = uvicorn.Server(config)
 
-        # Run server in background task
-        server_task = asyncio.create_task(server.serve())
+        # Run server in background task using anyio
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(server.serve)
 
-        # Wait for shutdown event
-        await self.shutdown_event.wait()
+            # Wait for shutdown event
+            await self.shutdown_event.wait()
 
-        # Graceful shutdown
-        server.should_exit = True
-        await server_task
+            # Graceful shutdown
+            server.should_exit = True
 
         logger.info("AstrBot WebUI 已经被优雅地关闭")

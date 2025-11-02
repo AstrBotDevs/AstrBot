@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import uuid
 
+import anyio
 import jwt
 from fastapi import Body
 from pwdlib import PasswordHash
@@ -56,7 +57,7 @@ class AuthRoute(Route):
 
         # Check if username matches
         if login_data.username != username:
-            await asyncio.sleep(3)
+            await anyio.sleep(3)
             return Response().error("用户名或密码错误").__dict__
 
         # The password from frontend is already MD5 hashed
@@ -70,7 +71,7 @@ class AuthRoute(Route):
             # Old MD5 format - compare directly and migrate
             provided_md5 = hashlib.md5(md5_password.encode()).hexdigest()
             if provided_md5 != stored_password_hash:
-                await asyncio.sleep(3)
+                await anyio.sleep(3)
                 return Response().error("用户名或密码错误").__dict__
 
             # Migrate to new format: hash the MD5 value with Argon2
@@ -84,7 +85,7 @@ class AuthRoute(Route):
                 md5_password, stored_password_hash
             )
             if not is_valid:
-                await asyncio.sleep(3)
+                await anyio.sleep(3)
                 return Response().error("用户名或密码错误").__dict__
 
             # Update hash if needed (e.g., if algorithm parameters changed)
