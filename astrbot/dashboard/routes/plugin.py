@@ -57,20 +57,16 @@ class PluginRoute(Route):
 
     async def reload_plugins(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
         plugin_name = data.get("name", None)
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
             if not success:
-                return Response().error(message).__dict__
-            return Response().ok(None, "重载成功。").__dict__
+                return Response.error(message)
+            return Response.ok(None, "重载成功。")
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response.error(str(e))
 
     async def get_online_plugins(self, request: Request):
         custom = request.query_params.get("custom_registry")
@@ -94,7 +90,7 @@ class PluginRoute(Route):
                 cached_data = self._load_plugin_cache(cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
-                    return Response().ok(cached_data).__dict__
+                    return Response.ok(cached_data)
 
         # 尝试获取远程数据
         remote_data = None
@@ -128,7 +124,7 @@ class PluginRoute(Route):
                             remote_data,
                             current_md5,
                         )
-                        return Response().ok(remote_data).__dict__
+                        return Response.ok(remote_data)
                     logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
@@ -139,9 +135,9 @@ class PluginRoute(Route):
 
         if cached_data:
             logger.warning("远程插件市场数据获取失败，使用缓存数据")
-            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+            return Response.ok(cached_data, "使用缓存数据，可能不是最新版本")
 
-        return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+        return Response.error("获取插件列表失败，且没有可用的缓存数据")
 
     async def _is_cache_valid(self, cache_file: str) -> bool:
         """检查缓存是否有效（基于MD5）"""
@@ -269,11 +265,7 @@ class PluginRoute(Route):
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
             }
             _plugin_resp.append(_t)
-        return (
-            Response()
-            .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
-            .__dict__
-        )
+        return Response.ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
 
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
         """解析插件行为"""
@@ -338,11 +330,7 @@ class PluginRoute(Route):
 
     async def install_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         post_data = data
         repo_url = post_data["url"]
@@ -356,48 +344,36 @@ class PluginRoute(Route):
             plugin_info = await self.plugin_manager.install_plugin(repo_url, proxy)
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            return Response.ok(plugin_info, "安装成功。")
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+            return Response.error(str(e))
 
     async def install_plugin_upload(self):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         # TODO: Add file parameter when route registration is fixed
         # For now, this will need manual fixing
-        return Response().error("File upload not yet implemented in FastAPI migration").__dict__
+        return Response.error("File upload not yet implemented in FastAPI migration")
 
     async def uninstall_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .model_dump()
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         plugin_name = data["name"]
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
             await self.plugin_manager.uninstall_plugin(plugin_name)
             logger.info(f"卸载插件 {plugin_name} 成功")
-            return Response().ok(None, "卸载成功").__dict__
+            return Response.ok(None, "卸载成功")
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
 
     async def update_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .model_dump()
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         plugin_name = data["name"]
         plugin_name = data["name"]
@@ -408,44 +384,36 @@ class PluginRoute(Route):
             # self.core_lifecycle.restart()
             await self.plugin_manager.reload(plugin_name)
             logger.info(f"更新插件 {plugin_name} 成功。")
-            return Response().ok(None, "更新成功。").model_dump()
+            return Response.ok(None, "更新成功。")
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
 
     async def off_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         plugin_name = data["name"]
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
             logger.info(f"停用插件 {plugin_name} 。")
-            return Response().ok(None, "停用成功。").model_dump()
+            return Response.ok(None, "停用成功。")
         except Exception as e:
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
 
     async def on_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .model_dump()
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         plugin_name = data["name"]
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             logger.info(f"启用插件 {plugin_name} 。")
-            return Response().ok(None, "启用成功。").model_dump()
+            return Response.ok(None, "启用成功。")
         except Exception as e:
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
 
     async def get_plugin_readme(self, name: str = Query(...)):
         plugin_name = name
@@ -453,7 +421,7 @@ class PluginRoute(Route):
 
         if not plugin_name:
             logger.warning("插件名称为空")
-            return Response().error("插件名称不能为空").__dict__
+            return Response.error("插件名称不能为空")
 
         plugin_obj = None
         for plugin in self.plugin_manager.context.get_all_stars():
@@ -463,7 +431,7 @@ class PluginRoute(Route):
 
         if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
-            return Response().error(f"插件 {plugin_name} 不存在").__dict__
+            return Response.error(f"插件 {plugin_name} 不存在")
 
         plugin_dir = os.path.join(
             self.plugin_manager.plugin_store_path,
@@ -472,23 +440,19 @@ class PluginRoute(Route):
 
         if not os.path.isdir(plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
-            return Response().error(f"无法找到插件 {plugin_name} 的目录").model_dump()
+            return Response.error(f"无法找到插件 {plugin_name} 的目录")
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
         if not os.path.isfile(readme_path):
             logger.warning(f"插件 {plugin_name} 没有README文件")
-            return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
+            return Response.error(f"插件 {plugin_name} 没有README文件")
 
         try:
             with open(readme_path, encoding="utf-8") as f:
                 readme_content = f.read()
 
-            return (
-                Response()
-                .ok(data={"content": readme_content}, message="成功获取README内容")
-                .model_dump()
-            )
+            return Response.ok(data={"content": readme_content}, message="成功获取README内容")
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
-            return Response().error(f"读取README文件失败: {e!s}").model_dump()
+            return Response.error(f"读取README文件失败: {e!s}")
