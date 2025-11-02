@@ -15,8 +15,8 @@ def register_provider_adapter(
     provider_type_name: str,
     desc: str,
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION,
-    default_config_tmpl: dict = None,
-    provider_display_name: str = None,
+    default_config_tmpl: dict | None = None,
+    provider_display_name: str | None = None,
 ):
     """用于注册平台适配器的带参装饰器"""
 

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Generic
 
 import mcp
@@ -9,7 +8,6 @@ from astrbot.core.provider.entities import LLMResponse
 from .run_context import ContextWrapper, TContext
 
 
-@dataclass
 class BaseAgentRunHooks(Generic[TContext]):
     async def on_agent_begin(self, run_context: ContextWrapper[TContext]): ...
     async def on_tool_start(

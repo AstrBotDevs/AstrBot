@@ -830,7 +830,13 @@ class PluginManager:
 
             # 禁用插件启用的 llm_tool
             for func_tool in llm_tools.func_list:
-                if func_tool.handler_module_path == plugin.module_path:
+                mp = func_tool.handler_module_path
+                if (
+                    plugin.module_path
+                    and mp
+                    and plugin.module_path.startswith(mp)
+                    and not mp.endswith(("packages", "data.plugins"))
+                ):
                     func_tool.active = False
                     if func_tool.name not in inactivated_llm_tools:
                         inactivated_llm_tools.append(func_tool.name)
@@ -873,8 +879,12 @@ class PluginManager:
 
         # 启用插件启用的 llm_tool
         for func_tool in llm_tools.func_list:
+            mp = func_tool.handler_module_path
             if (
-                func_tool.handler_module_path == plugin.module_path
+                plugin.module_path
+                and mp
+                and plugin.module_path.startswith(mp)
+                and not mp.endswith(("packages", "data.plugins"))
                 and func_tool.name in inactivated_llm_tools
             ):
                 inactivated_llm_tools.remove(func_tool.name)
@@ -882,8 +892,6 @@ class PluginManager:
         await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
         await self.reload(plugin_name)
-
-        # plugin.activated = True
 
     async def install_plugin_from_file(self, zip_file_path: str):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")

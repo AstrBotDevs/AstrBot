@@ -113,18 +113,18 @@ class DiscordPlatformEvent(AstrMessageEvent):
         message: MessageChain,
     ) -> tuple[str, list[discord.File], discord.ui.View | None, list[discord.Embed]]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
-        content = ""
+        content_parts = []
         files = []
         view = None
         embeds = []
         reference_message_id = None
         for i in message.chain:  # 遍历消息链
             if isinstance(i, Plain):  # 如果是文字类型的
-                content += i.text
+                content_parts.append(i.text)
             elif isinstance(i, Reply):
                 reference_message_id = i.id
             elif isinstance(i, At):
-                content += f"<@{i.qq}>"
+                content_parts.append(f"<@{i.qq}>")
             elif isinstance(i, Image):
                 logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:
@@ -238,6 +238,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             else:
                 logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
 
+        content = "".join(content_parts)
         if len(content) > 2000:
             logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
             content = content[:2000]

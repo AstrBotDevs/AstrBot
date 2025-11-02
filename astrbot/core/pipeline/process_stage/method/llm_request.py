@@ -5,11 +5,14 @@ import copy
 import json
 import traceback
 from collections.abc import AsyncGenerator
-from datetime import timedelta
+from typing import Any
+
+from mcp.types import CallToolResult
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -33,7 +36,7 @@ from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.metrics import Metric
 
-from ...context import PipelineContext, call_event_hook, call_handler
+from ...context import PipelineContext, call_event_hook, call_local_llm_tool
 from ..stage import Stage
 from ..utils import inject_kb_context
 
@@ -65,17 +68,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 yield r
             return
 
-        if tool.origin == "local":
-            async for r in cls._execute_local(tool, run_context, **tool_args):
-                yield r
-            return
-
-        elif tool.origin == "mcp":
+        elif isinstance(tool, MCPTool):
             async for r in cls._execute_mcp(tool, run_context, **tool_args):
                 yield r
             return
 
-        raise Exception(f"Unknown function origin: {tool.origin}")
+        else:
+            async for r in cls._execute_local(tool, run_context, **tool_args):
+                yield r
+            return
 
     @classmethod
     async def _execute_handoff(
@@ -113,10 +114,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             first_provider_request=run_context.context.first_provider_request,
             curr_provider_request=request,
             streaming=run_context.context.streaming,
+            event=run_context.context.event,
         )
 
+        event = run_context.context.event
+
         logger.debug(f"正在将任务委托给 Agent: {tool.agent.name}, input: {input_}")
-        await run_context.event.send(
+        await event.send(
             MessageChain().message("✨ 正在将任务委托给 Agent: " + tool.agent.name),
         )
 
@@ -125,7 +129,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             request=request,
             run_context=AgentContextWrapper(
                 context=astr_agent_ctx,
-                event=run_context.event,
+                tool_call_timeout=run_context.tool_call_timeout,
             ),
             tool_executor=FunctionToolExecutor(),
             agent_hooks=tool.agent.run_hooks or BaseAgentRunHooks[AstrAgentContext](),
@@ -175,25 +179,46 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args,
     ):
-        if not run_context.event:
+        event = run_context.context.event
+        if not event:
             raise ValueError("Event must be provided for local function tools.")
 
-        # 检查 tool 下有没有 run 方法
-        if not tool.handler and not hasattr(tool, "run"):
-            raise ValueError("Tool must have a valid handler or 'run' method.")
-        awaitable = tool.handler or tool.run
+        is_override_call = False
+        for ty in type(tool).mro():
+            if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
+                logger.debug(f"Found call in: {ty}")
+                is_override_call = True
+                break
 
-        wrapper = call_handler(
-            event=run_context.event,
+        # 检查 tool 下有没有 run 方法
+        if not tool.handler and not hasattr(tool, "run") and not is_override_call:
+            raise ValueError("Tool must have a valid handler or override 'run' method.")
+
+        awaitable = None
+        method_name = ""
+        if tool.handler:
+            awaitable = tool.handler
+            method_name = "decorator_handler"
+        elif is_override_call:
+            awaitable = tool.call
+            method_name = "call"
+        elif hasattr(tool, "run"):
+            awaitable = getattr(tool, "run")
+            method_name = "run"
+        if awaitable is None:
+            raise ValueError("Tool must have a valid handler or override 'run' method.")
+
+        wrapper = call_local_llm_tool(
+            context=run_context,
             handler=awaitable,
+            method_name=method_name,
             **tool_args,
         )
-        # async for resp in wrapper:
         while True:
             try:
                 resp = await asyncio.wait_for(
                     anext(wrapper),
-                    timeout=run_context.context.tool_call_timeout,
+                    timeout=run_context.tool_call_timeout,
                 )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
@@ -208,10 +233,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     # NOTE: Tool 在这里直接请求发送消息给用户
                     # TODO: 是否需要判断 event.get_result() 是否为空?
                     # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                    if res := run_context.context.event.get_result():
+                        if res.chain:
+                            try:
+                                await event.send(
+                                    MessageChain(
+                                        chain=res.chain,
+                                        type="tool_direct_result",
+                                    )
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"Tool 直接发送消息失败: {e}",
+                                    exc_info=True,
+                                )
                     yield None
             except asyncio.TimeoutError:
                 raise Exception(
-                    f"tool {tool.name} execution timeout after {run_context.context.tool_call_timeout} seconds.",
+                    f"tool {tool.name} execution timeout after {run_context.tool_call_timeout} seconds.",
                 )
             except StopAsyncIteration:
                 break
@@ -223,19 +262,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args,
     ):
-        if not tool.mcp_client:
-            raise ValueError("MCP client is not available for MCP function tools.")
-
-        session = tool.mcp_client.session
-        if not session:
-            raise ValueError("MCP session is not available for MCP function tools.")
-        res = await session.call_tool(
-            name=tool.name,
-            arguments=tool_args,
-            read_timeout_seconds=timedelta(
-                seconds=run_context.context.tool_call_timeout,
-            ),
-        )
+        res = await tool.call(run_context, **tool_args)
         if not res:
             return
         yield res
@@ -245,10 +272,19 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(self, run_context, llm_response):
         # 执行事件钩子
         await call_event_hook(
-            run_context.event,
+            run_context.context.event,
             EventType.OnLLMResponseEvent,
             llm_response,
         )
+
+    async def on_tool_end(
+        self,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool: FunctionTool[Any],
+        tool_args: dict | None,
+        tool_result: CallToolResult | None,
+    ):
+        run_context.context.event.clear_result()
 
 
 MAIN_AGENT_HOOKS = MainAgentHooks()
@@ -260,7 +296,7 @@ async def run_agent(
     show_tool_use: bool = True,
 ) -> AsyncGenerator[MessageChain, None]:
     step_idx = 0
-    astr_event = agent_runner.run_context.event
+    astr_event = agent_runner.run_context.context.event
     while step_idx < max_step:
         step_idx += 1
         try:
@@ -513,12 +549,15 @@ class LLMRequestSubStage(Stage):
             first_provider_request=req,
             curr_provider_request=req,
             streaming=self.streaming_response,
-            tool_call_timeout=self.tool_call_timeout,
+            event=event,
         )
         await agent_runner.reset(
             provider=provider,
             request=req,
-            run_context=AgentContextWrapper(context=astr_agent_ctx, event=event),
+            run_context=AgentContextWrapper(
+                context=astr_agent_ctx,
+                tool_call_timeout=self.tool_call_timeout,
+            ),
             tool_executor=FunctionToolExecutor(),
             agent_hooks=MAIN_AGENT_HOOKS,
             streaming=self.streaming_response,

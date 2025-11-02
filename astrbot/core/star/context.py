@@ -1,3 +1,4 @@
+import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -34,6 +35,8 @@ from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from .star import StarMetadata, star_map, star_registry
 from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
+
+logger = logging.getLogger("astrbot")
 
 
 class Context:
@@ -255,8 +258,43 @@ class Context:
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。"""
+        tool_name = {tool.name for tool in self.provider_manager.llm_tools.func_list}
+        module_path = ""
         for tool in tools:
+            if not module_path:
+                _parts = []
+                module_part = tool.__module__.split(".")
+                flags = ["packages", "plugins"]
+                for i, part in enumerate(module_part):
+                    _parts.append(part)
+                    if part in flags and i + 1 < len(module_part):
+                        _parts.append(module_part[i + 1])
+                        break
+                tool.handler_module_path = ".".join(_parts)
+                module_path = tool.handler_module_path
+            else:
+                tool.handler_module_path = module_path
+            logger.info(
+                f"plugin(module_path {module_path}) added LLM tool: {tool.name}"
+            )
+
+            if tool.name in tool_name:
+                logger.warning("替换已存在的 LLM 工具: " + tool.name)
+                self.provider_manager.llm_tools.remove_func(tool.name)
             self.provider_manager.llm_tools.func_list.append(tool)
+
+    def register_web_api(
+        self,
+        route: str,
+        view_handler: Awaitable,
+        methods: list,
+        desc: str,
+    ):
+        for idx, api in enumerate(self.registered_web_apis):
+            if api[0] == route and methods == api[2]:
+                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
+                return
+        self.registered_web_apis.append((route, view_handler, methods, desc))
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
@@ -269,7 +307,7 @@ class Context:
         desc: str,
         func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
-        """为函数调用（function-calling / tools-use）添加工具。
+        """[DEPRECATED]为函数调用（function-calling / tools-use）添加工具。
 
         @param name: 函数名
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
@@ -291,7 +329,7 @@ class Context:
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
     def unregister_llm_tool(self, name: str) -> None:
-        """删除一个函数调用工具。如果再要启用，需要重新注册。"""
+        """[DEPRECATED]删除一个函数调用工具。如果再要启用，需要重新注册。"""
         self.provider_manager.llm_tools.remove_func(name)
 
     def register_commands(
@@ -333,18 +371,5 @@ class Context:
         star_handlers_registry.append(md)
 
     def register_task(self, task: Awaitable, desc: str):
-        """注册一个异步任务。"""
+        """[DEPRECATED]注册一个异步任务。"""
         self._register_tasks.append(task)
-
-    def register_web_api(
-        self,
-        route: str,
-        view_handler: Awaitable,
-        methods: list,
-        desc: str,
-    ):
-        for idx, api in enumerate(self.registered_web_apis):
-            if api[0] == route and methods == api[2]:
-                self.registered_web_apis[idx] = (route, view_handler, methods, desc)
-                return
-        self.registered_web_apis.append((route, view_handler, methods, desc))
