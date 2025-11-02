@@ -1,9 +1,10 @@
 import argparse
-import asyncio
 import mimetypes
 import os
 import sys
 from pathlib import Path
+
+import anyio
 
 from astrbot.core import LogBroker, LogManager, db_helper, logger
 from astrbot.core.config.default import VERSION
@@ -93,7 +94,7 @@ if __name__ == "__main__":
     LogManager.set_queue_handler(logger, log_broker)
 
     # 检查仪表板文件
-    webui_dir = asyncio.run(check_dashboard_files(args.webui_dir))
+    webui_dir = anyio.run(check_dashboard_files, args.webui_dir)
 
     db = db_helper
 
@@ -102,4 +103,4 @@ if __name__ == "__main__":
 
     core_lifecycle = InitialLoader(db, log_broker)
     core_lifecycle.webui_dir = webui_dir
-    asyncio.run(core_lifecycle.start())
+    anyio.run(core_lifecycle.start)
