@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 WORKDIR /AstrBot
 
@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     ca-certificates \
     bash \
+    git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -24,13 +25,16 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | b
     nvm install $NODE_VERSION && \
     nvm use $NODE_VERSION && \
     nvm alias default $NODE_VERSION && \
-    node -v && npm -v
+    node -v && npm -v && \
+    echo "3.11" > .python-version
 ENV PATH="$NVM_DIR/versions/node/v$(node -v | cut -d 'v' -f 2)/bin:$PATH"
 
-RUN python -m pip install --no-cache-dir uv && \
-    uv pip install socksio pyffmpeg --no-cache-dir --system
+RUN python -m pip install --no-cache-dir uv
+
+# 安装项目依赖（根据指南，使用 uv sync）
+RUN uv sync --no-cache
 
 EXPOSE 6185
 EXPOSE 6186
 
-CMD ["uv","run", "main.py"]
+CMD ["uv", "run", "main.py"]
