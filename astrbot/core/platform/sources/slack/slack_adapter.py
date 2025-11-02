@@ -222,39 +222,41 @@ class SlackAdapter(Platform):
                     if element.get("type") == "rich_text_section":
                         # 处理富文本段落
                         section_elements = element.get("elements", [])
-                        text_content = ""
-
+                        text_parts = []
                         for section_element in section_elements:
                             element_type = section_element.get("type", "")
 
                             if element_type == "text":
                                 # 普通文本
-                                text_content += section_element.get("text", "")
+                                text_parts.append(section_element.get("text", ""))
                             elif element_type == "user":
                                 # @用户提及
                                 user_id = section_element.get("user_id", "")
                                 if user_id:
                                     # 将之前的文本内容先添加到组件中
+                                    text_content = "".join(text_parts)
                                     if text_content.strip():
                                         message_components.append(
                                             Plain(text=text_content),
                                         )
-                                        text_content = ""
+                                    text_parts = []
                                     # 添加@提及组件
                                     message_components.append(At(qq=user_id, name=""))
                             elif element_type == "channel":
                                 # #频道提及
                                 channel_id = section_element.get("channel_id", "")
-                                text_content += f"#{channel_id}"
+                                text_parts.append(f"#{channel_id}")
                             elif element_type == "link":
                                 # 链接
                                 url = section_element.get("url", "")
                                 link_text = section_element.get("text", url)
-                                text_content += f"[{link_text}]({url})"
+                                text_parts.append(f"[{link_text}]({url})")
                             elif element_type == "emoji":
                                 # 表情符号
                                 emoji_name = section_element.get("name", "")
-                                text_content += f":{emoji_name}:"
+                                text_parts.append(f":{emoji_name}:")
+
+                        text_content = "".join(text_parts)
 
                         if text_content.strip():
                             message_components.append(Plain(text=text_content))

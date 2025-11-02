@@ -250,14 +250,15 @@ async def migration_persona_data(
         try:
             begin_dialogs = persona.get("begin_dialogs", [])
             mood_imitation_dialogs = persona.get("mood_imitation_dialogs", [])
-            mood_prompt = ""
+            parts = []
             user_turn = True
             for mood_dialog in mood_imitation_dialogs:
                 if user_turn:
-                    mood_prompt += f"A: {mood_dialog}\n"
+                    parts.append(f"A: {mood_dialog}\n")
                 else:
-                    mood_prompt += f"B: {mood_dialog}\n"
+                    parts.append(f"B: {mood_dialog}\n")
                 user_turn = not user_turn
+            mood_prompt = "".join(parts)
             system_prompt = persona.get("prompt", "")
             if mood_prompt:
                 system_prompt += f"Here are few shots of dialogs, you need to imitate the tone of 'B' in the following dialogs to respond:\n {mood_prompt}"

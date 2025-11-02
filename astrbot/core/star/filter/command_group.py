@@ -66,7 +66,7 @@ class CommandGroupFilter(HandlerFilter):
         event: AstrMessageEvent | None = None,
         cfg: AstrBotConfig | None = None,
     ) -> str:
-        result = ""
+        parts = []
         for sub_filter in sub_command_filters:
             if isinstance(sub_filter, CommandFilter):
                 custom_filter_pass = True
@@ -74,31 +74,32 @@ class CommandGroupFilter(HandlerFilter):
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
                     cmd_th = sub_filter.print_types()
-                    result += f"{prefix}├── {sub_filter.command_name}"
+                    line = f"{prefix}├── {sub_filter.command_name}"
                     if cmd_th:
-                        result += f" ({cmd_th})"
+                        line += f" ({cmd_th})"
                     else:
-                        result += " (无参数指令)"
+                        line += " (无参数指令)"
 
                     if sub_filter.handler_md and sub_filter.handler_md.desc:
-                        result += f": {sub_filter.handler_md.desc}"
+                        line += f": {sub_filter.handler_md.desc}"
 
-                    result += "\n"
+                    parts.append(line + "\n")
             elif isinstance(sub_filter, CommandGroupFilter):
                 custom_filter_pass = True
                 if event and cfg:
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
-                    result += f"{prefix}├── {sub_filter.group_name}"
-                    result += "\n"
-                    result += sub_filter.print_cmd_tree(
-                        sub_filter.sub_command_filters,
-                        prefix + "│   ",
-                        event=event,
-                        cfg=cfg,
+                    parts.append(f"{prefix}├── {sub_filter.group_name}\n")
+                    parts.append(
+                        sub_filter.print_cmd_tree(
+                            sub_filter.sub_command_filters,
+                            prefix + "│   ",
+                            event=event,
+                            cfg=cfg,
+                        )
                     )
 
-        return result
+        return "".join(parts)
 
     def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         for custom_filter in self.custom_filter_list:

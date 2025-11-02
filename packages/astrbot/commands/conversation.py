@@ -134,12 +134,13 @@ class ConversationCommands:
             size_per_page,
         )
 
-        history = ""
+        parts = []
         for context in contexts:
             if len(context) > 150:
                 context = context[:150] + "..."
-            history += f"{context}\n"
+            parts.append(f"{context}\n")
 
+        history = "".join(parts)
         ret = (
             f"当前对话历史记录："
             f"{history or '无历史记录'}\n\n"
@@ -154,7 +155,7 @@ class ConversationCommands:
         provider = self.context.get_using_provider(message.unified_msg_origin)
         if provider and provider.meta().type == "dify":
             """原有的Dify处理逻辑保持不变"""
-            ret = "Dify 对话列表:\n"
+            parts = ["Dify 对话列表:\n"]
             assert isinstance(provider, ProviderDify)
             data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
             idx = 1
@@ -162,12 +163,17 @@ class ConversationCommands:
                 ts_h = datetime.datetime.fromtimestamp(conv["updated_at"]).strftime(
                     "%m-%d %H:%M",
                 )
-                ret += f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
+                parts.append(
+                    f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
+                )
                 idx += 1
             if idx == 1:
-                ret += "没有找到任何对话。"
+                parts.append("没有找到任何对话。")
             dify_cid = provider.conversation_ids.get(message.unified_msg_origin, None)
-            ret += f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+            parts.append(
+                f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+            )
+            ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret))
             return
 
@@ -185,7 +191,7 @@ class ConversationCommands:
         end_idx = start_idx + size_per_page
         conversations_paged = conversations_all[start_idx:end_idx]
 
-        ret = "对话列表：\n---\n"
+        parts = ["对话列表：\n---\n"]
         """全局序号从当前页的第一个开始"""
         global_index = start_idx + 1
 
@@ -204,10 +210,13 @@ class ConversationCommands:
                 )
                 persona_id = persona["name"]
             title = _titles.get(conv.cid, "新对话")
-            ret += f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            parts.append(
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+            )
             global_index += 1
 
-        ret += "---\n"
+        parts.append("---\n")
+        ret = "".join(parts)
         curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
             message.unified_msg_origin,
         )

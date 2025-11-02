@@ -146,14 +146,15 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         # RAG 引用脚标格式化
         output_text = re.sub(r"<ref>\[(\d+)\]</ref>", r"[\1]", output_text)
         if self.output_reference and response.output.get("doc_references", None):
-            ref_str = ""
+            ref_parts = []
             for ref in response.output.get("doc_references", []) or []:
                 ref_title = (
                     ref.get("title", "")
                     if ref.get("title")
                     else ref.get("doc_name", "")
                 )
-                ref_str += f"{ref['index_id']}. {ref_title}\n"
+                ref_parts.append(f"{ref['index_id']}. {ref_title}\n")
+            ref_str = "".join(ref_parts)
             output_text += f"\n\n回答来源:\n{ref_str}"
 
         llm_response = LLMResponse("assistant")
