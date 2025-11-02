@@ -110,11 +110,9 @@ class AuthRoute(Route):
         return (
             Response()
             .ok(
-                {
-                    "token": token,
-                    "username": username,
-                    "change_pwd_hint": change_pwd_hint,
-                }
+                token=token,
+                username=username,
+                change_pwd_hint=change_pwd_hint,
             )
             .__dict__
         )

@@ -10,6 +10,7 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+from pydantic import SecretStr
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,14 +22,15 @@ from astrbot.core.db.user import User
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     """User manager for handling user operations."""
 
-    reset_password_token_secret = None
-    verification_token_secret = None
+    # Base class requires these to be str | SecretStr, not optional
+    reset_password_token_secret: str | SecretStr = ""
+    verification_token_secret: str | SecretStr = ""
 
     def __init__(self, user_db: SQLAlchemyUserDatabase, jwt_secret: str):
         # Use Argon2 for password hashing with salt
         # The MD5 value from frontend will be treated as the "password" and hashed with Argon2
         password_hash = PasswordHash((Argon2Hasher(),))
-        super().__init__(user_db, password_hash)
+        super().__init__(user_db, password_hash)  # type: ignore[arg-type]
         self.reset_password_token_secret = jwt_secret
         self.verification_token_secret = jwt_secret
 
@@ -80,7 +82,9 @@ def get_auth_backend(jwt_secret: str) -> AuthenticationBackend:
     )
 
 
-def setup_fastapi_users(jwt_secret: str) -> FastAPIUsers:
+def setup_fastapi_users(
+    jwt_secret: str,
+) -> tuple[FastAPIUsers[User, uuid.UUID], AuthenticationBackend]:
     """Setup FastAPI Users instance."""
     auth_backend = get_auth_backend(jwt_secret)
 

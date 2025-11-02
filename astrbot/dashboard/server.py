@@ -23,7 +23,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
 
-APP: FastAPI = None
+APP: FastAPI | None = None
 
 
 class AstrBotDashboard:
@@ -119,7 +119,11 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
 
         # Register plugin route
-        @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"], operation_id="plugin_web_api_route")
+        @self.app.api_route(
+            "/api/plug/{subpath:path}",
+            methods=["GET", "POST"],
+            operation_id="plugin_web_api_route",
+        )
         async def srv_plug_route(subpath: str):
             return await self._srv_plug_route(subpath)
 
@@ -215,13 +219,12 @@ class AstrBotDashboard:
                 ip_addr = get_local_ip_addresses()
             except Exception as _:
                 pass
-        if isinstance(port, str):
-            port = int(port)
+        port_int = int(port) if isinstance(port, str) else port
 
-        if self.check_port_in_use(port):
-            process_info = self.get_process_using_port(port)
+        if self.check_port_in_use(port_int):
+            process_info = self.get_process_using_port(port_int)
             logger.error(
-                f"错误：端口 {port} 已被占用\n"
+                f"错误：端口 {port_int} 已被占用\n"
                 f"占用信息: \n           {process_info}\n"
                 f"请确保：\n"
                 f"1. 没有其他 AstrBot 实例正在运行\n"
@@ -249,7 +252,7 @@ class AstrBotDashboard:
         config = uvicorn.Config(
             self.app,
             host=host,
-            port=port,
+            port=port_int,
             log_config=None,  # Disable uvicorn logging to use our logger
         )
         server = uvicorn.Server(config)
