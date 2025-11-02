@@ -3,6 +3,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
@@ -23,24 +24,28 @@ class ProviderMeta:
 
 
 class AbstractProvider(abc.ABC):
+    """Provider Abstract Class"""
+
     def __init__(self, provider_config: dict) -> None:
         super().__init__()
         self.model_name = ""
         self.provider_config = provider_config
 
     def set_model(self, model_name: str):
-        """设置当前使用的模型名称"""
+        """Set the current model name"""
         self.model_name = model_name
 
     def get_model(self) -> str:
-        """获得当前使用的模型名称"""
+        """Get the current model name"""
         return self.model_name
 
     def meta(self) -> ProviderMeta:
-        """获取 Provider 的元数据"""
+        """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
         provider_type = meta_data.provider_type if meta_data else None
+        if provider_type is None:
+            raise ValueError(f"Cannot find provider type: {provider_type_name}")
         return ProviderMeta(
             id=self.provider_config["id"],
             model=self.get_model(),
@@ -50,6 +55,8 @@ class AbstractProvider(abc.ABC):
 
 
 class Provider(AbstractProvider):
+    """Chat Provider"""
+
     def __init__(
         self,
         provider_config: dict,
@@ -84,11 +91,11 @@ class Provider(AbstractProvider):
     @abc.abstractmethod
     async def text_chat(
         self,
-        prompt: str,
+        prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
-        contexts: list | None = None,
+        contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
@@ -97,11 +104,11 @@ class Provider(AbstractProvider):
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
 
         Args:
-            prompt: 提示词
+            prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
-            tools: Function-calling 工具
-            contexts: 上下文
+            tools: tool set
+            contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
@@ -114,11 +121,11 @@ class Provider(AbstractProvider):
 
     async def text_chat_stream(
         self,
-        prompt: str,
+        prompt: str | None = None,
         session_id: str | None = None,
         image_urls: list[str] | None = None,
         func_tool: ToolSet | None = None,
-        contexts: list | None = None,
+        contexts: list[Message] | list[dict] | None = None,
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
@@ -127,11 +134,11 @@ class Provider(AbstractProvider):
         """获得 LLM 的流式文本对话结果。会使用当前的模型进行对话。在生成的最后会返回一次完整的结果。
 
         Args:
-            prompt: 提示词
+            prompt: 提示词，和 contexts 二选一使用，如果都指定，则会将 prompt（以及可能的 image_urls） 作为最新的一条记录添加到 contexts 中
             session_id: 会话 ID(此属性已经被废弃)
             image_urls: 图片 URL 列表
-            tools: Function-calling 工具
-            contexts: 上下文
+            tools: tool set
+            contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
             kwargs: 其他参数
 
@@ -140,6 +147,7 @@ class Provider(AbstractProvider):
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
+        ...
 
     async def pop_record(self, context: list):
         """弹出 context 第一条非系统提示词对话记录"""
@@ -155,6 +163,22 @@ class Provider(AbstractProvider):
 
         for idx in reversed(indexs_to_pop):
             context.pop(idx)
+
+    def _ensure_message_to_dicts(
+        self,
+        messages: list[dict] | list[Message] | None,
+    ) -> list[dict]:
+        """Convert a list of Message objects to a list of dictionaries."""
+        if not messages:
+            return []
+        dicts: list[dict] = []
+        for message in messages:
+            if isinstance(message, Message):
+                dicts.append(message.model_dump())
+            else:
+                dicts.append(message)
+
+        return dicts
 
 
 class STTProvider(AbstractProvider):

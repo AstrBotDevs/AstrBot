@@ -331,6 +331,7 @@ class ProviderCoze(Provider):
                     },
                 )
 
+        contexts = self._ensure_message_to_dicts(contexts)
         if not self.auto_save_history and contexts:
             # 如果关闭了自动保存历史，传入上下文
             for ctx in contexts:

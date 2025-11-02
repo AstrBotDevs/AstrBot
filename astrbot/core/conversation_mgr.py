@@ -8,6 +8,7 @@ import json
 from collections.abc import Awaitable, Callable
 
 from astrbot.core import sp
+from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 
@@ -317,6 +318,41 @@ class ConversationManager:
             unified_msg_origin=unified_msg_origin,
             conversation_id=conversation_id,
             persona_id=persona_id,
+        )
+
+    async def add_message_pair(
+        self,
+        cid: str,
+        user_message: UserMessageSegment | dict,
+        assistant_message: AssistantMessageSegment | dict,
+    ) -> None:
+        """Add a user-assistant message pair to the conversation history.
+
+        Args:
+            cid (str): Conversation ID
+            user_message (UserMessageSegment | dict): OpenAI-format user message object or dict
+            assistant_message (AssistantMessageSegment | dict): OpenAI-format assistant message object or dict
+
+        Raises:
+            Exception: If the conversation with the given ID is not found
+        """
+        conv = await self.db.get_conversation_by_id(cid=cid)
+        if not conv:
+            raise Exception(f"Conversation with id {cid} not found")
+        history = conv.content or []
+        if isinstance(user_message, UserMessageSegment):
+            user_msg_dict = user_message.model_dump()
+        else:
+            user_msg_dict = user_message
+        if isinstance(assistant_message, AssistantMessageSegment):
+            assistant_msg_dict = assistant_message.model_dump()
+        else:
+            assistant_msg_dict = assistant_message
+        history.append(user_msg_dict)
+        history.append(assistant_msg_dict)
+        await self.db.update_conversation(
+            cid=cid,
+            content=history,
         )
 
     async def get_human_readable_context(
