@@ -15,7 +15,7 @@ def test_wecom_crypto_uses_secrets():
     from astrbot.core.platform.sources.wecom_ai_bot.WXBizJsonMsgCrypt import Prpcrypt
 
     # Create an instance and test that random string generation works
-    prpcrypt = Prpcrypt(b"test_key_32_bytes_long_value!!")
+    prpcrypt = Prpcrypt(b"test_key_32_bytes_long_value!")
 
     # Generate multiple random strings and verify they are different and valid
     random_strings = [prpcrypt.get_random_str() for _ in range(10)]
