@@ -786,7 +786,6 @@ class WeChatPadProAdapter(Platform):
             voice_bs64_data = voice_resp.get("Data", {}).get("Base64", None)
             if voice_bs64_data:
                 voice_bs64_data = base64.b64decode(voice_bs64_data)
-                temp_dir = str(AstrbotPaths.astrbot_root / "temp")
                 file_path = str(
                     AstrbotPaths.astrbot_root
                     / "temp"

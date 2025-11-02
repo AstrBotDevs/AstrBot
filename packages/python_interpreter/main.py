@@ -214,7 +214,6 @@ class Main(star.Star):
                 file_path = await comp.get_file()
                 if file_path.startswith("http"):
                     name = comp.name if comp.name else uuid.uuid4().hex[:8]
-                    temp_dir = str(AstrbotPaths.astrbot_root / "temp")
                     path = str(AstrbotPaths.astrbot_root / "temp" / name)
                     await download_file(file_path, path)
                 else:
