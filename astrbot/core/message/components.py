@@ -152,7 +152,6 @@ class Record(BaseMessageComponent):
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = str(AstrbotPaths.astrbot_root / "temp")
             file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg")
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
@@ -241,7 +240,6 @@ class Video(BaseMessageComponent):
         if url and url.startswith("file:///"):
             return url[8:]
         if url and url.startswith("http"):
-            download_dir = str(AstrbotPaths.astrbot_root / "temp")
             video_file_path = str(
                 AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4().hex}"
             )
@@ -443,7 +441,6 @@ class Image(BaseMessageComponent):
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = str(AstrbotPaths.astrbot_root / "temp")
             image_file_path = str(
                 AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg"
             )
