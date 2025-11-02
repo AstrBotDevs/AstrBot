@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Generic
 
 import jsonschema
+import mcp
 from deprecated import deprecated
 from pydantic import model_validator
 from pydantic.dataclasses import dataclass
@@ -62,9 +63,13 @@ class FunctionTool(ToolSchema, Generic[TContext]):
             "active": self.active,
         }
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> Any:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs
+    ) -> str | mcp.types.CallToolResult:
         """Run the tool with the given arguments. The handler field has priority."""
-        raise NotImplementedError("FunctionTool.call() must be implemented by subclasses or set a handler.")
+        raise NotImplementedError(
+            "FunctionTool.call() must be implemented by subclasses or set a handler."
+        )
 
 
 class ToolSet:

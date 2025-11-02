@@ -1,4 +1,5 @@
-# Inspired by MoonshotAI/kosong
+# Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
+# License: Apache License 2.0
 
 from typing import Any, ClassVar, Literal, cast
 
