@@ -188,10 +188,9 @@ class ConfigRoute(Route):
         """获取 UMOP 配置路由表"""
         return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
 
-    async def update_ucr_all(self):
+    async def update_ucr_all(self, post_data: dict = Body(...)):
         """更新 UMOP 配置路由表的全部内容"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         new_routing = post_data.get("routing", None)
@@ -206,10 +205,9 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新路由表失败: {e!s}").__dict__
 
-    async def update_ucr(self):
+    async def update_ucr(self, post_data: dict = Body(...)):
         """更新 UMOP 配置路由表"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         umo = post_data.get("umo", None)
@@ -225,10 +223,9 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新路由表失败: {e!s}").__dict__
 
-    async def delete_ucr(self):
+    async def delete_ucr(self, post_data: dict = Body(...)):
         """删除 UMOP 配置路由表中的一项"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         umo = post_data.get("umo", None)
@@ -258,10 +255,9 @@ class ConfigRoute(Route):
         abconf_list = self.acm.get_conf_list()
         return Response().ok({"info_list": abconf_list}).__dict__
 
-    async def create_abconf(self):
+    async def create_abconf(self, post_data: dict = Body(...)):
         """创建新的 AstrBot 配置文件"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
         name = post_data.get("name", None)
         config = post_data.get("config", DEFAULT_CONFIG)
@@ -272,10 +268,9 @@ class ConfigRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
-    async def get_abconf(self):
-        """获取指定 AstrBot 配置文件"""
-        abconf_id = request.args.get("id")
-        system_config = request.args.get("system_config", "0").lower() == "1"
+    async def get_abconf(self, id: str = Query(...), system_config: str = Query(default="0")):
+        abconf_id = id
+        system_config = system_config.lower() == "1"
         if not abconf_id and not system_config:
             return Response().error("缺少配置文件 ID").__dict__
 
@@ -296,10 +291,9 @@ class ConfigRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
-    async def delete_abconf(self):
+    async def delete_abconf(self, post_data: dict = Body(...)):
         """删除指定 AstrBot 配置文件"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         conf_id = post_data.get("id")
@@ -317,10 +311,9 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除配置文件失败: {e!s}").__dict__
 
-    async def update_abconf(self):
+    async def update_abconf(self, post_data: dict = Body(...)):
         """更新指定 AstrBot 配置文件信息"""
-        post_data = await request.json
-        if not post_data:
+                if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         conf_id = post_data.get("id")
@@ -537,9 +530,9 @@ class ConfigRoute(Route):
             log_fn(traceback.format_exc())
         return Response().error(message).__dict__
 
-    async def check_one_provider_status(self):
+    async def check_one_provider_status(self, id: str = Query(...)):
         """API: check a single LLM Provider's status by id"""
-        provider_id = request.args.get("id")
+        provider_id = id
         if not provider_id:
             return self._error_response(
                 "Missing provider_id parameter",
@@ -571,16 +564,14 @@ class ConfigRoute(Route):
                 500,
             )
 
-    async def get_configs(self):
+    async def get_configs(self, plugin_name: str = Query(default=None)):
         # plugin_name 为空时返回 AstrBot 配置
         # 否则返回指定 plugin_name 的插件配置
-        plugin_name = request.args.get("plugin_name", None)
         if not plugin_name:
             return Response().ok(await self._get_astrbot_config()).__dict__
         return Response().ok(await self._get_plugin_config(plugin_name)).__dict__
 
-    async def get_provider_config_list(self):
-        provider_type = request.args.get("provider_type", None)
+    async def get_provider_config_list(self, provider_type: str = Query(default=None)):
         if not provider_type:
             return Response().error("缺少参数 provider_type").__dict__
         provider_type_ls = provider_type.split(",")
@@ -591,9 +582,7 @@ class ConfigRoute(Route):
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 
-    async def get_provider_model_list(self):
-        """获取指定提供商的模型列表"""
-        provider_id = request.args.get("provider_id", None)
+    async def get_provider_model_list(self, provider_id: str = Query(default=None)):
         if not provider_id:
             return Response().error("缺少参数 provider_id").__dict__
 
@@ -615,8 +604,7 @@ class ConfigRoute(Route):
 
     async def get_embedding_dim(self):
         """获取嵌入模型的维度"""
-        post_data = await request.json
-        provider_config = post_data.get("provider_config", None)
+                provider_config = post_data.get("provider_config", None)
         if not provider_config:
             return Response().error("缺少参数 provider_config").__dict__
 
@@ -675,8 +663,8 @@ class ConfigRoute(Route):
             platform_list.append(platform)
         return Response().ok({"platforms": platform_list}).__dict__
 
-    async def post_astrbot_configs(self):
-        data = await request.json
+    async def post_astrbot_configs(self, data: dict = Body(...)):
+        # data already provided as parameter
         config = data.get("config", None)
         conf_id = data.get("conf_id", None)
         try:
@@ -687,9 +675,7 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def post_plugin_configs(self):
-        post_configs = await request.json
-        plugin_name = request.args.get("plugin_name", "unknown")
+    async def post_plugin_configs(self, post_configs: dict = Body(...), plugin_name: str = Query(default="unknown")):
         try:
             await self._save_plugin_configs(post_configs, plugin_name)
             await self.core_lifecycle.plugin_manager.reload(plugin_name)
@@ -701,8 +687,8 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
 
-    async def post_new_platform(self):
-        new_platform_config = await request.json
+    async def post_new_platform(self, data: dict = Body(...)):
+        new_platform_config = data
         self.config["platform"].append(new_platform_config)
         try:
             save_config(self.config, self.config, is_core=True)
@@ -713,8 +699,8 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "新增平台配置成功~").__dict__
 
-    async def post_new_provider(self):
-        new_provider_config = await request.json
+    async def post_new_provider(self, data: dict = Body(...)):
+        new_provider_config = data
         self.config["provider"].append(new_provider_config)
         try:
             save_config(self.config, self.config, is_core=True)
@@ -725,8 +711,8 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "新增服务提供商配置成功~").__dict__
 
-    async def post_update_platform(self):
-        update_platform_config = await request.json
+    async def post_update_platform(self, data: dict = Body(...)):
+        update_platform_config = data
         platform_id = update_platform_config.get("id", None)
         new_config = update_platform_config.get("config", None)
         if not platform_id or not new_config:
@@ -746,8 +732,8 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新平台配置成功~").__dict__
 
-    async def post_update_provider(self):
-        update_provider_config = await request.json
+    async def post_update_provider(self, data: dict = Body(...)):
+        update_provider_config = data
         provider_id = update_provider_config.get("id", None)
         new_config = update_provider_config.get("config", None)
         if not provider_id or not new_config:
@@ -767,8 +753,8 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新成功，已经实时生效~").__dict__
 
-    async def post_delete_platform(self):
-        platform_id = await request.json
+    async def post_delete_platform(self, data: dict = Body(...)):
+        platform_id = data
         platform_id = platform_id.get("id")
         for i, platform in enumerate(self.config["platform"]):
             if platform["id"] == platform_id:
@@ -783,8 +769,8 @@ class ConfigRoute(Route):
             return Response().error(str(e)).__dict__
         return Response().ok(None, "删除平台配置成功~").__dict__
 
-    async def post_delete_provider(self):
-        provider_id = await request.json
+    async def post_delete_provider(self, post_data: dict = Body(...)):
+        provider_id = data
         provider_id = provider_id.get("id")
         for i, provider in enumerate(self.config["provider"]):
             if provider["id"] == provider_id:

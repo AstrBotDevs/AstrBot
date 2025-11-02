@@ -109,7 +109,7 @@ class ChatRoute(Route):
 
         return Response().ok(data={"filename": filename}).__dict__
 
-    async def chat(self):
+    async def chat(self, data: dict = Body(...)):
         username = g.get("username", "guest")
 
         post_data = await request.json
@@ -257,7 +257,7 @@ class ChatRoute(Route):
             raise ValueError(f"Invalid conv user ID: {conv_user_id}")
         return webchat_session_id.split("!")[-1]
 
-    async def delete_conversation(self):
+    async def delete_conversation(self, data: dict = Body(...)):
         conversation_id = request.args.get("conversation_id")
         if not conversation_id:
             return Response().error("Missing key: conversation_id").__dict__
@@ -287,7 +287,7 @@ class ChatRoute(Route):
         )
         return Response().ok(data={"conversation_id": conv_id}).__dict__
 
-    async def rename_conversation(self):
+    async def rename_conversation(self, data: dict = Body(...)):
         post_data = await request.json
         if "conversation_id" not in post_data or "title" not in post_data:
             return Response().error("Missing key: conversation_id or title").__dict__

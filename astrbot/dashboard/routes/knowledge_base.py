@@ -207,7 +207,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取知识库列表失败: {e!s}").__dict__
 
-    async def create_kb(self):
+    async def create_kb(self, data: dict = Body(...)):
         """创建知识库
 
         Body:
@@ -224,7 +224,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
             kb_name = data.get("kb_name")
             if not kb_name:
                 return Response().error("知识库名称不能为空").__dict__
@@ -312,7 +311,7 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
+            kb_id = kb_id
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
 
@@ -330,7 +329,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取知识库详情失败: {e!s}").__dict__
 
-    async def update_kb(self):
+    async def update_kb(self, data: dict = Body(...)):
         """更新知识库
 
         Body:
@@ -348,7 +347,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
 
             kb_id = data.get("kb_id")
             if not kb_id:
@@ -410,7 +408,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新知识库失败: {e!s}").__dict__
 
-    async def delete_kb(self):
+    async def delete_kb(self, data: dict = Body(...)):
         """删除知识库
 
         Body:
@@ -418,7 +416,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
 
             kb_id = data.get("kb_id")
             if not kb_id:
@@ -445,7 +442,7 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
+            kb_id = kb_id
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
 
@@ -484,7 +481,7 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
+            kb_id = kb_id
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
             kb_helper = await kb_manager.get_kb(kb_id)
@@ -717,7 +714,7 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
+            kb_id = kb_id
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
             doc_id = request.args.get("doc_id")
@@ -740,7 +737,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取文档详情失败: {e!s}").__dict__
 
-    async def delete_document(self):
+    async def delete_document(self, data: dict = Body(...)):
         """删除文档
 
         Body:
@@ -749,7 +746,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
 
             kb_id = data.get("kb_id")
             if not kb_id:
@@ -772,7 +768,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除文档失败: {e!s}").__dict__
 
-    async def delete_chunk(self):
+    async def delete_chunk(self, data: dict = Body(...)):
         """删除文本块
 
         Body:
@@ -781,7 +777,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
 
             kb_id = data.get("kb_id")
             if not kb_id:
@@ -817,7 +812,7 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            kb_id = request.args.get("kb_id")
+            kb_id = kb_id
             doc_id = request.args.get("doc_id")
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 100, type=int)
@@ -856,7 +851,7 @@ class KnowledgeBaseRoute(Route):
 
     # ===== 检索 API =====
 
-    async def retrieve(self):
+    async def retrieve(self, data: dict = Body(...)):
         """检索知识库
 
         Body:
@@ -867,7 +862,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             kb_manager = self._get_kb_manager()
-            data = await request.json
 
             query = data.get("query")
             kb_names = data.get("kb_names")
@@ -955,7 +949,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"[KB配置] 获取配置时出错: {e}", exc_info=True)
             return Response().error(f"获取会话知识库配置失败: {e!s}").__dict__
 
-    async def set_session_kb_config(self):
+    async def set_session_kb_config(self, data: dict = Body(...)):
         """设置会话的知识库配置
 
         Body:
@@ -967,8 +961,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             from astrbot.core import sp
-
-            data = await request.json
 
             scope = data.get("scope")
             scope_id = data.get("scope_id")
@@ -1039,7 +1031,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"[KB配置] 设置配置时出错: {e}", exc_info=True)
             return Response().error(f"设置会话知识库配置失败: {e!s}").__dict__
 
-    async def delete_session_kb_config(self):
+    async def delete_session_kb_config(self, data: dict = Body(...)):
         """删除会话的知识库配置
 
         Body:
@@ -1048,8 +1040,6 @@ class KnowledgeBaseRoute(Route):
         """
         try:
             from astrbot.core import sp
-
-            data = await request.json
 
             scope = data.get("scope")
             scope_id = data.get("scope_id")
