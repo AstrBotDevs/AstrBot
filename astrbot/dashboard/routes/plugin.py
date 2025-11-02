@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from fastapi import Request, Body, Query
+from fastapi import Body, Query
 
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -362,8 +362,6 @@ class PluginRoute(Route):
             return Response().error(str(e)).__dict__
 
     async def install_plugin_upload(self):
-        from fastapi import UploadFile, File
-        
         if DEMO_MODE:
             return (
                 Response()
@@ -374,13 +372,6 @@ class PluginRoute(Route):
         # TODO: Add file parameter when route registration is fixed
         # For now, this will need manual fixing
         return Response().error("File upload not yet implemented in FastAPI migration").__dict__
-            plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
-            # self.core_lifecycle.restart()
-            logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(plugin_info, "安装成功。").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
 
     async def uninstall_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
