@@ -1,5 +1,4 @@
 import traceback
-from typing import Optional
 
 from fastapi import Query
 from pydantic import BaseModel
@@ -31,7 +30,7 @@ class DashboardUpdateRequest(BaseModel):
 
 class PipInstallRequest(BaseModel):
     package: str
-    mirror: Optional[str] = None
+    mirror: str | None = None
 
 
 class UpdateRoute(Route):
@@ -71,7 +70,7 @@ class UpdateRoute(Route):
             return Response().error(f"迁移失败: {e!s}").__dict__
 
     async def check_update(
-        self, type_: Optional[str] = Query(default=None, alias="type")
+        self, type_: str | None = Query(default=None, alias="type")
     ):
         try:
             dv = await get_dashboard_version()

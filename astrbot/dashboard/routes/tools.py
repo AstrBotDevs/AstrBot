@@ -1,5 +1,4 @@
 import traceback
-from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
@@ -14,18 +13,18 @@ DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 class MCPServerRequest(BaseModel):
     name: str
-    command: Optional[str] = None
-    args: Optional[list] = None
-    env: Optional[Dict[str, str]] = None
+    command: str | None = None
+    args: list | None = None
+    env: dict[str, str] | None = None
     active: bool = True
 
 
 class MCPServerUpdateRequest(BaseModel):
     name: str
     old_name: str
-    command: Optional[str] = None
-    args: Optional[list] = None
-    env: Optional[Dict[str, str]] = None
+    command: str | None = None
+    args: list | None = None
+    env: dict[str, str] | None = None
     active: bool = True
 
 
@@ -35,8 +34,8 @@ class MCPServerDeleteRequest(BaseModel):
 
 class MCPTestRequest(BaseModel):
     command: str
-    args: Optional[list] = None
-    env: Optional[Dict[str, str]] = None
+    args: list | None = None
+    env: dict[str, str] | None = None
 
 
 class ToggleToolRequest(BaseModel):

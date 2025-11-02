@@ -3,7 +3,6 @@
 from dataclasses import asdict
 
 from fastapi import HTTPException
-from pydantic import BaseModel
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle

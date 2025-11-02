@@ -2,8 +2,7 @@ import asyncio
 import hashlib
 import uuid
 
-from fastapi import Body, Depends
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Body
 from pydantic import BaseModel
 
 from astrbot import logger
@@ -60,6 +59,7 @@ class AuthRoute(Route):
 
             # Generate token using the same JWT secret
             import datetime
+
             import jwt
 
             payload = {
