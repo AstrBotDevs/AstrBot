@@ -8,11 +8,11 @@ import psutil
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
+from astrbot.base import AstrbotPaths
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
@@ -39,7 +39,7 @@ class AstrBotDashboard:
             self.data_path = os.path.abspath(webui_dir)
         else:
             self.data_path = os.path.abspath(
-                os.path.join(get_astrbot_data_path(), "dist"),
+                str(AstrbotPaths.astrbot_root / "dist")
             )
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")

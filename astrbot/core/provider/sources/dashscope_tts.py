@@ -15,7 +15,7 @@ except (
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
     MultiModalConversation = None
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.base import AstrbotPaths
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -45,7 +45,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         if not model:
             raise RuntimeError("Dashscope TTS model is not configured.")
 
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = str(AstrbotPaths.astrbot_root / "temp")
         os.makedirs(temp_dir, exist_ok=True)
 
         if self._is_qwen_tts_model(model):

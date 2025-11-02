@@ -21,7 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import asyncio
 import base64
 import json
 import os
@@ -30,8 +29,8 @@ from enum import Enum
 
 from pydantic.v1 import BaseModel
 
+from astrbot.base import AstrbotPaths
 from astrbot.core import astrbot_config, file_token_service, logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
@@ -153,8 +152,8 @@ class Record(BaseMessageComponent):
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            temp_dir = str(AstrbotPaths.astrbot_root / "temp")
+            file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg")
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
@@ -242,8 +241,8 @@ class Video(BaseMessageComponent):
         if url and url.startswith("file:///"):
             return url[8:]
         if url and url.startswith("http"):
-            download_dir = os.path.join(get_astrbot_data_path(), "temp")
-            video_file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+            download_dir = str(AstrbotPaths.astrbot_root / "temp")
+            video_file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4().hex}")
             await download_file(url, video_file_path)
             if os.path.exists(video_file_path):
                 return os.path.abspath(video_file_path)
@@ -442,8 +441,8 @@ class Image(BaseMessageComponent):
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            temp_dir = str(AstrbotPaths.astrbot_root / "temp")
+            image_file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg")
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
@@ -527,7 +526,7 @@ class Reply(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: str = ComponentType.Poke
+    type = ComponentType.Poke
     id: int | None = 0
     qq: int | None = 0
 
@@ -654,33 +653,19 @@ class File(BaseMessageComponent):
 
     @property
     def file(self) -> str:
-        """获取文件路径，如果文件不存在但有URL，则同步下载文件
+        """获取本地文件路径（仅返回已存在的文件）
+
+        ⚠️ 警告：此属性不会自动下载文件！
+        - 如果文件已存在，返回绝对路径
+        - 如果只有 URL 没有本地文件，返回空字符串
+        - 需要下载文件请使用 `await get_file()` 方法
 
         Returns:
-            str: 文件路径
+            str: 文件的绝对路径，如果文件不存在则返回空字符串
 
         """
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
-
-        if self.url:
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    logger.warning(
-                        "不可以在异步上下文中同步等待下载! "
-                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
-                    )
-                    return ""
-                # 等待下载完成
-                loop.run_until_complete(self._download_file())
-
-                if self.file_ and os.path.exists(self.file_):
-                    return os.path.abspath(self.file_)
-            except Exception as e:
-                logger.error(f"文件下载失败: {e}")
-
         return ""
 
     @file.setter
@@ -714,15 +699,18 @@ class File(BaseMessageComponent):
 
         if self.url:
             await self._download_file()
-            return os.path.abspath(self.file_)
+            if self.file_:
+                return os.path.abspath(self.file_)
 
         return ""
 
     async def _download_file(self):
         """下载文件"""
-        download_dir = os.path.join(get_astrbot_data_path(), "temp")
+        if not self.url:
+            raise ValueError("No URL provided for download")
+        download_dir = str(AstrbotPaths.astrbot_root / "temp")
         os.makedirs(download_dir, exist_ok=True)
-        file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+        file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4().hex}")
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 

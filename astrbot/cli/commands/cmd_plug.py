@@ -4,6 +4,8 @@ from pathlib import Path
 
 import click
 
+from astrbot.base import AstrbotPaths
+
 from ..utils import (
     PluginStatus,
     build_plug_list,
@@ -47,8 +49,7 @@ def display_plugins(plugins, title=None, color=None):
 @click.argument("name")
 def new(name: str):
     """创建新插件"""
-    base_path = _get_data_path()
-    plug_path = base_path / "plugins" / name
+    plug_path = AstrbotPaths.getPaths(name).plugins
 
     if plug_path.exists():
         raise click.ClickException(f"插件 {name} 已存在")

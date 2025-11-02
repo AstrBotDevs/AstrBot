@@ -14,6 +14,8 @@ import certifi
 import psutil
 from PIL import Image
 
+from astrbot.base import AstrbotPaths
+
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
@@ -50,11 +52,11 @@ def port_checker(port: int, host: str = "localhost"):
 
 
 def save_temp_img(img: Image.Image | str) -> str:
-    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    temp_dir = str(AstrbotPaths.astrbot_root / "temp")
     # 获得文件创建时间，清除超过 12 小时的
     try:
         for f in os.listdir(temp_dir):
-            path = os.path.join(temp_dir, f)
+            path = str(AstrbotPaths.astrbot_root / "temp" / f)
             if os.path.isfile(path):
                 ctime = os.path.getctime(path)
                 if time.time() - ctime > 3600 * 12:
@@ -64,7 +66,7 @@ def save_temp_img(img: Image.Image | str) -> str:
 
     # 获得时间戳
     timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    p = os.path.join(temp_dir, f"{timestamp}.jpg")
+    p = str(AstrbotPaths.astrbot_root / "temp" / f"{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
         img.save(p)
@@ -205,9 +207,9 @@ def get_local_ip_addresses():
 
 
 async def get_dashboard_version():
-    dist_dir = os.path.join(get_astrbot_data_path(), "dist")
+    dist_dir = str(AstrbotPaths.astrbot_root / "dist")
     if os.path.exists(dist_dir):
-        version_file = os.path.join(dist_dir, "assets", "version")
+        version_file = str(AstrbotPaths.astrbot_root / "dist" / "assets" / "version")
         if os.path.exists(version_file):
             with open(version_file, encoding="utf-8") as f:
                 v = f.read().strip()

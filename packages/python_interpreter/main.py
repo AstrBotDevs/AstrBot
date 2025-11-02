@@ -14,7 +14,7 @@ from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.message_components import File, Image
 from astrbot.api.provider import ProviderRequest
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.base import AstrbotPaths
 from astrbot.core.utils.io import download_file, download_image_by_url
 
 PROMPT = """
@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
     },
     "docker_host_astrbot_abs_path": "",
 }
-PATH = os.path.join(get_astrbot_data_path(), "config", "python_interpreter.json")
+PATH = str(AstrbotPaths.astrbot_root / "config" / "python_interpreter.json")
 
 
 class Main(star.Star):
@@ -101,13 +101,15 @@ class Main(star.Star):
         self.context = context
         self.curr_dir = os.path.dirname(os.path.abspath(__file__))
 
-        self.shared_path = os.path.join("data", "py_interpreter_shared")
+        self.shared_path = str(AstrbotPaths.astrbot_root / "py_interpreter_shared")
         if not os.path.exists(self.shared_path):
             # 复制 api.py 到 shared 目录
             os.makedirs(self.shared_path, exist_ok=True)
             shared_api_file = os.path.join(self.curr_dir, "shared", "api.py")
             shutil.copy(shared_api_file, self.shared_path)
-        self.workplace_path = os.path.join("data", "py_interpreter_workplace")
+        self.workplace_path = str(
+            AstrbotPaths.astrbot_root / "py_interpreter_workplace"
+        )
         os.makedirs(self.workplace_path, exist_ok=True)
 
         self.user_file_msg_buffer = defaultdict(list)
@@ -212,8 +214,8 @@ class Main(star.Star):
                 file_path = await comp.get_file()
                 if file_path.startswith("http"):
                     name = comp.name if comp.name else uuid.uuid4().hex[:8]
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    path = os.path.join(temp_dir, name)
+                    temp_dir = str(AstrbotPaths.astrbot_root / "temp")
+                    path = str(AstrbotPaths.astrbot_root / "temp" / name)
                     await download_file(file_path, path)
                 else:
                     path = file_path
