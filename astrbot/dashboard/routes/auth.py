@@ -5,6 +5,7 @@ import anyio
 import jwt
 from fastapi import Body
 from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pydantic import BaseModel
 
@@ -64,17 +65,26 @@ class AuthRoute(Route):
         password_from_frontend = login_data.password
 
         # Verify using pwdlib's Argon2
-        is_valid, new_hash = self.password_hash.verify_and_update(
-            password_from_frontend, stored_password_hash
-        )
-        if not is_valid:
-            await anyio.sleep(3)
-            return Response().error("用户名或密码错误").__dict__
+        try:
+            is_valid, new_hash = self.password_hash.verify_and_update(
+                password_from_frontend, stored_password_hash
+            )
+            if not is_valid:
+                await anyio.sleep(3)
+                return Response().error("用户名或密码错误").__dict__
 
-        # Update hash if needed (e.g., if algorithm parameters changed)
-        if new_hash is not None:
+            # Update hash if needed (e.g., if algorithm parameters changed)
+            if new_hash is not None:
+                self.config["dashboard"]["password"] = new_hash
+                self.config.save_config()
+        except UnknownHashError:
+            # Old password format detected - need to migrate
+            # Hash the frontend password with Argon2 and save it
+            logger.warning("检测到旧密码格式，正在迁移到新格式。首次登录后密码将更新。")
+            new_hash = self.password_hash.hash(password_from_frontend)
             self.config["dashboard"]["password"] = new_hash
             self.config.save_config()
+            logger.info("密码已迁移到 Argon2 格式")
 
         # Check if using default password (check against known default hash)
         change_pwd_hint = False
@@ -127,9 +137,20 @@ class AuthRoute(Route):
         provided_password = edit_data.password
 
         # Verify current password using pwdlib's Argon2
-        is_valid = self.password_hash.verify(provided_password, stored_password_hash)
-        if not is_valid:
-            return Response().error("原密码错误").__dict__
+        try:
+            is_valid = self.password_hash.verify(
+                provided_password, stored_password_hash
+            )
+            if not is_valid:
+                return Response().error("原密码错误").__dict__
+        except UnknownHashError:
+            # Old password format - migrate by creating new hash
+            logger.warning("检测到旧密码格式，正在迁移...")
+            # Create new hash from the provided password
+            new_hash = self.password_hash.hash(provided_password)
+            self.config["dashboard"]["password"] = new_hash
+            # Continue with the account edit
+            logger.info("密码已迁移到 Argon2 格式")
 
         if not edit_data.new_password and not edit_data.new_username:
             return (
