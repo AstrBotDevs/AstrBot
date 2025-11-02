@@ -3,25 +3,23 @@ WORKDIR /AstrBot
 
 COPY . /AstrBot/
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl gnupg ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y --no-install-recommends \
     gcc \
     build-essential \
     python3-dev \
     libffi-dev \
     libssl-dev \
-    ca-certificates \
     bash \
     ffmpeg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN apt-get update && apt-get install -y curl gnupg && \
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN python -m pip install uv
-RUN uv pip install socksio pilk --no-cache-dir --system
+RUN python -m pip install --no-cache-dir uv && \
+    uv pip install socksio pilk --no-cache-dir --system
 
 EXPOSE 6185
 EXPOSE 6186

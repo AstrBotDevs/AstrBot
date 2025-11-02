@@ -15,18 +15,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     bash \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Installation of Node.js
-ENV NVM_DIR="/root/.nvm"
+ENV NVM_DIR="/root/.nvm" \
+    NODE_VERSION=22
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
-    nvm install 22 && \
-    nvm use 22
-RUN /bin/bash -c ". \"$NVM_DIR/nvm.sh\" && node -v && npm -v"
+    nvm install $NODE_VERSION && \
+    nvm use $NODE_VERSION && \
+    nvm alias default $NODE_VERSION && \
+    node -v && npm -v
+ENV PATH="$NVM_DIR/versions/node/v$(node -v | cut -d 'v' -f 2)/bin:$PATH"
 
-RUN python -m pip install uv
-RUN uv pip install socksio pyffmpeg --no-cache-dir --system
+RUN python -m pip install --no-cache-dir uv && \
+    uv pip install socksio pyffmpeg --no-cache-dir --system
 
 EXPOSE 6185
 EXPOSE 6186
