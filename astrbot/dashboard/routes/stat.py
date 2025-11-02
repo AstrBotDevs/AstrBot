@@ -4,7 +4,8 @@ import traceback
 
 import aiohttp
 import psutil
-from quart import request
+from fastapi import Query
+from pydantic import BaseModel
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -14,6 +15,10 @@ from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.utils.io import get_dashboard_version
 
 from .route import Response, Route, RouteContext
+
+
+class ProxyTestRequest(BaseModel):
+    proxy_url: str
 
 
 class StatRoute(Route):
@@ -80,9 +85,7 @@ class StatRoute(Route):
     async def get_start_time(self):
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
 
-    async def get_stat(self):
-        offset_sec = request.args.get("offset_sec", 86400)
-        offset_sec = int(offset_sec)
+    async def get_stat(self, offset_sec: int = Query(default=86400)):
         try:
             stat = self.db_helper.get_base_stats(offset_sec)
             now = int(time.time())
@@ -149,11 +152,10 @@ class StatRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(e.__str__()).__dict__
 
-    async def test_ghproxy_connection(self):
+    async def test_ghproxy_connection(self, proxy_data: ProxyTestRequest):
         """测试 GitHub 代理连接是否可用。"""
         try:
-            data = await request.get_json()
-            proxy_url: str = data.get("proxy_url")
+            proxy_url: str = proxy_data.proxy_url
 
             if not proxy_url:
                 return Response().error("proxy_url is required").__dict__

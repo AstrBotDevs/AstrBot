@@ -1,12 +1,14 @@
 import asyncio
-import logging
 import os
 import socket
+from contextlib import asynccontextmanager
 
-import jwt
 import psutil
-from quart import Quart, g, jsonify, request
-from quart.logging import default_handler
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -15,12 +17,13 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from .auth import setup_fastapi_users
 from .routes import *
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
 
-APP: Quart = None
+APP: FastAPI = None
 
 
 class AstrBotDashboard:
@@ -33,6 +36,7 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
+        self.db = db
 
         # 参数指定webui目录
         if webui_dir and os.path.exists(webui_dir):
@@ -42,16 +46,43 @@ class AstrBotDashboard:
                 os.path.join(get_astrbot_data_path(), "dist"),
             )
 
-        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
-        APP = self.app  # noqa
-        self.app.config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        self.app.json.sort_keys = False
-        self.app.before_request(self.auth_middleware)
-        # token 用于验证请求
-        logging.getLogger(self.app.name).removeHandler(default_handler)
+        self.shutdown_event = shutdown_event
+        self._init_jwt_secret()
+        
+        # Create FastAPI app with lifespan
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            # Startup
+            logger.info("FastAPI application started")
+            yield
+            # Shutdown
+            logger.info("FastAPI application shutting down")
+        
+        self.app = FastAPI(
+            title="AstrBot Dashboard",
+            version=VERSION,
+            lifespan=lifespan,
+        )
+        
+        global APP
+        APP = self.app
+        
+        # Add CORS middleware
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        
+        # Setup fastapi-users authentication
+        self.fastapi_users, self.auth_backend = setup_fastapi_users(self._jwt_secret)
+        
+        # Initialize route context
         self.context = RouteContext(self.config, self.app)
+        
+        # Register routes from different modules
         self.ur = UpdateRoute(
             self.context,
             core_lifecycle.astrbot_updator,
@@ -66,7 +97,7 @@ class AstrBotDashboard:
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context)
+        self.ar = AuthRoute(self.context, self.fastapi_users, self.auth_backend)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
@@ -80,49 +111,26 @@ class AstrBotDashboard:
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
 
-        self.app.add_url_rule(
-            "/api/plug/<path:subpath>",
-            view_func=self.srv_plug_route,
-            methods=["GET", "POST"],
-        )
+        # Register plugin route
+        @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"])
+        async def srv_plug_route(subpath: str):
+            return await self._srv_plug_route(subpath)
+        
+        # Mount static files (must be last)
+        if os.path.exists(self.data_path):
+            self.app.mount("/", StaticFiles(directory=self.data_path, html=True), name="static")
 
-        self.shutdown_event = shutdown_event
-
-        self._init_jwt_secret()
-
-    async def srv_plug_route(self, subpath, *args, **kwargs):
+    async def _srv_plug_route(self, subpath: str):
         """插件路由"""
+        from fastapi import Request
+        request = Request(scope={"type": "http"})
+        
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
-            if route == f"/{subpath}" and request.method in methods:
-                return await view_handler(*args, **kwargs)
-        return jsonify(Response().error("未找到该路由").__dict__)
-
-    async def auth_middleware(self):
-        if not request.path.startswith("/api"):
-            return None
-        allowed_endpoints = ["/api/auth/login", "/api/file"]
-        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
-            return None
-        # 声明 JWT
-        token = request.headers.get("Authorization")
-        if not token:
-            r = jsonify(Response().error("未授权").__dict__)
-            r.status_code = 401
-            return r
-        token = token.removeprefix("Bearer ")
-        try:
-            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            g.username = payload["username"]
-        except jwt.ExpiredSignatureError:
-            r = jsonify(Response().error("Token 过期").__dict__)
-            r.status_code = 401
-            return r
-        except jwt.InvalidTokenError:
-            r = jsonify(Response().error("Token 无效").__dict__)
-            r.status_code = 401
-            return r
+            if route == f"/{subpath}":
+                return await view_handler()
+        return JSONResponse(Response().error("未找到该路由").__dict__)
 
     def check_port_in_use(self, port: int) -> bool:
         """跨平台检测端口是否被占用"""
@@ -172,7 +180,7 @@ class AstrBotDashboard:
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
-    def run(self):
+    async def run(self):
         ip_addr = []
         if p := os.environ.get("DASHBOARD_PORT"):
             port = p
@@ -227,12 +235,23 @@ class AstrBotDashboard:
 
         logger.info(display)
 
-        return self.app.run_task(
+        # Run uvicorn server
+        config = uvicorn.Config(
+            self.app,
             host=host,
             port=port,
-            shutdown_trigger=self.shutdown_trigger,
+            log_config=None,  # Disable uvicorn logging to use our logger
         )
-
-    async def shutdown_trigger(self):
+        server = uvicorn.Server(config)
+        
+        # Run server in background task
+        server_task = asyncio.create_task(server.serve())
+        
+        # Wait for shutdown event
         await self.shutdown_event.wait()
+        
+        # Graceful shutdown
+        server.should_exit = True
+        await server_task
+        
         logger.info("AstrBot WebUI 已经被优雅地关闭")
