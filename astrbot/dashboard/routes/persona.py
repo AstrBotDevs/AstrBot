@@ -57,10 +57,9 @@ class PersonaRoute(Route):
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取人格列表失败: {e!s}").__dict__
 
-    async def get_persona_detail(self):
+    async def get_persona_detail(self, data: dict = Body(...)):
         """获取指定人格的详细信息"""
         try:
-            data = await request.get_json()
             persona_id = data.get("persona_id")
 
             if not persona_id:
@@ -92,10 +91,9 @@ class PersonaRoute(Route):
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取人格详情失败: {e!s}").__dict__
 
-    async def create_persona(self):
+    async def create_persona(self, data: dict = Body(...)):
         """创建新人格"""
         try:
-            data = await request.get_json()
             persona_id = data.get("persona_id", "").strip()
             system_prompt = data.get("system_prompt", "").strip()
             begin_dialogs = data.get("begin_dialogs", [])
@@ -149,10 +147,9 @@ class PersonaRoute(Route):
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"创建人格失败: {e!s}").__dict__
 
-    async def update_persona(self):
+    async def update_persona(self, data: dict = Body(...)):
         """更新人格信息"""
         try:
-            data = await request.get_json()
             persona_id = data.get("persona_id")
             system_prompt = data.get("system_prompt")
             begin_dialogs = data.get("begin_dialogs")
@@ -183,10 +180,9 @@ class PersonaRoute(Route):
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新人格失败: {e!s}").__dict__
 
-    async def delete_persona(self):
+    async def delete_persona(self, data: dict = Body(...)):
         """删除人格"""
         try:
-            data = await request.get_json()
             persona_id = data.get("persona_id")
 
             if not persona_id:
