@@ -241,7 +241,7 @@ class KnowledgeBaseRoute(Route):
                 embedding_provider_id,
             )  # type: ignore
             if not prv or not isinstance(prv, EmbeddingProvider):
-                return Response.error(f"嵌入模型不存在或类型错误({type(prv)})"))
+                return Response.error(f"嵌入模型不存在或类型错误({type(prv)})")
             try:
                 vec = await prv.get_embedding("astrbot")
                 if len(vec) != prv.get_dim():
@@ -626,7 +626,7 @@ class KnowledgeBaseRoute(Route):
                         "file_count": len(files_to_upload),
                         "message": "task created, processing in background",
                     },
-                ))
+                )
 
         except ValueError as e:
             return Response.error(str(e))
@@ -819,7 +819,7 @@ class KnowledgeBaseRoute(Route):
                         "page_size": page_size,
                         "total": await kb_helper.get_chunk_count_by_doc_id(doc_id),
                     },
-                ))
+                )
         except ValueError as e:
             return Response.error(str(e))
         except Exception as e:

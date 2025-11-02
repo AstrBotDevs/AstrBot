@@ -135,9 +135,9 @@ class UpdateRoute(Route):
 
             if reboot:
                 await self.core_lifecycle.restart()
-                ret = Response.ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。"))
+                ret = Response.ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。")
                 return ret, 200, CLEAR_SITE_DATA_HEADERS
-            ret = Response.ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。"))
+            ret = Response.ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。")
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
             logger.error(f"/api/update_project: {traceback.format_exc()}")

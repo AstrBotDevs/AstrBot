@@ -49,7 +49,7 @@ class PersonaRoute(Route):
                         for persona in personas
                     ],
                     message="获取人格列表成功",
-                ))
+                )
         except Exception as e:
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
             return Response.error(f"获取人格列表失败: {e!s}")
@@ -80,7 +80,7 @@ class PersonaRoute(Route):
                         else None,
                     },
                     message="获取人格详情成功",
-                ))
+                )
         except Exception as e:
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
             return Response.error(f"获取人格详情失败: {e!s}")
@@ -127,7 +127,7 @@ class PersonaRoute(Route):
                         },
                     },
                     message="人格创建成功",
-                ))
+                )
         except ValueError as e:
             return Response.error(str(e))
         except Exception as e:

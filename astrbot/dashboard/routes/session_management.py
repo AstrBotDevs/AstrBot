@@ -247,7 +247,7 @@ class SessionManagementRoute(Route):
                         "error_count": len(error_sessions),
                         "error_sessions": error_sessions,
                     },
-                ))
+                )
         return Response.ok(
                 {
                     "message": f"成功批量{operation_name} {success_count} 个会话",
@@ -555,7 +555,7 @@ class SessionManagementRoute(Route):
                             session_id,
                         ),
                     },
-                ))
+                )
 
         except Exception as e:
             error_msg = f"更新会话名称失败: {e!s}\n{traceback.format_exc()}"

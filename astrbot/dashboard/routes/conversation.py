@@ -207,7 +207,7 @@ class ConversationRoute(Route):
                             "failed_count": len(failed_items),
                             "failed_items": failed_items,
                         },
-                    ))
+                    )
             # 单个删除
             user_id = data.get("user_id")
             cid = data.get("cid")

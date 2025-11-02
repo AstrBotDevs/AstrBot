@@ -72,7 +72,7 @@ class StatRoute(Route):
                     "change_pwd_hint": self.is_default_cred(),
                     "need_migration": need_migration,
                 },
-            ))
+            )
 
     async def get_start_time(self):
         return Response.ok({"start_time": self.core_lifecycle.start_time})
