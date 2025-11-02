@@ -63,6 +63,7 @@ dependencies = [
     "jieba>=0.42.1",
     "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
     "xinference-client",
+    "dotenv>=0.9.9",
 ]
 
 [dependency-groups]

@@ -1,22 +1,28 @@
+import warnings
 from pathlib import Path
 
 import click
 
+from astrbot.base import AstrbotPaths
+
 
 def check_astrbot_root(path: str | Path) -> bool:
     """检查路径是否为 AstrBot 根目录"""
-    if not isinstance(path, Path):
-        path = Path(path)
-    if not path.exists() or not path.is_dir():
-        return False
-    if not (path / ".astrbot").exists():
-        return False
-    return True
-
+    warnings.warn(
+    "请使用 AstrbotPaths 类代替本模块中的函数",
+    DeprecationWarning,
+    stacklevel=2,
+    )
+    return AstrbotPaths.is_root(Path(path))
 
 def get_astrbot_root() -> Path:
     """获取Astrbot根目录路径"""
-    return Path.cwd()
+    warnings.warn(
+    "请使用 AstrbotPaths 类代替本模块中的函数",
+    DeprecationWarning,
+    stacklevel=2,
+    )
+    return AstrbotPaths.astrbot_root
 
 
 async def check_dashboard(astrbot_root: Path) -> None:

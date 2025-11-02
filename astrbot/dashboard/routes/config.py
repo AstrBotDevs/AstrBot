@@ -1,4 +1,5 @@
 import asyncio
+import importlib.resources
 import inspect
 import os
 import traceback
@@ -21,7 +22,6 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import RerankProvider
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 from .route import Response, Route, RouteContext
 
@@ -461,11 +461,12 @@ class ConfigRoute(Route):
                 logger.debug(
                     f"Sending health check audio to provider: {status_info['name']}",
                 )
-                sample_audio_path = os.path.join(
-                    get_astrbot_path(),
-                    "samples",
-                    "stt_health_check.wav",
+                sample_audio_path = str(
+                    importlib.resources.files("astrbot")
+                    / "samples"
+                    / "stt_health_check.wav"
                 )
+
                 if not os.path.exists(sample_audio_path):
                     status_info["status"] = "unavailable"
                     status_info["error"] = (

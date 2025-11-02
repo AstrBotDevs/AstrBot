@@ -1,7 +1,6 @@
 import asyncio
 import math
 import random
-from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
@@ -153,7 +152,7 @@ class RespondStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None:
         result = event.get_result()
         if result is None:
             return

@@ -2,8 +2,9 @@
 
 import os
 import shutil
+from importlib import resources
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class TemplateManager:
@@ -15,14 +16,10 @@ class TemplateManager:
     CORE_TEMPLATES = ["base.html", "astrbot_powershell.html"]
 
     def __init__(self):
-        self.builtin_template_dir = os.path.join(
-            get_astrbot_path(),
-            "astrbot",
-            "core",
-            "utils",
-            "t2i",
-            "template",
+        self.builtin_template_dir = str(
+            resources.files("astrbot.core.utils.t2i.template")
         )
+
         self.user_template_dir = os.path.join(get_astrbot_data_path(), "t2i_templates")
 
         os.makedirs(self.user_template_dir, exist_ok=True)

@@ -8,32 +8,63 @@
 """
 
 import os
+import warnings
+
+from astrbot.base import AstrbotPaths
 
 
 def get_astrbot_path() -> str:
-    """获取Astrbot项目路径"""
+    """获取Astrbot项目路径 -- 请勿使用本函数!!! -- 仅供兼容旧代码使用"""
+    warnings.warn(
+        "get_astrbot_path is deprecated. Use AstrbotPaths class instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return os.path.realpath(
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../"),
     )
 
 
 def get_astrbot_root() -> str:
-    """获取Astrbot根目录路径"""
-    if path := os.environ.get("ASTRBOT_ROOT"):
-        return os.path.realpath(path)
-    return os.path.realpath(os.getcwd())
+    """获取Astrbot根目录路径 --> get_astrbot_data_path"""
+    warnings.warn(
+        "不要再使用本函数!实际上就是获取data目录!等效于: AstrbotPaths.getPaths('any!').root",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return str(AstrbotPaths.astrbot_root)
 
 
 def get_astrbot_data_path() -> str:
-    """获取Astrbot数据目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_root(), "data"))
+    """获取Astrbot数据目录路径
+    特别注意!
+    这里的data目录指的就是.astrbot根目录!
+    两者是等价的!
+    不要和AstrbotPaths.data混淆!
+    """
+    warnings.warn(
+        "等效于: AstrbotPaths.getPaths('any!').root.env 文件内容: ASTRBOT_ROOT=./data",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return str(AstrbotPaths.astrbot_root)
 
 
 def get_astrbot_config_path() -> str:
     """获取Astrbot配置文件路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "config"))
+    warnings.warn(
+        "get_astrbot_config_path is deprecated. Use AstrbotPaths class instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return str(AstrbotPaths.astrbot_root / "config")
 
 
 def get_astrbot_plugin_path() -> str:
     """获取Astrbot插件目录路径"""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
+    warnings.warn(
+        "get_astrbot_plugin_path is deprecated. Use AstrbotPaths class instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return str(AstrbotPaths.astrbot_root / "plugins")
