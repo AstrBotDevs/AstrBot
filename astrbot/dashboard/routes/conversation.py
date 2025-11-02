@@ -78,7 +78,7 @@ class ConversationRoute(Route):
                 )
             except Exception as e:
                 logger.error(f"数据库查询出错: {e!s}\n{traceback.format_exc()}")
-                return Response().error(f"数据库查询出错: {e!s}").__dict__
+                return Response.error(f"数据库查询出错: {e!s}")
 
             # 计算总页数
             total_pages = (
@@ -94,12 +94,12 @@ class ConversationRoute(Route):
                     "total_pages": total_pages,
                 },
             }
-            return Response().ok(result).__dict__
+            return Response.ok(result)
 
         except Exception as e:
             error_msg = f"获取对话列表失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"获取对话列表失败: {e!s}").__dict__
+            return Response.error(f"获取对话列表失败: {e!s}")
 
     async def get_conv_detail(self, data: dict = Body(...)):
         """获取指定对话详情（通过POST请求）"""
@@ -108,18 +108,16 @@ class ConversationRoute(Route):
             cid = data.get("cid")
 
             if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").__dict__
+                return Response.error("缺少必要参数: user_id 和 cid")
 
             conversation = await self.conv_mgr.get_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
             )
             if not conversation:
-                return Response().error("对话不存在").__dict__
+                return Response.error("对话不存在")
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "user_id": user_id,
                         "cid": cid,
@@ -130,12 +128,10 @@ class ConversationRoute(Route):
                         "updated_at": conversation.updated_at,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             logger.error(f"获取对话详情失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取对话详情失败: {e!s}").__dict__
+            return Response.error(f"获取对话详情失败: {e!s}")
 
     async def upd_conv(self, data: dict = Body(...)):
         """更新对话信息(标题和角色ID)"""
@@ -146,13 +142,13 @@ class ConversationRoute(Route):
             persona_id = data.get("persona_id", "")
 
             if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").__dict__
+                return Response.error("缺少必要参数: user_id 和 cid")
             conversation = await self.conv_mgr.get_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
             )
             if not conversation:
-                return Response().error("对话不存在").__dict__
+                return Response.error("对话不存在")
             if title is not None or persona_id is not None:
                 await self.conv_mgr.update_conversation(
                     unified_msg_origin=user_id,
@@ -160,11 +156,11 @@ class ConversationRoute(Route):
                     title=title,
                     persona_id=persona_id,
                 )
-            return Response().ok({"message": "对话信息更新成功"}).__dict__
+            return Response.ok({"message": "对话信息更新成功"})
 
         except Exception as e:
             logger.error(f"更新对话信息失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新对话信息失败: {e!s}").__dict__
+            return Response.error(f"更新对话信息失败: {e!s}")
 
     async def del_conv(self, data: dict = Body(...)):
         """删除对话"""
@@ -175,7 +171,7 @@ class ConversationRoute(Route):
                 conversations = data.get("conversations", [])
                 if not conversations:
                     return (
-                        Response().error("批量删除时conversations参数不能为空").__dict__
+                        Response.error("批量删除时conversations参数不能为空")
                     )
 
                 deleted_count = 0
@@ -204,34 +200,30 @@ class ConversationRoute(Route):
                 if failed_items:
                     message += f"，失败 {len(failed_items)} 个"
 
-                return (
-                    Response()
-                    .ok(
+                return Response.ok(
                         {
                             "message": message,
                             "deleted_count": deleted_count,
                             "failed_count": len(failed_items),
                             "failed_items": failed_items,
                         },
-                    )
-                    .__dict__
-                )
+                    ))
             # 单个删除
             user_id = data.get("user_id")
             cid = data.get("cid")
 
             if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").__dict__
+                return Response.error("缺少必要参数: user_id 和 cid")
 
             await self.core_lifecycle.conversation_manager.delete_conversation(
                 unified_msg_origin=user_id,
                 conversation_id=cid,
             )
-            return Response().ok({"message": "对话删除成功"}).__dict__
+            return Response.ok({"message": "对话删除成功"})
 
         except Exception as e:
             logger.error(f"删除对话失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除对话失败: {e!s}").__dict__
+            return Response.error(f"删除对话失败: {e!s}")
 
     async def update_history(self, data: dict = Body(...)):
         """更新对话历史内容"""
@@ -241,10 +233,10 @@ class ConversationRoute(Route):
             history = data.get("history")
 
             if not user_id or not cid:
-                return Response().error("缺少必要参数: user_id 和 cid").__dict__
+                return Response.error("缺少必要参数: user_id 和 cid")
 
             if history is None:
-                return Response().error("缺少必要参数: history").__dict__
+                return Response.error("缺少必要参数: history")
 
             # 历史记录必须是合法的 JSON 字符串
             try:
@@ -255,7 +247,7 @@ class ConversationRoute(Route):
                     json.loads(history)
             except json.JSONDecodeError:
                 return (
-                    Response().error("history 必须是有效的 JSON 字符串或数组").__dict__
+                    Response.error("history 必须是有效的 JSON 字符串或数组")
                 )
 
             conversation = await self.conv_mgr.get_conversation(
@@ -263,7 +255,7 @@ class ConversationRoute(Route):
                 conversation_id=cid,
             )
             if not conversation:
-                return Response().error("对话不存在").__dict__
+                return Response.error("对话不存在")
 
             history = json.loads(history) if isinstance(history, str) else history
 
@@ -273,8 +265,8 @@ class ConversationRoute(Route):
                 history=history,
             )
 
-            return Response().ok({"message": "对话历史更新成功"}).__dict__
+            return Response.ok({"message": "对话历史更新成功"})
 
         except Exception as e:
             logger.error(f"更新对话历史失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新对话历史失败: {e!s}").__dict__
+            return Response.error(f"更新对话历史失败: {e!s}")

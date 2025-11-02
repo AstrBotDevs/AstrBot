@@ -32,9 +32,7 @@ class PersonaRoute(Route):
         """获取所有人格列表"""
         try:
             personas = await self.persona_mgr.get_all_personas()
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     [
                         {
                             "persona_id": persona.persona_id,
@@ -51,12 +49,10 @@ class PersonaRoute(Route):
                         for persona in personas
                     ],
                     message="获取人格列表成功",
-                )
-                .model_dump()
-            )
+                ))
         except Exception as e:
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格列表失败: {e!s}").model_dump()
+            return Response.error(f"获取人格列表失败: {e!s}")
 
     async def get_persona_detail(self, data: dict = Body(...)):
         """获取指定人格的详细信息"""
@@ -64,15 +60,13 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").model_dump()
+                return Response.error("缺少必要参数: persona_id")
 
             persona = await self.persona_mgr.get_persona(persona_id)
             if not persona:
-                return Response().error("人格不存在").model_dump()
+                return Response.error("人格不存在")
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "persona_id": persona.persona_id,
                         "system_prompt": persona.system_prompt,
@@ -86,12 +80,10 @@ class PersonaRoute(Route):
                         else None,
                     },
                     message="获取人格详情成功",
-                )
-                .model_dump()
-            )
+                ))
         except Exception as e:
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格详情失败: {e!s}").model_dump()
+            return Response.error(f"获取人格详情失败: {e!s}")
 
     async def create_persona(self, data: dict = Body(...)):
         """创建新人格"""
@@ -102,18 +94,14 @@ class PersonaRoute(Route):
             tools = data.get("tools")
 
             if not persona_id:
-                return Response().error("人格ID不能为空").__dict__
+                return Response.error("人格ID不能为空")
 
             if not system_prompt:
-                return Response().error("系统提示词不能为空").__dict__
+                return Response.error("系统提示词不能为空")
 
             # 验证 begin_dialogs 格式
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
-                return (
-                    Response()
-                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
-                    .__dict__
-                )
+                return Response.error("预设对话数量必须为偶数（用户和助手轮流对话）")
 
             persona = await self.persona_mgr.create_persona(
                 persona_id=persona_id,
@@ -122,9 +110,7 @@ class PersonaRoute(Route):
                 tools=tools if tools else None,
             )
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": "人格创建成功",
                         "persona": {
@@ -141,14 +127,12 @@ class PersonaRoute(Route):
                         },
                     },
                     message="人格创建成功",
-                )
-                .model_dump()
-            )
+                ))
         except ValueError as e:
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
         except Exception as e:
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"创建人格失败: {e!s}").model_dump()
+            return Response.error(f"创建人格失败: {e!s}")
 
     async def update_persona(self, data: dict = Body(...)):
         """更新人格信息"""
@@ -159,15 +143,11 @@ class PersonaRoute(Route):
             tools = data.get("tools")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response.error("缺少必要参数: persona_id")
 
             # 验证 begin_dialogs 格式
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
-                return (
-                    Response()
-                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
-                    .__dict__
-                )
+                return Response.error("预设对话数量必须为偶数（用户和助手轮流对话）")
 
             await self.persona_mgr.update_persona(
                 persona_id=persona_id,
@@ -176,12 +156,12 @@ class PersonaRoute(Route):
                 tools=tools,
             )
 
-            return Response().ok({"message": "人格更新成功"}).model_dump()
+            return Response.ok({"message": "人格更新成功"})
         except ValueError as e:
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
         except Exception as e:
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新人格失败: {e!s}").model_dump()
+            return Response.error(f"更新人格失败: {e!s}")
 
     async def delete_persona(self, data: dict = Body(...)):
         """删除人格"""
@@ -189,13 +169,13 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").model_dump()
+                return Response.error("缺少必要参数: persona_id")
 
             await self.persona_mgr.delete_persona(persona_id)
 
-            return Response().ok({"message": "人格删除成功"}).model_dump()
+            return Response.ok({"message": "人格删除成功"})
         except ValueError as e:
-            return Response().error(str(e)).model_dump()
+            return Response.error(str(e))
         except Exception as e:
             logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除人格失败: {e!s}").model_dump()
+            return Response.error(f"删除人格失败: {e!s}")

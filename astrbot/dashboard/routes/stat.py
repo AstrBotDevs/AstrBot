@@ -42,14 +42,10 @@ class StatRoute(Route):
 
     async def restart_core(self):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response.error("You are not permitted to do this operation in demo mode")
 
         await self.core_lifecycle.restart()
-        return Response().ok().__dict__
+        return Response.ok()
 
     def _get_running_time_components(self, total_seconds: int):
         """将总秒数转换为时分秒组件"""
@@ -69,21 +65,17 @@ class StatRoute(Route):
     async def get_version(self):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
 
-        return (
-            Response()
-            .ok(
+        return Response.ok(
                 {
                     "version": VERSION,
                     "dashboard_version": await get_dashboard_version(),
                     "change_pwd_hint": self.is_default_cred(),
                     "need_migration": need_migration,
                 },
-            )
-            .__dict__
-        )
+            ))
 
     async def get_start_time(self):
-        return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
+        return Response.ok({"start_time": self.core_lifecycle.start_time})
 
     async def get_stat(self, offset_sec: int = Query(default=86400)):
         try:
@@ -103,7 +95,7 @@ class StatRoute(Route):
                     idx += 1
                 message_time_based_stats.append([bucket_end, cnt])
 
-            stat_dict = stat.__dict__
+            stat_dict = stat
 
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()
@@ -147,10 +139,10 @@ class StatRoute(Route):
                 },
             )
 
-            return Response().ok(stat_dict).__dict__
+            return Response.ok(stat_dict)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(e.__str__()).__dict__
+            return Response.error(e.__str__())
 
     async def test_ghproxy_connection(self, proxy_data: ProxyTestRequest):
         """测试 GitHub 代理连接是否可用。"""
@@ -158,7 +150,7 @@ class StatRoute(Route):
             proxy_url: str = proxy_data.proxy_url
 
             if not proxy_url:
-                return Response().error("proxy_url is required").__dict__
+                return Response.error("proxy_url is required")
 
             proxy_url = proxy_url.rstrip("/")
 
@@ -178,10 +170,10 @@ class StatRoute(Route):
                     ret = {
                         "latency": round((end_time - start_time) * 1000, 2),
                     }
-                    return Response().ok(data=ret).__dict__
+                    return Response.ok(data=ret)
                 return (
-                    Response().error(f"Failed. Status code: {response.status}").__dict__
+                    Response.error(f"Failed. Status code: {response.status}")
                 )
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").__dict__
+            return Response.error(f"Error: {e!s}")

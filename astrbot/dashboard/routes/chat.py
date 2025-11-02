@@ -59,7 +59,7 @@ class ChatRoute(Route):
     async def get_file(self):
         filename = request.args.get("filename")
         if not filename:
-            return Response().error("Missing key: filename").__dict__
+            return Response.error("Missing key: filename")
 
         try:
             file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
@@ -67,7 +67,7 @@ class ChatRoute(Route):
             real_imgs_dir = os.path.realpath(self.imgs_dir)
 
             if not real_file_path.startswith(real_imgs_dir):
-                return Response().error("Invalid file path").__dict__
+                return Response.error("Invalid file path")
 
             with open(real_file_path, "rb") as f:
                 filename_ext = os.path.splitext(filename)[1].lower()
@@ -79,24 +79,24 @@ class ChatRoute(Route):
                 return QuartResponse(f.read())
 
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response.error("File access error")
 
     async def post_image(self):
         post_data = await request.files
         if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
+            return Response.error("Missing key: file")
 
         file = post_data["file"]
         filename = str(uuid.uuid4()) + ".jpg"
         path = os.path.join(self.imgs_dir, filename)
         await file.save(path)
 
-        return Response().ok(data={"filename": filename}).__dict__
+        return Response.ok(data={"filename": filename})
 
     async def post_file(self):
         post_data = await request.files
         if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
+            return Response.error("Missing key: file")
 
         file = post_data["file"]
         filename = f"{uuid.uuid4()!s}"
@@ -107,17 +107,18 @@ class ChatRoute(Route):
         path = os.path.join(self.imgs_dir, filename)
         await file.save(path)
 
-        return Response().ok(data={"filename": filename}).__dict__
+        return Response.ok(data={"filename": filename})
 
     async def chat(self, data: dict = Body(...)):
-        username = g.get("username", "guest")
+        # TODO: Replace with proper FastAPI authentication dependency
+        username = "guest"  # g.get("username", "guest")
 
-        post_data = await request.json
+        post_data = data
         if "message" not in post_data and "image_url" not in post_data:
-            return Response().error("Missing key: message or image_url").__dict__
+            return Response.error("Missing key: message or image_url")
 
         if "conversation_id" not in post_data:
-            return Response().error("Missing key: conversation_id").__dict__
+            return Response.error("Missing key: conversation_id")
 
         message = post_data["message"]
         conversation_id = post_data["conversation_id"]
@@ -126,13 +127,9 @@ class ChatRoute(Route):
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         if not message and not image_url and not audio_url:
-            return (
-                Response()
-                .error("Message and image_url and audio_url are empty")
-                .__dict__
-            )
+            return Response.error("Message and image_url and audio_url are empty")
         if not conversation_id:
-            return Response().error("conversation_id is empty").__dict__
+            return Response.error("conversation_id is empty")
 
         # 追加用户消息
         webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
@@ -255,11 +252,11 @@ class ChatRoute(Route):
             raise ValueError(f"Invalid conv user ID: {conv_user_id}")
         return webchat_session_id.split("!")[-1]
 
-    async def delete_conversation(self, data: dict = Body(...)):
-        conversation_id = request.args.get("conversation_id")
+    async def delete_conversation(self, conversation_id: str):
         if not conversation_id:
-            return Response().error("Missing key: conversation_id").__dict__
-        username = g.get("username", "guest")
+            return Response.error("Missing key: conversation_id")
+        # TODO: Replace with proper FastAPI authentication dependency
+        username = "guest"  # g.get("username", "guest")
 
         # Clean up queues when deleting conversation
         webchat_queue_mgr.remove_queues(conversation_id)
@@ -273,22 +270,23 @@ class ChatRoute(Route):
             user_id=webchat_conv_id,
             offset_sec=99999999,
         )
-        return Response().ok().__dict__
+        return Response.ok()
 
     async def new_conversation(self):
-        username = g.get("username", "guest")
+        # TODO: Replace with proper FastAPI authentication dependency
+        username = "guest"  # g.get("username", "guest")
         webchat_conv_id = str(uuid.uuid4())
         conv_id = await self.conv_mgr.new_conversation(
             unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
             platform_id="webchat",
             content=[],
         )
-        return Response().ok(data={"conversation_id": conv_id}).__dict__
+        return Response.ok(data={"conversation_id": conv_id})
 
     async def rename_conversation(self, data: dict = Body(...)):
-        post_data = await request.json
+        post_data = data
         if "conversation_id" not in post_data or "title" not in post_data:
-            return Response().error("Missing key: conversation_id or title").__dict__
+            return Response.error("Missing key: conversation_id or title")
 
         conversation_id = post_data["conversation_id"]
         title = post_data["title"]
@@ -298,7 +296,7 @@ class ChatRoute(Route):
             conversation_id=conversation_id,
             title=title,
         )
-        return Response().ok(message="重命名成功！").__dict__
+        return Response.ok(message="重命名成功！")
 
     async def get_conversations(self):
         conversations = await self.conv_mgr.get_conversations(platform_id="webchat")
@@ -307,12 +305,12 @@ class ChatRoute(Route):
         for conv in conversations:
             conv.history = None
             conversations_.append(conv)
-        return Response().ok(data=conversations_).__dict__
+        return Response.ok(data=conversations_)
 
     async def get_conversation(self):
         conversation_id = request.args.get("conversation_id")
         if not conversation_id:
-            return Response().error("Missing key: conversation_id").__dict__
+            return Response.error("Missing key: conversation_id")
 
         webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
 
@@ -324,15 +322,11 @@ class ChatRoute(Route):
             page_size=1000,
         )
 
-        history_res = [history.model_dump() for history in history_ls]
+        history_res = history_ls
 
-        return (
-            Response()
-            .ok(
+        return Response.ok(
                 data={
                     "history": history_res,
                     "is_running": self.running_convs.get(webchat_conv_id, False),
                 },
-            )
-            .__dict__
-        )
+            ))

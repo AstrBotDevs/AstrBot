@@ -191,12 +191,12 @@ class SessionManagementRoute(Route):
                 },
             }
 
-            return Response().ok(result).__dict__
+            return Response.ok(result)
 
         except Exception as e:
             error_msg = f"获取会话列表失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"获取会话列表失败: {e!s}").__dict__
+            return Response.error(f"获取会话列表失败: {e!s}")
 
     async def _update_single_session_persona(self, session_id: str, persona_name: str):
         """更新单个会话的 persona 的内部方法"""
@@ -240,28 +240,20 @@ class SessionManagementRoute(Route):
                 error_sessions.append(session_id)
 
         if error_sessions:
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"批量更新完成，成功: {success_count}，失败: {len(error_sessions)}",
                         "success_count": success_count,
                         "error_count": len(error_sessions),
                         "error_sessions": error_sessions,
                     },
-                )
-                .__dict__
-            )
-        return (
-            Response()
-            .ok(
+                ))
+        return Response.ok(
                 {
                     "message": f"成功批量{operation_name} {success_count} 个会话",
                     "success_count": success_count,
                 },
             )
-            .__dict__
-        )
 
     async def update_session_persona(self, data: dict = Body(...)):
         """更新指定会话的 persona，支持批量操作"""
@@ -270,12 +262,12 @@ class SessionManagementRoute(Route):
             persona_name = data.get("persona_name")
 
             if persona_name is None:
-                return Response().error("缺少必要参数: persona_name").__dict__
+                return Response.error("缺少必要参数: persona_name")
 
             if is_batch:
                 session_ids = data.get("session_ids", [])
                 if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
+                    return Response.error("缺少必要参数: session_ids")
 
                 return await self._handle_batch_operation(
                     session_ids,
@@ -285,23 +277,19 @@ class SessionManagementRoute(Route):
                 )
             session_id = data.get("session_id")
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             await self._update_single_session_persona(session_id, persona_name)
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"成功更新会话 {session_id} 的人格为 {persona_name}",
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话人格失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话人格失败: {e!s}").__dict__
+            return Response.error(f"更新会话人格失败: {e!s}")
 
     async def _update_single_session_provider(
         self,
@@ -325,11 +313,7 @@ class SessionManagementRoute(Route):
             provider_type = data.get("provider_type")
 
             if not provider_id or not provider_type:
-                return (
-                    Response()
-                    .error("缺少必要参数: provider_id, provider_type")
-                    .__dict__
-                )
+                return Response.error("缺少必要参数: provider_id, provider_type")
 
             # 转换 provider_type 字符串为枚举
             if provider_type == "chat_completion":
@@ -339,16 +323,12 @@ class SessionManagementRoute(Route):
             elif provider_type == "text_to_speech":
                 provider_type_enum = ProviderType.TEXT_TO_SPEECH
             else:
-                return (
-                    Response()
-                    .error(f"不支持的 provider_type: {provider_type}")
-                    .__dict__
-                )
+                return Response.error(f"不支持的 provider_type: {provider_type}")
 
             if is_batch:
                 session_ids = data.get("session_ids", [])
                 if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
+                    return Response.error("缺少必要参数: session_ids")
 
                 return await self._handle_batch_operation(
                     session_ids,
@@ -359,34 +339,30 @@ class SessionManagementRoute(Route):
                 )
             session_id = data.get("session_id")
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             await self._update_single_session_provider(
                 session_id,
                 provider_id,
                 provider_type_enum,
             )
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"成功更新会话 {session_id} 的 {provider_type} 提供商为 {provider_id}",
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话提供商失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话提供商失败: {e!s}").__dict__
+            return Response.error(f"更新会话提供商失败: {e!s}")
 
     async def get_session_plugins(self, session_id: str = Query(...)):
         """获取指定会话的插件配置信息"""
         try:
 
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             # 获取所有已激活的插件
             all_plugins = []
@@ -410,21 +386,17 @@ class SessionManagementRoute(Route):
                         },
                     )
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "session_id": session_id,
                         "plugins": all_plugins,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"获取会话插件配置失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"获取会话插件配置失败: {e!s}").__dict__
+            return Response.error(f"获取会话插件配置失败: {e!s}")
 
     async def update_session_plugin(self, data: dict = Body(...)):
         """更新指定会话的插件启停状态"""
@@ -434,30 +406,26 @@ class SessionManagementRoute(Route):
             enabled = data.get("enabled")
 
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             if not plugin_name:
-                return Response().error("缺少必要参数: plugin_name").__dict__
+                return Response.error("缺少必要参数: plugin_name")
 
             if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
+                return Response.error("缺少必要参数: enabled")
 
             # 验证插件是否存在且已激活
             plugin_manager = self.core_lifecycle.plugin_manager
             plugin = plugin_manager.context.get_registered_star(plugin_name)
 
             if not plugin:
-                return Response().error(f"插件 {plugin_name} 不存在").__dict__
+                return Response.error(f"插件 {plugin_name} 不存在")
 
             if not plugin.activated:
-                return Response().error(f"插件 {plugin_name} 未激活").__dict__
+                return Response.error(f"插件 {plugin_name} 未激活")
 
             if plugin.reserved:
-                return (
-                    Response()
-                    .error(f"插件 {plugin_name} 是系统保留插件，无法管理")
-                    .__dict__
-                )
+                return Response.error(f"插件 {plugin_name} 是系统保留插件，无法管理")
 
             # 使用 SessionPluginManager 更新插件状态
             SessionPluginManager.set_plugin_status_for_session(
@@ -466,9 +434,7 @@ class SessionManagementRoute(Route):
                 enabled,
             )
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"插件 {plugin_name} 已{'启用' if enabled else '禁用'}",
                         "session_id": session_id,
@@ -476,13 +442,11 @@ class SessionManagementRoute(Route):
                         "enabled": enabled,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话插件状态失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话插件状态失败: {e!s}").__dict__
+            return Response.error(f"更新会话插件状态失败: {e!s}")
 
     async def _update_single_session_llm(self, session_id: str, enabled: bool):
         """更新单个会话的LLM状态的内部方法"""
@@ -495,12 +459,12 @@ class SessionManagementRoute(Route):
             enabled = data.get("enabled")
 
             if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
+                return Response.error("缺少必要参数: enabled")
 
             if is_batch:
                 session_ids = data.get("session_ids", [])
                 if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
+                    return Response.error("缺少必要参数: session_ids")
 
                 result = await self._handle_batch_operation(
                     session_ids,
@@ -511,25 +475,21 @@ class SessionManagementRoute(Route):
                 return result
             session_id = data.get("session_id")
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             await self._update_single_session_llm(session_id, enabled)
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"LLM已{'启用' if enabled else '禁用'}",
                         "session_id": session_id,
                         "llm_enabled": enabled,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话LLM状态失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话LLM状态失败: {e!s}").__dict__
+            return Response.error(f"更新会话LLM状态失败: {e!s}")
 
     async def _update_single_session_tts(self, session_id: str, enabled: bool):
         """更新单个会话的TTS状态的内部方法"""
@@ -542,12 +502,12 @@ class SessionManagementRoute(Route):
             enabled = data.get("enabled")
 
             if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
+                return Response.error("缺少必要参数: enabled")
 
             if is_batch:
                 session_ids = data.get("session_ids", [])
                 if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
+                    return Response.error("缺少必要参数: session_ids")
 
                 result = await self._handle_batch_operation(
                     session_ids,
@@ -558,25 +518,21 @@ class SessionManagementRoute(Route):
                 return result
             session_id = data.get("session_id")
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             await self._update_single_session_tts(session_id, enabled)
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"TTS已{'启用' if enabled else '禁用'}",
                         "session_id": session_id,
                         "tts_enabled": enabled,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话TTS状态失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话TTS状态失败: {e!s}").__dict__
+            return Response.error(f"更新会话TTS状态失败: {e!s}")
 
     async def update_session_name(self, data: dict = Body(...)):
         """更新指定会话的自定义名称"""
@@ -585,14 +541,12 @@ class SessionManagementRoute(Route):
             custom_name = data.get("custom_name", "")
 
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             # 使用 SessionServiceManager 更新会话名称
             SessionServiceManager.set_session_custom_name(session_id, custom_name)
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"会话名称已更新为: {custom_name if custom_name.strip() else '已清除自定义名称'}",
                         "session_id": session_id,
@@ -601,14 +555,12 @@ class SessionManagementRoute(Route):
                             session_id,
                         ),
                     },
-                )
-                .__dict__
-            )
+                ))
 
         except Exception as e:
             error_msg = f"更新会话名称失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话名称失败: {e!s}").__dict__
+            return Response.error(f"更新会话名称失败: {e!s}")
 
     async def update_session_status(self, data: dict = Body(...)):
         """更新指定会话的整体启停状态"""
@@ -617,30 +569,26 @@ class SessionManagementRoute(Route):
             session_enabled = data.get("session_enabled")
 
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             if session_enabled is None:
-                return Response().error("缺少必要参数: session_enabled").__dict__
+                return Response.error("缺少必要参数: session_enabled")
 
             # 使用 SessionServiceManager 更新会话整体状态
             SessionServiceManager.set_session_status(session_id, session_enabled)
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"会话整体状态已更新为: {'启用' if session_enabled else '禁用'}",
                         "session_id": session_id,
                         "session_enabled": session_enabled,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"更新会话整体状态失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"更新会话整体状态失败: {e!s}").__dict__
+            return Response.error(f"更新会话整体状态失败: {e!s}")
 
     async def delete_session(self, data: dict = Body(...)):
         """删除指定会话及其所有相关数据"""
@@ -648,7 +596,7 @@ class SessionManagementRoute(Route):
             session_id = data.get("session_id")
 
             if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                return Response.error("缺少必要参数: session_id")
 
             # 删除会话的所有相关数据
             conversation_manager = self.core_lifecycle.conversation_manager
@@ -665,18 +613,14 @@ class SessionManagementRoute(Route):
             except Exception as e:
                 logger.warning(f"清除会话 {session_id} 的偏好设置失败: {e!s}")
 
-            return (
-                Response()
-                .ok(
+            return Response.ok(
                     {
                         "message": f"会话 {session_id} 及其相关所有对话数据已成功删除",
                         "session_id": session_id,
                     },
                 )
-                .__dict__
-            )
 
         except Exception as e:
             error_msg = f"删除会话失败: {e!s}\n{traceback.format_exc()}"
             logger.error(error_msg)
-            return Response().error(f"删除会话失败: {e!s}").__dict__
+            return Response.error(f"删除会话失败: {e!s}")
