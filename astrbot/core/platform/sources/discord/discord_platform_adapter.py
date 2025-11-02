@@ -90,7 +90,7 @@ class DiscordPlatformAdapter(Platform):
         )
         message_obj.self_id = self.client_self_id
         message_obj.session_id = session.session_id
-        message_obj.message = message_chain
+        message_obj.message = message_chain.chain
 
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
