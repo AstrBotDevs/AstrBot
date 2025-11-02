@@ -749,20 +749,28 @@ class PluginManager:
                 data_base_dir = os.path.dirname(ppath)  # data/
 
                 # 删除 data/plugin_data 下的插件持久化数据（单数形式，新版本）
-                plugin_data_dir = os.path.join(data_base_dir, "plugin_data", root_dir_name)
+                plugin_data_dir = os.path.join(
+                    data_base_dir, "plugin_data", root_dir_name
+                )
                 if os.path.exists(plugin_data_dir):
                     try:
                         remove_dir(plugin_data_dir)
-                        logger.info(f"已删除插件 {plugin_name} 的持久化数据 (plugin_data)")
+                        logger.info(
+                            f"已删除插件 {plugin_name} 的持久化数据 (plugin_data)"
+                        )
                     except Exception as e:
                         logger.warning(f"删除插件持久化数据失败 (plugin_data): {e!s}")
 
                 # 删除 data/plugins_data 下的插件持久化数据（复数形式，旧版本兼容）
-                plugins_data_dir = os.path.join(data_base_dir, "plugins_data", root_dir_name)
+                plugins_data_dir = os.path.join(
+                    data_base_dir, "plugins_data", root_dir_name
+                )
                 if os.path.exists(plugins_data_dir):
                     try:
                         remove_dir(plugins_data_dir)
-                        logger.info(f"已删除插件 {plugin_name} 的持久化数据 (plugins_data)")
+                        logger.info(
+                            f"已删除插件 {plugin_name} 的持久化数据 (plugins_data)"
+                        )
                     except Exception as e:
                         logger.warning(f"删除插件持久化数据失败 (plugins_data): {e!s}")
 
