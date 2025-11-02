@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from quart import make_response
+from fastapi.responses import StreamingResponse
 
 from astrbot.core import LogBroker, logger
 
@@ -12,12 +12,8 @@ class LogRoute(Route):
     def __init__(self, context: RouteContext, log_broker: LogBroker) -> None:
         super().__init__(context)
         self.log_broker = log_broker
-        self.app.add_url_rule("/api/live-log", view_func=self.log, methods=["GET"])
-        self.app.add_url_rule(
-            "/api/log-history",
-            view_func=self.log_history,
-            methods=["GET"],
-        )
+        self.app.add_api_route("/api/live-log", self.log, methods=["GET"])
+        self.app.add_api_route("/api/log-history", self.log_history, methods=["GET"])
 
     async def log(self):
         async def stream():
@@ -39,17 +35,14 @@ class LogRoute(Route):
                 if queue:
                     self.log_broker.unregister(queue)
 
-        response = await make_response(
+        return StreamingResponse(
             stream(),
-            {
-                "Content-Type": "text/event-stream",
+            media_type="text/event-stream",
+            headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Transfer-Encoding": "chunked",
             },
         )
-        response.timeout = None
-        return response
 
     async def log_history(self):
         """获取日志历史"""

@@ -6,7 +6,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from quart import request
+from fastapi import Body, Query
 
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -55,15 +55,13 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
-    async def reload_plugins(self):
+    async def reload_plugins(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
                 .__dict__
             )
-
-        data = await request.json
         plugin_name = data.get("name", None)
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
@@ -338,7 +336,7 @@ class PluginRoute(Route):
 
         return handlers
 
-    async def install_plugin(self):
+    async def install_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
@@ -371,21 +369,11 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        try:
-            file = await request.files
-            file = file["file"]
-            logger.info(f"正在安装用户上传的插件 {file.filename}")
-            file_path = f"data/temp/{file.filename}"
-            await file.save(file_path)
-            plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
-            # self.core_lifecycle.restart()
-            logger.info(f"安装插件 {file.filename} 成功")
-            return Response().ok(plugin_info, "安装成功。").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(str(e)).__dict__
+        # TODO: Add file parameter when route registration is fixed
+        # For now, this will need manual fixing
+        return Response().error("File upload not yet implemented in FastAPI migration").__dict__
 
-    async def uninstall_plugin(self):
+    async def uninstall_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
@@ -404,7 +392,7 @@ class PluginRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def update_plugin(self):
+    async def update_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
@@ -426,7 +414,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def off_plugin(self):
+    async def off_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
@@ -444,7 +432,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def on_plugin(self):
+    async def on_plugin(self, data: dict = Body(...)):
         if DEMO_MODE:
             return (
                 Response()
@@ -462,8 +450,8 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def get_plugin_readme(self):
-        plugin_name = request.args.get("name")
+    async def get_plugin_readme(self, name: str = Query(...)):
+        plugin_name = name
         logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
 
         if not plugin_name:

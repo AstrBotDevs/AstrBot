@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 
-from quart import jsonify, request
+from fastapi import HTTPException
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -40,11 +40,9 @@ class T2iRoute(Route):
         """获取所有T2I模板列表"""
         try:
             templates = self.manager.list_templates()
-            return jsonify(asdict(Response().ok(data=templates)))
+            return Response().ok(data=templates).__dict__
         except Exception as e:
-            response = jsonify(asdict(Response().error(str(e))))
-            response.status_code = 500
-            return response
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def get_active_template(self):
         """获取当前激活的T2I模板"""

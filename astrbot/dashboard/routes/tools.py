@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from pydantic import BaseModel
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -9,6 +9,42 @@ from astrbot.core.star import star_map
 from .route import Response, Route, RouteContext
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+
+
+class MCPServerRequest(BaseModel):
+    name: str
+    command: str | None = None
+    args: list | None = None
+    env: dict[str, str] | None = None
+    active: bool = True
+
+
+class MCPServerUpdateRequest(BaseModel):
+    name: str
+    old_name: str
+    command: str | None = None
+    args: list | None = None
+    env: dict[str, str] | None = None
+    active: bool = True
+
+
+class MCPServerDeleteRequest(BaseModel):
+    name: str
+
+
+class MCPTestRequest(BaseModel):
+    command: str
+    args: list | None = None
+    env: dict[str, str] | None = None
+
+
+class ToggleToolRequest(BaseModel):
+    tool_name: str
+    enabled: bool
+
+
+class SyncProviderRequest(BaseModel):
+    provider_id: str
 
 
 class ToolsRoute(Route):
@@ -68,11 +104,9 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取 MCP 服务器列表失败: {e!s}").__dict__
 
-    async def add_mcp_server(self):
+    async def add_mcp_server(self, server_data: MCPServerRequest):
         try:
-            server_data = await request.json
-
-            name = server_data.get("name", "")
+            name = server_data.name
 
             # 检查必填字段
             if not name:
@@ -124,10 +158,8 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"添加 MCP 服务器失败: {e!s}").__dict__
 
-    async def update_mcp_server(self):
+    async def update_mcp_server(self, server_data: dict):
         try:
-            server_data = await request.json
-
             name = server_data.get("name", "")
 
             if not name:
@@ -228,10 +260,9 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新 MCP 服务器失败: {e!s}").__dict__
 
-    async def delete_mcp_server(self):
+    async def delete_mcp_server(self, server_data: MCPServerDeleteRequest):
         try:
-            server_data = await request.json
-            name = server_data.get("name", "")
+            name = server_data.name
 
             if not name:
                 return Response().error("服务器名称不能为空").__dict__
@@ -264,10 +295,9 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {e!s}").__dict__
 
-    async def test_mcp_connection(self):
+    async def test_mcp_connection(self, server_data: dict):
         """测试 MCP 服务器连接"""
         try:
-            server_data = await request.json
             config = server_data.get("mcp_server_config", None)
 
             if not isinstance(config, dict) or not config:
@@ -302,10 +332,9 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取工具列表失败: {e!s}").__dict__
 
-    async def toggle_tool(self):
+    async def toggle_tool(self, data: dict):
         """启用或停用指定的工具"""
         try:
-            data = await request.json
             tool_name = data.get("name")
             action = data.get("activate")  # True or False
 
@@ -328,10 +357,9 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"操作工具失败: {e!s}").__dict__
 
-    async def sync_provider(self):
+    async def sync_provider(self, data: dict):
         """同步 MCP 提供者配置"""
         try:
-            data = await request.json
             provider_name = data.get("name")  # modelscope, or others
             match provider_name:
                 case "modelscope":

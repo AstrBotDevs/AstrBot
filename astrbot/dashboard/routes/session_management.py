@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from fastapi import Body, Query
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -37,13 +37,16 @@ class SessionManagementRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def list_sessions(self):
+    async def list_sessions(
+        self,
+        page: int = Query(default=1),
+        page_size: int = Query(default=20),
+        search: str = Query(default=""),
+        platform: str = Query(default=""),
+    ):
         """获取所有会话的列表，包括 persona 和 provider 信息"""
         try:
-            page = int(request.args.get("page", 1))
-            page_size = int(request.args.get("page_size", 20))
-            search_query = request.args.get("search", "")
-            platform = request.args.get("platform", "")
+            search_query = search
 
             # 获取活跃的会话数据（处于对话内的会话）
             sessions_data, total = await self.db_helper.get_session_conversations(
@@ -260,10 +263,9 @@ class SessionManagementRoute(Route):
             .__dict__
         )
 
-    async def update_session_persona(self):
+    async def update_session_persona(self, data: dict = Body(...)):
         """更新指定会话的 persona，支持批量操作"""
         try:
-            data = await request.get_json()
             is_batch = data.get("is_batch", False)
             persona_name = data.get("persona_name")
 
@@ -315,10 +317,9 @@ class SessionManagementRoute(Route):
             umo=session_id,
         )
 
-    async def update_session_provider(self):
+    async def update_session_provider(self, data: dict = Body(...)):
         """更新指定会话的 provider，支持批量操作"""
         try:
-            data = await request.get_json()
             is_batch = data.get("is_batch", False)
             provider_id = data.get("provider_id")
             provider_type = data.get("provider_type")
@@ -380,10 +381,9 @@ class SessionManagementRoute(Route):
             logger.error(error_msg)
             return Response().error(f"更新会话提供商失败: {e!s}").__dict__
 
-    async def get_session_plugins(self):
+    async def get_session_plugins(self, session_id: str = Query(...)):
         """获取指定会话的插件配置信息"""
         try:
-            session_id = request.args.get("session_id")
 
             if not session_id:
                 return Response().error("缺少必要参数: session_id").__dict__
@@ -426,10 +426,9 @@ class SessionManagementRoute(Route):
             logger.error(error_msg)
             return Response().error(f"获取会话插件配置失败: {e!s}").__dict__
 
-    async def update_session_plugin(self):
+    async def update_session_plugin(self, data: dict = Body(...)):
         """更新指定会话的插件启停状态"""
         try:
-            data = await request.get_json()
             session_id = data.get("session_id")
             plugin_name = data.get("plugin_name")
             enabled = data.get("enabled")
@@ -489,10 +488,9 @@ class SessionManagementRoute(Route):
         """更新单个会话的LLM状态的内部方法"""
         SessionServiceManager.set_llm_status_for_session(session_id, enabled)
 
-    async def update_session_llm(self):
+    async def update_session_llm(self, data: dict = Body(...)):
         """更新指定会话的LLM启停状态，支持批量操作"""
         try:
-            data = await request.get_json()
             is_batch = data.get("is_batch", False)
             enabled = data.get("enabled")
 
@@ -537,10 +535,9 @@ class SessionManagementRoute(Route):
         """更新单个会话的TTS状态的内部方法"""
         SessionServiceManager.set_tts_status_for_session(session_id, enabled)
 
-    async def update_session_tts(self):
+    async def update_session_tts(self, data: dict = Body(...)):
         """更新指定会话的TTS启停状态，支持批量操作"""
         try:
-            data = await request.get_json()
             is_batch = data.get("is_batch", False)
             enabled = data.get("enabled")
 
@@ -581,10 +578,9 @@ class SessionManagementRoute(Route):
             logger.error(error_msg)
             return Response().error(f"更新会话TTS状态失败: {e!s}").__dict__
 
-    async def update_session_name(self):
+    async def update_session_name(self, data: dict = Body(...)):
         """更新指定会话的自定义名称"""
         try:
-            data = await request.get_json()
             session_id = data.get("session_id")
             custom_name = data.get("custom_name", "")
 
@@ -614,10 +610,9 @@ class SessionManagementRoute(Route):
             logger.error(error_msg)
             return Response().error(f"更新会话名称失败: {e!s}").__dict__
 
-    async def update_session_status(self):
+    async def update_session_status(self, data: dict = Body(...)):
         """更新指定会话的整体启停状态"""
         try:
-            data = await request.get_json()
             session_id = data.get("session_id")
             session_enabled = data.get("session_enabled")
 
@@ -647,10 +642,9 @@ class SessionManagementRoute(Route):
             logger.error(error_msg)
             return Response().error(f"更新会话整体状态失败: {e!s}").__dict__
 
-    async def delete_session(self):
+    async def delete_session(self, data: dict = Body(...)):
         """删除指定会话及其所有相关数据"""
         try:
-            data = await request.get_json()
             session_id = data.get("session_id")
 
             if not session_id:

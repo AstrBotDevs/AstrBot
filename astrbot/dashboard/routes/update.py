@@ -1,6 +1,7 @@
 import traceback
 
-from quart import request
+from fastapi import Query
+from pydantic import BaseModel
 
 from astrbot.core import DEMO_MODE, logger, pip_installer
 from astrbot.core.config.default import VERSION
@@ -12,6 +13,24 @@ from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 from .route import Response, Route, RouteContext
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+
+
+class MigrationRequest(BaseModel):
+    platform_id_map: dict = {}
+
+
+class UpdateProjectRequest(BaseModel):
+    version: str = ""
+    reboot: bool = True
+
+
+class DashboardUpdateRequest(BaseModel):
+    version: str = ""
+
+
+class PipInstallRequest(BaseModel):
+    package: str
+    mirror: str | None = None
 
 
 class UpdateRoute(Route):
@@ -34,13 +53,12 @@ class UpdateRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def do_migration(self):
+    async def do_migration(self, migration_data: MigrationRequest):
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
         if not need_migration:
             return Response().ok(None, "不需要进行迁移。").__dict__
         try:
-            data = await request.json
-            pim = data.get("platform_id_map", {})
+            pim = migration_data.platform_id_map
             await do_migration_v4(
                 self.core_lifecycle.db,
                 pim,
@@ -51,9 +69,9 @@ class UpdateRoute(Route):
             logger.error(f"迁移失败: {traceback.format_exc()}")
             return Response().error(f"迁移失败: {e!s}").__dict__
 
-    async def check_update(self):
-        type_ = request.args.get("type", None)
-
+    async def check_update(
+        self, type_: str | None = Query(default=None, alias="type")
+    ):
         try:
             dv = await get_dashboard_version()
             if type_ == "dashboard":
@@ -85,10 +103,9 @@ class UpdateRoute(Route):
             logger.error(f"/api/update/releases: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
-    async def update_project(self):
-        data = await request.json
-        version = data.get("version", "")
-        reboot = data.get("reboot", True)
+    async def update_project(self, update_data: UpdateProjectRequest):
+        version = update_data.version
+        reboot = update_data.reboot
         if version == "" or version == "latest":
             latest = True
             version = ""
@@ -137,19 +154,25 @@ class UpdateRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def update_dashboard(self):
+        from fastapi.responses import JSONResponse
+
         try:
             try:
                 await download_dashboard(version=f"v{VERSION}", latest=False)
             except Exception as e:
                 logger.error(f"下载管理面板文件失败: {e}。")
                 return Response().error(f"下载管理面板文件失败: {e}").__dict__
-            ret = Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__
-            return ret, 200, CLEAR_SITE_DATA_HEADERS
+            return JSONResponse(
+                content=Response()
+                .ok(None, "更新成功。刷新页面即可应用新版本面板。")
+                .__dict__,
+                headers=CLEAR_SITE_DATA_HEADERS,
+            )
         except Exception as e:
             logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
-    async def install_pip_package(self):
+    async def install_pip_package(self, pip_data: PipInstallRequest):
         if DEMO_MODE:
             return (
                 Response()
@@ -157,9 +180,8 @@ class UpdateRoute(Route):
                 .__dict__
             )
 
-        data = await request.json
-        package = data.get("package", "")
-        mirror = data.get("mirror", None)
+        package = pip_data.package
+        mirror = pip_data.mirror
         if not package:
             return Response().error("缺少参数 package 或不合法。").__dict__
         try:

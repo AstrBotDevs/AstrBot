@@ -1,4 +1,5 @@
-from quart import abort, send_file
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
 
 from astrbot import logger
 from astrbot.core import file_token_service
@@ -12,15 +13,15 @@ class FileRoute(Route):
         context: RouteContext,
     ) -> None:
         super().__init__(context)
-        self.routes = {
-            "/file/<file_token>": ("GET", self.serve_file),
-        }
-        self.register_routes()
+        # Register route with path parameter
+        self.app.add_api_route(
+            "/api/file/{file_token}", self.serve_file, methods=["GET"]
+        )
 
     async def serve_file(self, file_token: str):
         try:
             file_path = await file_token_service.handle_file(file_token)
-            return await send_file(file_path)
+            return FileResponse(file_path)
         except (FileNotFoundError, KeyError) as e:
             logger.warning(str(e))
-            return abort(404)
+            raise HTTPException(status_code=404, detail="File not found")
