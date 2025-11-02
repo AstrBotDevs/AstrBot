@@ -421,8 +421,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
-        plugin_name = post_data["name"]
+        plugin_name = data["name"]
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
             logger.info(f"停用插件 {plugin_name} 。")
@@ -436,18 +435,17 @@ class PluginRoute(Route):
             return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
-                .__dict__
+                .model_dump()
             )
 
-        post_data = await request.json
-        plugin_name = post_data["name"]
+        plugin_name = data["name"]
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
             logger.info(f"启用插件 {plugin_name} 。")
-            return Response().ok(None, "启用成功。").__dict__
+            return Response().ok(None, "启用成功。").model_dump()
         except Exception as e:
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
 
     async def get_plugin_readme(self, name: str = Query(...)):
         plugin_name = name
@@ -488,7 +486,7 @@ class PluginRoute(Route):
 
             return (
                 Response()
-                .ok({"content": readme_content}, "成功获取README内容")
+                .ok(data={"content": readme_content}, message="成功获取README内容")
                 .model_dump()
             )
         except Exception as e:

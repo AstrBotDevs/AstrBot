@@ -50,12 +50,13 @@ class PersonaRoute(Route):
                         }
                         for persona in personas
                     ],
+                    message="获取人格列表成功",
                 )
-                .__dict__
+                .model_dump()
             )
         except Exception as e:
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格列表失败: {e!s}").__dict__
+            return Response().error(f"获取人格列表失败: {e!s}").model_dump()
 
     async def get_persona_detail(self, data: dict = Body(...)):
         """获取指定人格的详细信息"""
@@ -63,11 +64,11 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").model_dump()
 
             persona = await self.persona_mgr.get_persona(persona_id)
             if not persona:
-                return Response().error("人格不存在").__dict__
+                return Response().error("人格不存在").model_dump()
 
             return (
                 Response()
@@ -84,12 +85,13 @@ class PersonaRoute(Route):
                         if persona.updated_at
                         else None,
                     },
+                    message="获取人格详情成功",
                 )
-                .__dict__
+                .model_dump()
             )
         except Exception as e:
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格详情失败: {e!s}").__dict__
+            return Response().error(f"获取人格详情失败: {e!s}").model_dump()
 
     async def create_persona(self, data: dict = Body(...)):
         """创建新人格"""
@@ -138,14 +140,15 @@ class PersonaRoute(Route):
                             else None,
                         },
                     },
+                    message="人格创建成功",
                 )
-                .__dict__
+                .model_dump()
             )
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
         except Exception as e:
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"创建人格失败: {e!s}").__dict__
+            return Response().error(f"创建人格失败: {e!s}").model_dump()
 
     async def update_persona(self, data: dict = Body(...)):
         """更新人格信息"""
@@ -173,12 +176,12 @@ class PersonaRoute(Route):
                 tools=tools,
             )
 
-            return Response().ok({"message": "人格更新成功"}).__dict__
+            return Response().ok({"message": "人格更新成功"}).model_dump()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
         except Exception as e:
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"更新人格失败: {e!s}").__dict__
+            return Response().error(f"更新人格失败: {e!s}").model_dump()
 
     async def delete_persona(self, data: dict = Body(...)):
         """删除人格"""
@@ -186,13 +189,13 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error("缺少必要参数: persona_id").__dict__
+                return Response().error("缺少必要参数: persona_id").model_dump()
 
             await self.persona_mgr.delete_persona(persona_id)
 
-            return Response().ok({"message": "人格删除成功"}).__dict__
+            return Response().ok({"message": "人格删除成功"}).model_dump()
         except ValueError as e:
-            return Response().error(str(e)).__dict__
+            return Response().error(str(e)).model_dump()
         except Exception as e:
             logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
-            return Response().error(f"删除人格失败: {e!s}").__dict__
+            return Response().error(f"删除人格失败: {e!s}").model_dump()
