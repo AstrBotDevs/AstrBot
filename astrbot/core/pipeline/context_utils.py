@@ -3,6 +3,8 @@ import traceback
 import typing as T
 
 from astrbot import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
@@ -105,3 +107,66 @@ async def call_event_hook(
             return True
 
     return event.is_stopped()
+
+
+async def call_local_llm_tool(
+    context: ContextWrapper[AstrAgentContext],
+    handler: T.Callable[..., T.Awaitable[T.Any]],
+    method_name: str,
+    *args,
+    **kwargs,
+) -> T.AsyncGenerator[T.Any, None]:
+    """执行本地 LLM 工具的处理函数并处理其返回结果"""
+    ready_to_call = None  # 一个协程或者异步生成器
+
+    trace_ = None
+
+    event = context.context.event
+
+    try:
+        if method_name == "run" or method_name == "decorator_handler":
+            ready_to_call = handler(event, *args, **kwargs)
+        elif method_name == "call":
+            ready_to_call = handler(context, *args, **kwargs)
+        else:
+            raise ValueError(f"未知的方法名: {method_name}")
+    except ValueError as e:
+        logger.error(f"调用本地 LLM 工具时出错: {e}", exc_info=True)
+    except TypeError:
+        logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+    except Exception as e:
+        trace_ = traceback.format_exc()
+        logger.error(f"调用本地 LLM 工具时出错: {e}\n{trace_}")
+
+    if not ready_to_call:
+        return
+
+    if inspect.isasyncgen(ready_to_call):
+        _has_yielded = False
+        try:
+            async for ret in ready_to_call:
+                # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
+                # 返回值只能是 MessageEventResult 或者 None（无返回值）
+                _has_yielded = True
+                if isinstance(ret, (MessageEventResult, CommandResult)):
+                    # 如果返回值是 MessageEventResult, 设置结果并继续
+                    event.set_result(ret)
+                    yield
+                else:
+                    # 如果返回值是 None, 则不设置结果并继续
+                    # 继续执行后续阶段
+                    yield ret
+            if not _has_yielded:
+                # 如果这个异步生成器没有执行到 yield 分支
+                yield
+        except Exception as e:
+            logger.error(f"Previous Error: {trace_}")
+            raise e
+    elif inspect.iscoroutine(ready_to_call):
+        # 如果只是一个协程, 直接执行
+        ret = await ready_to_call
+        if isinstance(ret, (MessageEventResult, CommandResult)):
+            event.set_result(ret)
+            yield
+        else:
+            yield ret

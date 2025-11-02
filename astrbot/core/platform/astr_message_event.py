@@ -324,7 +324,7 @@ class AstrMessageEvent(abc.ABC):
         image_urls: list[str] | None = None,
         contexts: list | None = None,
         system_prompt: str = "",
-        conversation: Conversation = None,
+        conversation: Conversation | None = None,
     ) -> ProviderRequest:
         """创建一个 LLM 请求。
 
@@ -394,7 +394,7 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def get_group(self, group_id: str = None, **kwargs) -> Group | None:
+    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:

@@ -16,15 +16,14 @@ from astrbot.core.message.message_event_result import (
     MessageChain,
 )
 from astrbot.core.provider.entities import (
-    AssistantMessageSegment,
     LLMResponse,
     ProviderRequest,
-    ToolCallMessageSegment,
     ToolCallsResult,
 )
 from astrbot.core.provider.provider import Provider
 
 from ..hooks import BaseAgentRunHooks
+from ..message import AssistantMessageSegment, ToolCallMessageSegment
 from ..response import AgentResponseData
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
@@ -171,8 +170,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 将结果添加到上下文中
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
-                    role="assistant",
-                    tool_calls=llm_resp.to_openai_tool_calls(),
+                    tool_calls=llm_resp.to_openai_to_calls_model(),
                     content=llm_resp.completion_text,
                 ),
                 tool_calls_result=tool_call_result_blocks,
@@ -238,7 +236,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
-                    logger.warning(f"工具 {func_tool_name} 没有 handler，使用所有参数")
 
                 try:
                     await self.agent_hooks.on_tool_start(
@@ -319,13 +316,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop。
+                        # 发送消息逻辑在 ToolExecutor 中处理了。
+                        logger.warning(
+                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户，此工具调用不会被记录到历史中。"
+                        )
                         self._transition_state(AgentState.DONE)
-                        if res := self.run_context.event.get_result():
-                            if res.chain:
-                                yield MessageChain(
-                                    chain=res.chain,
-                                    type="tool_direct_result",
-                                )
                     else:
                         # 不应该出现其他类型
                         logger.warning(
@@ -341,8 +336,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
-
-                self.run_context.event.clear_result()
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 tool_call_result_blocks.append(
