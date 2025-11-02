@@ -9,7 +9,7 @@ from .message_type import MessageType
 @dataclass
 class MessageMember:
     user_id: str  # 发送者id
-    nickname: str = None
+    nickname: str | None = None
 
     def __str__(self):
         # 使用 f-string 来构建返回的字符串表示形式
@@ -23,15 +23,15 @@ class MessageMember:
 class Group:
     group_id: str
     """群号"""
-    group_name: str = None
+    group_name: str | None = None
     """群名称"""
-    group_avatar: str = None
+    group_avatar: str | None = None
     """群头像"""
-    group_owner: str = None
+    group_owner: str | None = None
     """群主 id"""
-    group_admins: list[str] = None
+    group_admins: list[str] | None = None
     """群管理员 id"""
-    members: list[MessageMember] = None
+    members: list[MessageMember] | None = None
     """所有群成员"""
 
     def __str__(self):

@@ -66,10 +66,10 @@ class DiscordButton(BaseMessageComponent):
     def __init__(
         self,
         label: str,
-        custom_id: str = None,
+        custom_id: str | None = None,
         style: str = "primary",
-        emoji: str = None,
-        url: str = None,
+        emoji: str | None = None,
+        url: str | None = None,
         disabled: bool = False,
     ):
         self.label = label
