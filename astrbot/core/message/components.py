@@ -242,7 +242,9 @@ class Video(BaseMessageComponent):
             return url[8:]
         if url and url.startswith("http"):
             download_dir = str(AstrbotPaths.astrbot_root / "temp")
-            video_file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4().hex}")
+            video_file_path = str(
+                AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4().hex}"
+            )
             await download_file(url, video_file_path)
             if os.path.exists(video_file_path):
                 return os.path.abspath(video_file_path)
@@ -442,7 +444,9 @@ class Image(BaseMessageComponent):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
             temp_dir = str(AstrbotPaths.astrbot_root / "temp")
-            image_file_path = str(AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg")
+            image_file_path = str(
+                AstrbotPaths.astrbot_root / "temp" / f"{uuid.uuid4()}.jpg"
+            )
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
