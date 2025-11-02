@@ -77,8 +77,8 @@ def save_temp_img(img: Image.Image | str) -> str:
 async def download_image_by_url(
     url: str,
     post: bool = False,
-    post_data: dict = None,
-    path=None,
+    post_data: dict | None = None,
+    path: str | None = None,
 ) -> str:
     """下载图片, 返回 path"""
     try:

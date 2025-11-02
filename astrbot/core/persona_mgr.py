@@ -68,9 +68,9 @@ class PersonaManager:
     async def update_persona(
         self,
         persona_id: str,
-        system_prompt: str = None,
-        begin_dialogs: list[str] = None,
-        tools: list[str] = None,
+        system_prompt: str | None = None,
+        begin_dialogs: list[str] | None = None,
+        tools: list[str] | None = None,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)

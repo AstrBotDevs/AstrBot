@@ -18,7 +18,7 @@ class GeweDataParser:
         is_private_chat: bool = False,
         cached_texts=None,
         cached_images=None,
-        raw_message: dict = None,
+        raw_message: dict | None = None,
         downloader=None,
     ):
         self._xml = None

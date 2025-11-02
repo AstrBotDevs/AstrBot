@@ -94,7 +94,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         message_chain: MessageChain,
         event: Event | None = None,
         is_group: bool = False,
-        session_id: str = None,
+        session_id: str | None = None,
     ):
         """发送消息至 QQ 协议端（aiocqhttp）。
 

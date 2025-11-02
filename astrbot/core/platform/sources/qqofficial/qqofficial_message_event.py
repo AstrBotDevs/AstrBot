@@ -76,7 +76,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         return await super().send_streaming(generator, use_fallback)
 
-    async def _post_send(self, stream: dict = None):
+    async def _post_send(self, stream: dict | None = None):
         if not self.send_buffer:
             return None
 
@@ -265,17 +265,17 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self,
         openid: str,
         msg_type: int = 0,
-        content: str = None,
-        embed: message.Embed = None,
-        ark: message.Ark = None,
-        message_reference: message.Reference = None,
-        media: message.Media = None,
-        msg_id: str = None,
+        content: str | None = None,
+        embed: message.Embed | None = None,
+        ark: message.Ark | None = None,
+        message_reference: message.Reference | None = None,
+        media: message.Media | None = None,
+        msg_id: str | None = None,
         msg_seq: str = 1,
-        event_id: str = None,
-        markdown: message.MarkdownPayload = None,
-        keyboard: message.Keyboard = None,
-        stream: dict = None,
+        event_id: str | None = None,
+        markdown: message.MarkdownPayload | None = None,
+        keyboard: message.Keyboard | None = None,
+        stream: dict | None = None,
     ) -> message.Message:
         payload = locals()
         payload.pop("self", None)

@@ -11,9 +11,9 @@ platform_cls_map: dict[str, type] = {}
 def register_platform_adapter(
     adapter_name: str,
     desc: str,
-    default_config_tmpl: dict = None,
-    adapter_display_name: str = None,
-    logo_path: str = None,
+    default_config_tmpl: dict | None = None,
+    adapter_display_name: str | None = None,
+    logo_path: str | None = None,
 ):
     """用于注册平台适配器的带参装饰器。
 

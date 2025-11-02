@@ -926,7 +926,9 @@ class ConfigRoute(Route):
 
         return ret
 
-    async def _save_astrbot_configs(self, post_configs: dict, conf_id: str = None):
+    async def _save_astrbot_configs(
+        self, post_configs: dict, conf_id: str | None = None
+    ):
         try:
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")

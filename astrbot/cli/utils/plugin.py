@@ -221,9 +221,9 @@ def manage_plugin(
         raise click.ClickException(f"插件 {plugin_name} 未安装，无法更新")
 
     # 备份现有插件
-    if is_update and backup_path.exists():
+    if is_update and backup_path is not None and backup_path.exists():
         shutil.rmtree(backup_path)
-    if is_update:
+    if is_update and backup_path is not None:
         shutil.copytree(target_path, backup_path)
 
     try:
@@ -233,13 +233,13 @@ def manage_plugin(
         get_git_repo(repo_url, target_path, proxy)
 
         # 更新成功，删除备份
-        if is_update and backup_path.exists():
+        if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
         click.echo(f"插件 {plugin_name} {'更新' if is_update else '安装'}成功")
     except Exception as e:
         if target_path.exists():
             shutil.rmtree(target_path, ignore_errors=True)
-        if is_update and backup_path.exists():
+        if is_update and backup_path is not None and backup_path.exists():
             shutil.move(backup_path, target_path)
         raise click.ClickException(
             f"{'更新' if is_update else '安装'}插件 {plugin_name} 时出错: {e}",

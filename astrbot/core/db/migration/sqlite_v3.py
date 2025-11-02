@@ -384,11 +384,11 @@ class SQLiteDatabase:
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: list[str] = None,
-        message_types: list[str] = None,
-        search_query: str = None,
-        exclude_ids: list[str] = None,
-        exclude_platforms: list[str] = None,
+        platforms: list[str] | None = None,
+        message_types: list[str] | None = None,
+        search_query: str | None = None,
+        exclude_ids: list[str] | None = None,
+        exclude_platforms: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表"""
         try:

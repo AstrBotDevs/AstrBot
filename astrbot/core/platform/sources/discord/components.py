@@ -11,14 +11,14 @@ class DiscordEmbed(BaseMessageComponent):
 
     def __init__(
         self,
-        title: str = None,
-        description: str = None,
-        color: int = None,
-        url: str = None,
-        thumbnail: str = None,
-        image: str = None,
-        footer: str = None,
-        fields: list[dict] = None,
+        title: str | None = None,
+        description: str | None = None,
+        color: int | None = None,
+        url: str | None = None,
+        thumbnail: str | None = None,
+        image: str | None = None,
+        footer: str | None = None,
+        fields: list[dict] | None = None,
     ):
         self.title = title
         self.description = description
@@ -66,10 +66,10 @@ class DiscordButton(BaseMessageComponent):
     def __init__(
         self,
         label: str,
-        custom_id: str = None,
+        custom_id: str | None = None,
         style: str = "primary",
-        emoji: str = None,
-        url: str = None,
+        emoji: str | None = None,
+        url: str | None = None,
         disabled: bool = False,
     ):
         self.label = label
