@@ -527,7 +527,7 @@ class Reply(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type = ComponentType.Poke
+    type: str = ComponentType.Poke
     id: int | None = 0
     qq: int | None = 0
 
