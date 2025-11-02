@@ -96,7 +96,6 @@ class AstrBotDashboard:
         )
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
-        self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context, self.fastapi_users, self.auth_backend)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
@@ -110,6 +109,14 @@ class AstrBotDashboard:
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
+
+        # Store static folder path for static file route (must be set before StaticFileRoute init)
+        self.app._static_folder = (
+            self.data_path if os.path.exists(self.data_path) else None
+        )
+
+        # Register static file route (must be before mounting static files)
+        self.sfr = StaticFileRoute(self.context)
 
         # Register plugin route
         @self.app.api_route("/api/plug/{subpath:path}", methods=["GET", "POST"])
@@ -126,7 +133,7 @@ class AstrBotDashboard:
         """插件路由"""
         from fastapi import Request
 
-        request = Request(scope={"type": "http"})
+        Request(scope={"type": "http"})
 
         registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
         for api in registered_web_apis:
