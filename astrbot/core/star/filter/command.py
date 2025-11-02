@@ -36,11 +36,13 @@ class CommandFilter(HandlerFilter):
         command_name: str,
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
-        parent_command_names: list[str] = [""],
+        parent_command_names: list[str] | None = None,
     ):
         self.command_name = command_name
         self.alias = alias if alias else set()
-        self.parent_command_names = parent_command_names
+        self.parent_command_names = (
+            parent_command_names if parent_command_names is not None else [""]
+        )
         if handler_md:
             self.init_handler_md(handler_md)
         self.custom_filter_list: list[CustomFilter] = []
