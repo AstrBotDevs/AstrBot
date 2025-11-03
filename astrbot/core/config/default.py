@@ -4,8 +4,8 @@ from importlib.metadata import version
 
 from astrbot.base import AstrbotPaths
 
+# 警告,请使用version函数获取版本,此变量兼容保留
 VERSION = version("astrbot")
-""" 警告,请使用version函数获取版本,此变量兼容保留 """
 
 DB_PATH = str(AstrbotPaths.astrbot_root / "data_v4.db")
 
