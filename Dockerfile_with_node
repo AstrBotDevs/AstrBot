@@ -1,4 +1,4 @@
-FROM node:25-bookworm-slim
+FROM node:latest
 
 # Install Python 3.11
 RUN apt-get update && apt-get install -y --no-install-recommends \
