@@ -82,7 +82,7 @@ class SlackAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ):
-        blocks, text = SlackMessageEvent._parse_slack_blocks(
+        blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message_chain=message_chain,
             web_client=self.web_client,
         )
