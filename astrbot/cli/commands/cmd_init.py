@@ -26,16 +26,16 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
 
     paths = {
         "data": astrbot_root / "data",
-        "config": astrbot_root / "data" / "config",
-        "plugins": astrbot_root / "data" / "plugins",
-        "temp": astrbot_root / "data" / "temp",
+        "config": astrbot_root / "config",
+        "plugins": astrbot_root / "plugins",
+        "temp": astrbot_root / "temp",
     }
 
-    for name, path in paths.items():
+    for _, path in paths.items():
         path.mkdir(parents=True, exist_ok=True)
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
 
-    await check_dashboard(astrbot_root / "data")
+    await check_dashboard(astrbot_root)
 
 
 @click.command()
