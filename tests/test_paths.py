@@ -88,7 +88,6 @@ class TestAstrbotPathsInit:
         # 清除任何可能存在的 .env 文件影响
         monkeypatch.setattr("os.environ", {**os.environ})
 
-
         # 清除实例缓存
         AstrbotPaths._instances.clear()
 
