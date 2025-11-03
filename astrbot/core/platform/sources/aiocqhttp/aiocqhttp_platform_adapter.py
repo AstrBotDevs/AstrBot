@@ -107,7 +107,7 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage:
+    async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
