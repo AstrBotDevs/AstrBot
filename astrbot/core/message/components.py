@@ -21,11 +21,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import asyncio
 import base64
 import json
 import os
 import uuid
 from enum import Enum
+import warnings
 
 from pydantic.v1 import BaseModel
 
@@ -654,21 +656,47 @@ class File(BaseMessageComponent):
 
     @property
     def file(self) -> str:
-        """获取本地文件路径（仅返回已存在的文件）
+        """
+        获取文件路径，如果文件不存在但有URL，则同步下载文件
 
-        ⚠️ 警告：此属性不会自动下载文件！
+        ⚠️ 警告：此属性已弃用！请使用 `await get_file()` 方法代替，以避免在异步上下文中阻塞。
         - 如果文件已存在，返回绝对路径
-        - 如果只有 URL 没有本地文件，返回空字符串
-        - 需要下载文件请使用 `await get_file()` 方法
+        - 如果只有 URL 没有本地文件，会尝试同步下载（仅在非异步上下文中）
+        - 在异步上下文中会发出警告并返回空字符串
 
         Returns:
-            str: 文件的绝对路径，如果文件不存在则返回空字符串
-
+            str: 文件路径
         """
+        warnings.warn(
+            "File.file 属性已弃用。请使用 await get_file() 方法来异步获取文件。",
+            DeprecationWarning,
+            stacklevel=2
+        )
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
-        return ""
 
+        if self.url:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    logger.warning(
+                        (
+                            "不可以在异步上下文中同步等待下载! "
+                            "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                            "请使用 await get_file() 代替直接获取 <File>.file 字段"
+                        )
+                    )
+                    return ""
+                else:
+                    # 等待下载完成
+                    loop.run_until_complete(self._download_file())
+
+                    if self.file_ and os.path.exists(self.file_):
+                        return os.path.abspath(self.file_)
+            except Exception as e:
+                logger.error(f"文件下载失败: {e}")
+
+        return ""
     @file.setter
     def file(self, value: str):
         """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
