@@ -43,7 +43,7 @@ def get_astrbot_data_path() -> str:
     不要和AstrbotPaths.data混淆!
     """
     warnings.warn(
-        "等效于: AstrbotPaths.getPaths('any!').root.env 文件内容: ASTRBOT_ROOT=./data",
+        "等效于: AstrbotPaths.astrbot_root",
         DeprecationWarning,
         stacklevel=2,
     )
