@@ -4,6 +4,7 @@ import json
 import os
 import time
 import traceback
+from typing import cast
 
 import aiohttp
 import anyio
@@ -67,7 +68,7 @@ class WeChatPadProAdapter(Platform):
         )
         self.base_url = f"http://{self.host}:{self.port}"
         self.auth_key = None  # 用于保存生成的授权码
-        self.wxid = None  # 用于保存登录成功后的 wxid
+        self.wxid: str | None = None  # 用于保存登录成功后的 wxid
         self.credentials_file = os.path.join(
             get_astrbot_data_path(),
             "wechatpadpro_credentials.json",
@@ -396,7 +397,7 @@ class WeChatPadProAdapter(Platform):
                 )
                 await asyncio.sleep(5)
 
-    async def handle_websocket_message(self, message: str):
+    async def handle_websocket_message(self, message: str | bytes):
         """处理从 WebSocket 接收到的消息。"""
         logger.debug(f"收到 WebSocket 消息: {message}")
         try:
@@ -428,10 +429,11 @@ class WeChatPadProAdapter(Platform):
 
     async def convert_message(self, raw_message: dict) -> AstrBotMessage | None:
         """将 WeChatPadPro 原始消息转换为 AstrBotMessage。"""
+        assert self.wxid is not None
         abm = AstrBotMessage()
         abm.raw_message = raw_message
         abm.message_id = str(raw_message.get("msg_id"))
-        abm.timestamp = raw_message.get("create_time")
+        abm.timestamp = cast(int, raw_message.get("create_time"))
         abm.self_id = self.wxid
 
         if int(time.time()) - abm.timestamp > 180:
@@ -444,7 +446,7 @@ class WeChatPadProAdapter(Platform):
         to_user_name = raw_message.get("to_user_name", {}).get("str", "")
         content = raw_message.get("content", {}).get("str", "")
         push_content = raw_message.get("push_content", "")
-        msg_type = raw_message.get("msg_type")
+        msg_type = cast(int, raw_message.get("msg_type"))
 
         abm.message_str = ""
         abm.message = []
@@ -572,7 +574,7 @@ class WeChatPadProAdapter(Platform):
         from_user_name: str,
         to_user_name: str,
         msg_id: int,
-    ):
+    ) -> dict | None:
         """下载原始图片。"""
         url = f"{self.base_url}/message/GetMsgBigImg"
         params = {"key": self.auth_key}
@@ -723,12 +725,13 @@ class WeChatPadProAdapter(Platform):
             # 图片消息
             from_user_name = raw_message.get("from_user_name", {}).get("str", "")
             to_user_name = raw_message.get("to_user_name", {}).get("str", "")
-            msg_id = raw_message.get("msg_id")
+            msg_id = cast(int, raw_message.get("msg_id"))
             image_resp = await self._download_raw_image(
                 from_user_name,
                 to_user_name,
                 msg_id,
             )
+            assert image_resp is not None
             image_bs64_data = (
                 image_resp.get("Data", {}).get("Data", {}).get("Buffer", None)
             )
@@ -769,6 +772,7 @@ class WeChatPadProAdapter(Platform):
             bufid = 0
             to_user_name = raw_message.get("to_user_name", {}).get("str", "")
             new_msg_id = raw_message.get("new_msg_id")
+            assert new_msg_id is not None
             data_parser = GeweDataParser(
                 content=content,
                 is_private_chat=(abm.type != MessageType.GROUP_MESSAGE),
@@ -776,6 +780,7 @@ class WeChatPadProAdapter(Platform):
             )
 
             voicemsg = data_parser._format_to_xml().find("voicemsg")
+            assert voicemsg is not None
             bufid = voicemsg.get("bufid") or "0"
             length = int(voicemsg.get("length") or 0)
             voice_resp = await self.download_voice(
@@ -784,6 +789,7 @@ class WeChatPadProAdapter(Platform):
                 bufid=bufid,
                 length=length,
             )
+            assert voice_resp is not None
             voice_bs64_data = voice_resp.get("Data", {}).get("Base64", None)
             if voice_bs64_data:
                 voice_bs64_data = base64.b64decode(voice_bs64_data)
@@ -825,6 +831,7 @@ class WeChatPadProAdapter(Platform):
         try:
             if self.ws_handle_task:
                 self.ws_handle_task.cancel()
+            assert self._shutdown_event is not None
             self._shutdown_event.set()
         except Exception:
             pass
@@ -892,8 +899,8 @@ class WeChatPadProAdapter(Platform):
 
     async def get_contact_details_list(
         self,
-        room_wx_id_list: list[str] = None,
-        user_names: list[str] = None,
+        room_wx_id_list: list[str] | None = None,
+        user_names: list[str] | None = None,
     ) -> dict | None:
         """获取联系人详情列表。"""
         if room_wx_id_list is None:

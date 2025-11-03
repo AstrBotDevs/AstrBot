@@ -107,7 +107,7 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage:
+    async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
@@ -126,7 +126,9 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
+        abm.sender = MessageMember(
+            user_id=str(event.user_id), nickname=str(event.user_id)
+        )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
             abm.type = MessageType.GROUP_MESSAGE
@@ -152,7 +154,9 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
+        abm.sender = MessageMember(
+            user_id=str(event.user_id), nickname=str(event.user_id)
+        )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
             abm.group_id = str(event.group_id)
@@ -191,6 +195,7 @@ class AiocqhttpAdapter(Platform):
         @param event: 事件对象
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
+        assert event.sender is not None
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(
@@ -200,6 +205,7 @@ class AiocqhttpAdapter(Platform):
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
+            abm.group = Group(str(event.group_id))
             abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
@@ -225,7 +231,7 @@ class AiocqhttpAdapter(Platform):
                 self.bot.send(event, err)
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
-            return None
+            raise ValueError(err)
 
         # 按消息段类型类型适配
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):

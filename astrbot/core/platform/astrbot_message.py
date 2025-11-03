@@ -78,7 +78,7 @@ class AstrBotMessage:
         return ""
 
     @group_id.setter
-    def group_id(self, value: str):
+    def group_id(self, value: str | None):
         """设置 group_id"""
         if value:
             if self.group:

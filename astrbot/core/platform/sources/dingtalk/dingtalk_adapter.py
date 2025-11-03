@@ -2,6 +2,7 @@ import asyncio
 import os
 import threading
 import uuid
+from typing import cast
 
 import aiohttp
 import dingtalk_stream
@@ -54,12 +55,14 @@ class DingtalkPlatformAdapter(Platform):
         self.client_id = platform_config["client_id"]
         self.client_secret = platform_config["client_secret"]
 
+        outer_self = self
+
         class AstrCallbackClient(dingtalk_stream.ChatbotHandler):
-            async def process(self_, message: dingtalk_stream.CallbackMessage):
+            async def process(self, message: dingtalk_stream.CallbackMessage):
                 logger.debug(f"dingtalk: {message.data}")
                 im = dingtalk_stream.ChatbotMessage.from_dict(message.data)
-                abm = await self.convert_msg(im)
-                await self.handle_msg(abm)
+                abm = await outer_self.convert_msg(im)
+                await outer_self.handle_msg(abm)
 
                 return AckMessage.STATUS_OK, "OK"
 
@@ -73,6 +76,7 @@ class DingtalkPlatformAdapter(Platform):
             self.client,
         )
         self.client_ = client  # 用于 websockets 的 client
+        self._shutdown_event: threading.Event | None = None
 
     async def send_by_session(
         self,
@@ -95,18 +99,18 @@ class DingtalkPlatformAdapter(Platform):
         abm = AstrBotMessage()
         abm.message = []
         abm.message_str = ""
-        abm.timestamp = int(message.create_at / 1000)
+        abm.timestamp = int(cast(int, message.create_at) / 1000)
         abm.type = (
             MessageType.GROUP_MESSAGE
             if message.conversation_type == "2"
             else MessageType.FRIEND_MESSAGE
         )
         abm.sender = MessageMember(
-            user_id=message.sender_id,
-            nickname=message.sender_nick,
+            user_id=cast(str, message.sender_id),
+            nickname=cast(str, message.sender_nick),
         )
-        abm.self_id = message.chatbot_user_id
-        abm.message_id = message.message_id
+        abm.self_id = cast(str, message.chatbot_user_id)
+        abm.message_id = cast(str, message.message_id)
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
@@ -115,7 +119,7 @@ class DingtalkPlatformAdapter(Platform):
                 for user in message.at_users:
                     if user.dingtalk_id:
                         abm.message.append(At(qq=user.dingtalk_id))
-            abm.group_id = message.conversation_id
+            abm.group_id = cast(str, message.conversation_id)
             if self.unique_session:
                 abm.session_id = abm.sender.user_id
             else:
@@ -123,14 +127,16 @@ class DingtalkPlatformAdapter(Platform):
         else:
             abm.session_id = abm.sender.user_id
 
-        message_type: str = message.message_type
+        message_type: str = cast(str, message.message_type)
         match message_type:
             case "text":
                 abm.message_str = message.text.content.strip()
                 abm.message.append(Plain(abm.message_str))
             case "richText":
-                rtc: dingtalk_stream.RichTextContent = message.rich_text_content
-                contents: list[dict] = rtc.rich_text_list
+                rtc: dingtalk_stream.RichTextContent = cast(
+                    dingtalk_stream.RichTextContent, message.rich_text_content
+                )
+                contents: list[dict] = cast(list[dict], rtc.rich_text_list)
                 for content in contents:
                     plains = ""
                     if "text" in content:
@@ -139,7 +145,7 @@ class DingtalkPlatformAdapter(Platform):
                     elif "type" in content and content["type"] == "picture":
                         f_path = await self.download_ding_file(
                             content["downloadCode"],
-                            message.robot_code,
+                            cast(str, message.robot_code),
                             "jpg",
                         )
                         abm.message.append(Image.fromFileSystem(f_path))
@@ -184,7 +190,7 @@ class DingtalkPlatformAdapter(Platform):
                 logger.error(
                     f"下载钉钉文件失败: {resp.status}, {await resp.text()}",
                 )
-                return None
+                return ""
             resp_data = await resp.json()
             download_url = resp_data["data"]["downloadUrl"]
             await download_file(download_url, f_path)
@@ -204,7 +210,7 @@ class DingtalkPlatformAdapter(Platform):
                     logger.error(
                         f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}",
                     )
-                    return None
+                    return ""
                 return (await resp.json())["data"]["accessToken"]
 
     async def handle_msg(self, abm: AstrBotMessage):
@@ -241,6 +247,8 @@ class DingtalkPlatformAdapter(Platform):
         def monkey_patch_close():
             raise Exception("Graceful shutdown")
 
+        assert self.client_.websocket is not None
+        assert self._shutdown_event is not None
         self.client_.open_connection = monkey_patch_close
         await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
         self._shutdown_event.set()

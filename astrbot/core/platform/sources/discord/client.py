@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Awaitable, Callable
 
 import discord
 
@@ -14,7 +15,7 @@ else:
 class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
-    def __init__(self, token: str, proxy: str = None):
+    def __init__(self, token: str, proxy: str | None = None):
         self.token = token
         self.proxy = proxy
 
@@ -27,13 +28,13 @@ class DiscordBotClient(discord.Bot):
         super().__init__(intents=intents, proxy=proxy)
 
         # 回调函数
-        self.on_message_received = None
-        self.on_ready_once_callback = None
+        self.on_message_received: Callable[[dict], Awaitable[None]] | None = None
+        self.on_ready_once_callback: Callable[[], Awaitable[None]] | None = None
         self._ready_once_fired = False
 
-    @override
     async def on_ready(self):
         """当机器人成功连接并准备就绪时触发"""
+        assert self.user is not None
         logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
         logger.info("[Discord] 客户端已准备就绪。")
 
@@ -49,6 +50,7 @@ class DiscordBotClient(discord.Bot):
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
+        assert self.user is not None
         is_mentioned = self.user in message.mentions
         return {
             "message": message,
@@ -66,6 +68,8 @@ class DiscordBotClient(discord.Bot):
 
     def _create_interaction_data(self, interaction: discord.Interaction) -> dict:
         """从 discord.Interaction 创建数据字典"""
+        assert self.user is not None
+        assert interaction.user is not None
         return {
             "interaction": interaction,
             "bot_id": str(self.user.id),
@@ -80,7 +84,6 @@ class DiscordBotClient(discord.Bot):
             "type": "interaction",
         }
 
-    @override
     async def on_message(self, message: discord.Message):
         """当接收到消息时触发"""
         if message.author.bot:

@@ -57,6 +57,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = comp.file
 
                 if image_file is None:
+                    assert file_path is not None
                     image_file = open(file_path, "rb")
 
                 request = (
@@ -69,9 +70,11 @@ class LarkMessageEvent(AstrMessageEvent):
                     )
                     .build()
                 )
+                assert lark_client.im is not None
                 response = await lark_client.im.v1.image.acreate(request)
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
+                assert response.data is not None
                 image_key = response.data.image_key
                 logger.debug(image_key)
                 ret.append(_stage)
@@ -107,6 +110,7 @@ class LarkMessageEvent(AstrMessageEvent):
             .build()
         )
 
+        assert self.bot.im is not None
         response = await self.bot.im.v1.message.areply(request)
 
         if not response.success():
@@ -125,6 +129,7 @@ class LarkMessageEvent(AstrMessageEvent):
             )
             .build()
         )
+        assert self.bot.im is not None
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")

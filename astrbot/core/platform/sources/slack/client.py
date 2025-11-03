@@ -4,9 +4,11 @@ import hmac
 import json
 import logging
 from collections.abc import Callable
+from typing import cast
 
 from quart import Quart, Response, request
 from slack_sdk.socket_mode.aiohttp import SocketModeClient
+from slack_sdk.socket_mode.async_client import AsyncBaseSocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web.async_client import AsyncWebClient
@@ -50,7 +52,7 @@ class SlackWebhookClient:
             """处理 Slack 事件"""
             try:
                 # 获取请求体和头部
-                body = await request.get_data()
+                body = cast(bytes, await request.get_data())
                 event_data = json.loads(body.decode("utf-8"))
 
                 # Verify Slack request signature
@@ -128,9 +130,12 @@ class SlackSocketClient:
         self.event_handler = event_handler
         self.socket_client = None
 
-    async def _handle_events(self, _: SocketModeClient, req: SocketModeRequest):
+    async def _handle_events(
+        self, _: AsyncBaseSocketModeClient, req: SocketModeRequest
+    ):
         """处理 Socket Mode 事件"""
         try:
+            assert self.socket_client is not None
             # 确认收到事件
             response = SocketModeResponse(envelope_id=req.envelope_id)
             await self.socket_client.send_socket_mode_response(response)

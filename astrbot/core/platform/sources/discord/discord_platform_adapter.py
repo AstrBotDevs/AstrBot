@@ -1,10 +1,10 @@
 import asyncio
 import re
 import sys
-from typing import Any
+from typing import Any, cast
 
 import discord
-from discord.abc import Messageable
+from discord.abc import GuildChannel, Messageable, PrivateChannel
 from discord.channel import DMChannel
 
 from astrbot import logger
@@ -45,7 +45,7 @@ class DiscordPlatformAdapter(Platform):
         super().__init__(event_queue)
         self.config = platform_config
         self.settings = platform_settings
-        self.client_self_id = None
+        self.client_self_id: str | None = None
         self.registered_handlers = []
         # 指令注册相关
         self.enable_command_register = self.config.get("discord_command_register", True)
@@ -61,6 +61,7 @@ class DiscordPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         """通过会话发送消息"""
+        assert self.client.user is not None
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
         if "_" in session.session_id:
@@ -88,9 +89,9 @@ class DiscordPlatformAdapter(Platform):
             user_id=str(self.client_self_id),
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = self.client_self_id
+        message_obj.self_id = cast(str, self.client_self_id)
         message_obj.session_id = session.session_id
-        message_obj.message = message_chain
+        message_obj.message = message_chain.chain
 
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
@@ -158,7 +159,7 @@ class DiscordPlatformAdapter(Platform):
 
     def _get_message_type(
         self,
-        channel: Messageable,
+        channel: Messageable | GuildChannel | PrivateChannel,
         guild_id: int | None = None,
     ) -> MessageType:
         """根据 channel 对象和 guild_id 判断消息类型"""
@@ -168,13 +169,15 @@ class DiscordPlatformAdapter(Platform):
             return MessageType.FRIEND_MESSAGE
         return MessageType.GROUP_MESSAGE
 
-    def _get_channel_id(self, channel: Messageable) -> str:
+    def _get_channel_id(
+        self, channel: Messageable | GuildChannel | PrivateChannel
+    ) -> str:
         """根据 channel 对象获取ID"""
         return str(getattr(channel, "id", None))
 
     def _convert_message_to_abm(self, data: dict) -> AstrBotMessage:
         """将普通消息转换为 AstrBotMessage"""
-        message: discord.Message = data["message"]
+        message = data["message"]
 
         content = message.content
 
@@ -231,7 +234,7 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = self.client_self_id
+        abm.self_id = cast(str, self.client_self_id)
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -251,6 +254,8 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
+        assert message.raw_message is discord.Message
+        assert self.client.user is not None
 
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
@@ -386,7 +391,9 @@ class DiscordPlatformAdapter(Platform):
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
-        async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
+        async def dynamic_callback(
+            ctx: discord.ApplicationContext, params: str | None = None
+        ):
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
@@ -420,7 +427,7 @@ class DiscordPlatformAdapter(Platform):
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = self.client_self_id
+            abm.self_id = cast(str, self.client_self_id)
             abm.session_id = str(ctx.channel_id)
             abm.message_id = str(ctx.interaction.id)
 
@@ -433,7 +440,7 @@ class DiscordPlatformAdapter(Platform):
     def _extract_command_info(
         event_filter: Any,
         handler_metadata: StarHandlerMetadata,
-    ) -> tuple[str, str, CommandFilter] | None:
+    ) -> tuple[str, str, CommandFilter | None] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
         # is_group = False

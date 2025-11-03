@@ -3,6 +3,7 @@ import base64
 import json
 import re
 import uuid
+from typing import cast
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
@@ -74,6 +75,7 @@ class LarkPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ):
+        assert self.lark_api.im is not None
         res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
         wrapped = {
             "zh_cn": {
@@ -118,9 +120,11 @@ class LarkPlatformAdapter(Platform):
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
+        assert event.event is not None
         message = event.event.message
+        assert message is not None
         abm = AstrBotMessage()
-        abm.timestamp = int(message.create_time) / 1000
+        abm.timestamp = cast(int, message.create_time) // 1000
         abm.message = []
         abm.type = (
             MessageType.GROUP_MESSAGE
@@ -135,10 +139,13 @@ class LarkPlatformAdapter(Platform):
         at_list = {}
         if message.mentions:
             for m in message.mentions:
+                assert m.id is not None
                 at_list[m.key] = Comp.At(qq=m.id.open_id, name=m.name)
                 if m.name == self.bot_name:
+                    assert m.id.open_id is not None
                     abm.self_id = m.id.open_id
 
+        assert message.content is not None
         content_json_b = json.loads(message.content)
 
         if message.message_type == "text":
@@ -180,14 +187,16 @@ class LarkPlatformAdapter(Platform):
                     image_key = comp["image_key"]
                     request = (
                         GetMessageResourceRequest.builder()
-                        .message_id(message.message_id)
+                        .message_id(cast(str, message.message_id))
                         .file_key(image_key)
                         .type("image")
                         .build()
                     )
+                    assert self.lark_api.im is not None
                     response = await self.lark_api.im.v1.message_resource.aget(request)
                     if not response.success():
                         logger.error(f"无法下载飞书图片: {image_key}")
+                    assert response.file is not None
                     image_bytes = response.file.read()
                     image_base64 = base64.b64encode(image_bytes).decode()
                     abm.message.append(Comp.Image.fromBase64(image_base64))
@@ -195,6 +204,10 @@ class LarkPlatformAdapter(Platform):
         for comp in abm.message:
             if isinstance(comp, Comp.Plain):
                 abm.message_str += comp.text
+        assert message.message_id is not None
+        assert event.event.sender is not None
+        assert event.event.sender.sender_id is not None
+        assert event.event.sender.sender_id.open_id is not None
         abm.message_id = message.message_id
         abm.raw_message = message
         abm.sender = MessageMember(
@@ -234,5 +247,5 @@ class LarkPlatformAdapter(Platform):
         await self.client._disconnect()
         logger.info("飞书(Lark) 适配器已被优雅地关闭")
 
-    def get_client(self) -> lark.Client:
+    def get_client(self) -> lark.ws.Client:
         return self.client

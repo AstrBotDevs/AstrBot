@@ -3,8 +3,6 @@ import base64
 import re
 import time
 import uuid
-from collections.abc import Awaitable
-from typing import Any
 
 import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -116,13 +114,13 @@ class SlackAdapter(Platform):
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
-        abm.self_id = self.bot_self_id
+        abm.self_id = cast(str, self.bot_self_id)
 
         # 获取用户信息
         user_id = event.get("user", "")
         try:
             user_info = await self.web_client.users_info(user=user_id)
-            user_data = user_info["user"]
+            user_data = cast(dict, user_info["user"])
             user_name = user_data.get("real_name") or user_data.get("name", user_id)
         except Exception:
             user_name = user_id
@@ -133,7 +131,7 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = channel_info["channel"]["is_im"]
+            is_im = cast(dict, channel_info["channel"])["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -176,7 +174,7 @@ class SlackAdapter(Platform):
                 for mention in mentions:
                     try:
                         mentioned_user = await self.web_client.users_info(user=mention)
-                        user_data = mentioned_user["user"]
+                        user_data = cast(dict, mentioned_user["user"])
                         user_name = user_data.get("real_name") or user_data.get(
                             "name",
                             mention,
@@ -325,7 +323,7 @@ class SlackAdapter(Platform):
                 )
                 raise Exception(f"下载文件失败: {resp.status}")
 
-    async def run(self) -> Awaitable[Any]:
+    async def run(self) -> None:
         self.bot_self_id = await self.get_bot_user_id()
         logger.info(f"Slack auth test OK. Bot ID: {self.bot_self_id}")
 

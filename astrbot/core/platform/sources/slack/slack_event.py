@@ -1,6 +1,7 @@
 import asyncio
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterable
+from typing import cast
 
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -38,6 +39,7 @@ class SlackMessageEvent(AstrMessageEvent):
         if isinstance(segment, Image):
             # upload file
             url = segment.url or segment.file
+            assert url is not None
             if url.startswith("http"):
                 return {
                     "type": "image",
@@ -55,7 +57,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": "图片上传失败"},
                 }
-            image_url = response["files"][0]["url_private"]
+            image_url = cast(list, response["files"])[0]["url_private"]
             logger.debug(f"Slack file upload response: {response}")
             return {
                 "type": "image",
@@ -77,7 +79,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": "文件上传失败"},
                 }
-            file_url = response["files"][0]["permalink"]
+            file_url = cast(list, response["files"])[0]["permalink"]
             return {
                 "type": "section",
                 "text": {
@@ -224,10 +226,10 @@ class SlackMessageEvent(AstrMessageEvent):
             )
 
             members = []
-            for member_id in members_response["members"]:
+            for member_id in cast(Iterable, members_response["members"]):
                 try:
                     user_info = await self.web_client.users_info(user=member_id)
-                    user_data = user_info["user"]
+                    user_data = cast(dict, user_info["user"])
                     members.append(
                         MessageMember(
                             user_id=member_id,
@@ -239,7 +241,7 @@ class SlackMessageEvent(AstrMessageEvent):
                     # 如果获取用户信息失败，使用默认信息
                     members.append(MessageMember(user_id=member_id, nickname=member_id))
 
-            channel_data = channel_info["channel"]
+            channel_data = cast(dict, channel_info["channel"])
             return Group(
                 group_id=channel_id,
                 group_name=channel_data.get("name", ""),
