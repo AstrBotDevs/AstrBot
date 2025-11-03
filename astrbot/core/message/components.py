@@ -26,8 +26,8 @@ import base64
 import json
 import os
 import uuid
-from enum import Enum
 import warnings
+from enum import Enum
 
 from pydantic.v1 import BaseModel
 
@@ -670,7 +670,7 @@ class File(BaseMessageComponent):
         warnings.warn(
             "File.file 属性已弃用。请使用 await get_file() 方法来异步获取文件。",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         if self.file_ and os.path.exists(self.file_):
             return os.path.abspath(self.file_)
@@ -680,11 +680,9 @@ class File(BaseMessageComponent):
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     logger.warning(
-                        (
-                            "不可以在异步上下文中同步等待下载! "
-                            "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                            "请使用 await get_file() 代替直接获取 <File>.file 字段"
-                        )
+                        "不可以在异步上下文中同步等待下载! "
+                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                        "请使用 await get_file() 代替直接获取 <File>.file 字段"
                     )
                     return ""
                 else:
@@ -697,6 +695,7 @@ class File(BaseMessageComponent):
                 logger.error(f"文件下载失败: {e}")
 
         return ""
+
     @file.setter
     def file(self, value: str):
         """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
