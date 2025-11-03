@@ -1,31 +1,33 @@
-FROM python:3.11-slim
-WORKDIR /AstrBot
+FROM node:25-bookworm-slim
 
-COPY . /AstrBot/
-
+# Install Python 3.11
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
     gcc \
     build-essential \
-    python3-dev \
     libffi-dev \
     libssl-dev \
     ca-certificates \
     bash \
     ffmpeg \
-    nodejs \
-    curl \
-    gnupg \
     git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    echo "3.11" > .python-version && \
-    rm -rf /var/lib/apt/lists/*
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    rm -f /usr/lib/python3.11/EXTERNALLY-MANAGED
 
-RUN python -m pip install --no-cache-dir uv && \
-    uv pip install socksio pilk --no-cache-dir --system
+WORKDIR /AstrBot
+
+COPY . /AstrBot/
+
+RUN echo "3.11" > .python-version
+
+RUN python -m pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org uv socksio pilk
 
 EXPOSE 6185
 EXPOSE 6186
