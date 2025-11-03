@@ -16,7 +16,6 @@ import { ref, computed, onMounted, reactive, inject } from 'vue';
 const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/extension');
-const $confirm = inject('$confirm');
 const fileInput = ref(null);
 const activeTab = ref('installed');
 const extension_data = reactive({
