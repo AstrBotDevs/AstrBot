@@ -153,9 +153,6 @@ class WeChatPadProAdapter(Platform):
             "wxid": self.wxid,
         }
         try:
-            # 确保数据目录存在
-            config_dir = AstrbotPaths.astrbot_root / "config"
-            config_dir.mkdir(parents=True, exist_ok=True)
             with open(self.credentials_file, "w") as f:
                 json.dump(credentials, f)
         except Exception as e:
