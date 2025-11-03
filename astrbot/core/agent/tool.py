@@ -4,7 +4,6 @@ from typing import Any, Generic
 import jsonschema
 import mcp
 from deprecated import deprecated
-from pydantic import model_validator
 from pydantic.dataclasses import dataclass
 
 from .run_context import ContextWrapper, TContext
@@ -25,12 +24,11 @@ class ToolSchema:
     parameters: ParametersType
     """The parameters of the tool, in JSON Schema format."""
 
-    @model_validator(mode="after")
-    def validate_parameters(self) -> "ToolSchema":
+    def __post_init__(self):
+        """Validate parameters after dataclass initialization."""
         jsonschema.validate(
             self.parameters, jsonschema.Draft202012Validator.META_SCHEMA
         )
-        return self
 
 
 @dataclass
