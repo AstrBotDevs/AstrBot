@@ -5,11 +5,11 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import axios from 'axios';
-import { pinyin } from 'pinyin-pro';
-import { useCommonStore } from '@/stores/common';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import {pinyin} from 'pinyin-pro';
+import {useCommonStore} from '@/stores/common';
+import {useI18n, useModuleI18n} from '@/i18n/composables';
 
-import { ref, computed, onMounted, reactive } from 'vue';
+import {computed, onMounted, reactive, ref} from 'vue';
 
 
 const commonStore = useCommonStore();
@@ -22,6 +22,7 @@ const extension_data = reactive({
   message: ""
 });
 const showReserved = ref(false);
+const hideDisabled = ref(false);
 const snack_message = ref("");
 const snack_show = ref(false);
 const snack_success = ref("success");
@@ -124,10 +125,17 @@ const pluginMarketHeaders = computed(() => [
 
 // 过滤要显示的插件
 const filteredExtensions = computed(() => {
+  let result = extension_data?.data || [];
+
   if (!showReserved.value) {
-    return extension_data?.data?.filter(ext => !ext.reserved) || [];
+    result = result.filter(ext => !ext.reserved);
   }
-  return extension_data.data || [];
+
+  if (!hideDisabled.value) {
+    result = result.filter(ext => ext.activated);
+  }
+
+  return result;
 });
 
 // 通过搜索过滤插件
@@ -153,6 +161,10 @@ const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
 };
 
+const toggleHideDisabled = () => {
+  hideDisabled.value = !hideDisabled.value;
+};
+
 const toast = (message, success) => {
   snack_message.value = message;
   snack_show.value = true;
@@ -176,7 +188,11 @@ const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
 const getExtensions = async () => {
   loading_.value = true;
   try {
-    const res = await axios.get('/api/plugin/get');
+    const res = await axios.get('/api/plugin/get', {
+      params: {
+        hide_disabled: false // 强制获取所有插件，在前端过滤
+      }
+    });
     Object.assign(extension_data, res.data);
     checkUpdate();
   } catch (err) {
@@ -592,6 +608,11 @@ onMounted(async () => {
                 <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
                   <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
+                </v-btn>
+
+                <v-btn class="ml-2" variant="tonal" @click="toggleHideDisabled">
+                  <v-icon>{{ hideDisabled ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+                  {{ hideDisabled ? tm('buttons.hideDisabledPlugins') : tm('buttons.showDisabledPlugins') }}
                 </v-btn>
 
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
