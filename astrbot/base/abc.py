@@ -5,7 +5,6 @@ from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from pathlib import Path
 
 
-# TODO: 抽象基类
 class IAstrbotPaths(ABC):
     """路径管理的抽象基类."""
 
