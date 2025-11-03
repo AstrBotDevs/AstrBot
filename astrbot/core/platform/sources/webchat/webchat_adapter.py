@@ -5,8 +5,9 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from astrbot_api.abc import IAstrbotPaths
+
 from astrbot import logger
-from astrbot.base import AstrbotPaths
 from astrbot.core.message.components import Image, Plain, Record
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
@@ -17,11 +18,13 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot_sdk import sync_base_container
 
 from ...register import register_platform_adapter
 from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 class QueueListener:
     def __init__(self, webchat_queue_mgr: WebChatQueueMgr, callback: Callable) -> None:

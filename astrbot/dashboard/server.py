@@ -5,15 +5,16 @@ import socket
 
 import jwt
 import psutil
+from astrbot_api.abc import IAstrbotPaths
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
-from astrbot.base import AstrbotPaths
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot_sdk import sync_base_container
 
 from .routes import *
 from .routes.route import Response, RouteContext
@@ -22,7 +23,7 @@ from .routes.t2i import T2iRoute
 
 APP: Quart = None
 
-
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 class AstrBotDashboard:
     def __init__(
         self,

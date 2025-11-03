@@ -12,14 +12,16 @@ from pathlib import Path
 import aiohttp
 import certifi
 import psutil
+from astrbot_api.abc import IAstrbotPaths
 from PIL import Image
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
 
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 def on_error(func, path, exc_info):
     """A callback of the rmtree function."""

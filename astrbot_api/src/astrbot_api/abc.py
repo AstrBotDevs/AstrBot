@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable, Generator
-from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager, contextmanager
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    asynccontextmanager,
+    contextmanager,
+)
 from importlib.abc import Traversable
 from pathlib import Path
 from typing import ClassVar
@@ -17,8 +22,18 @@ from .models import AstrbotPluginMetadata
 
 # region 核心运行时协议
 
+
+class IAstrbotContainerMgr(ABC):
+    """AstrBot 容器管理器的抽象基类."""
+
+
+
+
+
 class IAstrbotPaths(ABC):
     """路径管理的抽象基类."""
+    astrbot_root: ClassVar[Path]
+    """Astrbot 根目录路径."""
 
     @abstractmethod
     def __init__(self, name: str) -> None:
@@ -80,12 +95,6 @@ class IAstrbotPaths(ABC):
     @abstractmethod
     async def achdir(self, cwd: str = "home") -> AbstractAsyncContextManager[Path]:
         """异步临时切换到指定目录, 子进程将继承此 CWD。"""
-
-
-
-
-
-
 
 
 

@@ -1,9 +1,12 @@
 import os
 import uuid
 
+from astrbot_api.abc import IAstrbotPaths
 from openai import NOT_GIVEN, AsyncOpenAI
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core import logger
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav

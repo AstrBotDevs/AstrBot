@@ -1,21 +1,15 @@
 from __future__ import annotations
 
-import os
-from contextlib import (
-    asynccontextmanager,
-    contextmanager,
-)
-from os import getenv
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
+from os import chdir, getenv
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from dotenv import load_dotenv
 from packaging.utils import NormalizedName, canonicalize_name
 
-from astrbot.base.abc import IAstrbotPaths
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Generator
+from astrbot_api import IAstrbotPaths
 
 
 class AstrbotPaths(IAstrbotPaths):
@@ -120,10 +114,10 @@ class AstrbotPaths(IAstrbotPaths):
         original_cwd = Path.cwd()
         target_dir = self.root / cwd
         try:
-            os.chdir(target_dir)
+            chdir(target_dir)
             yield target_dir
         finally:
-            os.chdir(original_cwd)
+            chdir(original_cwd)
 
     # 上面类型标注没错，这里mypy报错，但是这不应该错误，直接忽略掉
     @asynccontextmanager
@@ -132,7 +126,7 @@ class AstrbotPaths(IAstrbotPaths):
         original_cwd = Path.cwd()
         target_dir = self.root / cwd
         try:
-            os.chdir(target_dir)
+            chdir(target_dir)
             yield target_dir
         finally:
-            os.chdir(original_cwd)
+            chdir(original_cwd)

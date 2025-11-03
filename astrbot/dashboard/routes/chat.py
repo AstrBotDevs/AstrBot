@@ -4,10 +4,13 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
+from astrbot_api.abc import IAstrbotPaths
 from quart import Response as QuartResponse
 from quart import g, make_response, request
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase

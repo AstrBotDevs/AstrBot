@@ -10,8 +10,11 @@
 import os
 import warnings
 
-from astrbot.base import AstrbotPaths
+from astrbot_api.abc import IAstrbotPaths
 
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths = sync_base_container.get(type[IAstrbotPaths])
 
 def get_astrbot_path() -> str:
     """获取Astrbot项目路径 -- 请勿使用本函数!!! -- 仅供兼容旧代码使用"""

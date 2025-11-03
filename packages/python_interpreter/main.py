@@ -9,12 +9,15 @@ from collections import defaultdict
 
 import aiodocker
 import aiohttp
+from astrbot_api.abc import IAstrbotPaths
 
 from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.message_components import File, Image
 from astrbot.api.provider import ProviderRequest
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core.utils.io import download_file, download_image_by_url
 
 PROMPT = """

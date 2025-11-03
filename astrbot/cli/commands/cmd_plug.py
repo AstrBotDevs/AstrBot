@@ -3,8 +3,11 @@ import shutil
 from pathlib import Path
 
 import click
+from astrbot_api.abc import IAstrbotPaths
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 from ..utils import (
     PluginStatus,

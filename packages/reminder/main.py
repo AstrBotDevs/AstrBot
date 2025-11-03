@@ -5,10 +5,13 @@ import uuid
 import zoneinfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from astrbot_api.abc import IAstrbotPaths
 
 from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 

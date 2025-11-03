@@ -2,9 +2,11 @@ import warnings
 from pathlib import Path
 
 import click
+from astrbot_api.abc import IAstrbotPaths
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
 
+AstrbotPaths = sync_base_container.get(type[IAstrbotPaths])
 
 def check_astrbot_root(path: str | Path) -> bool:
     """检查路径是否为 AstrBot 根目录"""

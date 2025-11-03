@@ -3,7 +3,11 @@
 import json
 import os
 
-from astrbot.base import AstrbotPaths
+from astrbot_api.abc import IAstrbotPaths
+
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 
 def load_config(namespace: str) -> dict | bool:

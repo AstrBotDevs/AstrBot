@@ -5,9 +5,12 @@ import traceback
 import uuid
 
 import aiohttp
+from astrbot_api.abc import IAstrbotPaths
 
 from astrbot import logger
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 from ..entities import ProviderType
 from ..provider import TTSProvider

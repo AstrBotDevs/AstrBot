@@ -4,14 +4,16 @@ import mimetypes
 import os
 import sys
 
-from astrbot.base import LOGO, AstrbotPaths
 from astrbot.core import LogBroker, LogManager, db_helper, logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot_api import LOGO, IAstrbotPaths
+from astrbot_sdk import sync_base_container
 
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
-def check_env():
+def check_env() -> None:
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
         logger.error("请使用 Python3.10+ 运行本项目。")
         exit()

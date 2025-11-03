@@ -1,2 +1,7 @@
-def hello() -> str:
-    return "Hello from astrbot-api!"
+from .abc import IAstrbotPaths
+from .const import LOGO
+
+__all__ = [
+    "IAstrbotPaths",
+    "LOGO",
+]

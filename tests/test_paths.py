@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from astrbot_api.abc import IAstrbotPaths
 
-from astrbot.base.paths import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 if TYPE_CHECKING:
     from collections.abc import Generator

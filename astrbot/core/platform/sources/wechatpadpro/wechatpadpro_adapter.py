@@ -8,11 +8,14 @@ import traceback
 import aiohttp
 import anyio
 import websockets
+from astrbot_api.abc import IAstrbotPaths
 
 from astrbot import logger
 from astrbot.api.message_components import At, Image, Plain, Record
 from astrbot.api.platform import Platform, PlatformMetadata
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.astrbot_message import (

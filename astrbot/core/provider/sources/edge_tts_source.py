@@ -4,8 +4,11 @@ import subprocess
 import uuid
 
 import edge_tts
+from astrbot_api.abc import IAstrbotPaths
 
-from astrbot.base import AstrbotPaths
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 from astrbot.core import logger
 
 from ..entities import ProviderType

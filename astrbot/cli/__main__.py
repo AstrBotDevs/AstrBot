@@ -5,7 +5,7 @@ from importlib.metadata import version
 
 import click
 
-from astrbot.base import LOGO
+from astrbot_api import LOGO
 
 from .commands import conf, init, plug, run
 

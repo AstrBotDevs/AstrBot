@@ -65,6 +65,8 @@ dependencies = [
     "xinference-client",
     "dotenv>=0.9.9",
     "astrbot-api",
+    "astrbot-sdk",
+    "dishka>=1.7.2",
 ]
 
 [dependency-groups]
@@ -113,12 +115,14 @@ members = [
 
 [tool.uv.sources]
 astrbot-api = { workspace = true }
+astrbot-sdk = { workspace = true }
+
 [tool.pyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
-include = ["astrbot","packages"]
+include = ["astrbot","astrbot_api","astrbot_sdk","packages"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 
 [tool.hatch.version]

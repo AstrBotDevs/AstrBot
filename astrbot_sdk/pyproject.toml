@@ -10,6 +10,8 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "astrbot-api",
+    "dishka>=1.7.2",
+    "dotenv>=0.9.9",
 ]
 
 [build-system]

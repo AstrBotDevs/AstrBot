@@ -2,7 +2,11 @@
 
 from importlib.metadata import version
 
-from astrbot.base import AstrbotPaths
+from astrbot_api.abc import IAstrbotPaths
+
+from astrbot_sdk import sync_base_container
+
+AstrbotPaths: type[IAstrbotPaths] = sync_base_container.get(type[IAstrbotPaths])
 
 # 警告,请使用version函数获取版本,此变量兼容保留
 VERSION = version("astrbot")
