@@ -1,0 +1,23 @@
+[project]
+name = "astrbot-sdk"
+dynamic = ["version"]
+description = "Astrbot Python SDK"
+readme = "README.md"
+authors = [
+    { name = "AstrBotDevs", email = "community@astrbot.app" }
+]
+
+requires-python = ">=3.10"
+dependencies = [
+    "astrbot-api",
+]
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv.sources]
+astrbot-api = { workspace = true }

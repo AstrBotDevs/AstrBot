@@ -64,6 +64,7 @@ dependencies = [
     "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
     "xinference-client",
     "dotenv>=0.9.9",
+    "astrbot-api",
 ]
 
 [dependency-groups]
@@ -104,7 +105,14 @@ ignore = [
     "E501",
     "ASYNC230" # TODO: handle ASYNC230 in AstrBot
 ]
+[tool.uv.workspace]
+members = [
+    "astrbot_api",
+    "astrbot_sdk",
+]
 
+[tool.uv.sources]
+astrbot-api = { workspace = true }
 [tool.pyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

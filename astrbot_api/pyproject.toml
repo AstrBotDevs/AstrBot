@@ -1,0 +1,25 @@
+[project]
+name = "astrbot-api"
+dynamic = ["version"]
+description = "Astrbot Python API"
+readme = "README.md"
+authors = [
+    { name = "AstrBotDevs", email = "community@astrbot.app" }
+]
+
+requires-python = ">=3.10"
+dependencies = [
+    "anyio>=4.11.0",
+    "mcp>=1.12.4",
+    "pydantic>=2.10.6",
+    "pyyaml>=6.0.3",
+    "types-pyyaml>=6.0.12.20250915",
+    "yarl>=1.22.0",
+]
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
