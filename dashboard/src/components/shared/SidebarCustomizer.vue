@@ -30,6 +30,8 @@
               <v-list 
                 density="compact"
                 class="custom-list"
+                @dragover.prevent
+                @drop="handleDropToList($event, 'main')"
               >
                 <v-list-item
                   v-for="(item, index) in mainItems"
@@ -38,7 +40,7 @@
                   draggable="true"
                   @dragstart="handleDragStart($event, 'main', index)"
                   @dragover.prevent
-                  @drop="handleDrop($event, 'main', index)"
+                  @drop.stop="handleDrop($event, 'main', index)"
                 >
                   <template v-slot:prepend>
                     <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
@@ -61,6 +63,8 @@
               <v-list 
                 density="compact"
                 class="custom-list"
+                @dragover.prevent
+                @drop="handleDropToList($event, 'more')"
               >
                 <v-list-item
                   v-for="(item, index) in moreItems"
@@ -69,7 +73,7 @@
                   draggable="true"
                   @dragstart="handleDragStart($event, 'more', index)"
                   @dragover.prevent
-                  @drop="handleDrop($event, 'more', index)"
+                  @drop.stop="handleDrop($event, 'more', index)"
                 >
                   <template v-slot:prepend>
                     <v-icon :icon="item.icon" size="small" class="mr-2"></v-icon>
@@ -195,6 +199,32 @@ function handleDrop(event, targetListType, targetIndex) {
     mainItems.value.splice(targetIndex, 0, item);
   } else {
     moreItems.value.splice(targetIndex, 0, item);
+  }
+  
+  draggedItem.value = null;
+}
+
+function handleDropToList(event, targetListType) {
+  event.preventDefault();
+  
+  if (!draggedItem.value) return;
+  
+  const sourceListType = draggedItem.value.type;
+  const sourceIndex = draggedItem.value.index;
+  const item = draggedItem.value.item;
+  
+  // Remove from source
+  if (sourceListType === 'main') {
+    mainItems.value.splice(sourceIndex, 1);
+  } else {
+    moreItems.value.splice(sourceIndex, 1);
+  }
+  
+  // Add to target list at the end
+  if (targetListType === 'main') {
+    mainItems.value.push(item);
+  } else {
+    moreItems.value.push(item);
   }
   
   draggedItem.value = null;
