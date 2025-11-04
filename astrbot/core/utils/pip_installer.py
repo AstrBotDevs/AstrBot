@@ -25,6 +25,8 @@ class PipInstaller:
             cwd = Path(requirements_path).parent.resolve()
         elif project_path:
             cwd = Path(project_path).resolve()
+        else:
+            cwd = Path().cwd() # 安装pip包时避免cwd变量未初始化
 
         args = ["install"]
         if package_name:
