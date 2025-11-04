@@ -97,7 +97,11 @@
     },
     "uninstall": {
       "title": "删除确认",
-      "message": "你确定要删除当前插件吗？"
+      "message": "你确定要删除当前插件吗？",
+      "deleteConfig": "同时删除插件配置文件",
+      "deleteData": "同时删除插件持久化数据",
+      "configHint": "配置文件位于 data/config 目录",
+      "dataHint": "删除 data/plugin_data 和 data/plugins_data 目录下的数据"
     },
     "install": {
       "title": "安装插件",

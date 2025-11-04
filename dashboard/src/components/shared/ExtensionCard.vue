@@ -2,6 +2,7 @@
 import { ref, computed, inject } from 'vue';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
+import UninstallConfirmDialog from './UninstallConfirmDialog.vue';
 
 const props = defineProps({
   extension: {
@@ -31,6 +32,7 @@ const emit = defineEmits([
 ]);
 
 const reveal = ref(false);
+const showUninstallDialog = ref(false);
 
 // 国际化
 const { tm } = useModuleI18n('features/extension');
@@ -55,19 +57,11 @@ const installExtension = async () => {
 };
 
 const uninstallExtension = async () => {
-  if (typeof $confirm !== "function") {
-    console.error(tm("card.errors.confirmNotRegistered"));
-    return;
-  }
+  showUninstallDialog.value = true;
+};
 
-  const confirmed = await $confirm({
-    title: tm("dialogs.uninstall.title"),
-    message: tm("dialogs.uninstall.message"),
-  });
-
-  if (confirmed) {
-    emit("uninstall", props.extension);
-  }
+const handleUninstallConfirm = (options: { deleteConfig: boolean; deleteData: boolean }) => {
+  emit("uninstall", props.extension, options);
 };
 
 const toggleActivation = () => {
@@ -219,6 +213,12 @@ const viewReadme = () => {
       </v-btn>
     </v-card-actions>
   </v-card>
+
+  <!-- 卸载确认对话框 -->
+  <UninstallConfirmDialog
+    v-model="showUninstallDialog"
+    @confirm="handleUninstallConfirm"
+  />
 
 </template>
 

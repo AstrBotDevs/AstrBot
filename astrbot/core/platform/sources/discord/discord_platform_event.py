@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import binascii
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -183,7 +184,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                                 BytesIO(img_bytes),
                                 filename=filename or "image.png",
                             )
-                        except (ValueError, TypeError, base64.binascii.Error):
+                        except (ValueError, TypeError, binascii.Error):
                             logger.debug(
                                 f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}",
                             )

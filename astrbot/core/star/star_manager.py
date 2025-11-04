@@ -680,11 +680,18 @@ class PluginManager:
 
             return plugin_info
 
-    async def uninstall_plugin(self, plugin_name: str):
+    async def uninstall_plugin(
+        self,
+        plugin_name: str,
+        delete_config: bool = False,
+        delete_data: bool = False,
+    ):
         """卸载指定的插件。
 
         Args:
             plugin_name (str): 要卸载的插件名称
+            delete_config (bool): 是否删除插件配置文件，默认为 False
+            delete_data (bool): 是否删除插件数据，默认为 False
 
         Raises:
             Exception: 当插件不存在、是保留插件时，或删除插件文件夹失败时抛出异常
@@ -714,12 +721,58 @@ class PluginManager:
 
             await self._unbind_plugin(plugin_name, plugin.module_path)
 
+            # 删除插件文件夹
             try:
                 remove_dir(os.path.join(ppath, root_dir_name))
             except Exception as e:
                 raise Exception(
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 )
+
+            # 删除插件配置文件
+            if delete_config and root_dir_name:
+                config_file = os.path.join(
+                    self.plugin_config_path,
+                    f"{root_dir_name}_config.json",
+                )
+                if os.path.exists(config_file):
+                    try:
+                        os.remove(config_file)
+                        logger.info(f"已删除插件 {plugin_name} 的配置文件")
+                    except Exception as e:
+                        logger.warning(f"删除插件配置文件失败: {e!s}")
+
+            # 删除插件持久化数据
+            # 注意：需要检查两个可能的目录名（plugin_data 和 plugins_data）
+            # data/temp 目录可能被多个插件共享，不自动删除以防误删
+            if delete_data and root_dir_name:
+                data_base_dir = os.path.dirname(ppath)  # data/
+
+                # 删除 data/plugin_data 下的插件持久化数据（单数形式，新版本）
+                plugin_data_dir = os.path.join(
+                    data_base_dir, "plugin_data", root_dir_name
+                )
+                if os.path.exists(plugin_data_dir):
+                    try:
+                        remove_dir(plugin_data_dir)
+                        logger.info(
+                            f"已删除插件 {plugin_name} 的持久化数据 (plugin_data)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"删除插件持久化数据失败 (plugin_data): {e!s}")
+
+                # 删除 data/plugins_data 下的插件持久化数据（复数形式，旧版本兼容）
+                plugins_data_dir = os.path.join(
+                    data_base_dir, "plugins_data", root_dir_name
+                )
+                if os.path.exists(plugins_data_dir):
+                    try:
+                        remove_dir(plugins_data_dir)
+                        logger.info(
+                            f"已删除插件 {plugin_name} 的持久化数据 (plugins_data)"
+                        )
+                    except Exception as e:
+                        logger.warning(f"删除插件持久化数据失败 (plugins_data): {e!s}")
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):
         """解绑并移除一个插件。
