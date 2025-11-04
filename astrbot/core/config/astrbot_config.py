@@ -2,6 +2,7 @@ import enum
 import json
 import logging
 import os
+from pathlib import Path
 
 from astrbot.base import AstrbotPaths
 
@@ -42,6 +43,7 @@ class AstrBotConfig(dict):
 
         if not self.check_exist():
             """不存在时载入默认配置"""
+            Path(config_path).parent.mkdir(parents=True, exist_ok=True)
             with open(config_path, "w", encoding="utf-8-sig") as f:
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
                 object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
