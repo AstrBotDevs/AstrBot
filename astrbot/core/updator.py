@@ -85,11 +85,38 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
+
+    def _generate_update_instruction(self, latest: bool = True, version: str | None = None) -> str:
+        """私有辅助函数
+        
+        Args:
+            latest: 是否更新到最新版本
+            version: 目标版本号，如果 latest=True 则忽略
+        
+        Returns:
+            str: 更新指令字符串
+        """
+        if latest:
+            pip_cmd = "pip install git+https://github.com/AstrBotDevs/AstrBot.git"
+            uv_cmd = "uv tool upgrade astrbot"
+        else:
+            if version:
+                pip_cmd = f"pip install git+https://github.com/AstrBotDevs/AstrBot@{version}.git"
+                uv_cmd = f"uv tool upgrade astrbot --version {version}"
+            else:
+                raise ValueError("当 latest=False 时，必须提供 version")
+
+        return (
+            "命令行启动时,请直接使用uv tool upgrade astrbot更新\n"
+            f"或者使用此命令更新: {pip_cmd}"
+            f"使用uv: {uv_cmd}"
+        )
+
     async def update(self, reboot=False, latest=True, version=None, proxy=""):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
         if os.environ.get("ASTRBOT_CLI"):
-            raise Exception("不支持更新CLI启动的AstrBot")  # 避免版本管理混乱
+            raise Exception(self._generate_update_instruction(latest, version))  # 提示用户正确的更新方法
 
         if latest:
             latest_version = update_data[0]["tag_name"]
