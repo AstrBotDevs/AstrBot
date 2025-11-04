@@ -13,6 +13,7 @@ class PipInstaller:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
         self.paths = AstrbotPaths.getPaths("astrbot")
+
     async def install(
         self,
         package_name: str | None = None,
@@ -20,13 +21,12 @@ class PipInstaller:
         project_path: str | None = None,
         mirror: str | None = None,
     ) -> None:
-
         if requirements_path:
             cwd = Path(requirements_path).parent.resolve()
         elif project_path:
             cwd = Path(project_path).resolve()
         else:
-            cwd = Path().cwd() # 安装pip包时避免cwd变量未初始化
+            cwd = Path().cwd()  # 安装pip包时避免cwd变量未初始化
 
         args = ["install"]
         if package_name:

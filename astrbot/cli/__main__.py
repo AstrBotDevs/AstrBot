@@ -10,10 +10,11 @@ from astrbot.base import LOGO
 from .commands import conf, init, plug, run
 
 __version__ = version("astrbot")
-""" 注意,此版本号可能包含.dev+hash后缀,仅用于开发版本识别. 
+""" 注意,此版本号可能包含.dev+hash后缀,仅用于开发版本识别.
 
 请勿直接使用本版本号来下载dashboard.
 """
+
 
 @click.group()
 @click.version_option(__version__, prog_name="AstrBot")

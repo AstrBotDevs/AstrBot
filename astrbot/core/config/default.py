@@ -6,7 +6,11 @@ from astrbot.base import AstrbotPaths
 
 # 警告,请使用version函数获取版本,此变量兼容保留
 base = version("astrbot").split("+")[0].split(".dev")[0]
-VERSION = f"{'.'.join(base.split('.')[:2])}.{int(base.split('.')[2])-1}" if ".dev" in version("astrbot").split("+")[0] else base
+VERSION = (
+    f"{'.'.join(base.split('.')[:2])}.{int(base.split('.')[2]) - 1}"
+    if ".dev" in version("astrbot").split("+")[0]
+    else base
+)
 # 当前版本为开发版本时，去掉.dev后缀 并降级一级（已发布的正式版）
 
 DB_PATH = str(AstrbotPaths.astrbot_root / "data_v4.db")
