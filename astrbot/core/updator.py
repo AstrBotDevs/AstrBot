@@ -6,7 +6,7 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import download_file
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
@@ -20,7 +20,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
-        self.astrbot_root = get_astrbot_data_path()
+        self.astrbot_root = get_astrbot_path() # 覆盖源代码
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
