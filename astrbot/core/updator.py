@@ -102,8 +102,8 @@ class AstrBotUpdator(RepoZipUpdator):
             uv_cmd = "uv tool upgrade astrbot"
         else:
             if version:
-                pip_cmd = f"pip install git+https://github.com/AstrBotDevs/AstrBot@{version}.git"
-                uv_cmd = f"uv tool upgrade astrbot --version {version}"
+                pip_cmd = f"pip install git+https://github.com/AstrBotDevs/AstrBot.git@{version}"
+                uv_cmd = f"uv tool install --force git+https://github.com/AstrBotDevs/AstrBot.git@{version} astrbot"
             else:
                 raise ValueError("当 latest=False 时，必须提供 version")
 
