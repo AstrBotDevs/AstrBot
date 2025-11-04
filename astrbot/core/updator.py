@@ -20,7 +20,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
-        self.MAIN_PATH = get_astrbot_path() # 覆盖源代码
+        self.MAIN_PATH = get_astrbot_path()  # 覆盖源代码
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
@@ -85,14 +85,15 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-
-    def _generate_update_instruction(self, latest: bool = True, version: str | None = None) -> str:
+    def _generate_update_instruction(
+        self, latest: bool = True, version: str | None = None
+    ) -> str:
         """私有辅助函数
-        
+
         Args:
             latest: 是否更新到最新版本
             version: 目标版本号，如果 latest=True 则忽略
-        
+
         Returns:
             str: 更新指令字符串
         """
@@ -116,7 +117,9 @@ class AstrBotUpdator(RepoZipUpdator):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
         if os.environ.get("ASTRBOT_CLI"):
-            raise Exception(self._generate_update_instruction(latest, version))  # 提示用户正确的更新方法
+            raise Exception(
+                self._generate_update_instruction(latest, version)
+            )  # 提示用户正确的更新方法
 
         if latest:
             latest_version = update_data[0]["tag_name"]

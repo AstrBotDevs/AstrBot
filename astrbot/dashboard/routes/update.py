@@ -86,7 +86,6 @@ class UpdateRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def update_project(self):
-
         data = await request.json
         version = data.get("version", "")
         reboot = data.get("reboot", True)
