@@ -88,6 +88,8 @@ class AstrBotUpdator(RepoZipUpdator):
     async def update(self, reboot=False, latest=True, version=None, proxy=""):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
+        if os.environ.get("ASTRBOT_CLI"):
+            raise Exception("不支持更新CLI启动的AstrBot")  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
