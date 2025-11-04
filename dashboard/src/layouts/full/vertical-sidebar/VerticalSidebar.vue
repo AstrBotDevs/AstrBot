@@ -1,5 +1,5 @@
 <script setup>
-import { ref, shallowRef, onMounted } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
@@ -12,20 +12,26 @@ const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
 
 // Apply customization on mount and listen for storage changes
+const handleStorageChange = (e) => {
+  if (e.key === 'astrbot_sidebar_customization') {
+    sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  }
+};
+
+const handleCustomEvent = () => {
+  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+};
+
 onMounted(() => {
   sidebarMenu.value = applySidebarCustomization(sidebarItems);
   
-  // Listen for storage changes (e.g., from Settings page)
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'astrbot_sidebar_customization') {
-      sidebarMenu.value = applySidebarCustomization(sidebarItems);
-    }
-  });
-  
-  // Listen for custom event from same window
-  window.addEventListener('sidebar-customization-changed', () => {
-    sidebarMenu.value = applySidebarCustomization(sidebarItems);
-  });
+  window.addEventListener('storage', handleStorageChange);
+  window.addEventListener('sidebar-customization-changed', handleCustomEvent);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('storage', handleStorageChange);
+  window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
 });
 
 const showIframe = ref(false);

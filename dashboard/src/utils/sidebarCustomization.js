@@ -43,7 +43,7 @@ export function clearSidebarCustomization() {
 /**
  * Apply customization to sidebar items
  * @param {Array} defaultItems - Default sidebar items array
- * @returns {Array} Customized sidebar items array
+ * @returns {Array} Customized sidebar items array (new array, doesn't mutate input)
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
@@ -54,15 +54,16 @@ export function applySidebarCustomization(defaultItems) {
   const { mainItems, moreItems } = customization;
   
   // Create a map of all items by title for quick lookup
+  // Deep clone items to avoid mutating originals
   const allItemsMap = new Map();
   defaultItems.forEach(item => {
     if (item.children) {
       // If it's the "More" group, add children to map
       item.children.forEach(child => {
-        allItemsMap.set(child.title, child);
+        allItemsMap.set(child.title, { ...child });
       });
     } else {
-      allItemsMap.set(item.title, item);
+      allItemsMap.set(item.title, { ...item });
     }
   });
 
