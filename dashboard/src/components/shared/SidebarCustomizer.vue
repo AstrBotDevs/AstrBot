@@ -7,13 +7,13 @@
       @click="openDialog"
       style="margin-bottom: 8px;"
     >
-      {{ t('features/settings:sidebar.customize.title') }}
+      {{ t('features.settings.sidebar.customize.title') }}
     </v-btn>
 
     <v-dialog v-model="dialog" max-width="700px">
       <v-card>
         <v-card-title class="d-flex justify-space-between align-center">
-          <span>{{ t('features/settings:sidebar.customize.title') }}</span>
+          <span>{{ t('features.settings.sidebar.customize.title') }}</span>
           <v-btn
             icon="mdi-close"
             variant="text"
@@ -22,11 +22,11 @@
         </v-card-title>
         
         <v-card-text>
-          <p class="text-body-2 mb-4">{{ t('features/settings:sidebar.customize.subtitle') }}</p>
+          <p class="text-body-2 mb-4">{{ t('features.settings.sidebar.customize.subtitle') }}</p>
           
           <v-row>
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features/settings:sidebar.customize.mainItems') }}</div>
+              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.mainItems') }}</div>
               <v-list 
                 density="compact"
                 class="custom-list"
@@ -57,7 +57,7 @@
             </v-col>
             
             <v-col cols="12" md="6">
-              <div class="mb-2 font-weight-medium">{{ t('features/settings:sidebar.customize.moreItems') }}</div>
+              <div class="mb-2 font-weight-medium">{{ t('features.settings.sidebar.customize.moreItems') }}</div>
               <v-list 
                 density="compact"
                 class="custom-list"
@@ -95,14 +95,14 @@
             variant="text"
             @click="resetToDefault"
           >
-            {{ t('features/settings:sidebar.customize.reset') }}
+            {{ t('features.settings.sidebar.customize.reset') }}
           </v-btn>
           <v-spacer></v-spacer>
           <v-btn
             color="primary"
             @click="saveCustomization"
           >
-            {{ t('core.actions:save') }}
+            {{ t('core.actions.save') }}
           </v-btn>
         </v-card-actions>
       </v-card>
