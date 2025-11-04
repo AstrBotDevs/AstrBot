@@ -1,6 +1,9 @@
 import asyncio
 import logging
 import sys
+from pathlib import Path
+
+from astrbot.base import AstrbotPaths
 
 logger = logging.getLogger("astrbot")
 
@@ -9,18 +12,27 @@ class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None):
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
-
+        self.paths = AstrbotPaths.getPaths("astrbot")
     async def install(
         self,
         package_name: str | None = None,
         requirements_path: str | None = None,
+        project_path: str | None = None,
         mirror: str | None = None,
-    ):
+    ) -> None:
+
+        if requirements_path:
+            cwd = Path(requirements_path).parent.resolve()
+        elif project_path:
+            cwd = Path(project_path).resolve()
+
         args = ["install"]
         if package_name:
             args.append(package_name)
         elif requirements_path:
             args.extend(["-r", requirements_path])
+        elif project_path:
+            args.extend(".")
 
         index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
 
@@ -31,14 +43,15 @@ class PipInstaller:
 
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         try:
-            process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "pip",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
+            async with self.paths.achdir(cwd):
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
 
             assert process.stdout is not None
             async for line in process.stdout:

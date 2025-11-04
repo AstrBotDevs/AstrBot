@@ -114,7 +114,7 @@ class UpdateRoute(Route):
             # pip 更新依赖
             logger.info("更新依赖中...")
             try:
-                await pip_installer.install(requirements_path=".")
+                await pip_installer.install(requirements_path="requirements.txt")
 
             except Exception as e:
                 logger.error(f"更新依赖失败: {e}")
