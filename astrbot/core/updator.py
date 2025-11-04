@@ -20,7 +20,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
-        self.astrbot_root = get_astrbot_path() # 覆盖源代码
+        self.MAIN_PATH = get_astrbot_path() # 覆盖源代码
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
     def terminate_child_processes(self):
@@ -116,7 +116,7 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             await download_file(file_url, "temp.zip")
             logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
-            self.unzip_file("temp.zip", self.astrbot_root)
+            self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e
 
