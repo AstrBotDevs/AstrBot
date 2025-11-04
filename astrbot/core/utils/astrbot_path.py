@@ -14,9 +14,16 @@ from astrbot.base import AstrbotPaths
 
 
 def get_astrbot_path() -> str:
-    """获取Astrbot项目路径 -- 请勿使用本函数!!! -- 仅供兼容旧代码使用"""
+    """获取Astrbot项目路径 --仅供手动部署时/更新源代码时使用.
+
+    如果你不是想要更新源代码, 请勿使用本函数
+
+    如果你想获取Astrbot根目录路径, 请使用 AstrbotPaths.astrbot_root
+
+    当你从CLI启动时,切记不要使用本函数.
+    """
     warnings.warn(
-        "get_astrbot_path is deprecated. Use AstrbotPaths class instead.",
+        "当从源代码部署时,更新源代码,可以使用本函数(不建议). ",
         DeprecationWarning,
         stacklevel=2,
     )
