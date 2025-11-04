@@ -395,9 +395,15 @@ class PluginRoute(Route):
 
         post_data = await request.json
         plugin_name = post_data["name"]
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
-            await self.plugin_manager.uninstall_plugin(plugin_name)
+            await self.plugin_manager.uninstall_plugin(
+                plugin_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
             logger.info(f"卸载插件 {plugin_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
