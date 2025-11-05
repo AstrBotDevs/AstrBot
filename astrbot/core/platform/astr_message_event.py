@@ -5,7 +5,7 @@ import re
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
-
+from aiocqhttp import Event
 from astrbot import logger
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
@@ -198,6 +198,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
+        event: Event | None = None,
     ):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。

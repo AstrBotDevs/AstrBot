@@ -174,7 +174,11 @@ class RespondStage(Stage):
                 False,
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, use_fallback)
+            # 根据是否开启引用回复与回复消息中是否包含文件 来确定是否应该传递event
+            if self.reply_with_quote and not any(isinstance(item, Comp.File) for item in result.chain):
+                await event.send_streaming(result.async_stream, use_fallback, event)
+            else:
+                await event.send_streaming(result.async_stream, use_fallback)
             return
         if len(result.chain) > 0:
             # 检查路径映射
