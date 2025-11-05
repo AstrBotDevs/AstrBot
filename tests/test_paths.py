@@ -504,10 +504,7 @@ class TestIntegration:
 
     def test_singleton_pattern_thread_safe(self, temp_root: Path) -> None:
         """测试单例模式的基本行为（注意：不是真正的线程安全测试）."""
-        instances = []
-        for _ in range(10):
-            instances.append(AstrbotPaths.getPaths("singleton-test"))
-
+        instances = [AstrbotPaths.getPaths("singleton-test") for _ in range(10)]
         # 所有实例应该是同一个对象
         first = instances[0]
         for instance in instances[1:]:
