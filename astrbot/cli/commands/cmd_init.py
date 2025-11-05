@@ -25,7 +25,6 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
             click.echo(f"Created {dot_astrbot}")
 
     paths = {
-        "data": astrbot_root / "data",
         "config": astrbot_root / "config",
         "plugins": astrbot_root / "plugins",
         "temp": astrbot_root / "temp",
