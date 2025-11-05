@@ -22,12 +22,12 @@ def plug():
 
 
 def _get_data_path() -> Path:
-    base = get_astrbot_root()
+    base = AstrbotPaths.astrbot_root
     if not check_astrbot_root(base):
         raise click.ClickException(
             f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
         )
-    return (base / "data").resolve()
+    return base.resolve()
 
 
 def display_plugins(plugins, title=None, color=None):
@@ -50,9 +50,6 @@ def display_plugins(plugins, title=None, color=None):
 def new(name: str):
     """创建新插件"""
     plug_path = AstrbotPaths.getPaths(name).plugins
-
-    if plug_path.exists():
-        raise click.ClickException(f"插件 {name} 已存在")
 
     author = click.prompt("请输入插件作者", type=str)
     desc = click.prompt("请输入插件描述", type=str)
