@@ -296,7 +296,15 @@ class ToolsRoute(Route):
         """获取所有注册的工具列表"""
         try:
             tools = self.tool_mgr.func_list
-            tools_dict = [tool.__dict__() for tool in tools]
+            tools_dict = [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "active": tool.active,
+                }
+                for tool in tools
+            ]
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
