@@ -55,15 +55,6 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert the tool to a dictionary."""
-        return {
-            "name": self.name,
-            "parameters": self.parameters,
-            "description": self.description,
-            "active": self.active,
-        }
-
     async def call(
         self, context: ContextWrapper[TContext], **kwargs
     ) -> str | mcp.types.CallToolResult:

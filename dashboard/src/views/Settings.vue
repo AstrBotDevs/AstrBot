@@ -9,6 +9,12 @@
                 <ProxySelector></ProxySelector>
             </v-list-item>
 
+            <v-list-subheader>{{ tm('sidebar.title') }}</v-list-subheader>
+
+            <v-list-item :subtitle="tm('sidebar.customize.subtitle')" :title="tm('sidebar.customize.title')">
+                <SidebarCustomizer></SidebarCustomizer>
+            </v-list-item>
+
             <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
@@ -33,6 +39,7 @@ import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
+import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 const { tm } = useModuleI18n('features/settings');
