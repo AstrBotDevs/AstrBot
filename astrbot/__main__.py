@@ -12,7 +12,7 @@ from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
 
 def check_env():
-    if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
+    if sys.version_info.major != 3 or sys.version_info.minor < 10:
         logger.error("请使用 Python3.10+ 运行本项目。")
         exit()
 
