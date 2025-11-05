@@ -10,7 +10,6 @@ from ..utils import (
     PluginStatus,
     build_plug_list,
     check_astrbot_root,
-    get_astrbot_root,
     get_git_repo,
     manage_plugin,
 )
