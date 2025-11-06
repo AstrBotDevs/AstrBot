@@ -203,6 +203,7 @@ class AstrMessageEvent(abc.ABC):
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
+        增加了一个event参数 传递Event结构体 暂时仅用于接收引用消息ID 不传则不会触发消息引用
         """
         asyncio.create_task(
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
