@@ -574,7 +574,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat(
         self,
-        prompt: str,
+        prompt=None,
         session_id=None,
         image_urls=None,
         func_tool=None,
@@ -586,8 +586,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -623,7 +627,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat_stream(
         self,
-        prompt,
+        prompt=None,
         session_id=None,
         image_urls=None,
         func_tool=None,
@@ -635,8 +639,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -728,7 +736,6 @@ class ProviderGoogleGenAI(Provider):
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
-        return ""
 
     async def terminate(self):
         logger.info("Google GenAI 适配器已终止。")

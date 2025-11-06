@@ -1,14 +1,38 @@
 <script setup>
-import { ref, shallowRef } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
+import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
+
+// Apply customization on mount and listen for storage changes
+const handleStorageChange = (e) => {
+  if (e.key === 'astrbot_sidebar_customization') {
+    sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  }
+};
+
+const handleCustomEvent = () => {
+  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+};
+
+onMounted(() => {
+  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  
+  window.addEventListener('storage', handleStorageChange);
+  window.addEventListener('sidebar-customization-changed', handleCustomEvent);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('storage', handleStorageChange);
+  window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
+});
 
 const showIframe = ref(false);
 const starCount = ref(null);

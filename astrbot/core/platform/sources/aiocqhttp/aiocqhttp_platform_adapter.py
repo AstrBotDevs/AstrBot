@@ -228,7 +228,7 @@ class AiocqhttpAdapter(Platform):
             err = f"aiocqhttp: 无法识别的消息类型: {event.message!s}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
             logger.critical(err)
             try:
-                self.bot.send(event, err)
+                await self.bot.send(event, err)
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
             raise ValueError(err)
@@ -321,6 +321,8 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(a)
             elif t == "at":
                 first_at_self_processed = False
+                # Accumulate @ mention text for efficient concatenation
+                at_parts = []
 
                 for m in m_group:
                     try:
@@ -360,13 +362,15 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname}({m['data']['qq']}) "
+                                at_parts.append(f" @{nickname}({m['data']['qq']}) ")
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+
+                message_str += "".join(at_parts)
             else:
                 for m in m_group:
                     a = ComponentTypes[t](**m["data"])

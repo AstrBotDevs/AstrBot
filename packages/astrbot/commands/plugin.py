@@ -13,14 +13,17 @@ class PluginCommands:
 
     async def plugin_ls(self, event: AstrMessageEvent):
         """获取已经安装的插件列表。"""
-        plugin_list_info = "已加载的插件：\n"
+        parts = ["已加载的插件：\n"]
         for plugin in self.context.get_all_stars():
-            plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
+            line = f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
             if not plugin.activated:
-                plugin_list_info += " (未启用)"
-            plugin_list_info += "\n"
-        if plugin_list_info.strip() == "":
+                line += " (未启用)"
+            parts.append(line + "\n")
+
+        if len(parts) == 1:
             plugin_list_info = "没有加载任何插件。"
+        else:
+            plugin_list_info = "".join(parts)
 
         plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
         event.set_result(
@@ -103,14 +106,14 @@ class PluginCommands:
                     command_names.append(filter_.group_name)
 
         if len(command_handlers) > 0:
-            help_msg += "\n\n🔧 指令列表：\n"
+            parts = ["\n\n🔧 指令列表：\n"]
             for i in range(len(command_handlers)):
-                help_msg += f"- {command_names[i]}"
+                line = f"- {command_names[i]}"
                 if command_handlers[i].desc:
-                    help_msg += f": {command_handlers[i].desc}"
-                help_msg += "\n"
-
-            help_msg += "\nTip: 指令的触发需要添加唤醒前缀，默认为 /。"
+                    line += f": {command_handlers[i].desc}"
+                parts.append(line + "\n")
+            parts.append("\nTip: 指令的触发需要添加唤醒前缀，默认为 /。")
+            help_msg += "".join(parts)
 
         ret = f"🧩 插件 {plugin_name} 帮助信息：\n" + help_msg
         ret += "更多帮助信息请查看插件仓库 README。"
