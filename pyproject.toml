@@ -119,6 +119,7 @@ source = "uv-dynamic-versioning"
 vcs = "git"
 style = "pep440"
 bump = true
+fallback-version = "4.5.3"
 
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
