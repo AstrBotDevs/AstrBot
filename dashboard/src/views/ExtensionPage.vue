@@ -10,7 +10,7 @@ import { pinyin } from 'pinyin-pro';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
-import { ref, computed, onMounted, reactive, inject } from 'vue';
+import { ref, computed, onMounted, reactive, inject, watch } from 'vue';
 
 
 const commonStore = useCommonStore();
@@ -53,6 +53,10 @@ const isListView = ref(false);
 const pluginSearch = ref("");
 const loading_ = ref(false);
 
+// 分页相关
+const currentPage = ref(1);
+const itemsPerPage = ref(6); // 每页显示6个卡片 (2行 x 3列，避免滚动)
+
 // 危险插件确认对话框
 const dangerConfirmDialog = ref(false);
 const selectedDangerPlugin = ref(null);
@@ -68,8 +72,11 @@ const upload_file = ref(null);
 const uploadTab = ref('file');
 const showPluginFullName = ref(false);
 const marketSearch = ref("");
+const debouncedMarketSearch = ref("");
 const filterKeys = ['name', 'desc', 'author'];
 const refreshingMarket = ref(false);
+const sortBy = ref('default'); // default, stars, author, updated
+const sortOrder = ref('desc'); // desc (降序) or asc (升序)
 
 // 插件市场拼音搜索
 const normalizeStr = (s) => (s ?? '').toString().toLowerCase().trim();
@@ -151,6 +158,71 @@ const filteredPlugins = computed(() => {
 
 const pinnedPlugins = computed(() => {
   return pluginMarketData.value.filter(plugin => plugin?.pinned);
+});
+
+// 过滤后的插件市场数据（带搜索）
+const filteredMarketPlugins = computed(() => {
+  if (!debouncedMarketSearch.value) {
+    return pluginMarketData.value;
+  }
+
+  const search = debouncedMarketSearch.value.toLowerCase();
+  return pluginMarketData.value.filter(plugin => {
+    // 使用自定义过滤器
+    return marketCustomFilter(plugin.name, search, plugin) ||
+      marketCustomFilter(plugin.desc, search, plugin) ||
+      marketCustomFilter(plugin.author, search, plugin);
+  });
+});
+
+// 所有插件列表，推荐插件排在前面
+const sortedPlugins = computed(() => {
+  let plugins = [...filteredMarketPlugins.value];
+
+  // 根据排序选项排序
+  if (sortBy.value === 'stars') {
+    // 按 star 数排序
+    plugins.sort((a, b) => {
+      const starsA = a.stars ?? 0;
+      const starsB = b.stars ?? 0;
+      return sortOrder.value === 'desc' ? starsB - starsA : starsA - starsB;
+    });
+  } else if (sortBy.value === 'author') {
+    // 按作者名字典序排序
+    plugins.sort((a, b) => {
+      const authorA = (a.author ?? '').toLowerCase();
+      const authorB = (b.author ?? '').toLowerCase();
+      const result = authorA.localeCompare(authorB);
+      return sortOrder.value === 'desc' ? -result : result;
+    });
+  } else if (sortBy.value === 'updated') {
+    // 按更新时间排序
+    plugins.sort((a, b) => {
+      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      return sortOrder.value === 'desc' ? dateB - dateA : dateA - dateB;
+    });
+  } else {
+    // default: 推荐插件排在前面
+    const pinned = plugins.filter(plugin => plugin?.pinned);
+    const notPinned = plugins.filter(plugin => !plugin?.pinned);
+    return [...pinned, ...notPinned];
+  }
+
+  return plugins;
+});
+
+// 分页计算属性
+const displayItemsPerPage = 9; // 固定每页显示6个卡片（2行）
+
+const totalPages = computed(() => {
+  return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
+});
+
+const paginatedPlugins = computed(() => {
+  const start = (currentPage.value - 1) * displayItemsPerPage;
+  const end = start + displayItemsPerPage;
+  return sortedPlugins.value.slice(start, end);
 });
 
 // 方法
@@ -534,6 +606,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    currentPage.value = 1; // 重置到第一页
 
     toast(tm('messages.refreshSuccess'), "success");
   } catch (err) {
@@ -573,6 +646,20 @@ onMounted(async () => {
   } catch (err) {
     toast(tm('messages.getMarketDataFailed') + " " + err, "error");
   }
+});
+
+// 搜索防抖处理
+let searchDebounceTimer = null;
+watch(marketSearch, (newVal) => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+  }
+
+  searchDebounceTimer = setTimeout(() => {
+    debouncedMarketSearch.value = newVal;
+    // 搜索时重置到第一页
+    currentPage.value = 1;
+  }, 300); // 300ms 防抖延迟
 });
 
 
@@ -786,10 +873,12 @@ onMounted(async () => {
                 </v-row>
 
                 <v-row>
-  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
+                  <v-col cols="12" md="6" lg="4" v-for="extension in filteredPlugins" :key="extension.name"
                     class="pb-2">
-                    <ExtensionCard :extension="extension" class="rounded-lg" style="background-color: rgb(var(--v-theme-mcpCardBg));"
-                      @configure="openExtensionConfig(extension.name)" @uninstall="(ext, options) => uninstallExtension(ext.name, options)"
+                    <ExtensionCard :extension="extension" class="rounded-lg"
+                      style="background-color: rgb(var(--v-theme-mcpCardBg));"
+                      @configure="openExtensionConfig(extension.name)"
+                      @uninstall="(ext, options) => uninstallExtension(ext.name, options)"
                       @update="updateExtension(extension.name)" @reload="reloadPlugin(extension.name)"
                       @toggle-activation="extension.activated ? pluginOff(extension) : pluginOn(extension)"
                       @view-handlers="showPluginInfo(extension)" @view-readme="viewReadme(extension)">
@@ -809,85 +898,158 @@ onMounted(async () => {
               @click="dialog = true" color="darkprimary">
             </v-btn>
 
-            <div v-if="pinnedPlugins.length > 0" class="mt-4">
-              <h2>{{ tm('market.recommended') }}</h2>
-              <v-row style="margin-top: 8px;">
-                <v-col cols="12" md="6" lg="6" v-for="plugin in pinnedPlugins" :key="plugin.name">
-                  <ExtensionCard :extension="plugin" class="h-120 rounded-lg" market-mode="true" :highlight="true"
-                    @install="handleInstallPlugin(plugin)" @view-readme="open(plugin.repo)">
-                  </ExtensionCard>
-                </v-col>
-              </v-row>
-            </div>
-
             <div class="mt-4">
-              <div class="d-flex align-center mb-2" style="justify-content: space-between;">
-                <h2>{{ tm('market.allPlugins') }}</h2>
-                <div class="d-flex align-center">
-                  <v-btn variant="tonal" size="small" @click="refreshPluginMarket" :loading="refreshingMarket"
-                    class="mr-2">
+              <div class="d-flex align-center mb-2" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <div class="d-flex align-center" style="gap: 6px;">
+                  <h2>{{ tm('market.allPlugins') }}({{ filteredMarketPlugins.length }})</h2>
+                  <v-btn icon variant="text" @click="refreshPluginMarket" :loading="refreshingMarket">
                     <v-icon>mdi-refresh</v-icon>
-                    {{ tm('buttons.refresh') }}
                   </v-btn>
-                  <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
-                    density="compact" style="margin-left: 12px" />
+                </div>
+
+                <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap;">
+                  <v-pagination v-model="currentPage" :length="totalPages" :total-visible="5" size="small"
+                    density="comfortable"></v-pagination>
+
+                  <!-- 排序选择器 -->
+                  <v-select v-model="sortBy" :items="[
+                    { title: tm('sort.default'), value: 'default' },
+                    { title: tm('sort.stars'), value: 'stars' },
+                    { title: tm('sort.author'), value: 'author' },
+                    { title: tm('sort.updated'), value: 'updated' }
+                  ]" density="compact" variant="outlined" hide-details style="max-width: 150px;">
+                    <template v-slot:prepend-inner>
+                      <v-icon size="small">mdi-sort</v-icon>
+                    </template>
+                  </v-select>
+
+                  <!-- 排序方向切换按钮 -->
+                  <v-btn icon v-if="sortBy !== 'default'" @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                    variant="text" density="compact">
+                    <v-icon>{{ sortOrder === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending'
+                    }}</v-icon>
+                    <v-tooltip activator="parent" location="top">
+                      {{ sortOrder === 'desc' ? tm('sort.descending') : tm('sort.ascending') }}
+                    </v-tooltip>
+                  </v-btn>
+                  <!-- <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
+                    density="compact" style="margin-left: 12px" /> -->
                 </div>
               </div>
 
-              <v-col cols="12" md="12" style="padding: 0px;">
-                <v-data-table :headers="pluginMarketHeaders" :items="pluginMarketData" item-key="name" style="border-radius: 10px;"
-                  :loading="loading_" v-model:search="marketSearch" :filter-keys="filterKeys"
-                  :custom-filter="marketCustomFilter">
-                  <template v-slot:item.name="{ item }">
-                    <div class="d-flex align-center"
-                      style="overflow-x: auto; scrollbar-width: thin; scrollbar-track-color: transparent;">
-                      <img v-if="item.logo" :src="item.logo"
-                        style="height: 80px; width: 80px; margin-right: 8px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;"
-                        alt="logo">
-                      <a :href="item?.repo" style="color: var(--v-theme-primaryText, #000); 
-                          text-decoration:none">
-                          <div v-if="item.display_name">
-                            <span class="d-block">{{ item.display_name }}</span>
-                            <small style="color: grey; font-size: 60%;">({{ item.name }})</small>
+              <v-row style="min-height: 26rem;">
+                <v-col v-for="plugin in paginatedPlugins" :key="plugin.name" cols="12" md="6" lg="4">
+                  <v-card class="rounded-lg d-flex flex-column" elevation="0"
+                    style=" height: 12rem; position: relative;">
+
+                    <!-- 推荐标记 -->
+                    <v-chip v-if="plugin?.pinned" color="warning" size="x-small" label
+                      style="position: absolute; right: 8px; top: 8px; z-index: 10; height: 20px; font-weight: bold;">
+                      🥳 推荐
+                    </v-chip>
+
+                    <v-card-text
+                      style="padding: 12px; padding-bottom: 8px; display: flex; gap: 12px; width: 100%; flex: 1; overflow: hidden;">
+                      <div v-if="plugin?.logo" style="flex-shrink: 0;">
+                        <img :src="plugin.logo" :alt="plugin.name"
+                          style="height: 75px; width: 75px; border-radius: 8px; object-fit: cover;" />
+                      </div>
+
+                      <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                        <!-- Display Name -->
+                        <div class="font-weight-bold"
+                          style="margin-bottom: 4px; line-height: 1.3; font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          <span style="overflow: hidden; text-overflow: ellipsis;">
+                            {{ plugin.display_name?.length ? plugin.display_name :
+                              (showPluginFullName ? plugin.name : plugin.trimmedName) }}
+                          </span>
+                        </div>
+
+                        <!-- Author with link -->
+                        <div class="d-flex align-center" style="gap: 4px; margin-bottom: 6px;">
+                          <v-icon icon="mdi-account" size="x-small"
+                            style="color: rgba(var(--v-theme-on-surface), 0.5);"></v-icon>
+                          <a v-if="plugin?.social_link" :href="plugin.social_link" target="_blank"
+                            class="text-subtitle-2 font-weight-medium"
+                            style="text-decoration: none; color: rgb(var(--v-theme-primary)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {{ plugin.author }}
+                          </a>
+                          <span v-else class="text-subtitle-2 font-weight-medium"
+                            style="color: rgb(var(--v-theme-primary)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {{ plugin.author }}
+                          </span>
+                          <div class="d-flex align-center text-subtitle-2 ml-2"
+                            style="color: rgba(var(--v-theme-on-surface), 0.7);">
+                            <v-icon icon="mdi-source-branch" size="x-small" style="margin-right: 2px;"></v-icon>
+                            <span>{{ plugin.version }}</span>
                           </div>
-                          <span v-else>{{ showPluginFullName ? item.name : item.trimmedName }}</span>
-                      </a>
-                    </div>
-                  </template>
-                  <template v-slot:item.desc="{ item }">
-                    <small>
-                      {{ item.desc }}
-                    </small>
-                  </template>
-                  <template v-slot:item.author="{ item }">
-                    <div style="font-size: 12px;">
-                      <span v-if="item?.social_link"><a :href="item?.social_link">{{ item.author }}</a></span>
-                      <span v-else>{{ item.author }}</span>
-                    </div>
-                  </template>
-                  <template v-slot:item.stars="{ item }">
-                    <span>{{ item.stars }}</span>
-                  </template>
-                  <template v-slot:item.updated_at="{ item }">
-                    <small>{{ new Date(item.updated_at).toLocaleString() }}</small>
-                  </template>
-                  <template v-slot:item.tags="{ item }">
-                    <span v-if="item.tags.length === 0">-</span>
-                    <v-chip v-for="tag in item.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'"
-                      size="x-small" v-show="tag !== 'danger'" class="ma-1">
-                      {{ tag }}</v-chip>
-                  </template>
-                  <template v-slot:item.actions="{ item }">
-                    <v-btn class="text-none mr-2" size="x-small" icon variant="text"
-                      @click="open(item.repo)"><v-icon>mdi-github</v-icon></v-btn>
-                    <v-btn v-if="!item.installed" class="text-none mr-2" size="x-small" icon variant="text"
-                      @click="handleInstallPlugin(item)">
-                      <v-icon>mdi-download</v-icon></v-btn>
-                    <v-btn v-else class="text-none mr-2" size="x-small" icon variant="text"
-                      disabled><v-icon>mdi-check</v-icon></v-btn>
-                  </template>
-                </v-data-table>
-              </v-col>
+                        </div>
+
+                        <!-- Description -->
+                        <div class="text-caption"
+                          style="overflow: scroll; color: rgba(var(--v-theme-on-surface), 0.6); line-height: 1.3; margin-bottom: 6px; flex: 1;">
+                          {{ plugin.desc }}
+                        </div>
+
+                        <!-- Stats: Stars & Updated & Version -->
+                        <div class="d-flex align-center" style="gap: 8px; margin-top: auto;">
+                          <div v-if="plugin.stars !== undefined" class="d-flex align-center text-subtitle-2"
+                            style="color: rgba(var(--v-theme-on-surface), 0.7);">
+                            <v-icon icon="mdi-star" size="x-small" style="margin-right: 2px;"></v-icon>
+                            <span>{{ plugin.stars }}</span>
+                          </div>
+                          <div v-if="plugin.updated_at" class="d-flex align-center text-subtitle-2"
+                            style="color: rgba(var(--v-theme-on-surface), 0.7);">
+                            <v-icon icon="mdi-clock-outline" size="x-small" style="margin-right: 2px;"></v-icon>
+                            <span>{{ new Date(plugin.updated_at).toLocaleString() }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </v-card-text>
+
+                    <!-- Actions -->
+                    <v-card-actions style="gap: 6px; padding: 8px 12px; padding-top: 0;">
+                      <v-chip v-for="tag in plugin.tags?.slice(0, 2)" :key="tag"
+                        :color="tag === 'danger' ? 'error' : 'primary'" label size="x-small" style="height: 20px;">
+                        {{ tag === 'danger' ? tm('tags.danger') : tag }}
+                      </v-chip>
+                      <v-menu v-if="plugin.tags && plugin.tags.length > 2" open-on-hover offset-y>
+                        <template v-slot:activator="{ props: menuProps }">
+                          <v-chip v-bind="menuProps" color="grey" label size="x-small"
+                            style="height: 20px; cursor: pointer;">
+                            +{{ plugin.tags.length - 2 }}
+                          </v-chip>
+                        </template>
+                        <v-list density="compact">
+                          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
+                            <v-chip :color="tag === 'danger' ? 'error' : 'primary'" label size="small">
+                              {{ tag === 'danger' ? tm('tags.danger') : tag }}
+                            </v-chip>
+                          </v-list-item>
+                        </v-list>
+                      </v-menu>
+                      <v-spacer></v-spacer>
+                      <v-btn v-if="plugin?.repo" color="secondary" size="x-small" variant="tonal" :href="plugin.repo"
+                        target="_blank" style="height: 24px;">
+                        <v-icon icon="mdi-github" start size="x-small"></v-icon>
+                        仓库
+                      </v-btn>
+                      <v-btn v-if="!plugin?.installed" color="primary" size="x-small"
+                        @click="handleInstallPlugin(plugin)" variant="flat" style="height: 24px;">
+                        {{ tm('buttons.install') }}
+                      </v-btn>
+                      <v-chip v-else color="success" size="x-small" label style="height: 20px;">
+                        ✓ {{ tm('status.installed') }}
+                      </v-chip>
+                    </v-card-actions>
+                  </v-card>
+                </v-col>
+              </v-row>
+
+              <!-- 底部分页控件 -->
+              <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
+                <v-pagination v-model="currentPage" :length="totalPages" :total-visible="7" size="small"></v-pagination>
+              </div>
             </div>
           </v-tab-item>
 
@@ -900,7 +1062,7 @@ onMounted(async () => {
       </v-card>
     </v-col>
 
-    <v-col v-if="activeTab === 'market'" style="margin-bottom: 16px;" cols="12" md="12">
+    <v-col v-if="activeTab === 'market'" cols="12" md="12">
       <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
       <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo')
       }}</a></small>
@@ -997,10 +1159,7 @@ onMounted(async () => {
     :repo-url="readmeDialog.repoUrl" />
 
   <!-- 卸载插件确认对话框（列表模式用） -->
-  <UninstallConfirmDialog
-    v-model="showUninstallDialog"
-    @confirm="handleUninstallConfirm"
-  />
+  <UninstallConfirmDialog v-model="showUninstallDialog" @confirm="handleUninstallConfirm" />
 
   <!-- 危险插件确认对话框 -->
   <v-dialog v-model="dangerConfirmDialog" width="500" persistent>
