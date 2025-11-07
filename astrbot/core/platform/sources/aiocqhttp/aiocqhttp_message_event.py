@@ -14,7 +14,6 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Video,
-    Reply
 )
 from astrbot.api.platform import Group, MessageMember
 
@@ -162,15 +161,12 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         self,
         generator: AsyncGenerator,
         use_fallback: bool = False,
-        event: Event | None = None,
     ):
         if not use_fallback:
             buffer = None
             async for chain in generator:
                 if not buffer:
                     buffer = chain
-                    if event:
-                        buffer.chain.insert(0, Reply(id=event.message_obj.message_id))
                 else:
                     buffer.chain.extend(chain.chain)
             if not buffer:

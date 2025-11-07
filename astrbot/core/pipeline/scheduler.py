@@ -35,7 +35,7 @@ class PipelineScheduler:
         """
         for i in range(from_stage, len(self.stages)):
             stage = self.stages[i]  # 获取当前要执行的阶段
-            # logger.debug(f"执行阶段 {stage.__class__.__name__}")
+            # logger.info(f"执行阶段 {stage.__class__.__name__}")
             coroutine = stage.process(
                 event,
             )  # 调用阶段的process方法, 返回协程或者异步生成器

@@ -149,6 +149,31 @@ class RespondStage(Stage):
             extracted = [comp for comp in raw_chain if comp.type in extract_types]
 
         return extracted
+    
+    async def _inject_component(
+        self,
+        original_stream: AsyncGenerator[MessageChain, None],
+        component: list[BaseMessageComponent],
+    ) -> AsyncGenerator[MessageChain, None]:
+        """在流式输出中注入组件
+
+        Args:
+            original_stream (AsyncGenerator[MessageChain, None]): 原始流
+            component (list[BaseMessageComponent]): 要注入的组件列表
+
+        Returns:
+            AsyncGenerator[MessageChain, None]: 包装后的流
+        """
+        try:
+            # 前置插入
+            yield MessageChain(component)
+            
+            # 转发原始流
+            async for item in original_stream:
+                yield item
+
+        except Exception as e:
+            logger.error(f"包装 async_stream 时出错: {e}", exc_info=True)
 
     async def process(
         self,
@@ -174,16 +199,17 @@ class RespondStage(Stage):
                 False,
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            # 根据是否开启引用回复与回复消息中是否包含文件 来确定是否应该传递event
+
+            # fixes #3431 为避免影响其他平台 此处仅对aiocqhttp平台启用回复组件注入
             platform_type = event.get_platform_name()
             if (
                 self.reply_with_quote
                 and not any(isinstance(item, Comp.File) for item in result.chain)
                 and platform_type == "aiocqhttp"
             ):
-                await event.send_streaming(result.async_stream, use_fallback, event)
-            else:
-                await event.send_streaming(result.async_stream, use_fallback)
+                result.async_stream = self._inject_component(result.async_stream,[Comp.Reply(id=event.message_obj.message_id)])
+            
+            await event.send_streaming(result.async_stream, use_fallback)
             return
         if len(result.chain) > 0:
             # 检查路径映射
