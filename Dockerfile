@@ -18,15 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    echo "3.11" > .python-version && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -y nodejs && \
 
-RUN python -m pip install --no-cache-dir uv && \
-    uv pip install socksio pilk --no-cache-dir --system
+RUN python -m pip install uv
+RUN uv pip install -r requirements.txt --no-cache-dir --system
+RUN uv pip install socksio uv pilk --no-cache-dir --system
 
 EXPOSE 6185
-EXPOSE 6186
 
-CMD ["uv", "run", "main.py"]
+CMD ["python", "main.py"]
