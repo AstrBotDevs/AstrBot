@@ -2,7 +2,7 @@
 
 import os
 
-from astrbot.cdefaore.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.5.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
