@@ -197,7 +197,7 @@ class ProviderDify(Provider):
 
     async def text_chat_stream(
         self,
-        prompt,
+        prompt: str,
         session_id=None,
         image_urls=...,
         func_tool=None,
