@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-dynamic = ["version"]
+version = "4.5.3"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -111,16 +111,3 @@ reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot","packages"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-[tool.uv-dynamic-versioning]
-vcs = "git"
-style = "pep440"
-bump = true
-
-[build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
-build-backend = "hatchling.build"
-
