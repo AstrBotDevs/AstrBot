@@ -13,7 +13,7 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 async def call_handler(
     event: AstrMessageEvent,
-    handler: T.Callable[..., T.Awaitable[T.Any]],
+    handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
     *args,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
@@ -111,7 +111,7 @@ async def call_event_hook(
 
 async def call_local_llm_tool(
     context: ContextWrapper[AstrAgentContext],
-    handler: T.Callable[..., T.Awaitable[T.Any]],
+    handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
     method_name: str,
     *args,
     **kwargs,

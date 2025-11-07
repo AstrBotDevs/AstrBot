@@ -24,7 +24,7 @@ class StarRequestSubStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[Any, None]:
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )
