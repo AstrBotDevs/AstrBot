@@ -2,7 +2,7 @@ import base64
 import enum
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
@@ -18,7 +18,9 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.provider import Providers
+
+if TYPE_CHECKING:
+    from astrbot.core.provider.provider import Providers
 from astrbot.core.utils.io import download_image_by_url
 
 

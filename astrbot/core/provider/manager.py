@@ -374,7 +374,7 @@ class ProviderManager:
 
             if provider_metadata.provider_type == ProviderType.SPEECH_TO_TEXT:
                 # STT 任务
-                assert cls_type is type[STTProvider]
+                assert issubclass(cls_type, STTProvider)
                 inst = cls_type(provider_config, self.provider_settings)
 
                 if getattr(inst, "initialize", None):
@@ -394,7 +394,7 @@ class ProviderManager:
 
             elif provider_metadata.provider_type == ProviderType.TEXT_TO_SPEECH:
                 # TTS 任务
-                assert cls_type is type[TTSProvider]
+                assert issubclass(cls_type, TTSProvider)
                 inst = cls_type(provider_config, self.provider_settings)
 
                 if getattr(inst, "initialize", None):
@@ -411,7 +411,7 @@ class ProviderManager:
 
             elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
                 # 文本生成任务
-                assert cls_type is type[Provider]
+                assert issubclass(cls_type, Provider)
                 inst = cls_type(
                     provider_config,
                     self.provider_settings,
@@ -434,13 +434,13 @@ class ProviderManager:
                     self.curr_provider_inst = inst
 
             elif provider_metadata.provider_type == ProviderType.EMBEDDING:
-                assert cls_type is type[EmbeddingProvider]
+                assert issubclass(cls_type, EmbeddingProvider)
                 inst = cls_type(provider_config, self.provider_settings)
                 if getattr(inst, "initialize", None):
                     await cast(HasInitialize, inst).initialize()
                 self.embedding_provider_insts.append(inst)
             elif provider_metadata.provider_type == ProviderType.RERANK:
-                assert cls_type is type[RerankProvider]
+                assert issubclass(cls_type, RerankProvider)
                 inst = cls_type(provider_config, self.provider_settings)
                 if getattr(inst, "initialize", None):
                     await cast(HasInitialize, inst).initialize()
