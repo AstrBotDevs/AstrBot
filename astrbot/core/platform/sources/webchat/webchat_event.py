@@ -19,7 +19,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         os.makedirs(imgs_dir, exist_ok=True)
 
     @staticmethod
-    async def _send(message: MessageChain, session_id: str, streaming: bool = False):
+    async def _send(
+        message: MessageChain | None, session_id: str, streaming: bool = False
+    ):
         cid = session_id.split("!")[-1]
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         if not message:
@@ -107,9 +109,9 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain | None):
         await WebChatMessageEvent._send(message, session_id=self.session_id)
-        await super().send(message)
+        await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         final_data = ""
