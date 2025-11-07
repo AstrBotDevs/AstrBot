@@ -1,107 +1,100 @@
 [project]
 name = "AstrBot"
-version = "4.5.5"
+version = "4.5.6"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.10"
 
-keywords = [
-    "Astrbot",
-    "Astrbot Module",
-    "Astrbot Plugin"
-]
+keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
 dependencies = [
-    "aiocqhttp>=1.4.4",
-    "aiodocker>=0.24.0",
-    "aiohttp>=3.11.18",
-    "aiosqlite>=0.21.0",
-    "anthropic>=0.51.0",
-    "apscheduler>=3.11.0",
-    "beautifulsoup4>=4.13.4",
-    "certifi>=2025.4.26",
-    "chardet~=5.1.0",
-    "colorlog>=6.9.0",
-    "cryptography>=44.0.3",
-    "dashscope>=1.23.2",
-    "defusedxml>=0.7.1",
-    "deprecated>=1.2.18",
-    "dingtalk-stream>=0.22.1",
-    "docstring-parser>=0.16",
-    "faiss-cpu==1.10.0",
-    "filelock>=3.18.0",
-    "google-genai>=1.14.0",
-    "lark-oapi>=1.4.15",
-    "lxml-html-clean>=0.4.2",
-    "mcp>=1.8.0",
-    "openai>=1.78.0",
-    "ormsgpack>=1.9.1",
-    "pillow>=11.2.1",
-    "pip>=25.1.1",
-    "psutil>=5.8.0",
-    "py-cord>=2.6.1",
-    "pydantic~=2.10.3",
-    "pydub>=0.25.1",
-    "pyjwt>=2.10.1",
-    "python-telegram-bot>=22.0",
-    "qq-botpy>=1.2.1",
-    "quart>=0.20.0",
-    "readability-lxml>=0.8.4.1",
-    "silk-python>=0.2.6",
-    "slack-sdk>=3.35.0",
-    "sqlalchemy[asyncio]>=2.0.41",
-    "sqlmodel>=0.0.24",
-    "telegramify-markdown>=0.5.1",
-    "watchfiles>=1.0.5",
-    "websockets>=15.0.1",
-    "wechatpy>=1.8.18",
-    "audioop-lts ; python_full_version >= '3.13'",
-    "click>=8.2.1",
-    "pypdf>=6.1.1",
-    "aiofiles>=25.1.0",
-    "rank-bm25>=0.2.2",
-    "jieba>=0.42.1",
-    "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
-    "xinference-client",
+  "aiocqhttp>=1.4.4",
+  "aiodocker>=0.24.0",
+  "aiohttp>=3.11.18",
+  "aiosqlite>=0.21.0",
+  "anthropic>=0.51.0",
+  "apscheduler>=3.11.0",
+  "beautifulsoup4>=4.13.4",
+  "certifi>=2025.4.26",
+  "chardet~=5.1.0",
+  "colorlog>=6.9.0",
+  "cryptography>=44.0.3",
+  "dashscope>=1.23.2",
+  "defusedxml>=0.7.1",
+  "deprecated>=1.2.18",
+  "dingtalk-stream>=0.22.1",
+  "docstring-parser>=0.16",
+  "faiss-cpu==1.10.0",
+  "filelock>=3.18.0",
+  "google-genai>=1.14.0",
+  "lark-oapi>=1.4.15",
+  "lxml-html-clean>=0.4.2",
+  "mcp>=1.8.0",
+  "openai>=1.78.0",
+  "ormsgpack>=1.9.1",
+  "pillow>=11.2.1",
+  "pip>=25.1.1",
+  "psutil>=5.8.0",
+  "py-cord>=2.6.1",
+  "pydantic~=2.10.3",
+  "pydub>=0.25.1",
+  "pyjwt>=2.10.1",
+  "python-telegram-bot>=22.0",
+  "qq-botpy>=1.2.1",
+  "quart>=0.20.0",
+  "readability-lxml>=0.8.4.1",
+  "silk-python>=0.2.6",
+  "slack-sdk>=3.35.0",
+  "sqlalchemy[asyncio]>=2.0.41",
+  "sqlmodel>=0.0.24",
+  "telegramify-markdown>=0.5.1",
+  "watchfiles>=1.0.5",
+  "websockets>=15.0.1",
+  "wechatpy>=1.8.18",
+  "audioop-lts ; python_full_version >= '3.13'",
+  "click>=8.2.1",
+  "pypdf>=6.1.1",
+  "aiofiles>=25.1.0",
+  "rank-bm25>=0.2.2",
+  "jieba>=0.42.1",
+  "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
+  "xinference-client",
 ]
 
 [dependency-groups]
 dev = [
-    "commitizen>=4.9.1",
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
-    "pytest-cov>=6.2.1",
-    "ruff>=0.12.8",
+  "commitizen>=4.9.1",
+  "pytest>=8.4.1",
+  "pytest-asyncio>=1.1.0",
+  "pytest-cov>=6.2.1",
+  "ruff>=0.12.8",
 ]
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
 
 [tool.ruff]
-exclude = [
-  "astrbot/core/utils/t2i/local_strategy.py",
-  "astrbot/api/all.py",
-]
+exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py"]
 line-length = 88
 target-version = "py310"
 
 [tool.ruff.lint]
 select = [
-  "F", # Pyflakes
-  "W", # pycodestyle warnings
-  "E", # pycodestyle errors
+  "F",     # Pyflakes
+  "W",     # pycodestyle warnings
+  "E",     # pycodestyle errors
   "ASYNC", # flake8-async
-  "C4", # flake8-comprehensions
-  "Q", # flake8-quotes
-  "I", # import-order
-  "UP", # pyupgrade
+  "C4",    # flake8-comprehensions
+  "Q",     # flake8-quotes
+  "I",     # import-order
+  "UP",    # pyupgrade
   # "SIM", # flake8-simplify 
 ]
 ignore = [
-    "F403", 
-    "F405", 
-    "E501",
-    "ASYNC230" # TODO: handle ASYNC230 in AstrBot
+  "F403",
+  "F405",
+  "E501",
+  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
 ]
 
 [tool.pyright]
@@ -109,5 +102,9 @@ typeCheckingMode = "basic"
 pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
-include = ["astrbot","packages"]
+include = ["astrbot", "packages"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
