@@ -79,6 +79,14 @@
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository"
   },
+  "sort": {
+    "default": "Default",
+    "stars": "Stars",
+    "author": "Author",
+    "updated": "Last Updated",
+    "ascending": "Ascending",
+    "descending": "Descending"
+  },
   "tags": {
     "danger": "Danger"
   },
