@@ -33,7 +33,7 @@ class Stage(abc.ABC):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> None | AsyncGenerator[None]:
         """处理事件
 
         Args:

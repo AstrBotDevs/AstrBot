@@ -149,7 +149,7 @@ class RespondStage(Stage):
             extracted = [comp for comp in raw_chain if comp.type in extract_types]
 
         return extracted
-    
+
     async def _inject_component(
         self,
         original_stream: AsyncGenerator[MessageChain, None],
@@ -167,7 +167,7 @@ class RespondStage(Stage):
         try:
             # 前置插入
             yield MessageChain(component)
-            
+
             # 转发原始流
             async for item in original_stream:
                 yield item
@@ -207,8 +207,10 @@ class RespondStage(Stage):
                 and not any(isinstance(item, Comp.File) for item in result.chain)
                 and platform_type == "aiocqhttp"
             ):
-                result.async_stream = self._inject_component(result.async_stream,[Comp.Reply(id=event.message_obj.message_id)])
-            
+                result.async_stream = self._inject_component(
+                    result.async_stream, [Comp.Reply(id=event.message_obj.message_id)]
+                )
+
             await event.send_streaming(result.async_stream, use_fallback)
             return
         if len(result.chain) > 0:
