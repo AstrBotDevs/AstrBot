@@ -321,7 +321,7 @@ async def run_agent(
                         await astr_event.send(resp.data["chain"])
                     continue
 
-                if not agent_runner.streaming:
+                if agent_runner.stream_to_general or not agent_runner.streaming:
                     content_typ = (
                         ResultContentType.LLM_RESULT
                         if resp.type == "llm_result"
@@ -363,6 +363,7 @@ class LLMRequestSubStage(Stage):
             self.max_context_length - 1,
         )
         self.streaming_response: bool = settings["streaming_response"]
+        self.streaming_fallback: bool = settings["streaming_fallback"]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         if isinstance(self.max_step, bool):  # workaround: #2622
@@ -536,6 +537,9 @@ class LLMRequestSubStage(Stage):
                     new_tool_set.add_tool(tool)
             req.func_tool = new_tool_set
 
+        stream_to_general = (
+            self.streaming_fallback and not event.platform_meta.support_real_stream
+        )
         # 备份 req.contexts
         backup_contexts = copy.deepcopy(req.contexts)
 
@@ -561,9 +565,10 @@ class LLMRequestSubStage(Stage):
             tool_executor=FunctionToolExecutor(),
             agent_hooks=MAIN_AGENT_HOOKS,
             streaming=self.streaming_response,
+            stream_to_general=stream_to_general,
         )
 
-        if self.streaming_response:
+        if self.streaming_response and not stream_to_general:
             # 流式响应
             event.set_result(
                 MessageEventResult()

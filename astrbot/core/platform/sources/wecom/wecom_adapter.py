@@ -110,7 +110,7 @@ class WecomServer:
         await self.shutdown_event.wait()
 
 
-@register_platform_adapter("wecom", "wecom 适配器")
+@register_platform_adapter("wecom", "wecom 适配器", support_real_stream=False)
 class WecomPlatformAdapter(Platform):
     def __init__(
         self,
@@ -196,6 +196,7 @@ class WecomPlatformAdapter(Platform):
             "wecom",
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
+            support_real_stream=False,
         )
 
     @override

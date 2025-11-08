@@ -34,7 +34,9 @@ else:
 
 
 # 注册平台适配器
-@register_platform_adapter("discord", "Discord 适配器 (基于 Pycord)")
+@register_platform_adapter(
+    "discord", "Discord 适配器 (基于 Pycord)", support_real_stream=False
+)
 class DiscordPlatformAdapter(Platform):
     def __init__(
         self,
@@ -111,6 +113,7 @@ class DiscordPlatformAdapter(Platform):
             "Discord 适配器",
             id=self.config.get("id"),
             default_config_tmpl=self.config,
+            support_real_stream=False,
         )
 
     @override

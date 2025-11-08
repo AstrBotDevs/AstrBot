@@ -69,6 +69,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "streaming_segmented": False,
+        "streaming_fallback": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
@@ -1973,6 +1974,9 @@ CONFIG_METADATA_2 = {
                     "streaming_segmented": {
                         "type": "bool",
                     },
+                    "streaming_fallback": {
+                        "type": "bool",
+                    },
                     "max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
@@ -2278,6 +2282,10 @@ CONFIG_METADATA_3 = {
                     },
                     "provider_settings.streaming_segmented": {
                         "description": "不支持流式回复的平台采取分段输出",
+                        "type": "bool",
+                    },
+                    "provider_settings.streaming_fallback": {
+                        "description": "不支持流式回复的平台回落到普通输出",
                         "type": "bool",
                     },
                     "provider_settings.max_context_length": {

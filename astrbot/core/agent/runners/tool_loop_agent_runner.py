@@ -44,12 +44,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        stream_to_general: bool = False,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
         self.streaming = kwargs.get("streaming", False)
-        self.stream_to_general = stream_to_general
+        self.stream_to_general = kwargs.get("stream_to_general", False)
         self.provider = provider
         self.final_llm_resp = None
         self._state = AgentState.IDLE
