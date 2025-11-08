@@ -68,23 +68,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.streaming:
             stream = self.provider.text_chat_stream(**self.req.__dict__)
             if self.stream_to_general:
-                #  Collect all chunks before yielding
-                full_response = ""
+                # Collect the final non-chunk response before yielding
+                final_resp = None
                 async for resp in stream:  # type: ignore
                     assert isinstance(resp, LLMResponse)
-                    if resp.completion_text:
-                        full_response += resp.completion_text
-                
-                # Create a final LLMResponse object
-                final_resp = LLMResponse(
-                    role="assistant",  # Assuming assistant role for the full response
-                    completion_text=full_response,
-                    is_chunk=False,
-                    result_chain=MessageChain().message(full_response), # Create a MessageChain
-                )
-                yield final_resp
-
-
+                    if not resp.is_chunk:
+                        final_resp = resp
+                        break
+                if final_resp:
+                    yield final_resp
             else:
                 async for resp in stream:  # type: ignore
                     yield resp
