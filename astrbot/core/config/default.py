@@ -985,6 +985,8 @@ CONFIG_METADATA_2 = {
                         "model_config": {
                             "model": "glm-4-flash",
                         },
+                        "custom_headers": {},
+                        "custom_extra_body": {},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "Dify": {
