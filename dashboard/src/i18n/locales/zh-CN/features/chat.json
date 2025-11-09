@@ -57,6 +57,12 @@
     "voiceRecord": "录制语音",
     "pasteImage": "粘贴图片"
   },
+  "streaming": {
+    "enabled": "流式响应已开启",
+    "disabled": "流式响应已关闭",
+    "on": "流式",
+    "off": "普通"
+  },
   "connection": {
     "title": "连接状态提醒",
     "message": "系统检测到聊天连接需要重新建立。",

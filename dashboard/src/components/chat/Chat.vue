@@ -1,55 +1,70 @@
 <template>
-    <v-card class="chat-page-card">
+    <v-card class="chat-page-card" elevation="0" rounded="0">
         <v-card-text class="chat-page-container">
+            <!-- 遮罩层 (手机端) -->
+            <div class="mobile-overlay" v-if="isMobile && mobileMenuOpen" @click="closeMobileSidebar"></div>
+            
             <div class="chat-layout">
-                <div class="sidebar-panel" :class="{ 'sidebar-collapsed': sidebarCollapsed }"
-                    :style="{ 'background-color': isDark ? sidebarCollapsed ? '#1e1e1e' : '#2d2d2d' : sidebarCollapsed ? '#ffffff' : '#f5f5f5' }"
+                <div class="sidebar-panel" 
+                    :class="{ 
+                        'sidebar-collapsed': sidebarCollapsed && !isMobile,
+                        'mobile-sidebar-open': isMobile && mobileMenuOpen,
+                        'mobile-sidebar': isMobile
+                    }"
+                    :style="{ 'background-color': isDark ? sidebarCollapsed ? '#1e1e1e' : '#2d2d2d' : sidebarCollapsed ? '#ffffff' : '#f1f4f9' }"
                     @mouseenter="handleSidebarMouseEnter" @mouseleave="handleSidebarMouseLeave">
 
                     <div style="display: flex; align-items: center; justify-content: center; padding: 16px; padding-bottom: 0px;"
                         v-if="chatboxMode">
-                        <img width="50" src="@/assets/images/astrbot_logo_mini.webp" alt="AstrBot Logo">
+                        <img width="50" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
                         <span v-if="!sidebarCollapsed"
                             style="font-weight: 1000; font-size: 26px; margin-left: 8px;">AstrBot</span>
                     </div>
 
 
-                    <div class="sidebar-collapse-btn-container">
+                    <div class="sidebar-collapse-btn-container" v-if="!isMobile">
                         <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text"
                             color="deep-purple">
                             <v-icon>{{ (sidebarCollapsed || (!sidebarCollapsed && sidebarHoverExpanded)) ?
                                 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
                         </v-btn>
                     </div>
+                    <!-- 手机端关闭按钮 -->
+                    <div class="sidebar-collapse-btn-container" v-if="isMobile">
+                        <v-btn icon class="sidebar-collapse-btn" @click="closeMobileSidebar" variant="text"
+                            color="deep-purple">
+                            <v-icon>mdi-close</v-icon>
+                        </v-btn>
+                    </div>
 
                     <div style="padding: 16px; padding-top: 8px;">
                         <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
-                            v-if="!sidebarCollapsed" prepend-icon="mdi-plus"
+                            v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-plus"
                             style="background-color: transparent !important; border-radius: 4px;">{{
                                 tm('actions.newChat') }}</v-btn>
-                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed"
+                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed && !isMobile"
                             elevation="0"></v-btn>
                     </div>
-                    <div v-if="!sidebarCollapsed">
+                    <div v-if="!sidebarCollapsed || isMobile">
                         <v-divider class="mx-4"></v-divider>
                     </div>
 
 
                     <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
-                        v-if="!sidebarCollapsed">
+                        v-if="!sidebarCollapsed || isMobile">
                         <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
                             <v-list density="compact" nav class="conversation-list"
                                 style="background-color: transparent;" v-model:selected="selectedConversations"
                                 @update:selected="getConversationMessages">
                                 <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
                                     rounded="lg" class="conversation-item" active-color="secondary">
-                                    <v-list-item-title v-if="!sidebarCollapsed" class="conversation-title">{{ item.title
+                                    <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title">{{ item.title
                                         || tm('conversation.newConversation') }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="!sidebarCollapsed" class="timestamp">{{
+                                    <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">{{
                                         formatDate(item.updated_at)
-                                    }}</v-list-item-subtitle>
+                                        }}</v-list-item-subtitle>
 
-                                    <template v-if="!sidebarCollapsed" v-slot:append>
+                                    <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
                                         <div class="conversation-actions">
                                             <v-btn icon="mdi-pencil" size="x-small" variant="text"
                                                 class="edit-title-btn"
@@ -66,7 +81,7 @@
                         <v-fade-transition>
                             <div class="no-conversations" v-if="conversations.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
-                                <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded">
+                                <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded || isMobile">
                                     {{ tm('conversation.noHistory') }}</div>
                             </div>
                         </v-fade-transition>
@@ -78,12 +93,17 @@
                 <div class="chat-content-panel">
 
                     <div class="conversation-header fade-in">
-                        <div v-if="currCid && getCurrentConversation">
+                        <!-- 手机端菜单按钮 -->
+                        <v-btn icon class="mobile-menu-btn" @click="toggleMobileSidebar" v-if="isMobile" variant="text">
+                            <v-icon>mdi-menu</v-icon>
+                        </v-btn>
+                        
+                        <!-- <div v-if="currCid && getCurrentConversation">
                             <h3
                                 style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 {{ getCurrentConversation.title || tm('conversation.newConversation') }}</h3>
                             <span style="font-size: 12px;">{{ formatDate(getCurrentConversation.updated_at) }}</span>
-                        </div>
+                        </div> -->
                         <div class="conversation-header-actions">
                             <!-- router 推送到 /chatbox -->
                             <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
@@ -117,7 +137,6 @@
                             </v-tooltip>
                         </div>
                     </div>
-                    <v-divider v-if="currCid && getCurrentConversation" class="conversation-divider"></v-divider>
 
                     <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
                         :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
@@ -146,17 +165,30 @@
 
                     <!-- 输入区域 -->
                     <div class="input-area fade-in">
-                        <div
+                        <div class="input-container"
                             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
                             <textarea id="input-field" v-model="prompt" @keydown="handleInputKeyDown"
-                                :disabled="isStreaming" @click:clear="clearMessage"
-                                placeholder="Ask AstrBot..."
+                                :disabled="isStreaming" @click:clear="clearMessage" placeholder="Ask AstrBot..."
                                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
                             <div
-                                style="display: flex; justify-content: space-between; align-items: center; padding: 0px 8px;">
-                                <div style="display: flex; justify-content: flex-start; margin-top: 4px;">
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 0px 12px;">
+                                <div
+                                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px;">
                                     <!-- 选择提供商和模型 -->
                                     <ProviderModelSelector ref="providerModelSelector" />
+                                    <!-- 流式响应开关 -->
+                                    <v-tooltip
+                                        :text="enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled')"
+                                        location="top">
+                                        <template v-slot:activator="{ props }">
+                                            <v-chip v-bind="props" @click="toggleStreaming" size="x-small"
+                                                class="streaming-toggle-chip">
+                                                <v-icon start :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'"
+                                                    size="small"></v-icon>
+                                                {{ enableStreaming ? tm('streaming.on') : tm('streaming.off') }}
+                                            </v-chip>
+                                        </template>
+                                    </v-tooltip>
                                 </div>
                                 <div
                                     style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
@@ -175,7 +207,6 @@
                                         class="send-btn" size="small" />
                                 </div>
                             </div>
-
                         </div>
 
                         <!-- 附件预览区 -->
@@ -290,7 +321,7 @@ export default {
             // Ctrl键长按相关变量
             ctrlKeyDown: false,
             ctrlKeyTimer: null,
-            ctrlKeyLongPressThreshold: 300, // 长按阈值，单位毫秒
+            ctrlKeyLongPressThreshold: 300, // 长按阈值,单位毫秒
 
             mediaCache: {}, // Add a cache to store media blobs
 
@@ -316,6 +347,13 @@ export default {
 
             isToastedRunningInfo: false, // To avoid multiple toasts
             activeSSECount: 0, // Track number of active SSE connections
+
+            // 流式响应开关
+            enableStreaming: true, // 默认开启流式响应
+            
+            // 手机端相关变量
+            isMobile: false,
+            mobileMenuOpen: false,
         }
     },
 
@@ -394,6 +432,18 @@ export default {
             this.sidebarCollapsed = true; // 默认折叠状态
         }
 
+        // 从 localStorage 读取流式响应开关状态，默认为 true（开启）
+        const savedStreamingState = localStorage.getItem('enableStreaming');
+        if (savedStreamingState !== null) {
+            this.enableStreaming = JSON.parse(savedStreamingState);
+        } else {
+            this.enableStreaming = true; // 默认开启
+        }
+
+        // 检测是否为手机端
+        this.checkMobile();
+        window.addEventListener('resize', this.checkMobile);
+
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
         this.getConversations();
@@ -416,6 +466,9 @@ export default {
     beforeUnmount() {
         // 移除keyup事件监听
         document.removeEventListener('keyup', this.handleInputKeyUp);
+        
+        // 移除resize事件监听
+        window.removeEventListener('resize', this.checkMobile);
 
         // 清除悬停定时器
         if (this.sidebarHoverTimer) {
@@ -432,6 +485,27 @@ export default {
             customizer.SET_UI_THEME(newTheme);
             this.theme.global.name.value = newTheme;
         },
+        // 检测是否为手机端
+        checkMobile() {
+            this.isMobile = window.innerWidth <= 768;
+            // 如果切换到桌面端，关闭手机菜单
+            if (!this.isMobile) {
+                this.mobileMenuOpen = false;
+            }
+        },
+        // 切换手机端菜单
+        toggleMobileSidebar() {
+            this.mobileMenuOpen = !this.mobileMenuOpen;
+        },
+        // 关闭手机端菜单
+        closeMobileSidebar() {
+            this.mobileMenuOpen = false;
+        },
+        // 切换流式响应
+        toggleStreaming() {
+            this.enableStreaming = !this.enableStreaming;
+            localStorage.setItem('enableStreaming', JSON.stringify(this.enableStreaming));
+        },
         // 切换侧边栏折叠状态
         toggleSidebar() {
             if (this.sidebarHoverExpanded) {
@@ -445,7 +519,7 @@ export default {
 
         // 侧边栏鼠标悬停处理
         handleSidebarMouseEnter() {
-            if (!this.sidebarCollapsed) return;
+            if (!this.sidebarCollapsed || this.isMobile) return;
 
             this.sidebarHovered = true;
 
@@ -672,6 +746,11 @@ export default {
                 return
             }
 
+            // 手机端关闭侧边栏
+            if (this.isMobile) {
+                this.closeMobileSidebar();
+            }
+
             axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
                 this.currCid = cid[0];
                 // Update the selected conversation in the sidebar
@@ -752,6 +831,10 @@ export default {
             this.currCid = '';
             this.selectedConversations = []; // 清除选中状态
             this.messages = [];
+            // 手机端关闭侧边栏
+            if (this.isMobile) {
+                this.closeMobileSidebar();
+            }
             if (this.$route.path.startsWith('/chatbox')) {
                 this.$router.push('/chatbox');
             } else {
@@ -871,7 +954,8 @@ export default {
                         image_url: imageNamesToSend,
                         audio_url: audioNameToSend ? [audioNameToSend] : [],
                         selected_provider: selectedProviderId,
-                        selected_model: selectedModelName
+                        selected_model: selectedModelName,
+                        enable_streaming: this.enableStreaming
                     })
                 });
 
@@ -1105,6 +1189,17 @@ export default {
     flex-direction: column;
 }
 
+/* 流式响应开关芯片样式 */
+.streaming-toggle-chip {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.streaming-toggle-chip:hover {
+    opacity: 0.8;
+}
+
 .welcome-title {
     font-size: 28px;
     margin-bottom: 16px;
@@ -1145,7 +1240,6 @@ export default {
     width: 100%;
     height: 100%;
     max-height: 100%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
     overflow: hidden;
 }
 
@@ -1170,7 +1264,7 @@ export default {
     display: flex;
     flex-direction: column;
     padding: 0;
-    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    border-right: 1px solid rgba(0, 0, 0, 0.04);
     height: 100%;
     max-height: 100%;
     position: relative;
@@ -1190,6 +1284,77 @@ export default {
     max-width: 270px;
     min-width: 240px;
     transition: all 0.3s ease;
+}
+
+/* 手机端菜单按钮 */
+.mobile-menu-btn {
+    margin-right: 8px;
+}
+
+/* 手机端遮罩层 */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    animation: fadeIn 0.3s ease;
+}
+
+/* 手机端侧边栏 */
+.mobile-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    max-width: 280px !important;
+    min-width: 280px !important;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+}
+
+.mobile-sidebar-open {
+    transform: translateX(0) !important;
+}
+
+/* 手机端样式调整 */
+@media (max-width: 768px) {
+    .sidebar-panel:not(.mobile-sidebar) {
+        display: none;
+    }
+    
+    .chat-content-panel {
+        width: 100%;
+    }
+    
+    /* 手机端去掉容器padding */
+    .chat-page-container {
+        padding: 0 !important;
+    }
+    
+    /* 手机端输入区域样式 */
+    .input-area {
+        padding: 0 !important;
+    }
+    
+    .input-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        border-bottom: none !important;
+    }
+    
+    #input-field {
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+    }
 }
 
 /* 侧边栏折叠按钮 */
@@ -1271,23 +1436,10 @@ export default {
     white-space: nowrap;
 }
 
-.status-chips {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 8px;
-    margin-bottom: 8px;
-    transition: opacity 0.25s ease;
-}
-
-.status-chips .v-chip {
+.v-chip {
     flex: 1 1 0;
     justify-content: center;
     opacity: 0.7;
-}
-
-.status-chip {
-    font-size: 12px;
-    height: 24px !important;
 }
 
 .no-conversations {

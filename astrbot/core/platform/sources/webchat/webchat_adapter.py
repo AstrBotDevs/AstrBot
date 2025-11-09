@@ -163,6 +163,9 @@ class WebChatAdapter(Platform):
         _, _, payload = message.raw_message  # type: ignore
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
+        message_event.set_extra(
+            "enable_streaming", payload.get("enable_streaming", True)
+        )
 
         self.commit_event(message_event)
 

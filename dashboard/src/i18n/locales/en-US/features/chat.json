@@ -57,6 +57,12 @@
     "voiceRecord": "Record Voice",
     "pasteImage": "Paste Image"
   },
+  "streaming": {
+    "enabled": "Streaming enabled",
+    "disabled": "Streaming disabled",
+    "on": "Stream",
+    "off": "Normal"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",
