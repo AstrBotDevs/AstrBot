@@ -1,5 +1,10 @@
+from typing import cast
+
 from xinference_client.client.restful.async_restful_client import (
     AsyncClient as Client,
+)
+from xinference_client.client.restful.async_restful_client import (
+    AsyncRESTfulRerankModelHandle,
 )
 
 from astrbot import logger
@@ -29,7 +34,7 @@ class XinferenceRerankProvider(RerankProvider):
             False,
         )
         self.client = None
-        self.model = None
+        self.model: AsyncRESTfulRerankModelHandle | None = None
         self.model_uid = None
 
     async def initialize(self):
@@ -65,7 +70,10 @@ class XinferenceRerankProvider(RerankProvider):
                     return
 
             if self.model_uid:
-                self.model = await self.client.get_model(self.model_uid)
+                self.model = cast(
+                    AsyncRESTfulRerankModelHandle,
+                    await self.client.get_model(self.model_uid),
+                )
 
         except Exception as e:
             logger.error(f"Failed to initialize Xinference model: {e}")

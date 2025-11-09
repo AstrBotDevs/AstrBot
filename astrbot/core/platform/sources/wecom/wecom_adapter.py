@@ -2,6 +2,8 @@ import asyncio
 import os
 import sys
 import uuid
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 import quart
 from requests import Response
@@ -38,7 +40,7 @@ else:
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
+        self.port = int(cast(str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command",
@@ -58,7 +60,7 @@ class WecomServer:
             config["corpid"].strip(),
         )
 
-        self.callback = None
+        self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
     async def verify(self):
@@ -88,7 +90,7 @@ class WecomServer:
             logger.error("解密失败，签名异常，请检查配置。")
             raise
         else:
-            msg = parse_message(xml)
+            msg = cast(BaseMessage, parse_message(xml))
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -150,10 +152,10 @@ class WecomPlatformAdapter(Platform):
             # inject
             self.wechat_kf_api = WeChatKF(client=self.client)
             self.wechat_kf_message_api = WeChatKFMessage(self.client)
-            self.client.kf = self.wechat_kf_api
-            self.client.kf_message = self.wechat_kf_message_api
+            self.client.__setattr__("kf", self.wechat_kf_api)
+            self.client.__setattr__("kf_message", self.wechat_kf_message_api)
 
-        self.client.API_BASE_URL = self.api_base_url
+        self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
@@ -242,11 +244,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Plain(msg.content)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(msg.id)
+            abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif msg.type == "image":
@@ -256,11 +258,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=msg.image, url=msg.image)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(msg.id)
+            abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif msg.type == "voice":
@@ -292,11 +294,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(msg.id)
+            abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
@@ -308,7 +310,7 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
-        external_userid = msg.get("external_userid")
+        external_userid = cast(str, msg.get("external_userid"))
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理

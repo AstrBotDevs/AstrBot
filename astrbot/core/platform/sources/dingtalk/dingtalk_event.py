@@ -1,4 +1,5 @@
 import asyncio
+from typing import cast
 
 import dingtalk_stream
 
@@ -32,7 +33,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     client.reply_markdown,
                     segment.text,
                     segment.text,
-                    self.message_obj.raw_message,
+                    cast(dingtalk_stream.ChatbotMessage, self.message_obj.raw_message),
                 )
             elif isinstance(segment, Comp.Image):
                 markdown_str = ""
@@ -53,7 +54,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
                         client.reply_markdown,
                         "😄",
                         markdown_str,
-                        self.message_obj.raw_message,
+                        cast(
+                            dingtalk_stream.ChatbotMessage, self.message_obj.raw_message
+                        ),
                     )
                     logger.debug(f"send image: {ret}")
 

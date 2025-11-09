@@ -294,7 +294,7 @@ async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
     show_tool_use: bool = True,
-) -> AsyncGenerator[MessageChain, None]:
+) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     while step_idx < max_step:
@@ -410,7 +410,7 @@ class LLMRequestSubStage(Stage):
         self,
         event: AstrMessageEvent,
         _nested: bool = False,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[Any, None]:
         req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:

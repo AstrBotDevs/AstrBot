@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
@@ -87,7 +88,7 @@ class QQOfficialWebhook:
 
         if opcode == 13:
             # validation
-            signed = await self.webhook_validation(data)
+            signed = await self.webhook_validation(cast(dict, data))
             print(signed)
             return signed
 

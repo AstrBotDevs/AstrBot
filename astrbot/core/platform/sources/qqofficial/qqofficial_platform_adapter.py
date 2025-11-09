@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import time
+from typing import cast
 
 import botpy
 import botpy.message
@@ -44,7 +45,9 @@ class botClient(Client):
             MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.group_openid
+            abm.sender.user_id
+            if self.platform.unique_session
+            else cast(str, message.group_openid)
         )
         self._commit(abm)
 
@@ -103,7 +106,7 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
-        self.unique_session = platform_settings["unique_session"]
+        self.unique_session: bool = platform_settings["unique_session"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
 
@@ -144,7 +147,10 @@ class QQOfficialPlatformAdapter(Platform):
 
     @staticmethod
     def _parse_from_qqofficial(
-        message: botpy.message.Message | botpy.message.GroupMessage,
+        message: botpy.message.Message
+        | botpy.message.GroupMessage
+        | botpy.message.DirectMessage
+        | botpy.message.C2CMessage,
         message_type: MessageType,
     ):
         abm = AstrBotMessage()
@@ -152,7 +158,7 @@ class QQOfficialPlatformAdapter(Platform):
         abm.timestamp = int(time.time())
         abm.raw_message = message
         abm.message_id = message.id
-        abm.tag = "qq_official"
+        # abm.tag = "qq_official"
         msg: list[BaseMessageComponent] = []
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
@@ -182,9 +188,9 @@ class QQOfficialPlatformAdapter(Platform):
             message,
             botpy.message.DirectMessage,
         ):
-            try:
+            if isinstance(message, botpy.message.Message):
                 abm.self_id = str(message.mentions[0].id)
-            except BaseException as _:
+            else:
                 abm.self_id = ""
 
             plain_content = message.content.replace(
