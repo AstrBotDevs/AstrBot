@@ -242,6 +242,7 @@ import ProviderModelSelector from '@/components/chat/ProviderModelSelector.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import 'highlight.js/styles/github.css';
 import { useToast } from '@/utils/toast';
+import { useTheme } from 'vuetify';
 
 export default {
     name: 'ChatPage',
@@ -258,10 +259,12 @@ export default {
     }, setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
+        const theme = useTheme();
 
         return {
             t,
             tm,
+            theme,
             router,
             ref
         };
@@ -427,6 +430,7 @@ export default {
             const customizer = useCustomizerStore();
             const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
             customizer.SET_UI_THEME(newTheme);
+            this.theme.global.name.value = newTheme;
         },
         // 切换侧边栏折叠状态
         toggleSidebar() {

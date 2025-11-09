@@ -10,6 +10,7 @@ import { useCommonStore } from '@/stores/common';
 import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
+import { useTheme } from 'vuetify';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
@@ -20,6 +21,7 @@ const md = new MarkdownIt({
 });
 
 const customizer = useCustomizerStore();
+const theme = useTheme();
 const { t } = useI18n();
 let dialog = ref(false);
 let accountWarning = ref(false)
@@ -276,7 +278,9 @@ function updateDashboard() {
 }
 
 function toggleDarkMode() {
-  customizer.SET_UI_THEME(customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark');
+  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
+  customizer.SET_UI_THEME(newTheme);
+  theme.global.name.value = newTheme;
 }
 
 getVersion();
