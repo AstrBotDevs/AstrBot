@@ -434,6 +434,10 @@ class LLMRequestSubStage(Stage):
             logger.error(f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。")
             return
 
+        streaming_response = self.streaming_response
+        if (enable_streaming := event.get_extra("enable_streaming")) is not None:
+            streaming_response = bool(enable_streaming)
+
         if event.get_extra("provider_request"):
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
@@ -557,7 +561,7 @@ class LLMRequestSubStage(Stage):
             provider=provider,
             first_provider_request=req,
             curr_provider_request=req,
-            streaming=self.streaming_response,
+            streaming=streaming_response,
             event=event,
         )
         await agent_runner.reset(
@@ -570,7 +574,6 @@ class LLMRequestSubStage(Stage):
             tool_executor=FunctionToolExecutor(),
             agent_hooks=MAIN_AGENT_HOOKS,
             streaming=self.streaming_response,
-            stream_to_general=stream_to_general,
         )
 
         if self.streaming_response and not stream_to_general:

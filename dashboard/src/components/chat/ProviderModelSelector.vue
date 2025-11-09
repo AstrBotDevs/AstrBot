@@ -1,13 +1,10 @@
 <template>
     <div>
         <!-- 选择提供商和模型按钮 -->
-        <v-btn class="text-none" variant="tonal" rounded="xl" size="small"
+        <v-chip class="text-none" variant="tonal" size="x-small"
             v-if="selectedProviderId && selectedModelName" @click="openDialog">
             {{ selectedProviderId }} / {{ selectedModelName }}
-        </v-btn>
-        <v-btn variant="tonal" rounded="xl" size="small" v-else @click="openDialog">
-            选择模型
-        </v-btn>
+        </v-chip>
 
         <!-- 选择提供商和模型对话框 -->
         <v-dialog v-model="showDialog" max-width="800" persistent>
