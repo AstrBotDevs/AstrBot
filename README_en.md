@@ -83,6 +83,8 @@ See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 | Claude API                | ✔       | Text Generation        |                                                                       |
 | Google Gemini API         | ✔       | Text Generation        |                                                                       |
 | Dify                      | ✔       | LLMOps                 |                                                                       |
+| Coze                      | ✔       | LLMOps                 |                                                                       |
+| n8n                       | ✔       | LLMOps/Workflow        | Webhook-based workflow automation                                     |
 | DashScope (Alibaba Cloud) | ✔       | LLMOps                 |                                                                       |
 | Ollama                    | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
 | LM Studio                 | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
