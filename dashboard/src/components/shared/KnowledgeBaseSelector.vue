@@ -1,22 +1,25 @@
 <template>
-  <div class="d-flex align-center justify-space-between">
-    <span v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
-          style="color: rgb(var(--v-theme-primaryText));">
-      未选择
-    </span>
-    <div v-else class="d-flex flex-wrap gap-1">
-      <v-chip 
-        v-for="name in modelValue" 
-        :key="name" 
-        size="small" 
-        color="primary" 
-        variant="tonal"
-        closable
-        @click:close="removeKnowledgeBase(name)">
-        {{ name }}
-      </v-chip>
+  <div class="d-flex align-center justify-space-between" style="gap: 8px;">
+    <div style="flex: 1; min-width: 0; overflow: hidden;">
+      <span v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
+            style="color: rgb(var(--v-theme-primaryText));">
+        未选择
+      </span>
+      <div v-else class="d-flex flex-wrap gap-1">
+        <v-chip 
+          v-for="name in modelValue" 
+          :key="name" 
+          size="small" 
+          color="primary" 
+          variant="tonal"
+          closable
+          @click:close="removeKnowledgeBase(name)"
+          style="max-width: 100%;">
+          <span class="text-truncate" style="max-width: 200px;">{{ name }}</span>
+        </v-chip>
+      </div>
     </div>
-    <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
+    <v-btn size="small" color="primary" variant="tonal" @click="openDialog" style="flex-shrink: 0;">
       {{ buttonText }}
     </v-btn>
   </div>
@@ -219,5 +222,12 @@ function goToKnowledgeBasePage() {
 
 .gap-1 {
   gap: 4px;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
 }
 </style>
