@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import binascii
-import sys
+from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
 
@@ -20,11 +20,6 @@ from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
 
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 # 自定义Discord视图组件（兼容旧版本）
@@ -49,7 +44,6 @@ class DiscordPlatformEvent(AstrMessageEvent):
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
 
-    @override
     async def send(self, message: MessageChain):
         """发送消息到Discord平台"""
         # 解析消息链为 Discord 所需的对象
@@ -97,6 +91,21 @@ class DiscordPlatformEvent(AstrMessageEvent):
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
 
         await super().send(message)
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return None
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator, use_fallback)
 
     async def _get_channel(self) -> discord.abc.Messageable | None:
         """获取当前事件对应的频道对象"""

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -49,6 +50,21 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                 elif isinstance(comp, Record):
                     await self._send_voice(session, comp)
         await super().send(message)
+
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return None
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator, use_fallback)
 
     async def _send_image(self, session: aiohttp.ClientSession, comp: Image):
         b64 = await comp.convert_to_base64()
