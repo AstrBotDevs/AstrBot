@@ -41,10 +41,16 @@ class N8nAPIClient:
         auth_value: str | None = None,
     ):
         self.webhook_url = webhook_url
-        self.session = ClientSession(trust_env=True)
+        self.session = None
         self.headers = {}
         if auth_header and auth_value:
             self.headers[auth_header] = auth_value
+
+    def _get_session(self) -> ClientSession:
+        """Lazily create and return the ClientSession"""
+        if self.session is None:
+            self.session = ClientSession(trust_env=True)
+        return self.session
 
     async def execute_workflow(
         self,
@@ -67,8 +73,10 @@ class N8nAPIClient:
         """
         logger.debug(f"n8n workflow execution: {data}")
 
+        session = self._get_session()
+
         if method.upper() == "GET":
-            async with self.session.get(
+            async with session.get(
                 self.webhook_url,
                 params=data,
                 headers=self.headers,
@@ -83,7 +91,7 @@ class N8nAPIClient:
                     return self._handle_streaming_response(resp)
                 return await resp.json()
         # POST method
-        async with self.session.post(
+        async with session.post(
             self.webhook_url,
             json=data,
             headers=self.headers,
@@ -136,4 +144,6 @@ class N8nAPIClient:
 
     async def close(self):
         """Close the HTTP session"""
-        await self.session.close()
+        if self.session:
+            await self.session.close()
+            self.session = None
