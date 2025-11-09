@@ -114,7 +114,7 @@ class WecomServer:
 
 
 @register_platform_adapter(
-    "weixin_official_account", "微信公众平台 适配器", support_real_stream=False
+    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False
 )
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
@@ -197,7 +197,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             "weixin_official_account",
             "微信公众平台 适配器",
             id=self.config.get("id", "weixin_official_account"),
-            support_real_stream=False,
+            support_streaming_message=False,
         )
 
     @override

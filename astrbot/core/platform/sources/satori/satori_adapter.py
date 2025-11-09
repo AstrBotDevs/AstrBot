@@ -28,7 +28,9 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSession
 
 
-@register_platform_adapter("satori", "Satori 协议适配器", support_real_stream=False)
+@register_platform_adapter(
+    "satori", "Satori 协议适配器", support_streaming_message=False
+)
 class SatoriPlatformAdapter(Platform):
     def __init__(
         self,
@@ -57,7 +59,7 @@ class SatoriPlatformAdapter(Platform):
             name="satori",
             description="Satori 通用协议适配器",
             id=self.config["id"],
-            support_real_stream=False,
+            support_streaming_message=False,
         )
 
         self.ws: ClientConnection | None = None

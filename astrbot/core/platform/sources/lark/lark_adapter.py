@@ -24,7 +24,7 @@ from .lark_event import LarkMessageEvent
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_real_stream=False
+    "lark", "飞书机器人官方 API 适配器", support_streaming_message=False
 )
 class LarkPlatformAdapter(Platform):
     def __init__(
@@ -117,7 +117,7 @@ class LarkPlatformAdapter(Platform):
             name="lark",
             description="飞书机器人官方 API 适配器",
             id=self.config.get("id"),
-            support_real_stream=False,
+            support_streaming_message=False,
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):

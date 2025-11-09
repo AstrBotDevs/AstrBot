@@ -542,7 +542,8 @@ class LLMRequestSubStage(Stage):
             req.func_tool = new_tool_set
 
         stream_to_general = (
-            self.streaming_fallback and not event.platform_meta.support_real_stream
+            self.streaming_fallback
+            and not event.platform_meta.support_streaming_message
         )
         # 备份 req.contexts
         backup_contexts = copy.deepcopy(req.contexts)

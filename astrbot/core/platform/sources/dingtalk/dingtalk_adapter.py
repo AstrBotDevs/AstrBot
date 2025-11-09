@@ -38,7 +38,7 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 
 
 @register_platform_adapter(
-    "dingtalk", "钉钉机器人官方 API 适配器", support_real_stream=False
+    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=False
 )
 class DingtalkPlatformAdapter(Platform):
     def __init__(
@@ -88,7 +88,7 @@ class DingtalkPlatformAdapter(Platform):
             name="dingtalk",
             description="钉钉机器人官方 API 适配器",
             id=self.config.get("id"),
-            support_real_stream=False,
+            support_streaming_message=False,
         )
 
     async def convert_msg(
