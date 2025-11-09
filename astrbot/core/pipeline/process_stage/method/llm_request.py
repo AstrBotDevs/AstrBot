@@ -294,6 +294,7 @@ async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
     show_tool_use: bool = True,
+    stream_to_general: bool = False,
 ) -> AsyncGenerator[MessageChain, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
@@ -321,7 +322,10 @@ async def run_agent(
                         await astr_event.send(resp.data["chain"])
                     continue
 
-                if agent_runner.stream_to_general or not agent_runner.streaming:
+                if stream_to_general and resp.type == "streaming_delta":
+                    continue
+
+                if stream_to_general or not agent_runner.streaming:
                     content_typ = (
                         ResultContentType.LLM_RESULT
                         if resp.type == "llm_result"
@@ -595,7 +599,9 @@ class LLMRequestSubStage(Stage):
                         ),
                     )
         else:
-            async for _ in run_agent(agent_runner, self.max_step, self.show_tool_use):
+            async for _ in run_agent(
+                agent_runner, self.max_step, self.show_tool_use, stream_to_general
+            ):
                 yield
 
         # 恢复备份的 contexts

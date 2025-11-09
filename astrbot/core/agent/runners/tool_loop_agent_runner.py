@@ -48,7 +48,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> None:
         self.req = request
         self.streaming = kwargs.get("streaming", False)
-        self.stream_to_general = kwargs.get("stream_to_general", False)
         self.provider = provider
         self.final_llm_resp = None
         self._state = AgentState.IDLE
@@ -66,19 +65,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """Yields chunks *and* a final LLMResponse."""
         if self.streaming:
             stream = self.provider.text_chat_stream(**self.req.__dict__)
-            if self.stream_to_general:
-                # Collect the final non-chunk response before yielding
-                final_resp = None
-                async for resp in stream:  # type: ignore
-                    assert isinstance(resp, LLMResponse)
-                    if not resp.is_chunk:
-                        final_resp = resp
-                        break
-                if final_resp:
-                    yield final_resp
-            else:
-                async for resp in stream:  # type: ignore
-                    yield resp
+            async for resp in stream:  # type: ignore
+                yield resp
         else:
             yield await self.provider.text_chat(**self.req.__dict__)
 
