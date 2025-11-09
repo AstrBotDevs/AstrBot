@@ -3,6 +3,7 @@ import base64
 import re
 import time
 import uuid
+from typing import cast
 
 import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
