@@ -1,0 +1,181 @@
+from __future__ import annotations
+import enum
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Any, Generic, TypeVar
+from ..filter import HandlerFilter
+from ....api.star.star import StarMetadata
+from ....api.star.context import Context as BaseContext
+
+T = TypeVar("T", bound="StarHandlerMetadata")
+
+
+class EventType(enum.Enum):
+    """表示一个 AstrBot 内部事件的类型。如适配器消息事件、LLM 请求事件、发送消息前的事件等
+
+    用于对 Handler 的职能分组。
+    """
+
+    OnAstrBotLoadedEvent = enum.auto()
+    """AstrBot 加载完成"""
+    OnPlatformLoadedEvent = enum.auto()
+    """平台适配器加载完成"""
+    AdapterMessageEvent = enum.auto()
+    """收到适配器消息事件"""
+    OnLLMRequestEvent = enum.auto()
+    """LLM 请求前"""
+    OnLLMResponseEvent = enum.auto()
+    """LLM 响应后"""
+    OnDecoratingResultEvent = enum.auto()
+    """发送消息前"""
+    OnCallingFuncToolEvent = enum.auto()
+    """调用函数工具前"""
+    OnAfterMessageSentEvent = enum.auto()
+    """发送消息后"""
+
+
+@dataclass
+class StarHandlerMetadata:
+    """描述一个 Star 所注册的某一个 Handler。"""
+
+    event_type: EventType
+    """Handler 的事件类型"""
+
+    handler_full_name: str
+    '''格式为 f"{handler.__module__}_{handler.__name__}"'''
+
+    handler_name: str
+    """Handler 的名字，也就是方法名"""
+
+    handler_module_path: str
+    """Handler 所在的模块路径。"""
+
+    handler: Callable[..., Awaitable[Any]]
+    """Handler 的函数对象，应当是一个异步函数"""
+
+    event_filters: list[HandlerFilter]
+    """一个适配器消息事件过滤器，用于描述这个 Handler 能够处理、应该处理的适配器消息事件"""
+
+    desc: str = ""
+    """Handler 的描述信息"""
+
+    extras_configs: dict = field(default_factory=dict)
+    """插件注册的一些其他的信息, 如 priority 等"""
+
+    def __lt__(self, other: StarHandlerMetadata):
+        """定义小于运算符以支持优先队列"""
+        return self.extras_configs.get("priority", 0) < other.extras_configs.get(
+            "priority",
+            0,
+        )
+
+    def dump_model(self) -> dict[str, Any]:
+        """将 Handler 的元数据转换为字典形式，便于序列化。"""
+        p = self.__dict__.copy()
+        p.pop("handler")
+        p.pop("event_filters")
+        return p
+
+class StarHandlerRegistry(Generic[T]):
+    def __init__(self):
+        self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
+        self._handlers: list[StarHandlerMetadata] = []
+
+    def append(self, handler: StarHandlerMetadata):
+        """添加一个 Handler，并保持按优先级有序"""
+        if "priority" not in handler.extras_configs:
+            handler.extras_configs["priority"] = 0
+
+        self.star_handlers_map[handler.handler_full_name] = handler
+        self._handlers.append(handler)
+        self._handlers.sort(key=lambda h: -h.extras_configs["priority"])
+
+    def _print_handlers(self):
+        for handler in self._handlers:
+            print(handler.handler_full_name)
+
+    def get_handlers_by_event_type(
+        self,
+        event_type: EventType,
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata]:
+        handlers = []
+        for handler in self._handlers:
+            # 过滤事件类型
+            if handler.event_type != event_type:
+                continue
+            # 过滤启用状态
+            if only_activated:
+                plugin = star_map.get(handler.handler_module_path)
+                if not (plugin and plugin.activated):
+                    continue
+            # 过滤插件白名单
+            if plugins_name is not None and plugins_name != ["*"]:
+                plugin = star_map.get(handler.handler_module_path)
+                if not plugin:
+                    continue
+                if (
+                    plugin.name not in plugins_name
+                    and event_type
+                    not in (
+                        EventType.OnAstrBotLoadedEvent,
+                        EventType.OnPlatformLoadedEvent,
+                    )
+                    and not plugin.reserved
+                ):
+                    continue
+            handlers.append(handler)
+        return handlers
+
+    def get_handler_by_full_name(self, full_name: str) -> StarHandlerMetadata | None:
+        return self.star_handlers_map.get(full_name, None)
+
+    def get_handlers_by_module_name(
+        self,
+        module_name: str,
+    ) -> list[StarHandlerMetadata]:
+        return [
+            handler
+            for handler in self._handlers
+            if handler.handler_module_path == module_name
+        ]
+
+    def clear(self):
+        self.star_handlers_map.clear()
+        self._handlers.clear()
+
+    def remove(self, handler: StarHandlerMetadata):
+        self.star_handlers_map.pop(handler.handler_full_name, None)
+        self._handlers = [h for h in self._handlers if h != handler]
+
+    def __iter__(self):
+        return iter(self._handlers)
+
+    def __len__(self):
+        return len(self._handlers)
+
+
+class Star:
+    """所有插件的基类。每一个插件都应当继承自这个类，并实现相应的方法。"""
+
+    def __init__(self, context: BaseContext):
+        self.context = context
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not star_map.get(cls.__module__):
+            metadata = StarMetadata(
+                # star_cls_type=cls,
+                module_path=cls.__module__,
+            )
+            star_map[cls.__module__] = metadata
+            star_registry.append(metadata)
+        else:
+            # star_map[cls.__module__].star_cls_type = cls
+            star_map[cls.__module__].module_path = cls.__module__
+
+
+star_handlers_registry = StarHandlerRegistry()  # type: ignore
+star_map: dict[str, StarMetadata] = {}
+star_registry: list[StarMetadata] = []

@@ -1,0 +1,22 @@
+_schema_version: 2
+name: astrbot_plugin_helloworld
+display_name: HelloWorld 插件
+desc: 一个简单的问候插件示例
+author: Soulter
+version: 0.1.0
+components: # 组件列表，将支持自动生成
+  - class: plugin_sample.commands.hello:HelloCommand
+    type: command
+    name: hello
+    description: 发送问候消息
+    subcommands:
+      - name: wow
+        description: 发送 "Hello, Astrbot!" 消息
+  - class: plugin_sample.tools.echo:EchoTool
+    type: llm_tool
+    name: echo_tool
+    description: 回显输入的消息
+  - class: plugin_sample.listeners.message_listener:MessageListener
+    type: listener
+    name: message_logger
+    description: 监听并记录所有消息

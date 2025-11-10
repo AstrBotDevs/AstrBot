@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+from ....api.basic.astrbot_config import AstrBotConfig
+from ....api.event import AstrMessageEvent
+from . import HandlerFilter
+from .command import CommandFilter
+from .custom_filter import CustomFilter
+
+
+# 指令组受到 wake_prefix 的制约。
+class CommandGroupFilter(HandlerFilter):
+    def __init__(
+        self,
+        group_name: str,
+        alias: set | None = None,
+        parent_group: CommandGroupFilter | None = None,
+    ):
+        self.group_name = group_name
+        self.alias = alias if alias else set()
+        self.sub_command_filters: list[CommandFilter | CommandGroupFilter] = []
+        self.custom_filter_list: list[CustomFilter] = []
+        self.parent_group = parent_group
+
+        # Cache for complete command names list
+        self._cmpl_cmd_names: list | None = None
+
+    def add_sub_command_filter(
+        self,
+        sub_command_filter: CommandFilter | CommandGroupFilter,
+    ):
+        self.sub_command_filters.append(sub_command_filter)
+
+    def add_custom_filter(self, custom_filter: CustomFilter):
+        self.custom_filter_list.append(custom_filter)
+
+    def get_complete_command_names(self) -> list[str]:
+        """遍历父节点获取完整的指令名。
+
+        新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。
+        """
+        if self._cmpl_cmd_names is not None:
+            return self._cmpl_cmd_names
+
+        parent_cmd_names = (
+            self.parent_group.get_complete_command_names() if self.parent_group else []
+        )
+
+        if not parent_cmd_names:
+            # 根节点
+            return [self.group_name] + list(self.alias)
+
+        result = []
+        candidates = [self.group_name] + list(self.alias)
+        for parent_cmd_name in parent_cmd_names:
+            for candidate in candidates:
+                result.append(parent_cmd_name + " " + candidate)
+        self._cmpl_cmd_names = result
+        return result
+
+    # 以树的形式打印出来
+    def print_cmd_tree(
+        self,
+        sub_command_filters: list[CommandFilter | CommandGroupFilter],
+        prefix: str = "",
+        event: AstrMessageEvent | None = None,
+        cfg: AstrBotConfig | None = None,
+    ) -> str:
+        parts = []
+        for sub_filter in sub_command_filters:
+            if isinstance(sub_filter, CommandFilter):
+                custom_filter_pass = True
+                if event and cfg:
+                    custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
+                if custom_filter_pass:
+                    cmd_th = sub_filter.print_types()
+                    line = f"{prefix}├── {sub_filter.command_name}"
+                    if cmd_th:
+                        line += f" ({cmd_th})"
+                    else:
+                        line += " (无参数指令)"
+
+                    if sub_filter.handler_md and sub_filter.handler_md.desc:
+                        line += f": {sub_filter.handler_md.desc}"
+
+                    parts.append(line + "\n")
+            elif isinstance(sub_filter, CommandGroupFilter):
+                custom_filter_pass = True
+                if event and cfg:
+                    custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
+                if custom_filter_pass:
+                    parts.append(f"{prefix}├── {sub_filter.group_name}\n")
+                    parts.append(
+                        sub_filter.print_cmd_tree(
+                            sub_filter.sub_command_filters,
+                            prefix + "│   ",
+                            event=event,
+                            cfg=cfg,
+                        )
+                    )
+
+        return "".join(parts)
+
+    def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        for custom_filter in self.custom_filter_list:
+            if not custom_filter.filter(event, cfg):
+                return False
+        return True
+
+    def startswith(self, message_str: str) -> bool:
+        return message_str.startswith(tuple(self.get_complete_command_names()))
+
+    def equals(self, message_str: str) -> bool:
+        return message_str in self.get_complete_command_names()
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        if not event.is_at_or_wake_command:
+            return False
+
+        # 判断当前指令组的自定义过滤器
+        if not self.custom_filter_ok(event, cfg):
+            return False
+
+        if self.equals(event.message_str.strip()):
+            tree = (
+                self.group_name
+                + "\n"
+                + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
+            )
+            raise ValueError(
+                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
+            )
+
+        return self.startswith(event.message_str)
