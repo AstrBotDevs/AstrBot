@@ -1,0 +1,3 @@
+# Tauri specific
+src-tauri/target/
+src-tauri/WixTools/

@@ -1,0 +1,27 @@
+[package]
+name = "astrbot-dashboard"
+version = "4.5.6"
+description = "AstrBot"
+authors = ["AstrBot Team"]
+license = "AGPL-3.0"
+repository = "https://github.com/AstrBotDevs/AstrBot"
+default-run = "astrbot-dashboard"
+edition = "2021"
+rust-version = "1.91.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.9.2", features = ["macos-private-api", "protocol-asset"] }
+tauri-plugin-opener = "2"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
+# DO NOT REMOVE!!
+custom-protocol = [ "tauri/custom-protocol" ]

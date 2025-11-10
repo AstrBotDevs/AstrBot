@@ -11,6 +11,7 @@ import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
 import { useTheme } from 'vuetify';
+import { isTauri } from '@/utils/tauri';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({

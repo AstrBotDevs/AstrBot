@@ -32,6 +32,7 @@ tests/astrbot_plugin_openai
 # Dashboard
 dashboard/node_modules/
 dashboard/dist/
+dashboard/src-tauri/target
 package-lock.json
 package.json
 
@@ -47,3 +48,4 @@ astrbot.lock
 chroma
 venv/*
 pytest.ini
+build/

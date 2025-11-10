@@ -1,0 +1,79 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Python dependencies
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Build Python backend with Nuitka
+        run: |
+          pip install nuitka
+          python build_nuitka.py
+
+      - name: Install Node dependencies
+        working-directory: ./dashboard
+        run: npm install
+
+      - name: Build Tauri app
+        working-directory: ./dashboard
+        run: npm run tauri:build
+
+      - name: Upload artifacts (macOS)
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: astrbot-macos
+          path: dashboard/src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Upload artifacts (Windows)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: astrbot-windows
+          path: dashboard/src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload artifacts (Linux)
+        if: matrix.platform == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: astrbot-linux
+          path: |
+            dashboard/src-tauri/target/release/bundle/deb/*.deb
+            dashboard/src-tauri/target/release/bundle/appimage/*.AppImage

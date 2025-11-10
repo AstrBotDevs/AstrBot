@@ -43,5 +43,8 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
-  }
+  },
+  // Tauri 特定配置
+  clearScreen: false,
+  envPrefix: ['VITE_', 'TAURI_'],
 });
