@@ -5,6 +5,9 @@
             v-if="selectedProviderId && selectedModelName" @click="openDialog">
             {{ selectedProviderId }} / {{ selectedModelName }}
         </v-chip>
+        <v-chip variant="tonal" rounded="xl" size="x-small" v-else @click="openDialog">
+            选择模型
+        </v-chip>
 
         <!-- 选择提供商和模型对话框 -->
         <v-dialog v-model="showDialog" max-width="800" persistent>
