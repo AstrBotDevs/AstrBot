@@ -5,7 +5,7 @@ desc: 一个简单的问候插件示例
 author: Soulter
 version: 0.1.0
 components: # 组件列表，将支持自动生成
-  - class: handlers.commands.hello:HelloCommand
+  - class: test_plugin.commands.hello:HelloCommand
     type: command
     name: hello
     description: 发送问候消息
