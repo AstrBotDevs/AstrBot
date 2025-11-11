@@ -14,6 +14,7 @@ from .chunking.base import BaseChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.util import select_parser
+from .parsers.url_parser import extract_text_from_url
 
 
 class KBHelper:
@@ -359,3 +360,74 @@ class KBHelper:
         )
 
         return media
+
+    async def upload_from_url(
+        self,
+        url: str,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> KBDocument:
+        """从 URL 上传并处理文档（带原子性保证和失败清理）
+        Args:
+            url: 要提取内容的网页 URL
+            chunk_size: 文本块大小
+            chunk_overlap: 文本块重叠大小
+            batch_size: 批处理大小
+            tasks_limit: 并发任务限制
+            max_retries: 最大重试次数
+            progress_callback: 进度回调函数，接收参数 (stage, current, total)
+                - stage: 当前阶段 ('extracting', 'parsing', 'chunking', 'embedding')
+                - current: 当前进度
+                - total: 总数
+        Returns:
+            KBDocument: 上传的文档对象
+        Raises:
+            ValueError: 如果 URL 为空或无法提取内容
+            IOError: 如果网络请求失败
+        """
+        # 获取 Tavily API 密钥
+        # 从 provider_manager 的配置中获取
+        tavily_keys = self.prov_mgr.provider_settings.get("websearch_tavily_key", [])
+        if not tavily_keys:
+            raise ValueError("Error: Tavily API key is not configured in provider_settings.")
+
+        # 阶段1: 从 URL 提取内容
+        if progress_callback:
+            await progress_callback("extracting", 0, 100)
+
+        try:
+            text_content = await extract_text_from_url(url, tavily_keys)
+        except Exception as e:
+            logger.error(f"Failed to extract content from URL {url}: {e}")
+            raise IOError(f"Failed to extract content from URL {url}: {e}") from e
+
+        if not text_content:
+            raise ValueError(f"No content extracted from URL: {url}")
+
+        if progress_callback:
+            await progress_callback("extracting", 100, 100)
+
+        # 将提取的文本转换为 bytes
+        file_content_bytes = text_content.encode("utf-8")
+
+        # 创建一个虚拟文件名，可以基于 URL
+        file_name = url.split("/")[-1] or f"document_from_{url}"
+        if not file_name.endswith((".txt", ".md")):
+            file_name += ".txt"
+
+        # 复用现有的 upload_document方法
+        return await self.upload_document(
+            file_name=file_name,
+            file_content=file_content_bytes,
+            file_type="txt",  # 将其视为一个文本文档
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+        )
