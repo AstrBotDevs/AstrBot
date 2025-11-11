@@ -10,8 +10,7 @@ from .rpc.jsonrpc import (
     JSONRPCErrorResponse,
     JSONRPCErrorData,
 )
-from .types import CallHandlerRequest, HandshakeRequest
-from ..api.event.astr_message_event import AstrMessageEvent
+from .types import CallHandlerRequest
 
 
 class StarRunner:

@@ -1,6 +1,7 @@
 import yaml
 import importlib
 import functools
+import sys
 from pathlib import Path
 from loguru import logger
 from .stars.registry import star_handlers_registry, star_map, star_registry
@@ -20,13 +21,21 @@ class StarManager:
             root_dir (Path | None): The root directory to search for plugin.yaml. Defaults to None, which means the current working directory.
         """
         if root_dir is None:
-            root_dir = Path.cwd().relative_to(Path.cwd())
+            root_dir = Path.cwd()
         else:
-            root_dir = Path.cwd().joinpath(root_dir).resolve()
+            root_dir = Path(root_dir).resolve()
+        
         path = root_dir / "plugin.yaml"
         if not path.exists():
             logger.warning("No plugin.yaml found in the current directory.")
             return []
+        
+        # Add the plugin directory to sys.path so we can import its modules
+        root_dir_str = str(root_dir)
+        if root_dir_str not in sys.path:
+            sys.path.insert(0, root_dir_str)
+            logger.debug(f"Added {root_dir_str} to sys.path")
+        
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
@@ -46,7 +55,7 @@ class StarManager:
         full_name_list = []
         for comp in components:
             class_ = comp.get("class", "")
-            print(f"Loading component: {class_}")
+            logger.debug(f"Loading component: {class_}")
             if not class_:
                 logger.warning(f"Component without class found: {comp}")
                 continue
@@ -56,10 +65,7 @@ class StarManager:
                 continue
             # dynamically register the component
             try:
-                # we need edit the module path to be relative to the root_dir
-                root_dir_dot = str(root_dir).replace("/", ".").lstrip(".")
-                if root_dir_dot:
-                    module_path = f"{root_dir_dot}.{module_path}"
+                logger.debug(f"Importing module: {module_path}")
                 module_type = importlib.import_module(module_path)
                 logger.info(f"Successfully loaded component module: {module_path}")
                 component_cls = getattr(module_type, class_name)

@@ -6,5 +6,13 @@ class Context(BaseContext):
     def __init__(self, conversation_manager: ConversationManager):
         self.conversation_manager = conversation_manager
 
-    def _inject_rpc_handlers(self, runner):
-        setattr(self.conversation_manager, "runner", runner)
+    @classmethod
+    def default_context(cls, runner=None):
+        """Create a default context instance.
+
+        Args:
+            runner: Optional StarRunner instance to inject into conversation manager.
+                   If provided, enables RPC functionality.
+        """
+        conversation_manager = ConversationManager(runner=runner)
+        return cls(conversation_manager=conversation_manager)

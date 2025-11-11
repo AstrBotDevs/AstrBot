@@ -3,6 +3,14 @@ from .util import rpc_method
 
 
 class ConversationManager(BaseConversationManager):
+    def __init__(self, runner=None):
+        """Initialize ConversationManager.
+        
+        Args:
+            runner: Optional StarRunner instance for RPC functionality.
+        """
+        self.runner = runner
+
     @rpc_method
     async def new_conversation(
         self,
