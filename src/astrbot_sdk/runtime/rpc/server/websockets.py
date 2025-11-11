@@ -125,7 +125,7 @@ class WebSocketServer(JSONRPCServer):
             if msg.type == aiohttp.WSMsgType.TEXT:
                 try:
                     message = self._parse_message(msg.data)
-                    await self._handle_message(message)
+                    asyncio.create_task(self._handle_message(message))
                 except Exception as e:
                     logger.error(f"Failed to parse message: {e}, raw data: {msg.data}")
 
@@ -133,7 +133,7 @@ class WebSocketServer(JSONRPCServer):
                 try:
                     text = msg.data.decode("utf-8")
                     message = self._parse_message(text)
-                    await self._handle_message(message)
+                    asyncio.create_task(self._handle_message(message))
                 except Exception as e:
                     logger.error(f"Failed to parse binary message: {e}")
 

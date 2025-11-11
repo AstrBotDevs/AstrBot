@@ -110,7 +110,7 @@ class StdioServer(JSONRPCServer):
                 try:
                     # Parse JSON-RPC message
                     message = self._parse_message(line)
-                    await self._handle_message(message)
+                    asyncio.create_task(self._handle_message(message))
                 except Exception as e:
                     logger.error(f"Failed to parse message: {e}, raw line: {line}")
 
