@@ -67,41 +67,59 @@
 
         <v-divider />
 
-        <v-card-text class="pa-6">
-          <!-- 文件选择 -->
-          <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
-            @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
-            <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
-            <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-            <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf, .docx,
-              .xls, .xlsx</p>
-            <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-            <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-            <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
-              @change="handleFileSelect" />
-          </div>
+        <v-tabs v-model="uploadMode" grow class="mb-4">
+          <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
+          <v-tab value="url">{{ t('upload.fromUrl') }}</v-tab>
+        </v-tabs>
 
-          <div v-if="selectedFiles.length > 0" class="mt-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
-              <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
-            </div>
-            <div class="files-list">
-              <div v-for="(file, index) in selectedFiles" :key="index"
-                class="file-item pa-3 mb-2 rounded bg-surface-variant">
-                <div class="d-flex align-center justify-space-between">
-                  <div class="d-flex align-center gap-2">
-                    <v-icon>{{ getFileIcon(file.name) }}</v-icon>
-                    <div>
-                      <div class="font-weight-medium">{{ file.name }}</div>
-                      <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+        <v-card-text class="pa-6">
+          <v-window v-model="uploadMode">
+            <!-- 文件上传 -->
+            <v-window-item value="file">
+              <!-- 文件选择 -->
+              <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
+                @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
+                <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
+                <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
+                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf,
+                  .docx,
+                  .xls, .xlsx</p>
+                <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
+                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
+                  @change="handleFileSelect" />
+              </div>
+
+              <div v-if="selectedFiles.length > 0" class="mt-4">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
+                  <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
+                </div>
+                <div class="files-list">
+                  <div v-for="(file, index) in selectedFiles" :key="index"
+                    class="file-item pa-3 mb-2 rounded bg-surface-variant">
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center gap-2">
+                        <v-icon>{{ getFileIcon(file.name) }}</v-icon>
+                        <div>
+                          <div class="font-weight-medium">{{ file.name }}</div>
+                          <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+                        </div>
+                      </div>
+                      <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
                     </div>
                   </div>
-                  <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
                 </div>
               </div>
-            </div>
-          </div>
+            </v-window-item>
+
+            <!-- URL上传 -->
+            <v-window-item value="url">
+              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable
+                autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
+            </v-window-item>
+          </v-window>
+
 
           <!-- 分块设置 -->
           <div class="mt-6">
@@ -151,8 +169,8 @@
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="uploadDocument" :loading="uploading"
-            :disabled="selectedFiles.length === 0">
+          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
+            :disabled="isUploadDisabled">
             {{ t('upload.submit') }}
           </v-btn>
         </v-card-actions>
@@ -189,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -216,6 +234,8 @@ const selectedFiles = ref<File[]>([])
 const deleteTarget = ref<any>(null)
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const uploadMode = ref('file') // 'file' or 'url'
+const uploadUrl = ref('')
 
 // 上传进度 - 用于轮询多个任务
 const uploadingTasks = ref<Map<string, any>>(new Map())
@@ -252,6 +272,17 @@ const initUploadSettings = () => {
     max_retries: 3
   }
 }
+
+const isUploadDisabled = computed(() => {
+  if (uploading.value) return true
+  if (uploadMode.value === 'file') {
+    return selectedFiles.value.length === 0
+  }
+  if (uploadMode.value === 'url') {
+    return !uploadUrl.value
+  }
+  return true
+})
 
 // 表格列
 const headers = [
@@ -314,8 +345,17 @@ const handleDrop = (event: DragEvent) => {
   }
 }
 
-// 上传文档
-const uploadDocument = async () => {
+// 上传调度器
+const startUpload = async () => {
+  if (uploadMode.value === 'file') {
+    await uploadFiles()
+  } else if (uploadMode.value === 'url') {
+    await uploadFromUrl()
+  }
+}
+
+// 上传文件
+const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) {
     showSnackbar(t('upload.fileRequired'), 'warning')
     return
@@ -384,6 +424,73 @@ const uploadDocument = async () => {
     }
   } catch (error) {
     console.error('Failed to upload document:', error)
+    showSnackbar(t('documents.uploadFailed'), 'error')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 从 URL 上传
+const uploadFromUrl = async () => {
+  if (!uploadUrl.value) {
+    showSnackbar(t('upload.urlRequired'), 'warning')
+    return
+  }
+
+  uploading.value = true
+
+  try {
+    const payload: any = {
+      kb_id: props.kbId,
+      url: uploadUrl.value,
+      batch_size: uploadSettings.value.batch_size,
+      tasks_limit: uploadSettings.value.tasks_limit,
+      max_retries: uploadSettings.value.max_retries
+    }
+    if (uploadSettings.value.chunk_size) {
+      payload.chunk_size = uploadSettings.value.chunk_size
+    }
+    if (uploadSettings.value.chunk_overlap) {
+      payload.chunk_overlap = uploadSettings.value.chunk_overlap
+    }
+
+
+    const response = await axios.post('/api/kb/document/upload/url', payload)
+
+    if (response.data.status === 'ok') {
+      const result = response.data.data
+      const taskId = result.task_id
+
+      showSnackbar(`正在从 URL 后台提取内容...`, 'info')
+
+      // 添加占位条目
+      const uploadingDoc = {
+        doc_id: `uploading_${taskId}_0`,
+        doc_name: result.url,
+        file_type: 'url',
+        file_size: 0, // URL has no size
+        chunk_count: 0,
+        created_at: new Date().toISOString(),
+        uploading: true,
+        taskId: taskId,
+        uploadProgress: {
+          stage: 'waiting',
+          current: 0,
+          total: 100
+        }
+      }
+
+      documents.value = [uploadingDoc, ...documents.value]
+      closeUploadDialog()
+
+      if (taskId) {
+        startProgressPolling(taskId)
+      }
+    } else {
+      showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
+    }
+  } catch (error) {
+    console.error('Failed to upload from URL:', error)
     showSnackbar(t('documents.uploadFailed'), 'error')
   } finally {
     uploading.value = false
@@ -490,6 +597,7 @@ const getUploadPercentage = (item: any) => {
 const getStageText = (stage: string) => {
   const stageMap: Record<string, string> = {
     'waiting': '等待中...',
+    'extracting': '提取内容...',
     'parsing': '解析文档...',
     'chunking': '文本分块...',
     'embedding': '生成向量...'
@@ -501,6 +609,8 @@ const getStageText = (stage: string) => {
 const closeUploadDialog = () => {
   showUploadDialog.value = false
   selectedFiles.value = []
+  uploadUrl.value = ''
+  uploadMode.value = 'file'
   initUploadSettings()
 }
 
@@ -551,6 +661,7 @@ const getFileIcon = (fileType: string) => {
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
+  if (type.includes('url')) return 'mdi-link-variant'
   return 'mdi-file'
 }
 
@@ -559,6 +670,7 @@ const getFileColor = (fileType: string) => {
   if (type.includes('pdf')) return 'error'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
+  if (type.includes('url')) return 'primary'
   return 'grey'
 }
 

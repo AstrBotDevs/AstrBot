@@ -62,7 +62,12 @@
     "maxRetriesHint": "上传失败任务的重试次数 (默认: 3)",
     "cancel": "取消",
     "submit": "上传",
-    "fileRequired": "请选择要上传的文件"
+    "fileRequired": "请选择要上传的文件",
+    "fileUpload": "文件上传",
+    "fromUrl": "从 URL",
+    "urlPlaceholder": "请输入要提取内容的网页 URL",
+    "urlRequired": "请输入 URL",
+    "urlHint": "将自动从目标 URL 提取主要内容作为文档。目前支持 {supported} 页面。"
   },
   "retrieval": {
     "title": "知识库检索",

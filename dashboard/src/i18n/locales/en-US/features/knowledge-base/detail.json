@@ -61,7 +61,12 @@
     "maxRetriesHint": "Number of times to retry a failed upload task (default: 3)",
     "cancel": "Cancel",
     "submit": "Upload",
-    "fileRequired": "Please select a file to upload"
+    "fileRequired": "Please select a file to upload",
+    "fileUpload": "File Upload",
+    "fromUrl": "From URL",
+    "urlPlaceholder": "Enter the URL of the web page to extract content from",
+    "urlRequired": "Please enter a URL",
+    "urlHint": "The main content will be automatically extracted from the target URL as a document. Currently supports {supported} pages."
   },
   "settings": {
     "title": "Knowledge Base Settings",
