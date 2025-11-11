@@ -11,6 +11,7 @@ let AstrBot core interact with both types of stars without needing to know the u
 
 from .stars.virtual import VirtualStar
 from .stars.new import NewStdioStar, NewWebSocketStar
+from ..api.star.context import Context
 # from .types import StarURI, StarType
 
 
@@ -19,18 +20,20 @@ class Galaxy:
 
     vs_map: dict[str, VirtualStar] = {}
 
-    async def connect_to_stdio_star(self, star_name: str, config: dict) -> NewStdioStar:
+    async def connect_to_stdio_star(
+        self, context: Context, star_name: str, config: dict
+    ) -> NewStdioStar:
         """Connect to a new-style stdio star given its name."""
-        star = NewStdioStar(**config)
+        star = NewStdioStar(context=context, **config)
         await star.initialize()
         self.vs_map[star_name] = star
         return star
 
     async def connect_to_websocket_star(
-        self, star_name: str, config: dict
+        self, context: Context, star_name: str, config: dict
     ) -> NewWebSocketStar:
         """Connect to a new-style websocket star given its name."""
-        star = NewWebSocketStar(**config)
+        star = NewWebSocketStar(context=context, **config)
         await star.initialize()
         self.vs_map[star_name] = star
         return star

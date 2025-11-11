@@ -11,7 +11,7 @@ class ConversationManager(BaseConversationManager):
         """
         self.runner = runner
 
-    @rpc_method
+    @rpc_method(return_model=str)
     async def new_conversation(
         self,
         unified_msg_origin: str,

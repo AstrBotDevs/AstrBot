@@ -11,4 +11,4 @@ class HelloCommand(CommandComponent):
     async def hello(self, event: AstrMessageEvent):
         ret = await self.context.conversation_manager.new_conversation("hello")
         print(f"New conversation created: {ret}")
-        yield event.plain_result("Hello, Astrbot!")
+        yield event.plain_result(f"Hello, Astrbot! Created conversation ID: {ret}")

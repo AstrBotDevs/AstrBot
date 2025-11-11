@@ -17,13 +17,13 @@ class StarRunner:
     def __init__(self, server: JSONRPCServer):
         self.server = server
         self._request_id_counter = 0
-        self.pending_requests: dict[str, asyncio.Future] = {}
+        self.pending_requests: dict[str, asyncio.Future[JSONRPCMessage]] = {}
 
     def _generate_request_id(self) -> str:
         self._request_id_counter += 1
         return str(self._request_id_counter)
 
-    async def _call_rpc(self, message: JSONRPCMessage):
+    async def _call_rpc(self, message: JSONRPCMessage) -> JSONRPCMessage | None:
         if message.id is not None:
             self.pending_requests[message.id] = asyncio.get_event_loop().create_future()
         await self.server.send_message(message)

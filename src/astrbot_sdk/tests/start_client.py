@@ -5,12 +5,39 @@ from astrbot_sdk.api.event.astrbot_message import AstrBotMessage, MessageMember
 from astrbot_sdk.api.platform.platform_metadata import PlatformMetadata
 from astrbot_sdk.api.event.message_type import MessageType
 
+from astrbot_sdk.api.star.context import Context
+from astrbot_sdk.api.basic.conversation_mgr import BaseConversationManager
+
+
+class ConversationManager(BaseConversationManager):
+    async def new_conversation(
+        self,
+        unified_msg_origin: str,
+        platform_id: str | None = None,
+        content: list[dict] | None = None,
+        title: str | None = None,
+        persona_id: str | None = None,
+    ) -> str:
+        import uuid
+
+        return str(uuid.uuid4())
+
+
+class TestContext(Context):
+    def __init__(self, conversation_manager: ConversationManager):
+        super().__init__()
+        self.conversation_manager = conversation_manager
+        self.register_component(self.conversation_manager)
+
 
 async def amain():
     galaxy = Galaxy()
+    conversation_manager = ConversationManager()
+    context = TestContext(conversation_manager)
     star = await galaxy.connect_to_websocket_star(
-        "hello",
-        {
+        context=context,
+        star_name="hello",
+        config={
             "url": "ws://127.0.0.1:8765",
         },
     )

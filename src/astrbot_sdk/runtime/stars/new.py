@@ -33,12 +33,23 @@ class NewStar(VirtualStar):
     def __init__(
         self,
         client: JSONRPCClient,
+        context: Any = None,
     ) -> None:
         """Initialize a NewStar instance.
 
         Args:
             client: JSON-RPC client for communication
+            context: Context instance for managing managers and their functions
         """
+        # Import here to avoid circular dependency
+        from ..api.context import Context
+
+        # Initialize context
+        if context is None:
+            context = Context.default_context()
+
+        super().__init__(context)
+
         self._client = client
         self._metadata: dict[str, StarMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
@@ -120,14 +131,34 @@ class NewStar(VirtualStar):
         Args:
             request: The JSON-RPC request from the plugin
         """
-        result: dict = {}
+        result: Any = None
         try:
             # Handle core methods that plugins might call
             method = request.method
             params = request.params
 
             if method == "call_context_function":
-                logger.debug(f"plugin called call_context_function: {params}")
+                ctx = self._context
+                func_full_name = params.get("name", "")
+                args = params.get("args", {})
+                logger.debug(
+                    f"plugin called call_context_function: {func_full_name} with args: {args}"
+                )
+
+                # Get the registered function from context
+                func = ctx.get_registered_function(func_full_name)
+                if func is None:
+                    raise ValueError(f"Function not found: {func_full_name}")
+
+                # Call the function
+                import inspect
+
+                if inspect.iscoroutinefunction(func):
+                    result = await func(**args)
+                else:
+                    result = func(**args)
+
+                logger.debug(f"call_context_function result: {result}")
             else:
                 raise ValueError(f"Unknown method: {method}")
 
@@ -135,7 +166,9 @@ class NewStar(VirtualStar):
             response = JSONRPCSuccessResponse(
                 jsonrpc="2.0",
                 id=request.id,
-                result=result,
+                result={
+                    "data": result,
+                },
             )
             await self._client.send_message(response)
 
@@ -537,6 +570,7 @@ class NewStdioStar(NewStar):
         self,
         plugin_dir: str,
         python_executable: str = "python",
+        context: Any = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a STDIO-based NewStar.
@@ -544,7 +578,7 @@ class NewStdioStar(NewStar):
         Args:
             plugin_dir: Path to the plugin directory
             python_executable: Python executable to use (defaults to 'python')
-            main_script: Main script filename (defaults to 'main.py')
+            context: Context instance for managing managers and their functions
         """
         # Construct the command to start the plugin
         if not os.path.exists(plugin_dir):
@@ -554,7 +588,7 @@ class NewStdioStar(NewStar):
 
         # Create StdioClient with subprocess management
         client = StdioClient(command=command, cwd=plugin_dir)
-        super().__init__(client)
+        super().__init__(client, context=context)
 
 
 class NewWebSocketStar(NewStar):
@@ -569,6 +603,7 @@ class NewWebSocketStar(NewStar):
         url: str,
         heartbeat: float = 30.0,
         reconnect_interval: float = 5.0,
+        context: Any = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a WebSocket-based NewStar.
@@ -577,11 +612,12 @@ class NewWebSocketStar(NewStar):
             url: WebSocket server URL that the plugin will connect to
             heartbeat: Heartbeat interval in seconds
             reconnect_interval: Interval between reconnection attempts in seconds
+            context: Context instance for managing managers and their functions
         """
         client = WebSocketClient(
             url=url, heartbeat=heartbeat, reconnect_interval=reconnect_interval
         )
-        super().__init__(client)
+        super().__init__(client, context=context)
         self._url = url
         self._heartbeat = heartbeat
         self._reconnect_interval = reconnect_interval

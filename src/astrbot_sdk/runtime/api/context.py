@@ -4,7 +4,10 @@ from .conversation_mgr import ConversationManager
 
 class Context(BaseContext):
     def __init__(self, conversation_manager: ConversationManager):
+        super().__init__()
         self.conversation_manager = conversation_manager
+        # Auto-register the conversation manager
+        self.register_component(self.conversation_manager)
 
     @classmethod
     def default_context(cls, runner=None):

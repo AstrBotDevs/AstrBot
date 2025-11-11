@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from ...api.event.astr_message_event import AstrMessageEvent
 from ...api.star.star import StarMetadata
 from .registry import StarHandlerMetadata
+from ...api.star.context import Context
 
 
 class VirtualStar(ABC):
@@ -13,6 +14,8 @@ class VirtualStar(ABC):
     runtime environments (separate processes). It handles the complete lifecycle
     of a plugin from initialization to shutdown.
     """
+    def __init__(self, context: Context) -> None:
+        self._context = context
 
     @abstractmethod
     async def initialize(self) -> None:
