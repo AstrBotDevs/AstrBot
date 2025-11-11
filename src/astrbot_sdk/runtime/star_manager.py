@@ -67,7 +67,7 @@ class StarManager:
             try:
                 logger.debug(f"Importing module: {module_path}")
                 module_type = importlib.import_module(module_path)
-                logger.info(f"Successfully loaded component module: {module_path}")
+                logger.debug(f"Successfully loaded component module: {module_path}")
                 component_cls = getattr(module_type, class_name)
                 # Instantiate the component with context
                 ccls = component_cls(self.context)

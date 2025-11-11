@@ -1,8 +1,10 @@
-from .galaxy import Galaxy
-from ..api.event import AstrMessageEvent
-from ..api.event.astrbot_message import AstrBotMessage, MessageMember
-from ..api.platform.platform_metadata import PlatformMetadata
-from ..api.event.message_type import MessageType
+import asyncio
+from astrbot_sdk.runtime.galaxy import Galaxy
+from astrbot_sdk.api.event import AstrMessageEvent
+from astrbot_sdk.api.event.astrbot_message import AstrBotMessage, MessageMember
+from astrbot_sdk.api.platform.platform_metadata import PlatformMetadata
+from astrbot_sdk.api.event.message_type import MessageType
+
 
 async def amain():
     galaxy = Galaxy()
@@ -22,7 +24,9 @@ async def amain():
     abm.session_id = "test_session"
     abm.message_id = "msg_001"
     abm.message_str = "hello"
-    abm.sender = MessageMember(user_id="user_123", nickname="User123")   # Simplified for this example
+    abm.sender = MessageMember(
+        user_id="user_123", nickname="User123"
+    )  # Simplified for this example
     abm.group = None
     abm.message = []
     abm.raw_message = {}
@@ -35,3 +39,9 @@ async def amain():
         session_id="test_session",
     )
     await star.call_handler(star._handlers[0], event)
+
+    await star.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(amain())

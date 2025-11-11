@@ -2,7 +2,7 @@ import asyncio
 import sys
 import click
 from loguru import logger
-from ..runtime.start_server import amain as run_server
+from ..runtime.serve import run_websocket_server
 
 
 def setup_logger(verbose: bool = False):
@@ -43,7 +43,7 @@ def cli(ctx, verbose):
 def run(ctx, port: int):
     """Start the WebSocket server"""
     logger.info(f"Starting WebSocket server on port {port}...")
-    asyncio.run(run_server(port))
+    asyncio.run(run_websocket_server(port=port))
 
 
 if __name__ == "__main__":

@@ -123,23 +123,11 @@ class NewStar(VirtualStar):
         result: dict = {}
         try:
             # Handle core methods that plugins might call
-            # For now, we'll implement basic methods
             method = request.method
             params = request.params
 
-            if method == "core.log":
-                # Plugin wants to log something
-                level = params.get("level", "info")
-                message = params.get("message", "")
-                getattr(logger, level.lower())(f"[Plugin] {message}")
-                result = {"success": True}
-
-            elif method == "core.send_message":
-                # Plugin wants to send a message
-                # This would integrate with the platform adapter
-                logger.info(f"Plugin requested to send message: {params}")
-                result = {"success": True, "message_id": "mock-msg-id"}
-
+            if method == "call_context_function":
+                logger.debug(f"plugin called call_context_function: {params}")
             else:
                 raise ValueError(f"Unknown method: {method}")
 
@@ -530,8 +518,13 @@ class NewStar(VirtualStar):
         logger.debug(f"Calling handler: {handler.handler_name}")
 
         # Call the handler proxy
-        result = await handler.handler(event, *args, **kwargs)
+        result = await handler.handler(event, *args, **kwargs)  # type: ignore
         return result
+
+    async def stop(self) -> None:
+        """Stop the NewStar and cleanup resources."""
+        await self._client.stop()
+        logger.info("NewStar client stopped.")
 
 
 class NewStdioStar(NewStar):

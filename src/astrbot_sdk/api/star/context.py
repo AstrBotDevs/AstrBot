@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from ..basic.conversation_mgr import BaseConversationManager
 
 

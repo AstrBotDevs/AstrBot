@@ -3,42 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 from .rpc.jsonrpc import JSONRPCRequest
 from typing import Any, Literal, Type
-from ..api.event.astr_message_event import AstrMessageEvent, AstrMessageEventModel
-
-
-# class StarType(enum.Enum):
-#     LEGACY = "legacy"
-#     STDIO = "stdio"
-#     WEBSOCKET = "websocket"
-
-
-# class StarURI(BaseModel):
-#     star_type: StarType
-#     namespace: str
-#     plugin_name: str
-
-#     def __str__(self):
-#         return f"astrbot://{self.star_type.value}/{self.namespace}/{self.plugin_name}"
-
-#     @classmethod
-#     def from_str(cls, uri_str: str) -> StarURI:
-#         """Parse a StarURI from a string."""
-#         try:
-#             prefix, rest = uri_str.split("://", 1)
-#             star_type_str, namespace, plugin_name = rest.split("/", 2)
-#             star_type = StarType(star_type_str)
-#             return cls(
-#                 star_type=star_type,
-#                 namespace=namespace,
-#                 plugin_name=plugin_name,
-#             )
-#         except Exception as e:
-#             raise ValueError(f"Invalid StarURI format: {uri_str}") from e
-
-#     def is_new_star(self) -> bool:
-#         """Determine if the Star is a new-style Star (stdio or websocket)."""
-#         return self.star_type in {StarType.STDIO, StarType.WEBSOCKET}
-
+from ..api.event.astr_message_event import AstrMessageEventModel
 
 class HandshakeRequest(JSONRPCRequest):
     class Params(BaseModel):
