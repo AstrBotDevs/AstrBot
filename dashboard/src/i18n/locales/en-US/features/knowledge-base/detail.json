@@ -66,7 +66,8 @@
     "fromUrl": "From URL",
     "urlPlaceholder": "Enter the URL of the web page to extract content from",
     "urlRequired": "Please enter a URL",
-    "urlHint": "The main content will be automatically extracted from the target URL as a document. Currently supports {supported} pages."
+    "urlHint": "The main content will be automatically extracted from the target URL as a document. Currently supports {supported} pages.",
+    "urlWarning": "Before use, please ensure that the target web page allows crawler access and that the Tavily API key has been correctly configured in the system settings."
   },
   "settings": {
     "title": "Knowledge Base Settings",

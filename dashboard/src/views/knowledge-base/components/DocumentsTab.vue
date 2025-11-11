@@ -114,9 +114,12 @@
             </v-window-item>
 
             <!-- URL上传 -->
-            <v-window-item value="url">
+            <v-window-item value="url" class="pt-2">
               <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable
                 autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
+              <v-alert type="warning" variant="tonal" density="compact" class="mt-4">
+                {{ t('upload.urlWarning') }}
+              </v-alert>
             </v-window-item>
           </v-window>
 
