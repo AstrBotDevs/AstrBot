@@ -65,7 +65,9 @@ async def amain():
         ),
         session_id="test_session",
     )
-    await star.call_handler(star._handlers[0], event)
+
+    async for result in star.call_handler(star._handlers[0], event):
+        print(f"Handler result: {result}")
 
     await star.stop()
 

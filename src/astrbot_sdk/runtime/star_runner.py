@@ -11,7 +11,12 @@ from .rpc.jsonrpc import (
     JSONRPCErrorData,
 )
 from .rpc.request_helper import RPCRequestHelper
-from .types import CallHandlerRequest
+from .types import (
+    CallHandlerRequest,
+    HandlerStreamStartNotification,
+    HandlerStreamUpdateNotification,
+    HandlerStreamEndNotification,
+)
 
 
 class HandshakeHandler:
@@ -76,50 +81,61 @@ class HandlerExecutor:
         ready_to_call,
     ):
         """Execute handler and stream results."""
-        await self._send_stream_notification(
-            server, "handler_stream_start", request_id, handler_name
+        # Send start notification
+        await server.send_message(
+            HandlerStreamStartNotification(
+                jsonrpc="2.0",
+                method="handler_stream_start",
+                params=HandlerStreamStartNotification.Params(
+                    id=request_id,
+                    handler_full_name=handler_name,
+                ),
+            )
         )
 
         try:
             if inspect.iscoroutine(ready_to_call):
                 result = await ready_to_call
-                await self._send_stream_notification(
-                    server, "handler_stream_update", request_id, handler_name, result
+                # Send update notification
+                await server.send_message(
+                    HandlerStreamUpdateNotification(
+                        jsonrpc="2.0",
+                        method="handler_stream_update",
+                        params=HandlerStreamUpdateNotification.Params(
+                            id=request_id,
+                            handler_full_name=handler_name,
+                            data=result,
+                        ),
+                    )
                 )
             elif inspect.isasyncgen(ready_to_call):
                 async for ret in ready_to_call:
-                    await self._send_stream_notification(
-                        server, "handler_stream_update", request_id, handler_name, ret
+                    # Send update notification for each item
+                    await server.send_message(
+                        HandlerStreamUpdateNotification(
+                            jsonrpc="2.0",
+                            method="handler_stream_update",
+                            params=HandlerStreamUpdateNotification.Params(
+                                id=request_id,
+                                handler_full_name=handler_name,
+                                data=ret,
+                            ),
+                        )
                     )
         except Exception as e:
             logger.error(f"Error during handler {handler_name}: {e}")
         finally:
-            await self._send_stream_notification(
-                server, "handler_stream_end", request_id, handler_name
+            # Send end notification
+            await server.send_message(
+                HandlerStreamEndNotification(
+                    jsonrpc="2.0",
+                    method="handler_stream_end",
+                    params=HandlerStreamEndNotification.Params(
+                        id=request_id,
+                        handler_full_name=handler_name,
+                    ),
+                )
             )
-
-    async def _send_stream_notification(
-        self,
-        server: JSONRPCServer,
-        method: str,
-        request_id: str | None,
-        handler_name: str,
-        data=None,
-    ):
-        """Send a stream notification."""
-        params = {
-            "id": request_id,
-            "handler_full_name": handler_name,
-        }
-        if data is not None:
-            params["data"] = data
-
-        notification = JSONRPCRequest(
-            jsonrpc="2.0",
-            method=method,
-            params=params,
-        )
-        await server.send_message(notification)
 
     async def _send_error(
         self, server: JSONRPCServer, request_id: str | None, code: int, message: str
@@ -173,6 +189,8 @@ class StarRunner:
                 await self.server.send_message(response)
             elif message.method == "call_handler":
                 await self.handler_executor.execute(message, self.server)
+            else:
+                logger.warning(f"Unknown method from client: {message.method}")
         elif isinstance(message, (JSONRPCSuccessResponse, JSONRPCErrorResponse)):
             self.rpc_request_helper.resolve_pending_request(message)
 

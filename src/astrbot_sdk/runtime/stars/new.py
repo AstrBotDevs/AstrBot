@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any
+import inspect
+from typing import Any, AsyncGenerator
 
 from loguru import logger
 
@@ -20,6 +21,7 @@ from ..types import CallHandlerRequest, HandshakeRequest
 from ..rpc.client import JSONRPCClient
 from ..rpc.client.stdio import StdioClient
 from ..rpc.client.websocket import WebSocketClient
+from ..rpc.request_helper import RPCRequestHelper
 from .virtual import VirtualStar
 
 
@@ -33,7 +35,7 @@ class NewStar(VirtualStar):
     def __init__(
         self,
         client: JSONRPCClient,
-        context: Any = None,
+        context: Any,
     ) -> None:
         """Initialize a NewStar instance.
 
@@ -41,31 +43,18 @@ class NewStar(VirtualStar):
             client: JSON-RPC client for communication
             context: Context instance for managing managers and their functions
         """
-        # Import here to avoid circular dependency
-        from ..api.context import Context
-
-        # Initialize context
-        if context is None:
-            context = Context.default_context()
-
         super().__init__(context)
 
         self._client = client
         self._metadata: dict[str, StarMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
-        self._request_id_counter = 0
-        self._pending_requests: dict[
-            str, asyncio.Future[dict] | asyncio.Queue[dict]
-        ] = {}
         self._active = False
+
+        # Use RPCRequestHelper for managing requests
+        self._rpc_helper = RPCRequestHelper()
 
         # Set up message handler
         self._client.set_message_handler(self._handle_message)
-
-    def _generate_request_id(self) -> str:
-        """Generate a unique request ID."""
-        self._request_id_counter += 1
-        return f"req-{self._request_id_counter}"
 
     async def _handle_message(self, message: JSONRPCMessage) -> None:
         """Handle incoming JSON-RPC messages from the plugin.
@@ -77,41 +66,8 @@ class NewStar(VirtualStar):
             message,
             JSONRPCErrorResponse,
         ):
-            # This is a response to one of our requests
-            request_id = message.id
-            if request_id and request_id in self._pending_requests:
-                pending = self._pending_requests[request_id]
-
-                # Check if it's a Future or Queue
-                if isinstance(pending, asyncio.Future):
-                    self._pending_requests.pop(request_id)
-                    if isinstance(message, JSONRPCSuccessResponse):
-                        if not pending.done():
-                            pending.set_result(message.result)
-                    else:
-                        if not pending.done():
-                            pending.set_exception(
-                                RuntimeError(
-                                    f"RPC Error {message.error.code}: {message.error.message}",
-                                ),
-                            )
-                elif isinstance(pending, asyncio.Queue):
-                    if isinstance(message, JSONRPCSuccessResponse):
-                        logger.debug(
-                            f"Streaming handler {request_id} completed successfully"
-                        )
-                    else:
-                        logger.error(
-                            f"Streaming handler {request_id} failed: {message.error.message}"
-                        )
-                        # Put error marker in queue
-                        await pending.put(
-                            {"_error": True, "message": message.error.message}
-                        )
-            else:
-                logger.warning(
-                    f"Received response for unknown request ID: {request_id}"
-                )
+            # Delegate to RPCRequestHelper
+            self._rpc_helper.resolve_pending_request(message)
 
         elif isinstance(message, JSONRPCRequest):
             # Handle notifications from plugin (streaming events or method calls)
@@ -120,7 +76,7 @@ class NewStar(VirtualStar):
                 "handler_stream_update",
                 "handler_stream_end",
             ]:
-                await self._handle_stream_notification(message)
+                await self._rpc_helper.handle_stream_notification(message)
             else:
                 # Plugin is calling a method on the core
                 asyncio.create_task(self._handle_plugin_request(message))
@@ -185,115 +141,6 @@ class NewStar(VirtualStar):
             )
             await self._client.send_message(error_response)
 
-    async def _handle_stream_notification(self, notification: JSONRPCRequest) -> None:
-        """Handle streaming notifications from the plugin.
-
-        Args:
-            notification: The streaming notification (handler_stream_start/update/end)
-        """
-        params = notification.params
-        request_id = params.get("id")
-
-        if not request_id or request_id not in self._pending_requests:
-            logger.warning(
-                f"Received stream notification for unknown request ID: {request_id}"
-            )
-            return
-
-        pending = self._pending_requests.get(request_id)
-        if not isinstance(pending, asyncio.Queue):
-            logger.warning(f"Request {request_id} is not a streaming request")
-            return
-
-        if notification.method == "handler_stream_start":
-            logger.debug(
-                f"Stream started for handler {params.get('handler_full_name')}"
-            )
-            # Optionally put a start marker in the queue
-            # await pending.put({"_stream_start": True})
-
-        elif notification.method == "handler_stream_update":
-            # Put the streamed data into the queue
-            data = params.get("data")
-            logger.debug(f"Stream update for request {request_id}: {data}")
-            if data is not None:
-                await pending.put(data)
-
-        elif notification.method == "handler_stream_end":
-            # Mark the end of the stream
-            logger.debug(f"Stream ended for handler {params.get('handler_full_name')}")
-            # Put a sentinel value to indicate stream end
-            await pending.put({"_stream_end": True})
-            # Clean up the pending request after a short delay to allow queue to be processed
-            asyncio.create_task(self._cleanup_stream_request(request_id))
-
-    async def _cleanup_stream_request(
-        self, request_id: str, delay: float = 1.0
-    ) -> None:
-        """Clean up a streaming request after a delay.
-
-        Args:
-            request_id: The request ID to clean up
-            delay: Delay before cleanup in seconds
-        """
-        await asyncio.sleep(delay)
-        if request_id in self._pending_requests:
-            self._pending_requests.pop(request_id)
-            logger.debug(f"Cleaned up streaming request {request_id}")
-
-    async def _call_rpc(self, request: JSONRPCRequest) -> dict:
-        """Call a JSON-RPC method on the plugin and wait for response.
-
-        Args:
-            request: The JSON-RPC request to send
-
-        Returns:
-            The result from the plugin
-
-        Raises:
-            RuntimeError: If the RPC call fails
-        """
-        # Create a future to wait for the response
-        future: asyncio.Future[dict] = asyncio.Future()
-
-        if request.id is not None:
-            self._pending_requests[request.id] = future
-
-        try:
-            await self._client.send_message(request)
-            # Wait for response with timeout
-            result = await asyncio.wait_for(future, timeout=30.0)
-            return result
-        except asyncio.TimeoutError:
-            if request.id is not None:
-                self._pending_requests.pop(request.id, None)
-            raise RuntimeError(f"RPC call to {request.method} timed out")
-
-    async def _call_rpc_streaming(
-        self,
-        request: JSONRPCRequest,
-    ) -> asyncio.Queue[dict]:
-        """Call a JSON-RPC method on the plugin that returns a stream of results.
-
-        Args:
-            request: The JSON-RPC request to send
-        Returns:
-            An asyncio.Queue that will receive streamed results
-        """
-        # Create a queue to receive streamed results
-        queue: asyncio.Queue[dict] = asyncio.Queue()
-
-        if request.id is not None:
-            self._pending_requests[request.id] = queue
-
-        try:
-            await self._client.send_message(request)
-            return queue
-        except Exception as e:
-            if request.id is not None:
-                self._pending_requests.pop(request.id, None)
-            raise RuntimeError(f"RPC streaming call to {request.method} failed: {e}")
-
     async def initialize(self) -> None:
         """Start the plugin process and establish connection."""
         # Start the client (which may start a subprocess for STDIO)
@@ -308,13 +155,19 @@ class NewStar(VirtualStar):
         """
         logger.info("Performing handshake with plugin...")
 
-        result = await self._call_rpc(
+        response = await self._rpc_helper.call_rpc(
+            self._client,
             HandshakeRequest(
-                jsonrpc="2.0", id=self._generate_request_id(), method="handshake"
-            )
+                jsonrpc="2.0",
+                id=self._rpc_helper._generate_request_id(),
+                method="handshake",
+            ),
         )
 
-        print(result, result.__class__)
+        if not isinstance(response, JSONRPCSuccessResponse):
+            raise RuntimeError("Handshake failed: Invalid response from plugin")
+
+        result = response.result
 
         if isinstance(result, dict):
             # Parse metadata
@@ -365,7 +218,7 @@ class NewStar(VirtualStar):
 
             Returns either a direct result or an async generator for streaming handlers.
             """
-            request_id = self._generate_request_id()
+            request_id = self._rpc_helper._generate_request_id()
             request = CallHandlerRequest(
                 jsonrpc="2.0",
                 id=request_id,
@@ -376,124 +229,21 @@ class NewStar(VirtualStar):
                     args=kwargs,
                 ),
             )
-
-            # Create a queue for potential streaming response
-            queue: asyncio.Queue[dict] = asyncio.Queue()
-            self._pending_requests[request_id] = queue
+            queue = await self._rpc_helper.call_rpc_streaming(self._client, request)
 
             try:
-                # Send the request
-                await self._client.send_message(request)
+                while True:
+                    item = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    if isinstance(item, dict) and item.get("_stream_end"):
+                        break
+                    if isinstance(item, dict) and item.get("_error"):
+                        raise RuntimeError(item.get("message", "Unknown error"))
+                    yield self._deserialize_result(item)
 
-                # Wait for the first response or stream notification
-                try:
-                    # Set a timeout for the first response
-                    first_response = await asyncio.wait_for(queue.get(), timeout=30.0)
-
-                    # Check what type of response we got
-                    if isinstance(first_response, dict):
-                        # Check for stream end (empty stream case)
-                        if first_response.get("_stream_end"):
-                            # Empty stream, return None
-                            self._pending_requests.pop(request_id, None)
-                            return None
-
-                        # Check for error
-                        if first_response.get("_error"):
-                            self._pending_requests.pop(request_id, None)
-                            raise RuntimeError(
-                                first_response.get("message", "Unknown error")
-                            )
-
-                        # Check if this is streaming data or a final result
-                        # We peek at the queue to see if more data is coming
-                        # If the queue is empty after a short wait, it's a final result
-                        try:
-                            # Try to get another item with a very short timeout
-                            second_response = await asyncio.wait_for(
-                                queue.get(), timeout=0.1
-                            )
-                            # We got a second item, so this is streaming
-                            # Create and return the generator
-                            return self._create_stream_generator(
-                                queue, first_response, second_response
-                            )
-                        except asyncio.TimeoutError:
-                            # No second item, this might be a final result
-                            # But we should check if stream_end arrives shortly
-                            try:
-                                stream_end = await asyncio.wait_for(
-                                    queue.get(), timeout=0.5
-                                )
-                                if isinstance(stream_end, dict) and stream_end.get(
-                                    "_stream_end"
-                                ):
-                                    # This was a single-item stream
-                                    self._pending_requests.pop(request_id, None)
-                                    return self._deserialize_result(first_response)
-                                else:
-                                    # More data arrived, it's streaming
-                                    return self._create_stream_generator(
-                                        queue, first_response, stream_end
-                                    )
-                            except asyncio.TimeoutError:
-                                # Truly a final result (non-streaming)
-                                self._pending_requests.pop(request_id, None)
-                                return self._deserialize_result(first_response)
-                    else:
-                        # Unexpected response type
-                        self._pending_requests.pop(request_id, None)
-                        return self._deserialize_result(first_response)
-
-                except asyncio.TimeoutError:
-                    # Timeout waiting for response
-                    self._pending_requests.pop(request_id, None)
-                    raise RuntimeError(f"RPC call to {handler_full_name} timed out")
-
-            except Exception:
-                # Clean up on error
-                self._pending_requests.pop(request_id, None)
-                raise
+            except asyncio.TimeoutError:
+                raise RuntimeError(f"RPC call to {handler_full_name} timed out")
 
         return handler_proxy
-
-    async def _create_stream_generator(
-        self, queue: asyncio.Queue[dict], *initial_items: dict
-    ):
-        """Create an async generator that yields items from the stream queue.
-
-        Args:
-            queue: The queue containing stream items
-            initial_items: Initial items that were already retrieved from the queue
-
-        Yields:
-            Items from the stream
-        """
-        # Yield any initial items
-        for item in initial_items:
-            if not (isinstance(item, dict) and item.get("_stream_end")):
-                yield self._deserialize_result(item)
-
-        # Continue yielding items from the queue
-        while True:
-            try:
-                item = await queue.get()
-
-                # Check for end marker
-                if isinstance(item, dict) and item.get("_stream_end"):
-                    break
-
-                # Check for error marker
-                if isinstance(item, dict) and item.get("_error"):
-                    raise RuntimeError(item.get("message", "Stream error"))
-
-                # Yield the item
-                yield self._deserialize_result(item)
-
-            except asyncio.CancelledError:
-                # Generator was cancelled, stop iteration
-                logger.debug("Stream generator cancelled")
-                break
 
     def _deserialize_result(self, result: Any) -> Any:
         """Deserialize result from JSON-RPC response.
@@ -505,7 +255,7 @@ class NewStar(VirtualStar):
             Deserialized result object
         """
         # For now, return as-is
-        # In practice, you might want to reconstruct MessageEventResult etc.
+        # In practice, we might want to reconstruct MessageEventResult etc.
         return result
 
     def get_triggered_handlers(
@@ -536,7 +286,7 @@ class NewStar(VirtualStar):
         event: AstrMessageEvent,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> AsyncGenerator[Any, None]:
         """Call a specific handler in the plugin.
 
         Args:
@@ -546,13 +296,16 @@ class NewStar(VirtualStar):
             **kwargs: Additional keyword arguments
 
         Returns:
-            Result from the handler
+            An async generator yielding results from the handler
         """
         logger.debug(f"Calling handler: {handler.handler_name}")
 
         # Call the handler proxy
-        result = await handler.handler(event, *args, **kwargs)  # type: ignore
-        return result
+        assert inspect.isasyncgenfunction(handler.handler), (
+            "Handler proxy must be an async generator function"
+        )
+        async for result in handler.handler(event, **kwargs):
+            yield result
 
     async def stop(self) -> None:
         """Stop the NewStar and cleanup resources."""
