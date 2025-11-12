@@ -10,7 +10,7 @@ let AstrBot core interact with both types of stars without needing to know the u
 """
 
 from .stars.virtual import VirtualStar
-from .stars.new import NewStdioStar, NewWebSocketStar
+from .stars.new_star import NewStdioStar, NewWebSocketStar
 from ..api.star.context import Context
 # from .types import StarURI, StarType
 

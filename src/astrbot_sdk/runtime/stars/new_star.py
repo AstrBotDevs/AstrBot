@@ -7,22 +7,25 @@ from typing import Any, AsyncGenerator
 
 from loguru import logger
 
-from ...api.event.astr_message_event import AstrMessageEvent, AstrMessageEventModel
+from ...api.event.astr_message_event import AstrMessageEvent
 from ...api.star.star import StarMetadata
-from ..stars.registry import EventType, StarHandlerMetadata
+from .registry import EventType, StarHandlerMetadata
 from ..rpc.jsonrpc import (
-    JSONRPCErrorData,
     JSONRPCErrorResponse,
     JSONRPCMessage,
     JSONRPCRequest,
     JSONRPCSuccessResponse,
 )
-from ..types import CallHandlerRequest, HandshakeRequest
 from ..rpc.client import JSONRPCClient
 from ..rpc.client.stdio import StdioClient
 from ..rpc.client.websocket import WebSocketClient
 from ..rpc.request_helper import RPCRequestHelper
 from .virtual import VirtualStar
+from .new_star_utils import (
+    ClientHandshakeHandler,
+    PluginRequestHandler,
+    HandlerProxyFactory,
+)
 
 
 class NewStar(VirtualStar):
@@ -53,6 +56,11 @@ class NewStar(VirtualStar):
         # Use RPCRequestHelper for managing requests
         self._rpc_helper = RPCRequestHelper()
 
+        # Initialize specialized handlers
+        self._handshake_handler = ClientHandshakeHandler(self._rpc_helper)
+        self._plugin_request_handler = PluginRequestHandler(context)
+        self._handler_proxy_factory = HandlerProxyFactory(client, self._rpc_helper)
+
         # Set up message handler
         self._client.set_message_handler(self._handle_message)
 
@@ -78,68 +86,10 @@ class NewStar(VirtualStar):
             ]:
                 await self._rpc_helper.handle_stream_notification(message)
             else:
-                # Plugin is calling a method on the core
-                asyncio.create_task(self._handle_plugin_request(message))
-
-    async def _handle_plugin_request(self, request: JSONRPCRequest) -> None:
-        """Handle a JSON-RPC request from the plugin (plugin calling core methods).
-
-        Args:
-            request: The JSON-RPC request from the plugin
-        """
-        result: Any = None
-        try:
-            # Handle core methods that plugins might call
-            method = request.method
-            params = request.params
-
-            if method == "call_context_function":
-                ctx = self._context
-                func_full_name = params.get("name", "")
-                args = params.get("args", {})
-                logger.debug(
-                    f"plugin called call_context_function: {func_full_name} with args: {args}"
+                # Plugin is calling a method on the core - delegate to PluginRequestHandler
+                asyncio.create_task(
+                    self._plugin_request_handler.handle_request(message, self._client)
                 )
-
-                # Get the registered function from context
-                func = ctx.get_registered_function(func_full_name)
-                if func is None:
-                    raise ValueError(f"Function not found: {func_full_name}")
-
-                # Call the function
-                import inspect
-
-                if inspect.iscoroutinefunction(func):
-                    result = await func(**args)
-                else:
-                    result = func(**args)
-
-                logger.debug(f"call_context_function result: {result}")
-            else:
-                raise ValueError(f"Unknown method: {method}")
-
-            # Send success response
-            response = JSONRPCSuccessResponse(
-                jsonrpc="2.0",
-                id=request.id,
-                result={
-                    "data": result,
-                },
-            )
-            await self._client.send_message(response)
-
-        except Exception as e:
-            logger.error(f"Error handling plugin request: {e}")
-            # Send error response
-            error_response = JSONRPCErrorResponse(
-                jsonrpc="2.0",
-                id=request.id,
-                error=JSONRPCErrorData(
-                    code=-32603,
-                    message=str(e),
-                ),
-            )
-            await self._client.send_message(error_response)
 
     async def initialize(self) -> None:
         """Start the plugin process and establish connection."""
@@ -153,110 +103,16 @@ class NewStar(VirtualStar):
         Returns:
             Plugin metadata including name, version, handlers, etc.
         """
-        logger.info("Performing handshake with plugin...")
+        # Delegate to ClientHandshakeHandler
+        (
+            self._metadata,
+            self._handlers,
+        ) = await self._handshake_handler.perform_handshake(self._client)
 
-        response = await self._rpc_helper.call_rpc(
-            self._client,
-            HandshakeRequest(
-                jsonrpc="2.0",
-                id=self._rpc_helper._generate_request_id(),
-                method="handshake",
-            ),
-        )
+        # Set up handler proxies
+        self._handler_proxy_factory.setup_handlers(self._handlers)
 
-        if not isinstance(response, JSONRPCSuccessResponse):
-            raise RuntimeError("Handshake failed: Invalid response from plugin")
-
-        result = response.result
-
-        if isinstance(result, dict):
-            # Parse metadata
-            for star_name, star_info in result.items():
-                handlers_data = star_info.pop("handlers", None)
-                metadata = StarMetadata(**star_info)
-                self._metadata[star_name] = metadata
-
-                # Get handlers
-                self._handlers = []
-
-                for handler_data in handlers_data:
-                    handler_meta = StarHandlerMetadata(
-                        event_type=EventType(handler_data["event_type"]),
-                        handler_full_name=handler_data["handler_full_name"],
-                        handler_name=handler_data["handler_name"],
-                        handler_module_path=handler_data["handler_module_path"],
-                        handler=self._create_handler_proxy(
-                            handler_data["handler_full_name"]
-                        ),
-                        event_filters=[],
-                        desc=handler_data.get("desc", ""),
-                        extras_configs=handler_data.get("extras_configs", {}),
-                    )
-                    self._handlers.append(handler_meta)
-
-            logger.info(
-                f"Handshake complete: {len(self._metadata)} stars loaded, {self._metadata.keys()}, {len(self._handlers)} handlers registered."
-            )
-            logger.info(f"Registered {len(self._handlers)} handlers")
-
-            return self._metadata
-        raise RuntimeError("Handshake failed: Invalid response from plugin")
-
-    def _create_handler_proxy(self, handler_full_name: str):
-        """Create a proxy function that calls the handler via RPC.
-
-        Args:
-            handler_full_name: The full name of the handler
-
-        Returns:
-            An async function that proxies calls to the remote handler.
-            The function may return a direct result or an async generator for streaming.
-        """
-
-        async def handler_proxy(event: AstrMessageEvent, **kwargs):
-            """Proxy function for remote handler invocation.
-
-            Returns either a direct result or an async generator for streaming handlers.
-            """
-            request_id = self._rpc_helper._generate_request_id()
-            request = CallHandlerRequest(
-                jsonrpc="2.0",
-                id=request_id,
-                method="call_handler",
-                params=CallHandlerRequest.Params(
-                    handler_full_name=handler_full_name,
-                    event=AstrMessageEventModel.from_event(event),
-                    args=kwargs,
-                ),
-            )
-            queue = await self._rpc_helper.call_rpc_streaming(self._client, request)
-
-            try:
-                while True:
-                    item = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    if isinstance(item, dict) and item.get("_stream_end"):
-                        break
-                    if isinstance(item, dict) and item.get("_error"):
-                        raise RuntimeError(item.get("message", "Unknown error"))
-                    yield self._deserialize_result(item)
-
-            except asyncio.TimeoutError:
-                raise RuntimeError(f"RPC call to {handler_full_name} timed out")
-
-        return handler_proxy
-
-    def _deserialize_result(self, result: Any) -> Any:
-        """Deserialize result from JSON-RPC response.
-
-        Args:
-            result: The result from the plugin
-
-        Returns:
-            Deserialized result object
-        """
-        # For now, return as-is
-        # In practice, we might want to reconstruct MessageEventResult etc.
-        return result
+        return self._metadata
 
     def get_triggered_handlers(
         self, event: AstrMessageEvent
