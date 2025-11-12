@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 from loguru import logger
 from typing import Any
@@ -11,39 +10,153 @@ from .rpc.jsonrpc import (
     JSONRPCErrorResponse,
     JSONRPCErrorData,
 )
+from .rpc.request_helper import RPCRequestHelper
 from .types import CallHandlerRequest
 
 
+class HandshakeHandler:
+    """Handles the handshake protocol to exchange plugin metadata."""
+
+    async def handle(self, message: JSONRPCRequest) -> JSONRPCSuccessResponse:
+        """Build and return handshake response with plugin metadata."""
+        payload = {}
+        for star_name, star in star_map.items():
+            payload[star_name] = star.__dict__
+            handlers = []
+            for handler_full_name in star.star_handler_full_names:
+                handler = star_handlers_registry.get_handler_by_full_name(
+                    handler_full_name
+                )
+                if handler is None:
+                    continue
+                handlers.append(handler.dump_model())
+            payload[star_name]["handlers"] = handlers
+
+        return JSONRPCSuccessResponse(
+            jsonrpc="2.0",
+            id=message.id,
+            result=payload,
+        )
+
+
+class HandlerExecutor:
+    """Executes plugin handlers and manages streaming results."""
+
+    def __init__(self, rpc_request_helper: RPCRequestHelper):
+        self.rpc_request_helper = rpc_request_helper
+
+    async def execute(self, message: JSONRPCRequest, server: JSONRPCServer):
+        """Execute a handler and stream results back to the caller."""
+        params = CallHandlerRequest.Params.model_validate(message.params)
+        handler_full_name = params.handler_full_name
+        event_model = params.event
+        args = params.args
+        event = event_model.to_event()
+
+        handler = star_handlers_registry.get_handler_by_full_name(handler_full_name)
+
+        if handler is None:
+            await self._send_error(
+                server, message.id, -32601, f"Handler not found: {handler_full_name}"
+            )
+            return
+
+        try:
+            await self._execute_and_stream(
+                server, message.id, handler_full_name, handler.handler(event, **args)
+            )
+        except Exception as e:
+            await self._send_error(server, message.id, -32000, str(e))
+
+    async def _execute_and_stream(
+        self,
+        server: JSONRPCServer,
+        request_id: str | None,
+        handler_name: str,
+        ready_to_call,
+    ):
+        """Execute handler and stream results."""
+        await self._send_stream_notification(
+            server, "handler_stream_start", request_id, handler_name
+        )
+
+        try:
+            if inspect.iscoroutine(ready_to_call):
+                result = await ready_to_call
+                await self._send_stream_notification(
+                    server, "handler_stream_update", request_id, handler_name, result
+                )
+            elif inspect.isasyncgen(ready_to_call):
+                async for ret in ready_to_call:
+                    await self._send_stream_notification(
+                        server, "handler_stream_update", request_id, handler_name, ret
+                    )
+        except Exception as e:
+            logger.error(f"Error during handler {handler_name}: {e}")
+        finally:
+            await self._send_stream_notification(
+                server, "handler_stream_end", request_id, handler_name
+            )
+
+    async def _send_stream_notification(
+        self,
+        server: JSONRPCServer,
+        method: str,
+        request_id: str | None,
+        handler_name: str,
+        data=None,
+    ):
+        """Send a stream notification."""
+        params = {
+            "id": request_id,
+            "handler_full_name": handler_name,
+        }
+        if data is not None:
+            params["data"] = data
+
+        notification = JSONRPCRequest(
+            jsonrpc="2.0",
+            method=method,
+            params=params,
+        )
+        await server.send_message(notification)
+
+    async def _send_error(
+        self, server: JSONRPCServer, request_id: str | None, code: int, message: str
+    ):
+        """Send an error response."""
+        response = JSONRPCErrorResponse(
+            jsonrpc="2.0",
+            id=request_id,
+            error=JSONRPCErrorData(code=code, message=message),
+        )
+        await server.send_message(response)
+
+
 class StarRunner:
+    """Main runner to handle RPC messages and route them to handlers."""
+
     def __init__(self, server: JSONRPCServer):
         self.server = server
-        self._request_id_counter = 0
-        self.pending_requests: dict[str, asyncio.Future[JSONRPCMessage]] = {}
 
-    def _generate_request_id(self) -> str:
-        self._request_id_counter += 1
-        return str(self._request_id_counter)
+        self.rpc_request_helper = RPCRequestHelper()
+        self.handler_executor = HandlerExecutor(self.rpc_request_helper)
+        self.handshake_handler = HandshakeHandler()
 
-    async def _call_rpc(self, message: JSONRPCMessage) -> JSONRPCMessage | None:
-        if message.id is not None:
-            self.pending_requests[message.id] = asyncio.get_event_loop().create_future()
-        await self.server.send_message(message)
-        if message.id is not None:
-            return await self.pending_requests[message.id]
-
-    async def _call_context_function(
+    async def call_context_function(
         self, method_name: str, params: dict[str, Any]
     ) -> dict[str, Any]:
-        result = await self._call_rpc(
+        result = await self.rpc_request_helper.call_rpc(
+            self.server,
             JSONRPCRequest(
                 jsonrpc="2.0",
-                id=self._generate_request_id(),
+                id=self.rpc_request_helper._generate_request_id(),
                 method="call_context_function",
                 params={
                     "name": method_name,
                     "args": params,
                 },
-            )
+            ),
         )
         if isinstance(result, JSONRPCSuccessResponse):
             return result.result
@@ -53,121 +166,15 @@ class StarRunner:
             raise Exception("Invalid RPC response")
 
     async def _handle_messages(self, message: JSONRPCMessage):
+        """Route messages to appropriate handlers."""
         if isinstance(message, JSONRPCRequest):
-            logger.debug(f"Received RPC request: {message.method}")
             if message.method == "handshake":
-                payload = {}
-                for star_name, star in star_map.items():
-                    payload[star_name] = star.__dict__
-                    handlers = []
-                    for handler_full_name in star.star_handler_full_names:
-                        handler = star_handlers_registry.get_handler_by_full_name(
-                            handler_full_name
-                        )
-                        if handler is None:
-                            continue
-                        handlers.append(handler.dump_model())
-                    payload[star_name]["handlers"] = handlers
-                response = JSONRPCSuccessResponse(
-                    jsonrpc="2.0",
-                    id=message.id,
-                    result=payload,
-                )
+                response = await self.handshake_handler.handle(message)
                 await self.server.send_message(response)
             elif message.method == "call_handler":
-                params = CallHandlerRequest.Params.model_validate(message.params)
-                handler_full_name = params.handler_full_name
-                event_model = params.event
-                args = params.args
-                event = event_model.to_event()
-                logger.debug(f"Parsed event: {event}")
-
-                handler = star_handlers_registry.get_handler_by_full_name(
-                    handler_full_name
-                )
-                logger.debug(f"Invoking handler: {handler_full_name} with args: {args}")
-                if handler is None:
-                    response = JSONRPCErrorResponse(
-                        jsonrpc="2.0",
-                        id=message.id,
-                        error=JSONRPCErrorData(
-                            code=-32601,
-                            message=f"Handler not found: {handler_full_name}",
-                        ),
-                    )
-                    await self.server.send_message(response)
-                else:
-                    try:
-                        ready_to_call = handler.handler(event, **args)
-                        notification = JSONRPCRequest(
-                            jsonrpc="2.0",
-                            method="handler_stream_start",
-                            params={
-                                "id": message.id,
-                                "handler_full_name": handler_full_name,
-                            },
-                        )
-                        await self.server.send_message(notification)
-                        if inspect.iscoroutine(ready_to_call):
-                            result = await ready_to_call
-                            notification = JSONRPCRequest(
-                                jsonrpc="2.0",
-                                method="handler_stream_update",
-                                params={
-                                    "id": message.id,
-                                    "handler_full_name": handler_full_name,
-                                    "data": result,
-                                },
-                            )
-                            await self.server.send_message(notification)
-                        elif inspect.isasyncgen(ready_to_call):
-                            try:
-                                async for ret in ready_to_call:
-                                    # Send intermediate results as notifications
-                                    notification = JSONRPCRequest(
-                                        jsonrpc="2.0",
-                                        method="handler_stream_update",
-                                        params={
-                                            "id": message.id,
-                                            "handler_full_name": handler_full_name,
-                                            "data": ret,
-                                        },
-                                    )
-                                    await self.server.send_message(notification)
-                            except Exception as e:
-                                logger.error(
-                                    f"Error during async generator of handler {handler_full_name}: {e}"
-                                )
-                    except Exception as e:
-                        response = JSONRPCErrorResponse(
-                            jsonrpc="2.0",
-                            id=message.id,
-                            error=JSONRPCErrorData(
-                                code=-32000,
-                                message=str(e),
-                            ),
-                        )
-                    finally:
-                        notification = JSONRPCRequest(
-                            jsonrpc="2.0",
-                            method="handler_stream_end",
-                            params={
-                                "id": message.id,
-                                "handler_full_name": handler_full_name,
-                            },
-                        )
-                        await self.server.send_message(notification)
+                await self.handler_executor.execute(message, self.server)
         elif isinstance(message, (JSONRPCSuccessResponse, JSONRPCErrorResponse)):
-            if message.id in self.pending_requests:
-                future = self.pending_requests.pop(message.id)
-                if not future.done():
-                    future.set_result(message)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.stop()
+            self.rpc_request_helper.resolve_pending_request(message)
 
     async def run(self):
         self.server.set_message_handler(handler=self._handle_messages)

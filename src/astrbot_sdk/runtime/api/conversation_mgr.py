@@ -19,7 +19,7 @@ class ConversationManager(BaseConversationManager):
         title: str | None = None,
         persona_id: str | None = None,
     ) -> str:
-        result = await self.runner._call_context_function(
+        result = await self.runner.call_context_function(
             f"{self.__class__.__name__}.{self.new_conversation.__name__}",
             {
                 "unified_msg_origin": unified_msg_origin,
