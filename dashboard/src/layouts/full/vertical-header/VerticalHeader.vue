@@ -517,7 +517,7 @@ commonStore.getStartTime();
           {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
         </v-card-title>
         <v-card-text
-          style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
+          style="font-size: 14px; max-height: 400px; overflow-y: auto;"
           v-html="md.render(selectedReleaseNotes)" class="markdown-content">
         </v-card-text>
         <v-card-actions>
