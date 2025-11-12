@@ -43,6 +43,11 @@ let devCommits = ref<{ sha: string; date: string; message: string }[]>([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
+// Release Notes Modal
+let releaseNotesDialog = ref(false);
+let selectedReleaseNotes = ref('');
+let selectedReleaseTag = ref('');
+
 let tab = ref(0);
 
 const releasesHeader = computed(() => [
@@ -283,6 +288,12 @@ function toggleDarkMode() {
   theme.global.name.value = newTheme;
 }
 
+function openReleaseNotesDialog(body: string, tag: string) {
+  selectedReleaseNotes.value = body;
+  selectedReleaseTag.value = tag;
+  releaseNotesDialog.value = true;
+}
+
 getVersion();
 checkUpdate();
 
@@ -417,13 +428,10 @@ commonStore.getStartTime();
                       </v-chip>
                     </div>
                   </template>
-                  <template v-slot:item.body="{ item }: { item: { body: string } }">
-                    <v-tooltip :text="item.body">
-                      <template v-slot:activator="{ props }">
-                        <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="x-small">{{
-                          t('core.header.updateDialog.table.view') }}</v-btn>
-                      </template>
-                    </v-tooltip>
+                  <template v-slot:item.body="{ item }: { item: { body: string; tag_name: string } }">
+                    <v-btn @click="openReleaseNotesDialog(item.body, item.tag_name)" rounded="xl" variant="tonal"
+                      color="primary" size="x-small">{{
+                        t('core.header.updateDialog.table.view') }}</v-btn>
                   </template>
                   <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
                     <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
@@ -496,6 +504,25 @@ commonStore.getStartTime();
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="blue-darken-1" variant="text" @click="updateStatusDialog = false">
+            {{ t('core.common.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Release Notes Modal -->
+    <v-dialog v-model="releaseNotesDialog" max-width="800">
+      <v-card>
+        <v-card-title class="text-h5">
+          {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
+        </v-card-title>
+        <v-card-text
+          style="font-size: 14px; max-height: 400px; overflow-y: auto;"
+          v-html="md.render(selectedReleaseNotes)" class="markdown-content">
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="blue-darken-1" variant="text" @click="releaseNotesDialog = false">
             {{ t('core.common.close') }}
           </v-btn>
         </v-card-actions>

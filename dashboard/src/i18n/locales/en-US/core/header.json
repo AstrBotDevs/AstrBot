@@ -56,6 +56,9 @@
       "linkText": "View master branch commit history (click copy on the right to copy)",
       "confirm": "Confirm Switch"
     },
+    "releaseNotes": {
+      "title": "Release Notes"
+    },
     "dashboardUpdate": {
       "title": "Update Dashboard to Latest Version Only",
       "currentVersion": "Current Version",
