@@ -649,9 +649,9 @@ class LLMRequestSubStage(Stage):
                 req = ProviderRequest(prompt="", image_urls=[])
                 if sel_model := event.get_extra("selected_model"):
                     req.model = sel_model
-                if self.provider_wake_prefix:
-                    if not event.message_str.startswith(self.provider_wake_prefix):
-                        return
+                if self.provider_wake_prefix and not event.message_str.startswith(self.provider_wake_prefix):
+                    return
+
                 req.prompt = event.message_str[len(self.provider_wake_prefix) :]
                 # func_tool selection 现在已经转移到 packages/astrbot 插件中进行选择。
                 # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
