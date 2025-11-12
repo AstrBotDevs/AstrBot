@@ -575,7 +575,7 @@ class LLMRequestSubStage(Stage):
             ),
             tool_executor=FunctionToolExecutor(),
             agent_hooks=MAIN_AGENT_HOOKS,
-            streaming=self.streaming_response,
+            streaming=streaming_response,
         )
 
         if self.streaming_response and not stream_to_general:
