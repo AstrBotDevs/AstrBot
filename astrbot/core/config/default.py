@@ -2304,12 +2304,18 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                     },
                     "provider_settings.streaming_segmented": {
-                        "description": "不支持流式回复的平台采取分段输出",
+                        "description": "不支持的平台采取实时分段输出策略",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.streaming_response": True,
+                        },
                     },
                     "provider_settings.streaming_fallback": {
-                        "description": "不支持流式回复的平台回落到普通输出",
+                        "description": "不支持的平台关闭流式回复功能",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.streaming_response": True,
+                        },
                     },
                     "provider_settings.max_context_length": {
                         "description": "最多携带对话轮数",
