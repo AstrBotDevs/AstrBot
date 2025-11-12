@@ -93,7 +93,6 @@ class WecomAIQueueListener:
 @register_platform_adapter(
     "wecom_ai_bot",
     "企业微信智能机器人适配器，支持 HTTP 回调接收消息",
-    support_streaming_message=False,
 )
 class WecomAIBotAdapter(Platform):
     """企业微信智能机器人适配器"""
@@ -129,7 +128,6 @@ class WecomAIBotAdapter(Platform):
             name="wecom_ai_bot",
             description="企业微信智能机器人适配器，支持 HTTP 回调接收消息",
             id=self.config.get("id", "wecom_ai_bot"),
-            support_streaming_message=False,
         )
 
         # 初始化 API 客户端
