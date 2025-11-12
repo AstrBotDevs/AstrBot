@@ -4,9 +4,9 @@ import functools
 import sys
 from pathlib import Path
 from loguru import logger
-from .stars.registry import star_handlers_registry, star_map, star_registry
-from ..runtime.api.context import Context
-from ..api.star.star import StarMetadata
+from .registry import star_handlers_registry, star_map, star_registry
+from ..api.context import Context
+from ...api.star.star import StarMetadata
 
 
 class StarManager:

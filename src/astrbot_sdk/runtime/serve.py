@@ -2,7 +2,7 @@ import asyncio
 import signal
 from .rpc.server import WebSocketServer, StdioServer
 from .star_runner import StarRunner
-from .star_manager import StarManager
+from .stars.star_manager import StarManager
 from .api.context import Context
 from loguru import logger
 from typing import IO, Any
