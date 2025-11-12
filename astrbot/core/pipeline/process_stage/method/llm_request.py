@@ -578,7 +578,7 @@ class LLMRequestSubStage(Stage):
             streaming=streaming_response,
         )
 
-        if self.streaming_response and not stream_to_general:
+        if streaming_response and not stream_to_general:
             # 流式响应
             event.set_result(
                 MessageEventResult()
