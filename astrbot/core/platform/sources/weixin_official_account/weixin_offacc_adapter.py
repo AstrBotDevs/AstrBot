@@ -113,7 +113,9 @@ class WecomServer:
         await self.shutdown_event.wait()
 
 
-@register_platform_adapter("weixin_official_account", "微信公众平台 适配器")
+@register_platform_adapter(
+    "weixin_official_account", "微信公众平台 适配器", support_streaming_message=False
+)
 class WeixinOfficialAccountPlatformAdapter(Platform):
     def __init__(
         self,
@@ -195,6 +197,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             "weixin_official_account",
             "微信公众平台 适配器",
             id=self.config.get("id", "weixin_official_account"),
+            support_streaming_message=False,
         )
 
     @override

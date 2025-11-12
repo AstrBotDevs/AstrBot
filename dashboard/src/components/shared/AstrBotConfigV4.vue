@@ -154,7 +154,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <div class="w-100" v-if="!itemMeta?._special">
                 <!-- Select input for JSON selector -->
                 <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
-                  :items="itemMeta?.options" :disabled="itemMeta?.readonly" density="compact" variant="outlined"
+                  :items="itemMeta?.labels ? itemMeta.options.map((value, index) => ({ title: itemMeta.labels[index] || value, value: value })) : itemMeta.options" 
+                  :disabled="itemMeta?.readonly" density="compact" variant="outlined"
                   class="config-field" hide-details></v-select>
 
                 <!-- Code Editor for JSON selector -->

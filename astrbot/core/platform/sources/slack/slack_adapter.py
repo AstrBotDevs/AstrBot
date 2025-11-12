@@ -30,6 +30,7 @@ from .slack_event import SlackMessageEvent
 @register_platform_adapter(
     "slack",
     "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
+    support_streaming_message=False,
 )
 class SlackAdapter(Platform):
     def __init__(
@@ -68,6 +69,7 @@ class SlackAdapter(Platform):
             name="slack",
             description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
             id=self.config.get("id"),
+            support_streaming_message=False,
         )
 
         # 初始化 Slack Web Client

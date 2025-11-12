@@ -32,7 +32,9 @@ except ImportError as e:
     )
 
 
-@register_platform_adapter("wechatpadpro", "WeChatPadPro 消息平台适配器")
+@register_platform_adapter(
+    "wechatpadpro", "WeChatPadPro 消息平台适配器", support_streaming_message=False
+)
 class WeChatPadProAdapter(Platform):
     def __init__(
         self,
@@ -51,6 +53,7 @@ class WeChatPadProAdapter(Platform):
             name="wechatpadpro",
             description="WeChatPadPro 消息平台适配器",
             id=self.config.get("id", "wechatpadpro"),
+            support_streaming_message=False,
         )
 
         # 保存配置信息

@@ -169,12 +169,15 @@ class RespondStage(Stage):
                 logger.warning("async_stream 为空，跳过发送。")
                 return
             # 流式结果直接交付平台适配器处理
-            use_fallback = self.config.get("provider_settings", {}).get(
-                "streaming_segmented",
-                False,
+            realtime_segmenting = (
+                self.config.get("provider_settings", {}).get(
+                    "unsupported_streaming_strategy",
+                    "realtime_segmenting",
+                )
+                == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, use_fallback)
+            await event.send_streaming(result.async_stream, realtime_segmenting)
             return
         if len(result.chain) > 0:
             # 检查路径映射

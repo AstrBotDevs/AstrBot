@@ -29,6 +29,7 @@ from .aiocqhttp_message_event import AiocqhttpMessageEvent
 @register_platform_adapter(
     "aiocqhttp",
     "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。",
+    support_streaming_message=False,
 )
 class AiocqhttpAdapter(Platform):
     def __init__(
@@ -49,6 +50,7 @@ class AiocqhttpAdapter(Platform):
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
             id=self.config.get("id"),
+            support_streaming_message=False,
         )
 
         self.bot = CQHttp(
