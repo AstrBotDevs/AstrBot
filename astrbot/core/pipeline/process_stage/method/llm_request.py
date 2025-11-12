@@ -367,7 +367,9 @@ class LLMRequestSubStage(Stage):
             self.max_context_length - 1,
         )
         self.streaming_response: bool = settings["streaming_response"]
-        self.streaming_fallback: bool = settings["streaming_fallback"]
+        self.unsupported_streaming_strategy: str = settings[
+            "unsupported_streaming_strategy"
+        ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         if isinstance(self.max_step, bool):  # workaround: #2622
@@ -546,7 +548,7 @@ class LLMRequestSubStage(Stage):
             req.func_tool = new_tool_set
 
         stream_to_general = (
-            self.streaming_fallback
+            self.unsupported_streaming_strategy == "turn_off"
             and not event.platform_meta.support_streaming_message
         )
         # 备份 req.contexts
