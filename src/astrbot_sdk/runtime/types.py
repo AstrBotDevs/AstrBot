@@ -30,12 +30,3 @@ class CallHandlerRequest(JSONRPCRequest):
 
     method: Literal["call_handler"]
     params: Params | dict = Field(default_factory=dict)
-
-
-class CallContextFunctionRequest(JSONRPCRequest):
-    class Params(BaseModel):
-        name: str
-        args: dict[str, Any] = {}
-
-    method: Literal["call_context_function"]
-    params: Params | dict = Field(default_factory=dict)

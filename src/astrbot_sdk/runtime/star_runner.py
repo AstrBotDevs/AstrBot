@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 from loguru import logger
+from typing import Any
 from .rpc.server.base import JSONRPCServer
 from .stars.registry import star_map, star_handlers_registry
 from .rpc.jsonrpc import (
@@ -29,6 +30,27 @@ class StarRunner:
         await self.server.send_message(message)
         if message.id is not None:
             return await self.pending_requests[message.id]
+
+    async def _call_context_function(
+        self, method_name: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        result = await self._call_rpc(
+            JSONRPCRequest(
+                jsonrpc="2.0",
+                id=self._generate_request_id(),
+                method="call_context_function",
+                params={
+                    "name": method_name,
+                    "args": params,
+                },
+            )
+        )
+        if isinstance(result, JSONRPCSuccessResponse):
+            return result.result
+        elif isinstance(result, JSONRPCErrorResponse):
+            raise Exception(f"RPC Error {result.error.code}: {result.error.message}")
+        else:
+            raise Exception("Invalid RPC response")
 
     async def _handle_messages(self, message: JSONRPCMessage):
         if isinstance(message, JSONRPCRequest):

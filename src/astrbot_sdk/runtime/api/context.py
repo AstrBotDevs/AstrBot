@@ -1,5 +1,7 @@
+from __future__ import annotations
 from ...api.star.context import Context as BaseContext
 from .conversation_mgr import ConversationManager
+from ..star_runner import StarRunner
 
 
 class Context(BaseContext):
@@ -10,12 +12,12 @@ class Context(BaseContext):
         self.register_component(self.conversation_manager)
 
     @classmethod
-    def default_context(cls, runner=None):
+    def default_context(cls, runner: StarRunner) -> Context:
         """Create a default context instance.
 
         Args:
             runner: Optional StarRunner instance to inject into conversation manager.
                    If provided, enables RPC functionality.
         """
-        conversation_manager = ConversationManager(runner=runner)
+        conversation_manager = ConversationManager(runner)
         return cls(conversation_manager=conversation_manager)
