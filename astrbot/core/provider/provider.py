@@ -1,26 +1,17 @@
 import abc
 import asyncio
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
     LLMResponse,
-    ProviderType,
+    ProviderMetaData,
     RerankResult,
     ToolCallsResult,
 )
 from astrbot.core.provider.register import provider_cls_map
-
-
-@dataclass
-class ProviderMeta:
-    id: str
-    model: str
-    type: str
-    provider_type: ProviderType
 
 
 class AbstractProvider(abc.ABC):
@@ -39,19 +30,13 @@ class AbstractProvider(abc.ABC):
         """Get the current model name"""
         return self.model_name
 
-    def meta(self) -> ProviderMeta:
+    def meta(self) -> ProviderMetaData:
         """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
-        provider_type = meta_data.provider_type if meta_data else None
-        if provider_type is None:
-            raise ValueError(f"Cannot find provider type: {provider_type_name}")
-        return ProviderMeta(
-            id=self.provider_config["id"],
-            model=self.get_model(),
-            type=provider_type_name,
-            provider_type=provider_type,
-        )
+        if not meta_data:
+            raise ValueError(f"Provider type {provider_type_name} not registered")
+        return meta_data
 
 
 class Provider(AbstractProvider):

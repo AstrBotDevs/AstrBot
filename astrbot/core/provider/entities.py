@@ -36,8 +36,9 @@ class ProviderMetaData:
     desc: str = ""
     """提供商适配器描述"""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
+    """提供商类型"""
     cls_type: Any = None
-
+    """提供商适配器类类型"""
     default_config_tmpl: dict | None = None
     """平台的默认配置模板"""
     provider_display_name: str | None = None
