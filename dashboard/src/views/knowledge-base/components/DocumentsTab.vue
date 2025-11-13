@@ -123,6 +123,22 @@
             </v-window-item>
           </v-window>
 
+          <!-- 清洗设置 (仅在URL模式下显示) -->
+          <div v-if="uploadMode === 'url'" class="mt-6">
+            <div class="d-flex align-center mb-4">
+              <h3 class="text-h6">{{ t('upload.cleaningSettings') }}</h3>
+            </div>
+            <v-row>
+              <v-col cols="12" sm="4">
+                <v-switch v-model="uploadSettings.enable_cleaning" :label="t('upload.enableCleaning')" color="primary" />
+              </v-col>
+              <v-col cols="12" sm="8">
+                <v-select v-model="uploadSettings.cleaning_provider_id" :items="llmProviders" item-title="id"
+                  item-value="id" :label="t('upload.cleaningProvider')" :hint="t('upload.cleaningProviderHint')"
+                  persistent-hint variant="outlined" density="compact" :disabled="!uploadSettings.enable_cleaning" />
+              </v-col>
+            </v-row>
+          </div>
 
           <!-- 分块设置 -->
           <div class="mt-6">
@@ -239,8 +255,7 @@ const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploadMode = ref('file') // 'file' or 'url'
 const uploadUrl = ref('')
-
-// 上传进度 - 用于轮询多个任务
+const llmProviders = ref<any[]>([])
 const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
 
@@ -262,7 +277,9 @@ const uploadSettings = ref({
   chunk_overlap: null as number | null,
   batch_size: 32,
   tasks_limit: 3,
-  max_retries: 3
+  max_retries: 3,
+  enable_cleaning: false,
+  cleaning_provider_id: null as string | null
 })
 
 // 初始化上传设置
@@ -272,7 +289,9 @@ const initUploadSettings = () => {
     chunk_overlap: props.kb?.chunk_overlap || null,
     batch_size: 32,
     tasks_limit: 3,
-    max_retries: 3
+    max_retries: 3,
+    enable_cleaning: false,
+    cleaning_provider_id: null
   }
 }
 
@@ -456,6 +475,10 @@ const uploadFromUrl = async () => {
     if (uploadSettings.value.chunk_overlap) {
       payload.chunk_overlap = uploadSettings.value.chunk_overlap
     }
+    if (uploadSettings.value.enable_cleaning) {
+      payload.enable_cleaning = true
+      payload.cleaning_provider_id = uploadSettings.value.cleaning_provider_id
+    }
 
 
     const response = await axios.post('/api/kb/document/upload/url', payload)
@@ -601,6 +624,7 @@ const getStageText = (stage: string) => {
   const stageMap: Record<string, string> = {
     'waiting': '等待中...',
     'extracting': '提取内容...',
+    'cleaning': '清洗内容...',
     'parsing': '解析文档...',
     'chunking': '文本分块...',
     'embedding': '生成向量...'
@@ -700,8 +724,23 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+// 加载LLM providers
+const loadLlmProviders = async () => {
+  try {
+    const response = await axios.get('/api/config/provider/list', {
+      params: { provider_type: 'chat_completion' }
+    })
+    if (response.data.status === 'ok') {
+      llmProviders.value = response.data.data
+    }
+  } catch (error) {
+    console.error('Failed to load LLM providers:', error)
+  }
+}
+
 onMounted(() => {
   loadDocuments()
+  loadLlmProviders()
 })
 
 onUnmounted(() => {

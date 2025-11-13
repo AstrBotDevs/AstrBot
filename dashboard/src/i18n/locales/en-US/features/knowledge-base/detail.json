@@ -4,6 +4,7 @@
   "tabs": {
     "overview": "Overview",
     "documents": "Documents",
+    "retrieval": "Retrieval",
     "sessions": "Sessions",
     "settings": "Settings"
   },
@@ -49,6 +50,10 @@
     "maxSize": "Max file size: 128MB",
     "chunkSettings": "Chunk Settings",
     "batchSettings": "Batch Settings",
+    "cleaningSettings": "Cleaning Settings",
+    "enableCleaning": "Enable Content Cleaning",
+    "cleaningProvider": "Cleaning Service Provider",
+    "cleaningProviderHint": "Select an LLM provider to clean and summarize the extracted web page content",
     "chunkSize": "Chunk Size",
     "chunkSizeHint": "Number of characters per chunk (default: 512)",
     "chunkOverlap": "Chunk Overlap",

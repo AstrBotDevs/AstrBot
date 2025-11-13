@@ -1104,6 +1104,8 @@ class KnowledgeBaseRoute(Route):
             batch_size = data.get("batch_size", 32)
             tasks_limit = data.get("tasks_limit", 3)
             max_retries = data.get("max_retries", 3)
+            enable_cleaning = data.get("enable_cleaning", False)
+            cleaning_provider_id = data.get("cleaning_provider_id")
 
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
@@ -1131,6 +1133,8 @@ class KnowledgeBaseRoute(Route):
                     batch_size=batch_size,
                     tasks_limit=tasks_limit,
                     max_retries=max_retries,
+                    enable_cleaning=enable_cleaning,
+                    cleaning_provider_id=cleaning_provider_id,
                 ),
             )
 
@@ -1163,6 +1167,8 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
+        enable_cleaning: bool,
+        cleaning_provider_id: str | None,
     ):
         """后台上传URL任务"""
         try:
@@ -1205,6 +1211,8 @@ class KnowledgeBaseRoute(Route):
                 tasks_limit=tasks_limit,
                 max_retries=max_retries,
                 progress_callback=progress_callback,
+                enable_cleaning=enable_cleaning,
+                cleaning_provider_id=cleaning_provider_id,
             )
 
             # 更新任务完成状态
