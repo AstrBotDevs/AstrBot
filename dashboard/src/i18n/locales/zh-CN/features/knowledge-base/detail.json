@@ -72,7 +72,8 @@
     "urlPlaceholder": "请输入要提取内容的网页 URL",
     "urlRequired": "请输入 URL",
     "urlHint": "将自动从目标 URL 提取主要内容作为文档。目前支持 {supported} 页面。",
-    "urlWarning": "使用前请确保目标网页允许爬虫访问，并且已在系统设置中正确配置 Tavily API 密钥。"
+    "urlWarning": "使用前请确保目标网页允许爬虫访问，并且已在系统设置中正确配置 Tavily API 密钥。",
+    "beta": "测试版"
   },
   "retrieval": {
     "title": "知识库检索",

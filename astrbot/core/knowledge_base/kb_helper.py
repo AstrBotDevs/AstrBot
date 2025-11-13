@@ -112,27 +112,66 @@ class RateLimiter:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-TEXT_REPAIR_SYSTEM_PROMPT = """You are an expert text editor. Your task is to extract and refine valuable information from a given text chunk, which may contain noise.
+TEXT_REPAIR_SYSTEM_PROMPT = """You are a meticulous digital archivist. Your mission is to reconstruct a clean, readable article from raw, noisy text chunks.
 
-**Core Principle: Be conservative in discarding.** Even if a chunk contains some irrelevant information (like navigation links or metadata), your primary goal is to **extract and preserve any substantive content** within it.
+**Core Task:**
+1.  **Analyze:** Examine the text chunk to separate "signal" (substantive information) from "noise" (UI elements, ads, navigation, footers).
+2.  **Process:** Clean and repair the signal. **Do not translate it.** Keep the original language.
 
-**Step 1: Analyze and Extract**
-- Read the entire text chunk carefully.
-- Identify and ignore noise such as: UI navigation text ("click here", "edit"), metadata (version tables, author lists), lists of links, ads, etc.
-- **Focus on finding and extracting any sentences, paragraphs, or facts that have informational value.**
+**Crucial Rules:**
+- **NEVER discard a chunk if it contains ANY valuable information.** Your primary duty is to salvage content.
+- **If a chunk contains multiple distinct topics, split them.** Enclose each topic in its own `<repaired_text>` tag.
+- Your output MUST be ONLY `<repaired_text>...</repaired_text>` tags or a single `<discard_chunk />` tag.
 
-**Step 2: Process the Extracted Content**
-- **If you find NO valuable information at all** (the chunk is pure noise, e.g., only a list of links): Your ONLY output should be the tag `<discard_chunk />`.
-- **If you find ANY valuable information**:
-    1.  **Clean and Repair**: Remove the noise you identified. Repair any grammar or formatting issues in the remaining valuable text.
-    2.  **Translate**: Translate the cleaned and repaired text into Simplified Chinese.
-    3.  **Structure**:
-        *   If the cleaned text forms a single, coherent topic, enclose the entire translated result in one `<repaired_text>` tag.
-        *   If the cleaned text contains multiple distinct topics, split them into separate sub-chunks, translate each, and enclose each translated sub-chunk in its own `<repaired_text>` tag.
+---
+**Example 1: Chunk with Noise and Signal**
 
-**Summary of Your Output Rules:**
-- **Only** output `<discard_chunk />` if the chunk is completely devoid of any useful information.
-- Otherwise, output the cleaned, repaired, and translated valuable content within one or more `<repaired_text>...</repaired_text>` tags.
+*Input Chunk:*
+"Home | About | Products | **The Llama is a domesticated South American camelid.** | © 2025 ACME Corp."
+
+*Your Thought Process:*
+1.  "Home | About | Products..." and "© 2025 ACME Corp." are noise.
+2.  "The Llama is a domesticated..." is the signal.
+3.  I must extract the signal and wrap it.
+
+*Your Output:*
+<repaired_text>
+The Llama is a domesticated South American camelid.
+</repaired_text>
+
+---
+**Example 2: Chunk with ONLY Noise**
+
+*Input Chunk:*
+"Next Page > | Subscribe to our newsletter | Follow us on X"
+
+*Your Thought Process:*
+1.  This entire chunk is noise. There is no signal.
+2.  I must discard this.
+
+*Your Output:*
+<discard_chunk />
+
+---
+**Example 3: Chunk with Multiple Topics (Requires Splitting)**
+
+*Input Chunk:*
+"## Chapter 1: The Sun\nThe Sun is the star at the center of the Solar System.\n\n## Chapter 2: The Moon\nThe Moon is Earth's only natural satellite."
+
+*Your Thought Process:*
+1.  This chunk contains two distinct topics.
+2.  I must process them separately to maintain semantic integrity.
+3.  I will create two `<repaired_text>` blocks.
+
+*Your Output:*
+<repaired_text>
+## Chapter 1: The Sun
+The Sun is the star at the center of the Solar System.
+</repaired_text>
+<repaired_text>
+## Chapter 2: The Moon
+The Moon is Earth's only natural satellite.
+</repaired_text>
 """
 
 async def _repair_and_translate_chunk_with_retry(chunk: str, repair_llm_service: LLMProvider, rate_limiter: RateLimiter, max_retries: int = 2) -> List[str]:
@@ -153,10 +192,8 @@ Text chunk to process:
                 response = await repair_llm_service.text_chat(prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT)
             
             llm_output = response.completion_text
-            logger.debug(f"LLM Raw Output (attempt {attempt + 1}):\n---\n{llm_output}\n---")
             
             if '<discard_chunk />' in llm_output:
-                logger.info("  - LLM decided to discard this chunk.")
                 return []  # Signal to discard this chunk
 
             # More robust regex to handle potential LLM formatting errors (spaces, newlines in tags)
@@ -164,12 +201,10 @@ Text chunk to process:
             
             if matches:
                 # Further cleaning to ensure no empty strings are returned
-                cleaned_matches = [m.strip() for m in matches if m.strip()]
-                logger.info(f"  - LLM successfully repaired chunk into {len(cleaned_matches)} sub-chunks.")
-                return cleaned_matches
+                return [m.strip() for m in matches if m.strip()]
             else:
-                logger.warning(f"  - LLM response for chunk was not a discard and did not contain valid tags. Attempt {attempt + 1}/{max_retries + 1}. Assuming it's a discard.")
-                return [] # If no valid tags and not explicitly discarded, discard it to be safe.
+                # If no valid tags and not explicitly discarded, discard it to be safe.
+                return []
         except Exception as e:
             logger.warning(f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}")
     
@@ -599,6 +634,11 @@ class KBHelper:
             chunk_overlap=chunk_overlap,
         )
 
+        if enable_cleaning and not final_chunks:
+            raise ValueError(
+                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
+            )
+
         # 创建一个虚拟文件名
         file_name = url.split("/")[-1] or f"document_from_{url}"
         if not Path(file_name).suffix:
@@ -663,8 +703,6 @@ class KBHelper:
             )
             initial_chunks = text_splitter.split_text(content)
             logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
-            for i, chunk in enumerate(initial_chunks):
-                logger.debug(f"--- 初步分块 {i+1} ---\n{chunk}\n---------------------")
 
             # 并发处理所有块
             rate_limiter = RateLimiter(repair_max_rpm)

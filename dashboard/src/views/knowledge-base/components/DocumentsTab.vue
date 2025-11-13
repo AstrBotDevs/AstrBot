@@ -69,7 +69,10 @@
 
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
-          <v-tab value="url">{{ t('upload.fromUrl') }}</v-tab>
+          <v-tab value="url">
+            {{ t('upload.fromUrl') }}
+            <v-badge color="warning" :content="t('upload.beta')" inline class="ml-2" />
+          </v-tab>
         </v-tabs>
 
         <v-card-text class="pa-6">
@@ -515,9 +518,10 @@ const uploadFromUrl = async () => {
     } else {
       showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to upload from URL:', error)
-    showSnackbar(t('documents.uploadFailed'), 'error')
+    const message = error.response?.data?.message || t('documents.uploadFailed')
+    showSnackbar(message, 'error')
   } finally {
     uploading.value = false
   }
