@@ -146,21 +146,6 @@
                             <span>Hello, I'm</span>
                             <span class="bot-name">AstrBot ⭐</span>
                         </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.type') }}</span>
-                            <code>help</code>
-                            <span>{{ tm('shortcuts.help') }} 😊</span>
-                        </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.longPress') }}</span>
-                            <code>Ctrl + B</code>
-                            <span>{{ tm('shortcuts.voiceRecord') }} 🎤</span>
-                        </div>
-                        <div class="welcome-hint markdown-content">
-                            <span>{{ t('core.common.press') }}</span>
-                            <code>Ctrl + V</code>
-                            <span>{{ tm('shortcuts.pasteImage') }} 🏞️</span>
-                        </div>
                     </div>
 
                     <!-- 输入区域 -->
@@ -1031,17 +1016,26 @@ export default {
                                     "content": bot_resp
                                 });
                             } else if (chunk_json.type === 'plain') {
+                                const chain_type = chunk_json.chain_type || 'normal';
+                                
                                 if (!in_streaming) {
                                     message_obj = {
                                         type: 'bot',
-                                        message: this.ref(chunk_json.data),
+                                        message: this.ref(chain_type === 'reasoning' ? '' : chunk_json.data),
+                                        reasoning: this.ref(chain_type === 'reasoning' ? chunk_json.data : ''),
                                     }
                                     this.messages.push({
                                         "content": message_obj
                                     });
                                     in_streaming = true;
                                 } else {
-                                    message_obj.message.value += chunk_json.data;
+                                    if (chain_type === 'reasoning') {
+                                        // Append to reasoning content
+                                        message_obj.reasoning.value += chunk_json.data;
+                                    } else {
+                                        // Append to normal message
+                                        message_obj.message.value += chunk_json.data;
+                                    }
                                 }
                             } else if (chunk_json.type === 'update_title') {
                                 // 更新对话标题

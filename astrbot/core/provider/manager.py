@@ -394,7 +394,6 @@ class ProviderManager:
                 inst = cls_type(
                     provider_config,
                     self.provider_settings,
-                    self.selected_default_persona,
                 )
 
                 if getattr(inst, "initialize", None):

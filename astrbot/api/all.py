@@ -36,7 +36,8 @@ from astrbot.core.star.config import *
 
 
 # provider
-from astrbot.core.provider import Provider, Personality, ProviderMetaData
+from astrbot.core.provider import Provider, ProviderMetaData
+from astrbot.core.db.po import Personality
 
 # platform
 from astrbot.core.platform import (

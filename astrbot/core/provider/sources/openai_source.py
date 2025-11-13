@@ -4,12 +4,14 @@ import inspect
 import json
 import os
 import random
+import re
 from collections.abc import AsyncGenerator
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError, UnprocessableEntityError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -28,17 +30,8 @@ from ..register import register_provider_adapter
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
-    def __init__(
-        self,
-        provider_config,
-        provider_settings,
-        default_persona=None,
-    ) -> None:
-        super().__init__(
-            provider_config,
-            provider_settings,
-            default_persona,
-        )
+    def __init__(self, provider_config, provider_settings) -> None:
+        super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
         self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
@@ -53,9 +46,8 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
-        # 适配 azure openai #332
         if "api_version" in provider_config:
-            # 使用 azure api
+            # Using Azure OpenAI API
             self.client = AsyncAzureOpenAI(
                 api_key=self.chosen_api_key,
                 api_version=provider_config.get("api_version", None),
@@ -64,7 +56,7 @@ class ProviderOpenAIOfficial(Provider):
                 timeout=self.timeout,
             )
         else:
-            # 使用 openai api
+            # Using OpenAI Official API
             self.client = AsyncOpenAI(
                 api_key=self.chosen_api_key,
                 base_url=provider_config.get("api_base", None),
@@ -79,6 +71,8 @@ class ProviderOpenAIOfficial(Provider):
         model_config = provider_config.get("model_config", {})
         model = model_config.get("model", "unknown")
         self.set_model(model)
+
+        self.reasoning_key = "reasoning_content"
 
     def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
         """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
@@ -157,7 +151,7 @@ class ProviderOpenAIOfficial(Provider):
 
         logger.debug(f"completion: {completion}")
 
-        llm_response = await self.parse_openai_completion(completion, tools)
+        llm_response = await self._parse_openai_completion(completion, tools)
 
         return llm_response
 
@@ -210,36 +204,78 @@ class ProviderOpenAIOfficial(Provider):
             if len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
-            # 处理文本内容
+            logger.debug(f"chunk delta: {delta}")
+            # handle the content delta
+            reasoning = self._extract_reasoning_content(chunk)
+            _y = False
+            if reasoning:
+                llm_response.reasoning_content = reasoning
+                _y = True
             if delta.content:
                 completion_text = delta.content
                 llm_response.result_chain = MessageChain(
                     chain=[Comp.Plain(completion_text)],
                 )
+                _y = True
+            if _y:
                 yield llm_response
 
         final_completion = state.get_final_completion()
-        llm_response = await self.parse_openai_completion(final_completion, tools)
+        llm_response = await self._parse_openai_completion(final_completion, tools)
 
         yield llm_response
 
-    async def parse_openai_completion(
+    def _extract_reasoning_content(
+        self,
+        completion: ChatCompletion | ChatCompletionChunk,
+    ) -> str:
+        """Extract reasoning content from OpenAI ChatCompletion if available."""
+        reasoning_text = ""
+        if len(completion.choices) == 0:
+            return reasoning_text
+        if isinstance(completion, ChatCompletion):
+            choice = completion.choices[0]
+            reasoning_attr = getattr(choice.message, self.reasoning_key, None)
+            if reasoning_attr:
+                reasoning_text = str(reasoning_attr)
+        elif isinstance(completion, ChatCompletionChunk):
+            delta = completion.choices[0].delta
+            reasoning_attr = getattr(delta, self.reasoning_key, None)
+            if reasoning_attr:
+                reasoning_text = str(reasoning_attr)
+        return reasoning_text
+
+    async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
-        """解析 OpenAI 的 ChatCompletion 响应"""
+        """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
         if len(completion.choices) == 0:
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 
+        # parse the text completion
         if choice.message.content is not None:
             # text completion
             completion_text = str(choice.message.content).strip()
+            # specially, some providers may set <think> tags around reasoning content in the completion text,
+            # we use regex to remove them, and store then in reasoning_content field
+            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            matches = reasoning_pattern.findall(completion_text)
+            if matches:
+                llm_response.reasoning_content = "\n".join(
+                    [match.strip() for match in matches],
+                )
+                completion_text = reasoning_pattern.sub("", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
 
+        # parse the reasoning content if any
+        # the priority is higher than the <think> tag extraction
+        llm_response.reasoning_content = self._extract_reasoning_content(completion)
+
+        # parse tool calls if any
         if choice.message.tool_calls and tools is not None:
-            # tools call (function calling)
             args_ls = []
             func_name_ls = []
             tool_call_ids = []
@@ -265,11 +301,11 @@ class ProviderOpenAIOfficial(Provider):
             llm_response.tools_call_name = func_name_ls
             llm_response.tools_call_ids = tool_call_ids
 
+        # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
-
         if llm_response.completion_text is None and not llm_response.tools_call_args:
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")

@@ -8,7 +8,7 @@ from dashscope.app.application_response import ApplicationResponse
 from astrbot.core import logger, sp
 from astrbot.core.message.message_event_result import MessageChain
 
-from .. import Personality, Provider
+from .. import Provider
 from ..entities import LLMResponse
 from ..register import register_provider_adapter
 from .openai_source import ProviderOpenAIOfficial
@@ -20,13 +20,11 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         self,
         provider_config: dict,
         provider_settings: dict,
-        default_persona: Personality | None = None,
     ) -> None:
         Provider.__init__(
             self,
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
