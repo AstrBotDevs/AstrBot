@@ -299,12 +299,20 @@ const initUploadSettings = () => {
 }
 
 const isUploadDisabled = computed(() => {
-  if (uploading.value) return true
+  if (uploading.value) {
+    return true
+  }
   if (uploadMode.value === 'file') {
     return selectedFiles.value.length === 0
   }
   if (uploadMode.value === 'url') {
-    return !uploadUrl.value
+    if (!uploadUrl.value) {
+      return true
+    }
+    if (uploadSettings.value.enable_cleaning && !uploadSettings.value.cleaning_provider_id) {
+      return true
+    }
+    return false
   }
   return true
 })
@@ -480,7 +488,9 @@ const uploadFromUrl = async () => {
     }
     if (uploadSettings.value.enable_cleaning) {
       payload.enable_cleaning = true
-      payload.cleaning_provider_id = uploadSettings.value.cleaning_provider_id
+      if (uploadSettings.value.cleaning_provider_id) {
+        payload.cleaning_provider_id = uploadSettings.value.cleaning_provider_id
+      }
     }
 
 

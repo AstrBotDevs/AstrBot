@@ -43,7 +43,7 @@ class SimpleRecursiveCharacterTextSplitter:
             )
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
-        self._separators = separators or ["\n\n", "\n", " ", ""]
+        self._separators = separators or ["\n\n", "\n", " "]
         self._length_function = length_function
 
     def split_text(self, text: str) -> list[str]:
@@ -734,9 +734,9 @@ class KBHelper:
             # 初步分块
             # 优化分隔符，优先按段落分割，以获得更高质量的文本块
             text_splitter = SimpleRecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=150,
-                separators=["\n\n", "\n", " ", ""],  # 优先使用段落分隔符
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
                 length_function=len,
                 is_separator_regex=False,
             )
