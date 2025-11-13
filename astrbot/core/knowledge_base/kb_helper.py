@@ -1,10 +1,9 @@
-import json
-import uuid
-import re
 import asyncio
+import json
+import re
 import time
+import uuid
 from pathlib import Path
-from typing import List
 
 import aiofiles
 
@@ -12,27 +11,36 @@ from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider, Provider as LLMProvider
+from astrbot.core.provider.provider import (
+    EmbeddingProvider,
+    RerankProvider,
+)
+from astrbot.core.provider.provider import (
+    Provider as LLMProvider,
+)
 
 from .chunking.base import BaseChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
-from .parsers.util import select_parser
 from .parsers.url_parser import extract_text_from_url
+from .parsers.util import select_parser
 
 
 class SimpleRecursiveCharacterTextSplitter:
     """A simple implementation of a recursive text splitter to avoid heavy dependencies."""
+
     def __init__(
         self,
         chunk_size: int = 1000,
         chunk_overlap: int = 150,
         separators: list[str] | None = None,
         length_function=len,
-        is_separator_regex: bool = False, # Ignored for simplicity
+        is_separator_regex: bool = False,  # Ignored for simplicity
     ):
         if chunk_overlap > chunk_size:
-            raise ValueError(f"Chunk overlap ({chunk_overlap}) > chunk size ({chunk_size})")
+            raise ValueError(
+                f"Chunk overlap ({chunk_overlap}) > chunk size ({chunk_size})"
+            )
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._separators = separators or ["\n\n", "\n", " ", ""]
@@ -41,10 +49,10 @@ class SimpleRecursiveCharacterTextSplitter:
     def split_text(self, text: str) -> list[str]:
         """Split text into chunks."""
         final_chunks = []
-        
+
         # Start with the whole text as the first chunk to process
         chunks_to_process = [text]
-        
+
         # Go through separators and split any chunks that are too big
         for separator in self._separators:
             new_chunks_to_process = []
@@ -52,7 +60,7 @@ class SimpleRecursiveCharacterTextSplitter:
                 if self._length_function(chunk) > self._chunk_size:
                     # If the chunk is too big, split it by the current separator
                     new_splits = chunk.split(separator)
-                    
+
                     # Greedily merge the new splits
                     merged_chunk = ""
                     for sub_split in new_splits:
@@ -60,13 +68,16 @@ class SimpleRecursiveCharacterTextSplitter:
                         if not merged_chunk:
                             merged_chunk = sub_split
                         # If adding the next sub-split doesn't exceed the chunk size, merge it
-                        elif self._length_function(merged_chunk + separator + sub_split) <= self._chunk_size:
+                        elif (
+                            self._length_function(merged_chunk + separator + sub_split)
+                            <= self._chunk_size
+                        ):
                             merged_chunk += separator + sub_split
                         # Otherwise, finalize the merged chunk and start a new one
                         else:
                             new_chunks_to_process.append(merged_chunk)
                             merged_chunk = sub_split
-                    
+
                     # Add the last merged chunk
                     if merged_chunk:
                         new_chunks_to_process.append(merged_chunk)
@@ -74,7 +85,7 @@ class SimpleRecursiveCharacterTextSplitter:
                     # If the chunk is already small enough, carry it over
                     new_chunks_to_process.append(chunk)
             chunks_to_process = new_chunks_to_process
-        
+
         # Handle overlap for the final list of chunks
         for chunk in chunks_to_process:
             if self._length_function(chunk) <= self._chunk_size:
@@ -86,12 +97,13 @@ class SimpleRecursiveCharacterTextSplitter:
                     end_idx = start_idx + self._chunk_size
                     final_chunks.append(chunk[start_idx:end_idx])
                     start_idx += self._chunk_size - self._chunk_overlap
-        
+
         return [c for c in final_chunks if c.strip()]
 
 
 class RateLimiter:
     """一个简单的速率限制器"""
+
     def __init__(self, max_rpm: int):
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
@@ -100,17 +112,18 @@ class RateLimiter:
     async def __aenter__(self):
         if self.interval == 0:
             return
-        
+
         now = time.monotonic()
         elapsed = now - self.last_call_time
-        
+
         if elapsed < self.interval:
             await asyncio.sleep(self.interval - elapsed)
-        
+
         self.last_call_time = time.monotonic()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
+
 
 TEXT_REPAIR_SYSTEM_PROMPT = """You are a meticulous digital archivist. Your mission is to reconstruct a clean, readable article from raw, noisy text chunks.
 
@@ -174,7 +187,13 @@ The Moon is Earth's only natural satellite.
 </repaired_text>
 """
 
-async def _repair_and_translate_chunk_with_retry(chunk: str, repair_llm_service: LLMProvider, rate_limiter: RateLimiter, max_retries: int = 2) -> List[str]:
+
+async def _repair_and_translate_chunk_with_retry(
+    chunk: str,
+    repair_llm_service: LLMProvider,
+    rate_limiter: RateLimiter,
+    max_retries: int = 2,
+) -> list[str]:
     """
     Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
     """
@@ -189,16 +208,22 @@ Text chunk to process:
     for attempt in range(max_retries + 1):
         try:
             async with rate_limiter:
-                response = await repair_llm_service.text_chat(prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT)
-            
+                response = await repair_llm_service.text_chat(
+                    prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT
+                )
+
             llm_output = response.completion_text
-            
-            if '<discard_chunk />' in llm_output:
+
+            if "<discard_chunk />" in llm_output:
                 return []  # Signal to discard this chunk
 
             # More robust regex to handle potential LLM formatting errors (spaces, newlines in tags)
-            matches = re.findall(r'<\s*repaired_text\s*>\s*(.*?)\s*<\s*/\s*repaired_text\s*>', llm_output, re.DOTALL)
-            
+            matches = re.findall(
+                r"<\s*repaired_text\s*>\s*(.*?)\s*<\s*/\s*repaired_text\s*>",
+                llm_output,
+                re.DOTALL,
+            )
+
             if matches:
                 # Further cleaning to ensure no empty strings are returned
                 return [m.strip() for m in matches if m.strip()]
@@ -206,9 +231,13 @@ Text chunk to process:
                 # If no valid tags and not explicitly discarded, discard it to be safe.
                 return []
         except Exception as e:
-            logger.warning(f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}")
-    
-    logger.error(f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text.")
+            logger.warning(
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
+            )
+
+    logger.error(
+        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
+    )
     return [chunk]
 
 
@@ -304,7 +333,7 @@ class KBHelper:
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
-        pre_chunked_text: List[str] | None = None,
+        pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
 
@@ -336,7 +365,7 @@ class KBHelper:
         try:
             chunks_text = []
             saved_media = []
-            
+
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
                 chunks_text = pre_chunked_text
@@ -345,8 +374,10 @@ class KBHelper:
             else:
                 # 否则，执行标准的文件解析和分块流程
                 if file_content is None:
-                    raise ValueError("当未提供 pre_chunked_text 时，file_content 不能为空。")
-                
+                    raise ValueError(
+                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
+                    )
+
                 file_size = len(file_content)
 
                 # 阶段1: 解析文档
@@ -605,7 +636,9 @@ class KBHelper:
         # 获取 Tavily API 密钥
         tavily_keys = self.prov_mgr.provider_settings.get("websearch_tavily_key", [])
         if not tavily_keys:
-            raise ValueError("Error: Tavily API key is not configured in provider_settings.")
+            raise ValueError(
+                "Error: Tavily API key is not configured in provider_settings."
+            )
 
         # 阶段1: 从 URL 提取内容
         if progress_callback:
@@ -615,7 +648,7 @@ class KBHelper:
             text_content = await extract_text_from_url(url, tavily_keys)
         except Exception as e:
             logger.error(f"Failed to extract content from URL {url}: {e}")
-            raise IOError(f"Failed to extract content from URL {url}: {e}") from e
+            raise OSError(f"Failed to extract content from URL {url}: {e}") from e
 
         if not text_content:
             raise ValueError(f"No content extracted from URL: {url}")
@@ -647,7 +680,7 @@ class KBHelper:
         # 复用现有的 upload_document 方法，但传入预分块文本
         return await self.upload_document(
             file_name=file_name,
-            file_content=None,  
+            file_content=None,
             file_type="url",  # 使用 'url' 作为特殊文件类型
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -668,19 +701,23 @@ class KBHelper:
         repair_max_rpm: int = 60,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
         """
         if not enable_cleaning:
             # 如果不启用清洗，则使用从前端传递的参数进行分块
-            logger.info(f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
+            logger.info(
+                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+            )
             return await self.chunker.chunk(
                 content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
 
         if not cleaning_provider_id:
-            logger.warning("启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。")
+            logger.warning(
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
+            )
             return await self.chunker.chunk(content)
 
         if progress_callback:
@@ -690,14 +727,16 @@ class KBHelper:
             # 获取指定的 LLM Provider
             llm_provider = await self.prov_mgr.get_provider_by_id(cleaning_provider_id)
             if not llm_provider or not isinstance(llm_provider, LLMProvider):
-                raise ValueError(f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确")
+                raise ValueError(
+                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确"
+                )
 
             # 初步分块
             # 优化分隔符，优先按段落分割，以获得更高质量的文本块
             text_splitter = SimpleRecursiveCharacterTextSplitter(
                 chunk_size=1000,
                 chunk_overlap=150,
-                separators=["\n\n", "\n", " ", ""], # 优先使用段落分隔符
+                separators=["\n\n", "\n", " ", ""],  # 优先使用段落分隔符
                 length_function=len,
                 is_separator_regex=False,
             )
@@ -706,10 +745,15 @@ class KBHelper:
 
             # 并发处理所有块
             rate_limiter = RateLimiter(repair_max_rpm)
-            tasks = [_repair_and_translate_chunk_with_retry(chunk, llm_provider, rate_limiter) for chunk in initial_chunks]
-            
+            tasks = [
+                _repair_and_translate_chunk_with_retry(
+                    chunk, llm_provider, rate_limiter
+                )
+                for chunk in initial_chunks
+            ]
+
             repaired_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
@@ -717,12 +761,14 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
-            
-            logger.info(f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。")
+
+            logger.info(
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
+            )
 
             if progress_callback:
                 await progress_callback("cleaning", 100, 100)
-            
+
             return final_chunks
 
         except Exception as e:

@@ -1,21 +1,21 @@
 import asyncio
+
 import aiohttp
-from astrbot.core import logger
 
 
 class URLExtractor:
     """URL 内容提取器，封装了 Tavily API 调用和密钥管理"""
-    
+
     def __init__(self, tavily_keys: list[str]):
         """
         初始化 URL 提取器
-        
+
         Args:
             tavily_keys: Tavily API 密钥列表
         """
         if not tavily_keys:
             raise ValueError("Error: Tavily API keys are not configured.")
-        
+
         self.tavily_keys = tavily_keys
         self.tavily_key_index = 0
         self.tavily_key_lock = asyncio.Lock()
@@ -52,12 +52,12 @@ class URLExtractor:
             "Authorization": f"Bearer {tavily_key}",
             "Content-Type": "application/json",
         }
-        
+
         payload = {
             "urls": [url],
             "extract_depth": "basic",  # 使用基础提取深度
         }
-        
+
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.post(
@@ -68,36 +68,34 @@ class URLExtractor:
                 ) as response:
                     if response.status != 200:
                         reason = await response.text()
-                        raise IOError(
+                        raise OSError(
                             f"Tavily web extraction failed: {reason}, status: {response.status}"
                         )
-                    
+
                     data = await response.json()
                     results = data.get("results", [])
-                    
+
                     if not results:
-                        raise ValueError(
-                            f"No content extracted from URL: {url}"
-                        )
-                    
+                        raise ValueError(f"No content extracted from URL: {url}")
+
                     # 返回第一个结果的内容
                     return results[0].get("raw_content", "")
-                    
+
         except aiohttp.ClientError as e:
-            raise IOError(f"Failed to fetch URL {url}: {e}") from e
+            raise OSError(f"Failed to fetch URL {url}: {e}") from e
         except Exception as e:
-            raise IOError(f"Failed to extract content from URL {url}: {e}") from e
+            raise OSError(f"Failed to extract content from URL {url}: {e}") from e
 
 
 # 为了向后兼容，提供一个简单的函数接口
 async def extract_text_from_url(url: str, tavily_keys: list[str]) -> str:
     """
     简单的函数接口，用于从 URL 提取文本内容
-    
+
     Args:
         url: 要提取内容的网页 URL
         tavily_keys: Tavily API 密钥列表
-        
+
     Returns:
         提取的文本内容
     """

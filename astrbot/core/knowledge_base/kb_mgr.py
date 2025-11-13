@@ -8,7 +8,7 @@ from astrbot.core.provider.manager import ProviderManager
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
-from .models import KnowledgeBase, KBDocument
+from .models import KBDocument, KnowledgeBase
 from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
@@ -297,7 +297,7 @@ class KnowledgeBaseManager:
         progress_callback=None,
     ) -> KBDocument:
         """从 URL 上传文档到指定的知识库
-        
+
         Args:
             kb_id: 知识库 ID
             url: 要提取内容的网页 URL
@@ -307,10 +307,10 @@ class KnowledgeBaseManager:
             tasks_limit: 并发任务限制
             max_retries: 最大重试次数
             progress_callback: 进度回调函数
-            
+
         Returns:
             KBDocument: 上传的文档对象
-            
+
         Raises:
             ValueError: 如果知识库不存在或 URL 为空
             IOError: 如果网络请求失败
@@ -318,7 +318,7 @@ class KnowledgeBaseManager:
         kb_helper = await self.get_kb(kb_id)
         if not kb_helper:
             raise ValueError(f"Knowledge base with id {kb_id} not found.")
-        
+
         return await kb_helper.upload_from_url(
             url=url,
             chunk_size=chunk_size,
