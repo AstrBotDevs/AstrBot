@@ -187,7 +187,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         is_override_call = False
         for ty in type(tool).mro():
             if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
-                logger.debug(f"Found call in: {ty}")
                 is_override_call = True
                 break
 
@@ -543,9 +542,6 @@ class LLMRequestSubStage(Stage):
                 ),
             )
             if llm_resp and llm_resp.completion_text:
-                logger.debug(
-                    f"WebChat 对话标题生成响应: {llm_resp.completion_text.strip()}",
-                )
                 title = llm_resp.completion_text.strip()
                 if not title or "<None>" in title:
                     return
@@ -635,7 +631,9 @@ class LLMRequestSubStage(Stage):
         if (enable_streaming := event.get_extra("enable_streaming")) is not None:
             streaming_response = bool(enable_streaming)
 
+        logger.debug("ready to request llm provider")
         async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+            logger.debug("acquired session lock for llm request")
             if event.get_extra("provider_request"):
                 req = event.get_extra("provider_request")
                 assert isinstance(req, ProviderRequest), (
