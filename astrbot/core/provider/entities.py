@@ -31,6 +31,8 @@ class ProviderType(enum.Enum):
 
 @dataclass
 class ProviderMetaData:
+    id: str
+    """提供商适配器 ID"""
     type: str
     """提供商适配器名称，如 openai, ollama"""
     desc: str = ""

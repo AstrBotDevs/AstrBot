@@ -354,6 +354,8 @@ class ProviderManager:
                 logger.error(f"无法找到 {provider_metadata.type} 的类")
                 return
 
+            provider_metadata.id = provider_config["id"]
+
             if provider_metadata.provider_type == ProviderType.SPEECH_TO_TEXT:
                 # STT 任务
                 inst = cls_type(provider_config, self.provider_settings)
