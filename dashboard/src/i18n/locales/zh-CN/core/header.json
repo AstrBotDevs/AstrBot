@@ -55,6 +55,9 @@
       "linkText": "查看 master 分支提交记录（点击右边的 copy 即可复制）",
       "confirm": "确定切换"
     },
+    "releaseNotes": {
+      "title": "更新日志"
+    },
     "dashboardUpdate": {
       "title": "单独更新管理面板到最新版本",
       "currentVersion": "当前版本",

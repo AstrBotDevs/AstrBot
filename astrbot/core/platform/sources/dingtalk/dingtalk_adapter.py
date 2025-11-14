@@ -38,7 +38,9 @@ class MyEventHandler(dingtalk_stream.EventHandler):
         return AckMessage.STATUS_OK, "OK"
 
 
-@register_platform_adapter("dingtalk", "钉钉机器人官方 API 适配器")
+@register_platform_adapter(
+    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=False
+)
 class DingtalkPlatformAdapter(Platform):
     def __init__(
         self,
@@ -90,6 +92,7 @@ class DingtalkPlatformAdapter(Platform):
             name="dingtalk",
             description="钉钉机器人官方 API 适配器",
             id=self.config.get("id"),
+            support_streaming_message=False,
         )
 
     async def convert_msg(

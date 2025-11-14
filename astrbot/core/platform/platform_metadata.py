@@ -16,3 +16,6 @@ class PlatformMetadata:
     """显示在 WebUI 配置页中的平台名称，如空则是 name"""
     logo_path: str | None = None
     """平台适配器的 logo 文件路径（相对于插件目录）"""
+
+    support_streaming_message: bool = True
+    """平台是否支持真实流式传输"""

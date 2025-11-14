@@ -68,7 +68,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
-        "streaming_segmented": False,
+        "unsupported_streaming_strategy": "realtime_segmenting",
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
@@ -1993,8 +1993,8 @@ CONFIG_METADATA_2 = {
                     "show_tool_use_status": {
                         "type": "bool",
                     },
-                    "streaming_segmented": {
-                        "type": "bool",
+                    "unsupported_streaming_strategy": {
+                        "type": "string",
                     },
                     "max_agent_step": {
                         "description": "工具调用轮数上限",
@@ -2299,9 +2299,15 @@ CONFIG_METADATA_3 = {
                         "description": "流式回复",
                         "type": "bool",
                     },
-                    "provider_settings.streaming_segmented": {
-                        "description": "不支持流式回复的平台采取分段输出",
-                        "type": "bool",
+                    "provider_settings.unsupported_streaming_strategy": {
+                        "description": "不支持流式回复的平台",
+                        "type": "string",
+                        "options": ["realtime_segmenting", "turn_off"],
+                        "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时，立即发送当前已接收的内容",
+                        "labels": ["实时分段回复", "关闭流式回复"],
+                        "condition": {
+                            "provider_settings.streaming_response": True,
+                        },
                     },
                     "provider_settings.max_context_length": {
                         "description": "最多携带对话轮数",

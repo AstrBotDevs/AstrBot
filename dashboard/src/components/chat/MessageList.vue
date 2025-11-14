@@ -33,7 +33,7 @@
                     <v-avatar class="bot-avatar" size="36">
                         <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1" indeterminate size="28"
                             width="2"></v-progress-circular>
-                        <span v-else-if="messages[index - 1]?.content.type !== 'bot'" class="text-h2">✨</span>
+                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64" color="#8fb6d2">mdi-star-four-points-small</v-icon>
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">

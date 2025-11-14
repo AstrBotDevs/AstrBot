@@ -44,7 +44,9 @@ MAX_FILE_UPLOAD_COUNT = 16
 DEFAULT_UPLOAD_CONCURRENCY = 3
 
 
-@register_platform_adapter("misskey", "Misskey 平台适配器")
+@register_platform_adapter(
+    "misskey", "Misskey 平台适配器", support_streaming_message=False
+)
 class MisskeyPlatformAdapter(Platform):
     def __init__(
         self,
@@ -119,6 +121,7 @@ class MisskeyPlatformAdapter(Platform):
             description="Misskey 平台适配器",
             id=self.config.get("id", "misskey"),
             default_config_tmpl=default_config,
+            support_streaming_message=False,
         )
 
     async def run(self):
