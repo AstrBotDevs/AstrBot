@@ -172,7 +172,7 @@ class RetrievalManager:
                 vec_db
                 and vec_db.rerank_provider
                 and rerank_pi
-                and rerank_pi == vec_db.rerank_provider.meta().id
+                and rerank_pi == vec_db.rerank_provider.provider_config["id"]
             ):
                 first_rerank = vec_db.rerank_provider
                 break
