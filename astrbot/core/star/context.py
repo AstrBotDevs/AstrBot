@@ -169,10 +169,10 @@ class Context:
 
         request = ProviderRequest(
             prompt=prompt,
-            image_urls=image_urls,
+            image_urls=image_urls or [],
             func_tool=tools,
             contexts=context_,
-            system_prompt=system_prompt,
+            system_prompt=system_prompt or "",
         )
         astr_agent_ctx = AstrAgentContext(
             provider=prov,
