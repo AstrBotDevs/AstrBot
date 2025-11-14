@@ -6,7 +6,11 @@ import uuid
 from typing import cast
 
 import lark_oapi as lark
-from lark_oapi.api.im.v1 import *
+from lark_oapi.api.im.v1 import (
+    CreateMessageRequest,
+    CreateMessageRequestBody,
+    GetMessageResourceRequest,
+)
 
 import astrbot.api.message_components as Comp
 from astrbot import logger

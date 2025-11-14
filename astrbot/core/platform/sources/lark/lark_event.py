@@ -5,7 +5,15 @@ import uuid
 from io import BytesIO
 
 import lark_oapi as lark
-from lark_oapi.api.im.v1 import *
+from lark_oapi.api.im.v1 import (
+    CreateImageRequest,
+    CreateImageRequestBody,
+    CreateMessageReactionRequest,
+    CreateMessageReactionRequestBody,
+    Emoji,
+    ReplyMessageRequest,
+    ReplyMessageRequestBody,
+)
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
