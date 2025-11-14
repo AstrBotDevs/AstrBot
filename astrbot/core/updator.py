@@ -74,7 +74,7 @@ class AstrBotUpdator(RepoZipUpdator):
         url: str,
         current_version: str,
         consider_prerelease: bool = True,
-    ) -> ReleaseInfo:
+    ) -> ReleaseInfo | None:
         """检查更新"""
         return await super().check_update(
             self.ASTRBOT_RELEASE_API,

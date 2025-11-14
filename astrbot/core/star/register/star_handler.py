@@ -168,6 +168,8 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
                 for (
                     sub_handle
                 ) in parent_register_commandable.parent_group.sub_command_filters:
+                    if isinstance(sub_handle, CommandGroupFilter):
+                        continue
                     # 所有符合fullname一致的子指令handle添加自定义过滤器。
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
                     sub_handle_md = sub_handle.get_handler_md()
@@ -179,6 +181,8 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
             else:
                 # 裸指令
+                # 确保运行时是可调用的 handler，针对类型检查器添加忽略
+                assert isinstance(awaitable, Callable)
                 handler_md = get_handler_or_create(
                     awaitable,
                     EventType.AdapterMessageEvent,
@@ -236,7 +240,7 @@ class RegisteringCommandable:
 
     group: Callable[..., Callable[..., RegisteringCommandable]] = register_command_group
     command: Callable[..., Callable[..., None]] = register_command
-    custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
+    custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
     def __init__(self, parent_group: CommandGroupFilter):
         self.parent_group = parent_group

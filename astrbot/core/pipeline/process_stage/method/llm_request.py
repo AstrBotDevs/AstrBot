@@ -608,7 +608,7 @@ class LLMRequestSubStage(Stage):
         self,
         event: AstrMessageEvent,
         _nested: bool = False,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:

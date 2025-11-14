@@ -27,6 +27,7 @@ import json
 import os
 import uuid
 from enum import Enum
+from typing import cast
 
 from pydantic.v1 import BaseModel
 
@@ -65,6 +66,9 @@ class ComponentType(str, Enum):
 
 class BaseMessageComponent(BaseModel):
     type: ComponentType
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def toDict(self):
         data = {}
@@ -551,7 +555,7 @@ class Node(BaseMessageComponent):
     id: int | None = 0  # 忽略
     name: str | None = ""  # qq昵称
     uin: str | None = "0"  # qq号
-    content: list[BaseMessageComponent] | None = []
+    content: list[BaseMessageComponent] = []
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
 
@@ -615,7 +619,7 @@ class Nodes(BaseMessageComponent):
             ret["messages"].append(d)
         return ret
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
         ret = {"messages": []}
         for node in self.nodes:
@@ -714,12 +718,13 @@ class File(BaseMessageComponent):
 
         if self.url:
             await self._download_file()
-            return os.path.abspath(self.file_)
+            return os.path.abspath(cast(str, self.file_))
 
         return ""
 
     async def _download_file(self):
         """下载文件"""
+        assert self.url is not None
         download_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(download_dir, exist_ok=True)
         file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
