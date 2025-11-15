@@ -125,9 +125,6 @@ class FunctionToolManager:
         }
         for param in func_args:
             params["properties"][param["name"]] = param
-        import json
-
-        print(json.dumps(params, ensure_ascii=False, indent=4))
         return FuncTool(
             name=name,
             parameters=params,
