@@ -204,7 +204,7 @@ class ProviderOpenAIOfficial(Provider):
             if len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
-            logger.debug(f"chunk delta: {delta}")
+            # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
