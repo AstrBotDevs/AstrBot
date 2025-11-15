@@ -7,7 +7,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
     LLMResponse,
-    ProviderMetaData,
+    ProviderMeta,
     RerankResult,
     ToolCallsResult,
 )
@@ -30,13 +30,19 @@ class AbstractProvider(abc.ABC):
         """Get the current model name"""
         return self.model_name
 
-    def meta(self) -> ProviderMetaData:
+    def meta(self) -> ProviderMeta:
         """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
         if not meta_data:
             raise ValueError(f"Provider type {provider_type_name} not registered")
-        return meta_data
+        meta = ProviderMeta(
+            id=self.provider_config.get("id", "default"),
+            model=self.get_model(),
+            type=provider_type_name,
+            provider_type=meta_data.provider_type,
+        )
+        return meta
 
 
 class Provider(AbstractProvider):

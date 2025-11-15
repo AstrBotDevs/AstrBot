@@ -30,21 +30,31 @@ class ProviderType(enum.Enum):
 
 
 @dataclass
-class ProviderMetaData:
+class ProviderMeta:
+    """The basic metadata of a provider instance."""
+
     id: str
-    """提供商适配器 ID"""
+    """the unique id of the provider instance that user configured"""
+    model: str | None
+    """the model name of the provider instance currently used"""
     type: str
-    """提供商适配器名称，如 openai, ollama"""
-    desc: str = ""
-    """提供商适配器描述"""
+    """the name of the provider adapter, such as openai, ollama"""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    """提供商类型"""
+    """the capability type of the provider adapter"""
+
+
+@dataclass
+class ProviderMetaData(ProviderMeta):
+    """The metadata of a provider adapter for registration."""
+
+    desc: str = ""
+    """the short description of the provider adapter"""
     cls_type: Any = None
-    """提供商适配器类类型"""
+    """the class type of the provider adapter"""
     default_config_tmpl: dict | None = None
-    """平台的默认配置模板"""
+    """the default configuration template of the provider adapter"""
     provider_display_name: str | None = None
-    """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
+    """the display name of the provider shown in the WebUI configuration page; if empty, the type is used"""
 
 
 @dataclass
