@@ -24,7 +24,16 @@ SUPPORTED_TYPES = [
     "boolean",
 ]  # json schema 支持的数据类型
 
-
+PY_TO_JSON_TYPE = {
+    "int": "number",
+    "float": "number",
+    "bool": "boolean",
+    "str": "string",
+    "dict": "object",
+    "list": "array",
+    "tuple": "array",
+    "set": "array",
+}
 # alias
 FuncTool = FunctionTool
 
@@ -115,10 +124,10 @@ class FunctionToolManager:
             "properties": {},
         }
         for param in func_args:
-            params["properties"][param["name"]] = {
-                "type": param["type"],
-                "description": param["description"],
-            }
+            params["properties"][param["name"]] = param
+        import json
+
+        print(json.dumps(params, ensure_ascii=False, indent=4))
         return FuncTool(
             name=name,
             parameters=params,
