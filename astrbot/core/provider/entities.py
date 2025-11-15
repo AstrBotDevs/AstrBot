@@ -63,6 +63,14 @@ class ToolCallsResult:
         ]
         return ret
 
+    def to_openai_messages_model(
+        self,
+    ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        return [
+            self.tool_calls_info,
+            *self.tool_calls_result,
+        ]
+
 
 @dataclass
 class ProviderRequest:

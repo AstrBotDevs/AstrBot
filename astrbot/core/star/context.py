@@ -9,8 +9,6 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
@@ -90,7 +88,7 @@ class Context:
         image_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
-        contexts: list[Message] | list[dict] | None = None,
+        contexts: list[Message] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Call the LLM to generate a response. The method will not automatically execute tool calls. If you want to use tool calls, please use `tool_loop_agent()`.
@@ -132,12 +130,15 @@ class Context:
         image_urls: list[str] | None = None,
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
-        contexts: list[Message] | list[dict] | None = None,
+        contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
+        If you do not pass the agent_context parameter, the method will recreate a new agent context.
+
+        .. versionadded:: 4.5.7 (sdk)
 
         Args:
             chat_provider_id: The chat provider ID to use.
@@ -147,7 +148,9 @@ class Context:
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
             max_steps: Maximum number of tool calls before stopping the loop
-            **kwargs: Additional keyword arguments for LLM generation, OpenAI compatible
+            **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
+                agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
+                agent_context: AstrAgentContext - context to use for the agent
 
         Returns:
             The final LLMResponse after tool calls are completed.
@@ -156,9 +159,19 @@ class Context:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
         """
+        # Import here to avoid circular imports
+        from astrbot.core.astr_agent_context import (
+            AgentContextWrapper,
+            AstrAgentContext,
+        )
+        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+
+        agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
+        agent_context = kwargs.get("agent_context")
 
         context_ = []
         for msg in contexts or []:
@@ -174,23 +187,22 @@ class Context:
             contexts=context_,
             system_prompt=system_prompt or "",
         )
-        astr_agent_ctx = AstrAgentContext(
-            provider=prov,
-            event=event,
-        )
+        if agent_context is None:
+            agent_context = AstrAgentContext(
+                context=self,
+                event=event,
+            )
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
         await agent_runner.reset(
             provider=prov,
             request=request,
             run_context=AgentContextWrapper(
-                context=astr_agent_ctx,
+                context=agent_context,
                 tool_call_timeout=tool_call_timeout,
             ),
             tool_executor=tool_executor,
-            agent_hooks=kwargs.get(
-                "agent_hooks", BaseAgentRunHooks[AstrAgentContext]()
-            ),
+            agent_hooks=agent_hooks,
             streaming=kwargs.get("stream", False),
         )
         async for _ in agent_runner.step_until_done(max_steps):

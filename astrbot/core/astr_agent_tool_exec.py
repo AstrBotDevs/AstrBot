@@ -7,7 +7,6 @@ import mcp
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -18,11 +17,7 @@ from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
 )
-from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-
-from .astr_agent_context import AgentContextWrapper
-from .astr_agent_run_util import AgentRunner, run_agent
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -60,8 +55,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args,
     ):
-        input_ = tool_args.get("input", "agent")
-        agent_runner = AgentRunner()
+        input_ = tool_args.get("input")
 
         # make toolset for the agent
         tools = tool.agent.tools
@@ -77,71 +71,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         else:
             toolset = None
 
-        request = ProviderRequest(
-            prompt=input_,
-            system_prompt=tool.description or "",
-            image_urls=[],  # 暂时不传递原始 agent 的上下文
-            contexts=[],  # 暂时不传递原始 agent 的上下文
-            func_tool=toolset,
-        )
-        astr_agent_ctx = AstrAgentContext(
-            provider=run_context.context.provider,
-            event=run_context.context.event,
-        )
-
+        ctx = run_context.context.context
         event = run_context.context.event
-
-        logger.debug(f"正在将任务委托给 Agent: {tool.agent.name}, input: {input_}")
-        await event.send(
-            MessageChain().message("✨ 正在将任务委托给 Agent: " + tool.agent.name),
+        umo = event.unified_msg_origin
+        prov_id = await ctx.get_current_chat_provider_id(umo)
+        llm_resp = await ctx.tool_loop_agent(
+            event=event,
+            chat_provider_id=prov_id,
+            prompt=input_,
+            tools=toolset,
+            max_steps=30,
         )
-
-        await agent_runner.reset(
-            provider=run_context.context.provider,
-            request=request,
-            run_context=AgentContextWrapper(
-                context=astr_agent_ctx,
-                tool_call_timeout=run_context.tool_call_timeout,
-            ),
-            tool_executor=FunctionToolExecutor(),
-            agent_hooks=tool.agent.run_hooks or BaseAgentRunHooks[AstrAgentContext](),
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
         )
-
-        async for _ in run_agent(agent_runner, 15, True):
-            pass
-
-        if agent_runner.done():
-            llm_response = agent_runner.get_final_llm_resp()
-
-            if not llm_response:
-                text_content = mcp.types.TextContent(
-                    type="text",
-                    text=f"error when deligate task to {tool.agent.name}",
-                )
-                yield mcp.types.CallToolResult(content=[text_content])
-                return
-
-            logger.debug(
-                f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}",
-            )
-
-            result = (
-                f"Agent {tool.agent.name} respond with: {llm_response.completion_text}\n\n"
-                "Note: If the result is error or need user provide more information, please provide more information to the agent(you can ask user for more information first)."
-            )
-
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=result,
-            )
-            yield mcp.types.CallToolResult(content=[text_content])
-        else:
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=f"error when deligate task to {tool.agent.name}",
-            )
-            yield mcp.types.CallToolResult(content=[text_content])
-        return
 
     @classmethod
     async def _execute_local(
