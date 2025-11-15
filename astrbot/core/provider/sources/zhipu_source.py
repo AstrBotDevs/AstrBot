@@ -12,10 +12,5 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         self,
         provider_config: dict,
         provider_settings: dict,
-        default_persona=None,
     ) -> None:
-        super().__init__(
-            provider_config,
-            provider_settings,
-            default_persona,
-        )
+        super().__init__(provider_config, provider_settings)

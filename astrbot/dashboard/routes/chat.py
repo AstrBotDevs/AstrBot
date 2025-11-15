@@ -204,6 +204,8 @@ class ChatRoute(Route):
                         ):
                             # 追加机器人消息
                             new_his = {"type": "bot", "message": result_text}
+                            if "reasoning" in result:
+                                new_his["reasoning"] = result["reasoning"]
                             await self.platform_history_mgr.insert(
                                 platform_id="webchat",
                                 user_id=webchat_conv_id,

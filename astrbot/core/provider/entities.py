@@ -194,25 +194,28 @@ class ProviderRequest:
 @dataclass
 class LLMResponse:
     role: str
-    """角色, assistant, tool, err"""
+    """The role of the message, e.g., assistant, tool, err"""
     result_chain: MessageChain | None = None
-    """返回的消息链"""
+    """A chain of message components representing the text completion from LLM."""
     tools_call_args: list[dict[str, Any]] = field(default_factory=list)
-    """工具调用参数"""
+    """Tool call arguments."""
     tools_call_name: list[str] = field(default_factory=list)
-    """工具调用名称"""
+    """Tool call names."""
     tools_call_ids: list[str] = field(default_factory=list)
-    """工具调用 ID"""
+    """Tool call IDs."""
+    reasoning_content: str = ""
+    """The reasoning content extracted from the LLM, if any."""
 
     raw_completion: (
         ChatCompletion | GenerateContentResponse | AnthropicMessage | None
     ) = None
-    _new_record: dict[str, Any] | None = None
+    """The raw completion response from the LLM provider."""
 
     _completion_text: str = ""
+    """The plain text of the completion."""
 
     is_chunk: bool = False
-    """是否是流式输出的单个 Chunk"""
+    """Indicates if the response is a chunked response."""
 
     def __init__(
         self,
@@ -226,7 +229,6 @@ class LLMResponse:
         | GenerateContentResponse
         | AnthropicMessage
         | None = None,
-        _new_record: dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):
         """初始化 LLMResponse
@@ -254,7 +256,6 @@ class LLMResponse:
         self.tools_call_name = tools_call_name
         self.tools_call_ids = tools_call_ids
         self.raw_completion = raw_completion
-        self._new_record = _new_record
         self.is_chunk = is_chunk
 
     @property

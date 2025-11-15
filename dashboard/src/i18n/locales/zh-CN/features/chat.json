@@ -63,6 +63,9 @@
     "on": "流式",
     "off": "普通"
   },
+  "reasoning": {
+    "thinking": "思考过程"
+  },
   "connection": {
     "title": "连接状态提醒",
     "message": "系统检测到聊天连接需要重新建立。",

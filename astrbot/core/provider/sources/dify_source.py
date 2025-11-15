@@ -18,12 +18,10 @@ class ProviderDify(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_key = provider_config.get("dify_api_key", "")
         if not self.api_key:

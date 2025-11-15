@@ -63,6 +63,9 @@
     "on": "Stream",
     "off": "Normal"
   },
+  "reasoning": {
+    "thinking": "Thinking Process"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",
