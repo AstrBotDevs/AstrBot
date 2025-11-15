@@ -17,5 +17,7 @@ services:
       - TZ=Asia/Shanghai
     volumes:
       - ./data:/AstrBot/data
+      - ./venv:/AstrBot/.venv
       # - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+
