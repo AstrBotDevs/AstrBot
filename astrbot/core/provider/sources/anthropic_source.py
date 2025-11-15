@@ -25,12 +25,10 @@ class ProviderAnthropic(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
 
         self.chosen_api_key: str = ""

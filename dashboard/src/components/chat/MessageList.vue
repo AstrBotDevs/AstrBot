@@ -37,6 +37,19 @@
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">
+                            <!-- Reasoning Block (Collapsible) -->
+                            <div v-if="msg.content.reasoning && msg.content.reasoning.trim()" class="reasoning-container">
+                                <div class="reasoning-header" @click="toggleReasoning(index)">
+                                    <v-icon size="small" class="reasoning-icon">
+                                        {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                    </v-icon>
+                                    <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
+                                </div>
+                                <div v-if="isReasoningExpanded(index)" class="reasoning-content">
+                                    <div v-html="md.render(msg.content.reasoning)" class="markdown-content reasoning-text"></div>
+                                </div>
+                            </div>
+                            
                             <!-- Text -->
                             <div v-if="msg.content.message && msg.content.message.trim()"
                                 v-html="md.render(msg.content.message)" class="markdown-content"></div>
@@ -125,7 +138,8 @@ export default {
             copiedMessages: new Set(),
             isUserNearBottom: true,
             scrollThreshold: 1,
-            scrollTimer: null
+            scrollTimer: null,
+            expandedReasoning: new Set(), // Track which reasoning blocks are expanded
         };
     },
     mounted() {
@@ -142,6 +156,22 @@ export default {
         }
     },
     methods: {
+        // Toggle reasoning expansion state
+        toggleReasoning(messageIndex) {
+            if (this.expandedReasoning.has(messageIndex)) {
+                this.expandedReasoning.delete(messageIndex);
+            } else {
+                this.expandedReasoning.add(messageIndex);
+            }
+            // Force reactivity
+            this.expandedReasoning = new Set(this.expandedReasoning);
+        },
+
+        // Check if reasoning is expanded
+        isReasoningExpanded(messageIndex) {
+            return this.expandedReasoning.has(messageIndex);
+        },
+
         // 复制代码到剪贴板
         copyCodeToClipboard(code) {
             navigator.clipboard.writeText(code).then(() => {
@@ -348,7 +378,7 @@ export default {
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(0);
     }
 
     to {
@@ -538,6 +568,69 @@ export default {
 /* 动画类 */
 .fade-in {
     animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Reasoning 区块样式 */
+.reasoning-container {
+    margin-bottom: 12px;
+    margin-top: 6px;
+    border: 1px solid var(--v-theme-border);
+    border-radius: 8px;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.v-theme--dark .reasoning-container {
+    background-color: rgba(103, 58, 183, 0.08);
+}
+
+.reasoning-header {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    border-radius: 8px;
+}
+
+.reasoning-header:hover {
+    background-color: rgba(103, 58, 183, 0.08);
+}
+
+.v-theme--dark .reasoning-header:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reasoning-icon {
+    margin-right: 6px;
+    color: var(--v-theme-secondary);
+    transition: transform 0.2s ease;
+}
+
+.reasoning-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--v-theme-secondary);
+    letter-spacing: 0.3px;
+}
+
+.reasoning-content {
+    padding: 0px 12px;
+    border-top: 1px solid var(--v-theme-border);
+    color: gray;
+    animation: fadeIn 0.2s ease-in-out;
+    font-style: italic;
+}
+
+.reasoning-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--v-theme-secondaryText);
+}
+
+.v-theme--dark .reasoning-text {
+    opacity: 0.85;
 }
 </style>
 

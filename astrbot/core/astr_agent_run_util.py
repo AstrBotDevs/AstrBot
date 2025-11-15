@@ -18,6 +18,7 @@ async def run_agent(
     max_step: int = 30,
     show_tool_use: bool = True,
     stream_to_general: bool = False,
+    show_reasoning: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
@@ -31,7 +32,6 @@ async def run_agent(
                     msg_chain = resp.data["chain"]
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
-                        resp.data["chain"].type = "tool_call_result"
                         await astr_event.send(resp.data["chain"])
                         continue
                     # 对于其他情况，暂时先不处理
@@ -40,8 +40,7 @@ async def run_agent(
                     if agent_runner.streaming:
                         # 用来标记流式响应需要分节
                         yield MessageChain(chain=[], type="break")
-                    if show_tool_use or astr_event.get_platform_name() == "webchat":
-                        resp.data["chain"].type = "tool_call"
+                    if show_tool_use:
                         await astr_event.send(resp.data["chain"])
                     continue
 
@@ -63,6 +62,10 @@ async def run_agent(
                     yield
                     astr_event.clear_result()
                 elif resp.type == "streaming_delta":
+                    chain = resp.data["chain"]
+                    if chain.type == "reasoning" and not show_reasoning:
+                        # display the reasoning content only when configured
+                        continue
                     yield resp.data["chain"]  # MessageChain
             if agent_runner.done():
                 break

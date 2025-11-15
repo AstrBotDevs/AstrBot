@@ -57,6 +57,7 @@ class LLMRequestSubStage(Stage):
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
+        self.show_reasoning = settings.get("display_reasoning_text", False)
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -419,7 +420,12 @@ class LLMRequestSubStage(Stage):
                     MessageEventResult()
                     .set_result_content_type(ResultContentType.STREAMING_RESULT)
                     .set_async_stream(
-                        run_agent(agent_runner, self.max_step, self.show_tool_use),
+                        run_agent(
+                            agent_runner,
+                            self.max_step,
+                            self.show_tool_use,
+                            show_reasoning=self.show_reasoning,
+                        ),
                     ),
                 )
                 yield
@@ -443,7 +449,11 @@ class LLMRequestSubStage(Stage):
                         )
             else:
                 async for _ in run_agent(
-                    agent_runner, self.max_step, self.show_tool_use, stream_to_general
+                    agent_runner,
+                    self.max_step,
+                    self.show_tool_use,
+                    stream_to_general,
+                    show_reasoning=self.show_reasoning,
                 ):
                     yield
 

@@ -31,6 +31,7 @@ export function getProviderIcon(type) {
     '302ai': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/1.53.0/files/icons/ai302-color.svg',
     'microsoft': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/microsoft.svg',
     'vllm': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/vllm.svg',
+    'groq': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/groq.svg',
   };
   return icons[type] || '';
 }

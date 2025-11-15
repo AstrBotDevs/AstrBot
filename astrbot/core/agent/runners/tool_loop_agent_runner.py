@@ -110,11 +110,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type="streaming_delta",
                         data=AgentResponseData(chain=llm_response.result_chain),
                     )
-                else:
+                elif llm_response.completion_text:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
                             chain=MessageChain().message(llm_response.completion_text),
+                        ),
+                    )
+                elif llm_response.reasoning_content:
+                    yield AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain(type="reasoning").message(
+                                llm_response.reasoning_content,
+                            ),
                         ),
                     )
                 continue
@@ -177,13 +186,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield AgentResponse(
                     type="tool_call",
                     data=AgentResponseData(
-                        chain=MessageChain().message(f"🔨 调用工具: {tool_call_name}"),
+                        chain=MessageChain(type="tool_call").message(
+                            f"🔨 调用工具: {tool_call_name}"
+                        ),
                     ),
                 )
             async for result in self._handle_function_tools(self.req, llm_resp):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
                 elif isinstance(result, MessageChain):
+                    result.type = "tool_call_result"
                     yield AgentResponse(
                         type="tool_call_result",
                         data=AgentResponseData(chain=result),

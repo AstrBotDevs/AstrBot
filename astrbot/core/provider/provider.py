@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderMeta,
@@ -52,14 +51,9 @@ class Provider(AbstractProvider):
         self,
         provider_config: dict,
         provider_settings: dict,
-        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(provider_config)
-
         self.provider_settings = provider_settings
-
-        self.curr_personality = default_persona
-        """维护了当前的使用的 persona，即人格。可能为 None"""
 
     @abc.abstractmethod
     def get_current_key(self) -> str:

@@ -880,6 +880,23 @@ CONFIG_METADATA_2 = {
                         "custom_extra_body": {},
                         "modalities": ["text", "tool_use"],
                     },
+                    "Groq": {
+                        "id": "groq_default",
+                        "provider": "groq",
+                        "type": "groq_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.groq.com/openai/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "openai/gpt-oss-20b",
+                            "temperature": 0.4,
+                        },
+                        "custom_headers": {},
+                        "custom_extra_body": {},
+                        "modalities": ["text", "tool_use"],
+                    },
                     "302.AI": {
                         "id": "302ai",
                         "provider": "302ai",

@@ -53,12 +53,10 @@ class ProviderGoogleGenAI(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_keys: list = super().get_keys()
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
@@ -326,8 +324,18 @@ class ProviderGoogleGenAI(Provider):
 
         return gemini_contents
 
-    @staticmethod
+    def _extract_reasoning_content(self, candidate: types.Candidate) -> str:
+        """Extract reasoning content from candidate parts"""
+        if not candidate.content or not candidate.content.parts:
+            return ""
+
+        thought_buf: list[str] = [
+            (p.text or "") for p in candidate.content.parts if p.thought
+        ]
+        return "".join(thought_buf).strip()
+
     def _process_content_parts(
+        self,
         candidate: types.Candidate,
         llm_response: LLMResponse,
     ) -> MessageChain:
@@ -357,6 +365,11 @@ class ProviderGoogleGenAI(Provider):
         if not result_parts:
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
             raise Exception("API 返回的 candidate.content.parts 为空。")
+
+        # 提取 reasoning content
+        reasoning = self._extract_reasoning_content(candidate)
+        if reasoning:
+            llm_response.reasoning_content = reasoning
 
         chain = []
         part: types.Part
@@ -515,6 +528,7 @@ class ProviderGoogleGenAI(Provider):
 
         # Accumulate the complete response text for the final response
         accumulated_text = ""
+        accumulated_reasoning = ""
         final_response = None
 
         async for chunk in result:
@@ -539,9 +553,19 @@ class ProviderGoogleGenAI(Provider):
                 yield llm_response
                 return
 
+            _f = False
+
+            # 提取 reasoning content
+            reasoning = self._extract_reasoning_content(chunk.candidates[0])
+            if reasoning:
+                _f = True
+                accumulated_reasoning += reasoning
+                llm_response.reasoning_content = reasoning
             if chunk.text:
+                _f = True
                 accumulated_text += chunk.text
                 llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            if _f:
                 yield llm_response
 
             if chunk.candidates[0].finish_reason:
@@ -558,6 +582,10 @@ class ProviderGoogleGenAI(Provider):
         # Yield final complete response with accumulated text
         if not final_response:
             final_response = LLMResponse("assistant", is_chunk=False)
+
+        # Set the complete accumulated reasoning in the final response
+        if accumulated_reasoning:
+            final_response.reasoning_content = accumulated_reasoning
 
         # Set the complete accumulated text in the final response
         if accumulated_text:
