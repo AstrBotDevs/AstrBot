@@ -291,6 +291,7 @@ export default {
         "zhipu_chat_completion": "chat_completion",
         "dify": "chat_completion",
         "coze": "chat_completion",
+        "n8n": "chat_completion",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",

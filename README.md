@@ -168,6 +168,7 @@ uv run main.py
 - Dify
 - 阿里云百炼应用
 - Coze
+- n8n
 
 **语音转文本服务**
 
