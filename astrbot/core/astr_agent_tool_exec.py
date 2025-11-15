@@ -79,8 +79,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=event,
             chat_provider_id=prov_id,
             prompt=input_,
+            system_prompt=tool.agent.instructions,
             tools=toolset,
             max_steps=30,
+            run_hooks=tool.agent.run_hooks,
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
