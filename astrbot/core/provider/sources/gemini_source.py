@@ -329,10 +329,9 @@ class ProviderGoogleGenAI(Provider):
         if not candidate.content or not candidate.content.parts:
             return ""
 
-        thought_buf: list[str] = []
-        for p in candidate.content.parts:
-            if p.thought:
-                thought_buf.append(p.text or "")
+        thought_buf: list[str] = [
+            (p.text or "") for p in candidate.content.parts if p.thought
+        ]
         return "".join(thought_buf).strip()
 
     def _process_content_parts(
