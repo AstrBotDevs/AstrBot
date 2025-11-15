@@ -5,6 +5,10 @@ from typing import Any
 
 from deprecated import deprecated
 
+from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import Message
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
@@ -13,10 +17,10 @@ from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
-from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -31,6 +35,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
 )
 
+from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
 from .filter.regex import RegexFilter
 from .star import StarMetadata, star_map, star_registry
@@ -74,6 +79,153 @@ class Context:
         self.persona_manager = persona_manager
         self.astrbot_config_mgr = astrbot_config_mgr
         self.kb_manager = knowledge_base_manager
+
+    async def llm_generate(
+        self,
+        *,
+        chat_provider_id: str,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        tools: ToolSet | None = None,
+        system_prompt: str | None = None,
+        contexts: list[Message] | None = None,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Call the LLM to generate a response. The method will not automatically execute tool calls. If you want to use tool calls, please use `tool_loop_agent()`.
+
+        .. versionadded:: 4.5.7 (sdk)
+
+        Args:
+            chat_provider_id: The chat provider ID to use.
+            prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
+            image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            tools: ToolSet of tools available to the LLM
+            system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
+            contexts: context messages for the LLM
+            **kwargs: Additional keyword arguments for LLM generation, OpenAI compatible
+
+        Raises:
+            ChatProviderNotFoundError: If the specified chat provider ID is not found
+            Exception: For other errors during LLM generation
+        """
+        prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
+        if not prov or not isinstance(prov, Provider):
+            raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+        llm_resp = await prov.text_chat(
+            prompt=prompt,
+            image_urls=image_urls,
+            func_tool=tools,
+            contexts=contexts,
+            system_prompt=system_prompt,
+            **kwargs,
+        )
+        return llm_resp
+
+    async def tool_loop_agent(
+        self,
+        *,
+        event: AstrMessageEvent,
+        chat_provider_id: str,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        tools: ToolSet | None = None,
+        system_prompt: str | None = None,
+        contexts: list[Message] | None = None,
+        max_steps: int = 30,
+        tool_call_timeout: int = 60,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
+        If you do not pass the agent_context parameter, the method will recreate a new agent context.
+
+        .. versionadded:: 4.5.7 (sdk)
+
+        Args:
+            chat_provider_id: The chat provider ID to use.
+            prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
+            image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            tools: ToolSet of tools available to the LLM
+            system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
+            contexts: context messages for the LLM
+            max_steps: Maximum number of tool calls before stopping the loop
+            **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
+                agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
+                agent_context: AstrAgentContext - context to use for the agent
+
+        Returns:
+            The final LLMResponse after tool calls are completed.
+
+        Raises:
+            ChatProviderNotFoundError: If the specified chat provider ID is not found
+            Exception: For other errors during LLM generation
+        """
+        # Import here to avoid circular imports
+        from astrbot.core.astr_agent_context import (
+            AgentContextWrapper,
+            AstrAgentContext,
+        )
+        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+
+        prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
+        if not prov or not isinstance(prov, Provider):
+            raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+
+        agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
+        agent_context = kwargs.get("agent_context")
+
+        context_ = []
+        for msg in contexts or []:
+            if isinstance(msg, Message):
+                context_.append(msg.model_dump())
+            else:
+                context_.append(msg)
+
+        request = ProviderRequest(
+            prompt=prompt,
+            image_urls=image_urls or [],
+            func_tool=tools,
+            contexts=context_,
+            system_prompt=system_prompt or "",
+        )
+        if agent_context is None:
+            agent_context = AstrAgentContext(
+                context=self,
+                event=event,
+            )
+        agent_runner = ToolLoopAgentRunner()
+        tool_executor = FunctionToolExecutor()
+        await agent_runner.reset(
+            provider=prov,
+            request=request,
+            run_context=AgentContextWrapper(
+                context=agent_context,
+                tool_call_timeout=tool_call_timeout,
+            ),
+            tool_executor=tool_executor,
+            agent_hooks=agent_hooks,
+            streaming=kwargs.get("stream", False),
+        )
+        async for _ in agent_runner.step_until_done(max_steps):
+            pass
+        llm_resp = agent_runner.get_final_llm_resp()
+        if not llm_resp:
+            raise Exception("Agent did not produce a final LLM response")
+        return llm_resp
+
+    async def get_current_chat_provider_id(self, umo: str) -> str:
+        """Get the ID of the currently used chat provider.
+
+        Args:
+            umo(str): unified_message_origin value, if provided and user has enabled provider session isolation, the provider preferred by that session will be used.
+
+        Raises:
+            ProviderNotFoundError: If the specified chat provider is not found
+
+        """
+        prov = self.get_using_provider(umo)
+        if not prov:
+            raise ProviderNotFoundError("Provider not found")
+        return prov.meta().id
 
     def get_registered_star(self, star_name: str) -> StarMetadata | None:
         """根据插件名获取插件的 Metadata"""

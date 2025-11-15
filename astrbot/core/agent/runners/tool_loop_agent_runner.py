@@ -23,7 +23,7 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 
 from ..hooks import BaseAgentRunHooks
-from ..message import AssistantMessageSegment, ToolCallMessageSegment
+from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
@@ -54,6 +54,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+
+        messages = []
+        # append existing messages in the run context
+        for msg in request.contexts:
+            messages.append(Message.model_validate(msg))
+        if request.prompt is not None:
+            m = await request.assemble_context()
+            messages.append(Message.model_validate(m))
+        if request.system_prompt:
+            messages.insert(
+                0,
+                Message(role="system", content=request.system_prompt),
+            )
+        self.run_context.messages = messages
 
     def _transition_state(self, new_state: AgentState) -> None:
         """转换 Agent 状态"""
@@ -139,6 +153,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 如果没有工具调用，转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
+            # record the final assistant message
+            self.run_context.messages.append(
+                Message(
+                    role="assistant",
+                    content=llm_resp.completion_text or "",
+                ),
+            )
             try:
                 await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
             except Exception as e:
@@ -187,7 +208,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
+            # record the assistant message with tool calls
+            self.run_context.messages.extend(
+                tool_calls_result.to_openai_messages_model()
+            )
+
             self.req.append_tool_calls_result(tool_calls_result)
+
+    async def step_until_done(
+        self, max_step: int
+    ) -> T.AsyncGenerator[AgentResponse, None]:
+        """Process steps until the agent is done."""
+        step_count = 0
+        while not self.done() and step_count < max_step:
+            step_count += 1
+            async for resp in self.step():
+                yield resp
 
     async def _handle_function_tools(
         self,

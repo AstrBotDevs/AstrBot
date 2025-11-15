@@ -73,12 +73,20 @@ class ToolCallsResult:
         ]
         return ret
 
+    def to_openai_messages_model(
+        self,
+    ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        return [
+            self.tool_calls_info,
+            *self.tool_calls_result,
+        ]
+
 
 @dataclass
 class ProviderRequest:
-    prompt: str
+    prompt: str | None = None
     """提示词"""
-    session_id: str = ""
+    session_id: str | None = ""
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""

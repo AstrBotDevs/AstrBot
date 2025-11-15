@@ -3,20 +3,10 @@
 import asyncio
 import copy
 import json
-import traceback
 from collections.abc import AsyncGenerator
-from typing import Any
-
-from mcp.types import CallToolResult
 
 from astrbot.core import logger
-from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import Image
@@ -31,330 +21,18 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
-from ...context import PipelineContext, call_event_hook, call_local_llm_tool
+from ....astr_agent_context import AgentContextWrapper
+from ....astr_agent_hooks import MAIN_AGENT_HOOKS
+from ....astr_agent_run_util import AgentRunner, run_agent
+from ....astr_agent_tool_exec import FunctionToolExecutor
+from ...context import PipelineContext, call_event_hook
 from ..stage import Stage
 from ..utils import inject_kb_context
-
-try:
-    import mcp
-except (ModuleNotFoundError, ImportError):
-    logger.warning("警告: 缺少依赖库 'mcp'，将无法使用 MCP 服务。")
-
-
-AgentContextWrapper = ContextWrapper[AstrAgentContext]
-AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
-
-
-class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
-        """执行函数调用。
-
-        Args:
-            event (AstrMessageEvent): 事件对象, 当 origin 为 local 时必须提供。
-            **kwargs: 函数调用的参数。
-
-        Returns:
-            AsyncGenerator[None | mcp.types.CallToolResult, None]
-
-        """
-        if isinstance(tool, HandoffTool):
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
-                yield r
-            return
-
-        elif isinstance(tool, MCPTool):
-            async for r in cls._execute_mcp(tool, run_context, **tool_args):
-                yield r
-            return
-
-        else:
-            async for r in cls._execute_local(tool, run_context, **tool_args):
-                yield r
-            return
-
-    @classmethod
-    async def _execute_handoff(
-        cls,
-        tool: HandoffTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
-        input_ = tool_args.get("input", "agent")
-        agent_runner = AgentRunner()
-
-        # make toolset for the agent
-        tools = tool.agent.tools
-        if tools:
-            toolset = ToolSet()
-            for t in tools:
-                if isinstance(t, str):
-                    _t = llm_tools.get_func(t)
-                    if _t:
-                        toolset.add_tool(_t)
-                elif isinstance(t, FunctionTool):
-                    toolset.add_tool(t)
-        else:
-            toolset = None
-
-        request = ProviderRequest(
-            prompt=input_,
-            system_prompt=tool.description or "",
-            image_urls=[],  # 暂时不传递原始 agent 的上下文
-            contexts=[],  # 暂时不传递原始 agent 的上下文
-            func_tool=toolset,
-        )
-        astr_agent_ctx = AstrAgentContext(
-            provider=run_context.context.provider,
-            first_provider_request=run_context.context.first_provider_request,
-            curr_provider_request=request,
-            streaming=run_context.context.streaming,
-            event=run_context.context.event,
-        )
-
-        event = run_context.context.event
-
-        logger.debug(f"正在将任务委托给 Agent: {tool.agent.name}, input: {input_}")
-        await event.send(
-            MessageChain().message("✨ 正在将任务委托给 Agent: " + tool.agent.name),
-        )
-
-        await agent_runner.reset(
-            provider=run_context.context.provider,
-            request=request,
-            run_context=AgentContextWrapper(
-                context=astr_agent_ctx,
-                tool_call_timeout=run_context.tool_call_timeout,
-            ),
-            tool_executor=FunctionToolExecutor(),
-            agent_hooks=tool.agent.run_hooks or BaseAgentRunHooks[AstrAgentContext](),
-            streaming=run_context.context.streaming,
-        )
-
-        async for _ in run_agent(agent_runner, 15, True):
-            pass
-
-        if agent_runner.done():
-            llm_response = agent_runner.get_final_llm_resp()
-
-            if not llm_response:
-                text_content = mcp.types.TextContent(
-                    type="text",
-                    text=f"error when deligate task to {tool.agent.name}",
-                )
-                yield mcp.types.CallToolResult(content=[text_content])
-                return
-
-            logger.debug(
-                f"Agent  {tool.agent.name} 任务完成, response: {llm_response.completion_text}",
-            )
-
-            result = (
-                f"Agent {tool.agent.name} respond with: {llm_response.completion_text}\n\n"
-                "Note: If the result is error or need user provide more information, please provide more information to the agent(you can ask user for more information first)."
-            )
-
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=result,
-            )
-            yield mcp.types.CallToolResult(content=[text_content])
-        else:
-            text_content = mcp.types.TextContent(
-                type="text",
-                text=f"error when deligate task to {tool.agent.name}",
-            )
-            yield mcp.types.CallToolResult(content=[text_content])
-        return
-
-    @classmethod
-    async def _execute_local(
-        cls,
-        tool: FunctionTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
-        event = run_context.context.event
-        if not event:
-            raise ValueError("Event must be provided for local function tools.")
-
-        is_override_call = False
-        for ty in type(tool).mro():
-            if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
-                is_override_call = True
-                break
-
-        # 检查 tool 下有没有 run 方法
-        if not tool.handler and not hasattr(tool, "run") and not is_override_call:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        awaitable = None
-        method_name = ""
-        if tool.handler:
-            awaitable = tool.handler
-            method_name = "decorator_handler"
-        elif is_override_call:
-            awaitable = tool.call
-            method_name = "call"
-        elif hasattr(tool, "run"):
-            awaitable = getattr(tool, "run")
-            method_name = "run"
-        if awaitable is None:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        wrapper = call_local_llm_tool(
-            context=run_context,
-            handler=awaitable,
-            method_name=method_name,
-            **tool_args,
-        )
-        while True:
-            try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=run_context.tool_call_timeout,
-                )
-                if resp is not None:
-                    if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
-                    else:
-                        text_content = mcp.types.TextContent(
-                            type="text",
-                            text=str(resp),
-                        )
-                        yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
-                                    )
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
-                                )
-                    yield None
-            except asyncio.TimeoutError:
-                raise Exception(
-                    f"tool {tool.name} execution timeout after {run_context.tool_call_timeout} seconds.",
-                )
-            except StopAsyncIteration:
-                break
-
-    @classmethod
-    async def _execute_mcp(
-        cls,
-        tool: FunctionTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
-        res = await tool.call(run_context, **tool_args)
-        if not res:
-            return
-        yield res
-
-
-class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
-    async def on_agent_done(self, run_context, llm_response):
-        # 执行事件钩子
-        await call_event_hook(
-            run_context.context.event,
-            EventType.OnLLMResponseEvent,
-            llm_response,
-        )
-
-    async def on_tool_end(
-        self,
-        run_context: ContextWrapper[AstrAgentContext],
-        tool: FunctionTool[Any],
-        tool_args: dict | None,
-        tool_result: CallToolResult | None,
-    ):
-        run_context.context.event.clear_result()
-
-
-MAIN_AGENT_HOOKS = MainAgentHooks()
-
-
-async def run_agent(
-    agent_runner: AgentRunner,
-    max_step: int = 30,
-    show_tool_use: bool = True,
-    stream_to_general: bool = False,
-    show_reasoning: bool = False,
-) -> AsyncGenerator[MessageChain | None, None]:
-    step_idx = 0
-    astr_event = agent_runner.run_context.context.event
-    while step_idx < max_step:
-        step_idx += 1
-        try:
-            async for resp in agent_runner.step():
-                if astr_event.is_stopped():
-                    return
-                if resp.type == "tool_call_result":
-                    msg_chain = resp.data["chain"]
-                    if msg_chain.type == "tool_direct_result":
-                        # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
-                        await astr_event.send(resp.data["chain"])
-                        continue
-                    # 对于其他情况，暂时先不处理
-                    continue
-                elif resp.type == "tool_call":
-                    if agent_runner.streaming:
-                        # 用来标记流式响应需要分节
-                        yield MessageChain(chain=[], type="break")
-                    if show_tool_use:
-                        await astr_event.send(resp.data["chain"])
-                    continue
-
-                if stream_to_general and resp.type == "streaming_delta":
-                    continue
-
-                if stream_to_general or not agent_runner.streaming:
-                    content_typ = (
-                        ResultContentType.LLM_RESULT
-                        if resp.type == "llm_result"
-                        else ResultContentType.GENERAL_RESULT
-                    )
-                    astr_event.set_result(
-                        MessageEventResult(
-                            chain=resp.data["chain"].chain,
-                            result_content_type=content_typ,
-                        ),
-                    )
-                    yield
-                    astr_event.clear_result()
-                elif resp.type == "streaming_delta":
-                    chain = resp.data["chain"]
-                    if chain.type == "reasoning" and not show_reasoning:
-                        # display the reasoning content only when configured
-                        continue
-                    yield resp.data["chain"]  # MessageChain
-            if agent_runner.done():
-                break
-
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在控制台查看和分享错误详情。\n"
-            if agent_runner.streaming:
-                yield MessageChain().message(err_msg)
-            else:
-                astr_event.set_result(MessageEventResult().message(err_msg))
-            return
 
 
 class LLMRequestSubStage(Stage):
@@ -573,6 +251,9 @@ class LLMRequestSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
+        if req.contexts is None:
+            req.contexts = []
+
         # 历史上下文
         messages = copy.deepcopy(req.contexts)
         # 这一轮对话请求的用户输入
@@ -648,7 +329,9 @@ class LLMRequestSubStage(Stage):
                     req.contexts = json.loads(req.conversation.history)
 
             else:
-                req = ProviderRequest(prompt="", image_urls=[])
+                req = ProviderRequest()
+                req.prompt = ""
+                req.image_urls = []
                 if sel_model := event.get_extra("selected_model"):
                     req.model = sel_model
                 if self.provider_wake_prefix and not event.message_str.startswith(
@@ -685,14 +368,13 @@ class LLMRequestSubStage(Stage):
                 req.contexts = json.loads(req.contexts)
 
             # truncate contexts to fit max length
-            req.contexts = self._truncate_contexts(req.contexts)
+            if req.contexts:
+                req.contexts = self._truncate_contexts(req.contexts)
+                self._fix_messages(req.contexts)
 
             # session_id
             if not req.session_id:
                 req.session_id = event.unified_msg_origin
-
-            # fix messages
-            req.contexts = self._fix_messages(req.contexts)
 
             # check provider modalities, if provider does not support image/tool_use, clear them in request.
             self._modalities_fix(provider, req)
@@ -713,10 +395,7 @@ class LLMRequestSubStage(Stage):
                 f"handle provider[id: {provider.provider_config['id']}] request: {req}",
             )
             astr_agent_ctx = AstrAgentContext(
-                provider=provider,
-                first_provider_request=req,
-                curr_provider_request=req,
-                streaming=streaming_response,
+                context=self.ctx.plugin_manager.context,
                 event=event,
             )
             await agent_runner.reset(
