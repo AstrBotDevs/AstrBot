@@ -241,6 +241,8 @@ class ProviderManager:
                     )
                 case "zhipu_chat_completion":
                     from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
+                case "groq_chat_completion":
+                    from .sources.groq_source import ProviderGroq as ProviderGroq
                 case "anthropic_chat_completion":
                     from .sources.anthropic_source import (
                         ProviderAnthropic as ProviderAnthropic,
