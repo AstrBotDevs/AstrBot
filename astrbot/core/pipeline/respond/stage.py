@@ -10,7 +10,6 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
-from astrbot.core.utils.session_lock import session_lock_manager
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -221,21 +220,20 @@ class RespondStage(Stage):
                         f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
                     )
                     return
-                async with session_lock_manager.acquire_lock(event.unified_msg_origin):
-                    for comp in result.chain:
-                        i = await self._calc_comp_interval(comp)
-                        await asyncio.sleep(i)
-                        try:
-                            if comp.type in need_separately:
-                                await event.send(MessageChain([comp]))
-                            else:
-                                await event.send(MessageChain([*header_comps, comp]))
-                                header_comps.clear()
-                        except Exception as e:
-                            logger.error(
-                                f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
-                                exc_info=True,
-                            )
+                for comp in result.chain:
+                    i = await self._calc_comp_interval(comp)
+                    await asyncio.sleep(i)
+                    try:
+                        if comp.type in need_separately:
+                            await event.send(MessageChain([comp]))
+                        else:
+                            await event.send(MessageChain([*header_comps, comp]))
+                            header_comps.clear()
+                    except Exception as e:
+                        logger.error(
+                            f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
+                            exc_info=True,
+                        )
             else:
                 if all(
                     comp.type in {ComponentType.Reply, ComponentType.At}
