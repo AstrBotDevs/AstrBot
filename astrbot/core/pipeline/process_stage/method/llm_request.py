@@ -6,7 +6,6 @@ import json
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
@@ -395,9 +394,6 @@ class LLMRequestSubStage(Stage):
             logger.debug(
                 f"handle provider[id: {provider.provider_config['id']}] request: {req}",
             )
-            context_model: list[Message] = []
-            for msg in req.contexts:
-                context_model.append(Message.model_validate(msg))
             astr_agent_ctx = AstrAgentContext(
                 context=self.ctx.plugin_manager.context,
                 event=event,
