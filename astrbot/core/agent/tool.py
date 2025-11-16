@@ -4,7 +4,7 @@ from typing import Any, Generic
 import jsonschema
 import mcp
 from deprecated import deprecated
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
 
 from .run_context import ContextWrapper, TContext
@@ -63,6 +63,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
         )
 
 
+@dataclass
 class ToolSet:
     """A set of function tools that can be used in function calling.
 
@@ -70,8 +71,7 @@ class ToolSet:
     convert the tools to different API formats (OpenAI, Anthropic, Google GenAI).
     """
 
-    def __init__(self, tools: list[FunctionTool] | None = None):
-        self.tools: list[FunctionTool] = tools or []
+    tools: list[FunctionTool] = Field(default_factory=list)
 
     def empty(self) -> bool:
         """Check if the tool set is empty."""
