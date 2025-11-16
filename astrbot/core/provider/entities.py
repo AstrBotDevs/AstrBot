@@ -184,7 +184,7 @@ class ProviderRequest:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
                 user_content["content"].append(
-                    {"type": "image_url", "image_url": {"url": image_data}},
+                    {"type": "image_url", "image_url": image_data},
                 )
             return user_content
         return {"role": "user", "content": self.prompt}
