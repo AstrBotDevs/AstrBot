@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 from collections.abc import Awaitable, Callable
@@ -115,7 +116,7 @@ class FunctionToolManager:
     def spec_to_func(
         self,
         name: str,
-        func_args: list,
+        func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any]],
     ) -> FuncTool:
@@ -124,7 +125,9 @@ class FunctionToolManager:
             "properties": {},
         }
         for param in func_args:
-            params["properties"][param["name"]] = param
+            p = copy.deepcopy(param)
+            p.pop("name", None)
+            params["properties"][param["name"]] = p
         return FuncTool(
             name=name,
             parameters=params,
