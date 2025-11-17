@@ -22,7 +22,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tag: true
 
       - name: Check for new commits today
         if: github.event_name == 'schedule'
@@ -119,7 +120,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tag: true
 
       - name: Get latest tag (only on manual trigger)
         id: get-latest-tag
