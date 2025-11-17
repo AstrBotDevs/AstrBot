@@ -20,85 +20,11 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
 from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
-
-
-class SimpleRecursiveCharacterTextSplitter:
-    """A simple implementation of a recursive text splitter to avoid heavy dependencies."""
-
-    def __init__(
-        self,
-        chunk_size: int = 1000,
-        chunk_overlap: int = 150,
-        separators: list[str] | None = None,
-        length_function=len,
-        is_separator_regex: bool = False,  # Ignored for simplicity
-    ):
-        if chunk_overlap > chunk_size:
-            raise ValueError(
-                f"Chunk overlap ({chunk_overlap}) > chunk size ({chunk_size})"
-            )
-        self._chunk_size = chunk_size
-        self._chunk_overlap = chunk_overlap
-        self._separators = separators or ["\n\n", "\n", " "]
-        self._length_function = length_function
-
-    def split_text(self, text: str) -> list[str]:
-        """Split text into chunks."""
-        final_chunks = []
-
-        # Start with the whole text as the first chunk to process
-        chunks_to_process = [text]
-
-        # Go through separators and split any chunks that are too big
-        for separator in self._separators:
-            new_chunks_to_process = []
-            for chunk in chunks_to_process:
-                if self._length_function(chunk) > self._chunk_size:
-                    # If the chunk is too big, split it by the current separator
-                    new_splits = chunk.split(separator)
-
-                    # Greedily merge the new splits
-                    merged_chunk = ""
-                    for sub_split in new_splits:
-                        # If a merged chunk is empty, start with the current sub-split
-                        if not merged_chunk:
-                            merged_chunk = sub_split
-                        # If adding the next sub-split doesn't exceed the chunk size, merge it
-                        elif (
-                            self._length_function(merged_chunk + separator + sub_split)
-                            <= self._chunk_size
-                        ):
-                            merged_chunk += separator + sub_split
-                        # Otherwise, finalize the merged chunk and start a new one
-                        else:
-                            new_chunks_to_process.append(merged_chunk)
-                            merged_chunk = sub_split
-
-                    # Add the last merged chunk
-                    if merged_chunk:
-                        new_chunks_to_process.append(merged_chunk)
-                else:
-                    # If the chunk is already small enough, carry it over
-                    new_chunks_to_process.append(chunk)
-            chunks_to_process = new_chunks_to_process
-
-        # Handle overlap for the final list of chunks
-        for chunk in chunks_to_process:
-            if self._length_function(chunk) <= self._chunk_size:
-                final_chunks.append(chunk)
-            else:
-                # If a chunk is still too big after all separators, force split by size
-                start_idx = 0
-                while start_idx < self._length_function(chunk):
-                    end_idx = start_idx + self._chunk_size
-                    final_chunks.append(chunk[start_idx:end_idx])
-                    start_idx += self._chunk_size - self._chunk_overlap
-
-        return [c for c in final_chunks if c.strip()]
 
 
 class RateLimiter:
@@ -733,14 +659,12 @@ class KBHelper:
 
             # 初步分块
             # 优化分隔符，优先按段落分割，以获得更高质量的文本块
-            text_splitter = SimpleRecursiveCharacterTextSplitter(
+            text_splitter = RecursiveCharacterChunker(
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
-                length_function=len,
-                is_separator_regex=False,
             )
-            initial_chunks = text_splitter.split_text(content)
+            initial_chunks = await text_splitter.chunk(content)
             logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
 
             # 并发处理所有块
