@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-test-image:
+  build-nightly-image:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/master')
     runs-on: ubuntu-latest
     env:
@@ -60,21 +60,21 @@ jobs:
           username: ${{ env.GHCR_OWNER }}
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
-      - name: Build test image tags list
+      - name: Build nightly image tags list
         id: test-tags
         run: |
-          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:test-latest
-          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:test-${{ steps.test-meta.outputs.short_sha }}"
+          TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest
+          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.short_sha }}"
           if [ "${{ env.HAS_GHCR_TOKEN }}" = "true" ]; then
             TAGS="$TAGS
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:test-latest
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:test-${{ steps.test-meta.outputs.short_sha }}"
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.short_sha }}"
           fi
           echo "tags<<EOF" >> $GITHUB_OUTPUT
           echo "$TAGS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Build and Push Test Image
+      - name: Build and Push Nightly Image
         uses: docker/build-push-action@v6
         with:
           context: .
