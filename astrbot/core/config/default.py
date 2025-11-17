@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.5.6"
+VERSION = "4.5.8"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -876,6 +876,23 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "model_config": {"model": "deepseek-chat", "temperature": 0.4},
+                        "custom_headers": {},
+                        "custom_extra_body": {},
+                        "modalities": ["text", "tool_use"],
+                    },
+                    "Groq": {
+                        "id": "groq_default",
+                        "provider": "groq",
+                        "type": "groq_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.groq.com/openai/v1",
+                        "timeout": 120,
+                        "model_config": {
+                            "model": "openai/gpt-oss-20b",
+                            "temperature": 0.4,
+                        },
                         "custom_headers": {},
                         "custom_extra_body": {},
                         "modalities": ["text", "tool_use"],

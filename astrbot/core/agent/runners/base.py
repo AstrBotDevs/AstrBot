@@ -41,6 +41,13 @@ class BaseAgentRunner(T.Generic[TContext]):
         ...
 
     @abc.abstractmethod
+    async def step_until_done(
+        self, max_step: int
+    ) -> T.AsyncGenerator[AgentResponse, None]:
+        """Process steps until the agent is done."""
+        ...
+
+    @abc.abstractmethod
     def done(self) -> bool:
         """Check if the agent has completed its task.
         Returns True if the agent is done, False otherwise.

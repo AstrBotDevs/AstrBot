@@ -2,7 +2,7 @@ import base64
 import enum
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
@@ -18,9 +18,6 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-
-if TYPE_CHECKING:
-    from astrbot.core.provider.provider import Providers
 from astrbot.core.utils.io import download_image_by_url
 
 
@@ -33,21 +30,31 @@ class ProviderType(enum.Enum):
 
 
 @dataclass
-class ProviderMetaData:
+class ProviderMeta:
+    """The basic metadata of a provider instance."""
+
     id: str
-    """提供商适配器 ID"""
+    """the unique id of the provider instance that user configured"""
+    model: str | None
+    """the model name of the provider instance currently used"""
     type: str
-    """提供商适配器名称，如 openai, ollama"""
-    desc: str = ""
-    """提供商适配器描述"""
+    """the name of the provider adapter, such as openai, ollama"""
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION
-    """提供商类型"""
-    cls_type: "type[Providers] | None" = None
-    """提供商适配器类类型"""
+    """the capability type of the provider adapter"""
+
+
+@dataclass
+class ProviderMetaData(ProviderMeta):
+    """The metadata of a provider adapter for registration."""
+
+    desc: str = ""
+    """the short description of the provider adapter"""
+    cls_type: Any = None
+    """the class type of the provider adapter"""
     default_config_tmpl: dict | None = None
-    """平台的默认配置模板"""
+    """the default configuration template of the provider adapter"""
     provider_display_name: str | None = None
-    """显示在 WebUI 配置页中的提供商名称，如空则是 type"""
+    """the display name of the provider shown in the WebUI configuration page; if empty, the type is used"""
 
 
 @dataclass
@@ -66,12 +73,20 @@ class ToolCallsResult:
         ]
         return ret
 
+    def to_openai_messages_model(
+        self,
+    ) -> list[AssistantMessageSegment | ToolCallMessageSegment]:
+        return [
+            self.tool_calls_info,
+            *self.tool_calls_result,
+        ]
+
 
 @dataclass
 class ProviderRequest:
-    prompt: str
+    prompt: str | None = None
     """提示词"""
-    session_id: str = ""
+    session_id: str | None = ""
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
@@ -187,25 +202,28 @@ class ProviderRequest:
 @dataclass
 class LLMResponse:
     role: str
-    """角色, assistant, tool, err"""
+    """The role of the message, e.g., assistant, tool, err"""
     result_chain: MessageChain | None = None
-    """返回的消息链"""
+    """A chain of message components representing the text completion from LLM."""
     tools_call_args: list[dict[str, Any]] = field(default_factory=list)
-    """工具调用参数"""
+    """Tool call arguments."""
     tools_call_name: list[str] = field(default_factory=list)
-    """工具调用名称"""
+    """Tool call names."""
     tools_call_ids: list[str] = field(default_factory=list)
-    """工具调用 ID"""
+    """Tool call IDs."""
+    reasoning_content: str = ""
+    """The reasoning content extracted from the LLM, if any."""
 
     raw_completion: (
         ChatCompletion | GenerateContentResponse | AnthropicMessage | None
     ) = None
-    _new_record: dict[str, Any] | None = None
+    """The raw completion response from the LLM provider."""
 
     _completion_text: str = ""
+    """The plain text of the completion."""
 
     is_chunk: bool = False
-    """是否是流式输出的单个 Chunk"""
+    """Indicates if the response is a chunked response."""
 
     def __init__(
         self,
@@ -219,7 +237,6 @@ class LLMResponse:
         | GenerateContentResponse
         | AnthropicMessage
         | None = None,
-        _new_record: dict[str, Any] | None = None,
         is_chunk: bool = False,
     ):
         """初始化 LLMResponse
@@ -247,7 +264,6 @@ class LLMResponse:
         self.tools_call_name = tools_call_name
         self.tools_call_ids = tools_call_ids
         self.raw_completion = raw_completion
-        self._new_record = _new_record
         self.is_chunk = is_chunk
 
     @property

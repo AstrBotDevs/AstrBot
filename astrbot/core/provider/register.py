@@ -37,6 +37,7 @@ def register_provider_adapter(
 
         pm = ProviderMetaData(
             id="default",  # will be replaced when instantiated
+            model=None,
             type=provider_type_name,
             desc=desc,
             provider_type=provider_type,

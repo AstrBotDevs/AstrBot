@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 from collections.abc import Awaitable, Callable
@@ -24,7 +25,16 @@ SUPPORTED_TYPES = [
     "boolean",
 ]  # json schema 支持的数据类型
 
-
+PY_TO_JSON_TYPE = {
+    "int": "number",
+    "float": "number",
+    "bool": "boolean",
+    "str": "string",
+    "dict": "object",
+    "list": "array",
+    "tuple": "array",
+    "set": "array",
+}
 # alias
 FuncTool = FunctionTool
 
@@ -106,7 +116,7 @@ class FunctionToolManager:
     def spec_to_func(
         self,
         name: str,
-        func_args: list,
+        func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any]],
     ) -> FuncTool:
@@ -115,10 +125,9 @@ class FunctionToolManager:
             "properties": {},
         }
         for param in func_args:
-            params["properties"][param["name"]] = {
-                "type": param["type"],
-                "description": param["description"],
-            }
+            p = copy.deepcopy(param)
+            p.pop("name", None)
+            params["properties"][param["name"]] = p
         return FuncTool(
             name=name,
             parameters=params,

@@ -3,7 +3,7 @@ import traceback
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
-from astrbot.api.provider import ProviderRequest
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 from astrbot.core.provider.sources.dify_source import ProviderDify
 
@@ -333,6 +333,17 @@ class Main(star.Star):
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
                 logger.error(f"ltm: {e}")
+
+    @filter.on_llm_response()
+    async def inject_reasoning(self, event: AstrMessageEvent, resp: LLMResponse):
+        """在 LLM 响应后基于配置注入思考过程文本"""
+        umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo).get("provider_settings", {})
+        show_reasoning = cfg.get("display_reasoning_text", False)
+        if show_reasoning and resp.reasoning_content:
+            resp.completion_text = (
+                f"🤔 思考: {resp.reasoning_content}\n\n{resp.completion_text}"
+            )
 
     @filter.after_message_sent()
     async def after_llm_req(self, event: AstrMessageEvent):

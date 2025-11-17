@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.star import PluginManager
 
-from .context_utils import call_event_hook, call_handler, call_local_llm_tool
+from .context_utils import call_event_hook, call_handler
 
 
 @dataclass
@@ -15,4 +15,3 @@ class PipelineContext:
     astrbot_config_id: str
     call_handler = call_handler
     call_event_hook = call_event_hook
-    call_local_llm_tool = call_local_llm_tool

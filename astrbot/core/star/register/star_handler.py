@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -11,7 +12,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
+from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 
 from ..filter.command import CommandFilter
@@ -421,18 +422,37 @@ def register_llm_tool(name: str | None = None, **kwargs):
         docstring = docstring_parser.parse(func_doc)
         args = []
         for arg in docstring.params:
-            if arg.type_name not in SUPPORTED_TYPES:
+            sub_type_name = None
+            type_name = arg.type_name
+            if not type_name:
+                raise ValueError(
+                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释。",
+                )
+            # parse type_name to handle cases like "list[string]"
+            match = re.match(r"(\w+)\[(\w+)\]", type_name)
+            if match:
+                type_name = match.group(1)
+                sub_type_name = match.group(2)
+            type_name = PY_TO_JSON_TYPE.get(type_name, type_name)
+            if sub_type_name:
+                sub_type_name = PY_TO_JSON_TYPE.get(sub_type_name, sub_type_name)
+            if type_name not in SUPPORTED_TYPES or (
+                sub_type_name and sub_type_name not in SUPPORTED_TYPES
+            ):
                 raise ValueError(
                     f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型：{arg.type_name}",
                 )
-            args.append(
-                {
-                    "type": arg.type_name,
-                    "name": arg.arg_name,
-                    "description": arg.description,
-                },
-            )
-        # print(llm_tool_name, registering_agent)
+
+            arg_json_schema = {
+                "type": type_name,
+                "name": arg.arg_name,
+                "description": arg.description,
+            }
+            if sub_type_name:
+                if type_name == "array":
+                    arg_json_schema["items"] = {"type": sub_type_name}
+            args.append(arg_json_schema)
+
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)

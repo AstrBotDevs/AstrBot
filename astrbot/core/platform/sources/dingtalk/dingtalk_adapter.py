@@ -80,6 +80,14 @@ class DingtalkPlatformAdapter(Platform):
         self.client_ = client  # 用于 websockets 的 client
         self._shutdown_event: threading.Event | None = None
 
+    def _id_to_sid(self, dingtalk_id: str | None) -> str | None:
+        if not dingtalk_id:
+            return dingtalk_id
+        prefix = "$:LWCP_v1:$"
+        if dingtalk_id.startswith(prefix):
+            return dingtalk_id[len(prefix) :]
+        return dingtalk_id
+
     async def send_by_session(
         self,
         session: MessageSesion,
@@ -109,20 +117,20 @@ class DingtalkPlatformAdapter(Platform):
             else MessageType.FRIEND_MESSAGE
         )
         abm.sender = MessageMember(
-            user_id=cast(str, message.sender_id),
-            nickname=cast(str, message.sender_nick),
+            user_id=self._id_to_sid(message.sender_id),
+            nickname=message.sender_nick,
         )
-        abm.self_id = cast(str, message.chatbot_user_id)
-        abm.message_id = cast(str, message.message_id)
+        abm.self_id = self._id_to_sid(message.chatbot_user_id)
+        abm.message_id = message.message_id
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
             # 处理所有被 @ 的用户（包括机器人自己，因 at_users 已包含）
             if message.at_users:
                 for user in message.at_users:
-                    if user.dingtalk_id:
-                        abm.message.append(At(qq=user.dingtalk_id))
-            abm.group_id = cast(str, message.conversation_id)
+                    if id := self._id_to_sid(user.dingtalk_id):
+                        abm.message.append(At(qq=id))
+            abm.group_id = message.conversation_id
             if self.unique_session:
                 abm.session_id = abm.sender.user_id
             else:
