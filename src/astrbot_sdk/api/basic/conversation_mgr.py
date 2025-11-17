@@ -1,4 +1,5 @@
-# from astr_agent_sdk.message import AssistantMessageSegment, UserMessageSegment
+from astr_agent_sdk.message import AssistantMessageSegment, UserMessageSegment
+from ...api.basic.entities import Conversation
 
 
 class BaseConversationManager:
@@ -31,7 +32,9 @@ class BaseConversationManager:
         """
         ...
 
-    async def switch_conversation(self, unified_msg_origin: str, conversation_id: str):
+    async def switch_conversation(
+        self, unified_msg_origin: str, conversation_id: str
+    ) -> None:
         """切换会话的对话
 
         Args:
@@ -75,60 +78,60 @@ class BaseConversationManager:
         """
         ...
 
-    # async def get_conversation(
-    #     self,
-    #     unified_msg_origin: str,
-    #     conversation_id: str,
-    #     create_if_not_exists: bool = False,
-    # ) -> Conversation | None:
-    #     """获取会话的对话.
+    async def get_conversation(
+        self,
+        unified_msg_origin: str,
+        conversation_id: str,
+        create_if_not_exists: bool = False,
+    ) -> Conversation | None:
+        """获取会话的对话.
 
-    #     Args:
-    #         unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
-    #         conversation_id (str): 对话 ID, 是 uuid 格式的字符串
-    #         create_if_not_exists (bool): 如果对话不存在,是否创建一个新的对话
-    #     Returns:
-    #         conversation (Conversation): 对话对象
+        Args:
+            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            conversation_id (str): 对话 ID, 是 uuid 格式的字符串
+            create_if_not_exists (bool): 如果对话不存在,是否创建一个新的对话
+        Returns:
+            conversation (Conversation): 对话对象
 
-    #     """
-    #     ...
+        """
+        ...
 
-    # async def get_conversations(
-    #     self,
-    #     unified_msg_origin: str | None = None,
-    #     platform_id: str | None = None,
-    # ) -> list[Conversation]:
-    #     """获取对话列表.
+    async def get_conversations(
+        self,
+        unified_msg_origin: str | None = None,
+        platform_id: str | None = None,
+    ) -> list[Conversation]:
+        """获取对话列表.
 
-    #     Args:
-    #         unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id，可选
-    #         platform_id (str): 平台 ID, 可选参数, 用于过滤对话
-    #     Returns:
-    #         conversations (List[Conversation]): 对话对象列表
+        Args:
+            unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id，可选
+            platform_id (str): 平台 ID, 可选参数, 用于过滤对话
+        Returns:
+            conversations (List[Conversation]): 对话对象列表
 
-    #     """
-    #     ...
+        """
+        ...
 
-    # async def get_filtered_conversations(
-    #     self,
-    #     page: int = 1,
-    #     page_size: int = 20,
-    #     platform_ids: list[str] | None = None,
-    #     search_query: str = "",
-    #     **kwargs,
-    # ) -> tuple[list[Conversation], int]:
-    #     """获取过滤后的对话列表.
+    async def get_filtered_conversations(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        platform_ids: list[str] | None = None,
+        search_query: str = "",
+        **kwargs,
+    ) -> tuple[list[Conversation], int]:
+        """获取过滤后的对话列表.
 
-    #     Args:
-    #         page (int): 页码, 默认为 1
-    #         page_size (int): 每页大小, 默认为 20
-    #         platform_ids (list[str]): 平台 ID 列表, 可选
-    #         search_query (str): 搜索查询字符串, 可选
-    #     Returns:
-    #         conversations (list[Conversation]): 对话对象列表
+        Args:
+            page (int): 页码, 默认为 1
+            page_size (int): 每页大小, 默认为 20
+            platform_ids (list[str]): 平台 ID 列表, 可选
+            search_query (str): 搜索查询字符串, 可选
+        Returns:
+            conversations (list[Conversation]): 对话对象列表
 
-    #     """
-    #     ...
+        """
+        ...
 
     async def update_conversation(
         self,
@@ -184,23 +187,23 @@ class BaseConversationManager:
         """
         ...
 
-    # async def add_message_pair(
-    #     self,
-    #     cid: str,
-    #     user_message: UserMessageSegment | dict,
-    #     assistant_message: AssistantMessageSegment | dict,
-    # ) -> None:
-    #     """Add a user-assistant message pair to the conversation history.
+    async def add_message_pair(
+        self,
+        cid: str,
+        user_message: UserMessageSegment | dict,
+        assistant_message: AssistantMessageSegment | dict,
+    ) -> None:
+        """Add a user-assistant message pair to the conversation history.
 
-    #     Args:
-    #         cid (str): Conversation ID
-    #         user_message (UserMessageSegment | dict): OpenAI-format user message object or dict
-    #         assistant_message (AssistantMessageSegment | dict): OpenAI-format assistant message object or dict
+        Args:
+            cid (str): Conversation ID
+            user_message (UserMessageSegment | dict): OpenAI-format user message object or dict
+            assistant_message (AssistantMessageSegment | dict): OpenAI-format assistant message object or dict
 
-    #     Raises:
-    #         Exception: If the conversation with the given ID is not found
-    #     """
-    #     ...
+        Raises:
+            Exception: If the conversation with the given ID is not found
+        """
+        ...
 
     async def get_human_readable_context(
         self,

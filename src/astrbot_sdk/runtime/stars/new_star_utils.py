@@ -5,6 +5,7 @@ from loguru import logger
 
 from ...api.event.astr_message_event import AstrMessageEvent, AstrMessageEventModel
 from ...api.star.star import StarMetadata
+from ...api.star.context import Context
 from ..rpc.client import JSONRPCClient
 from ..rpc.request_helper import RPCRequestHelper
 from ..rpc.jsonrpc import (
@@ -181,7 +182,7 @@ class ClientHandshakeHandler:
 class PluginRequestHandler:
     """Handles JSON-RPC requests from plugins calling core methods."""
 
-    def __init__(self, context: Any):
+    def __init__(self, context: Context):
         """Initialize the plugin request handler.
 
         Args:
@@ -251,7 +252,7 @@ class PluginRequestHandler:
         )
 
         # Get the registered function from context
-        func = self._context.get_registered_function(func_full_name)
+        func = self._context._registered_functions.get(func_full_name)
         if func is None:
             raise ValueError(f"Function not found: {func_full_name}")
 
