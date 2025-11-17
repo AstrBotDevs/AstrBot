@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import inspect
 import os
 import threading
 import time
@@ -233,6 +234,7 @@ class AstrBotCoreLifecycle:
         )
         for handler in handlers:
             try:
+                assert inspect.iscoroutinefunction(handler.handler)
                 logger.info(
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )

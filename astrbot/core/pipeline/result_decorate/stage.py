@@ -1,3 +1,4 @@
+import inspect
 import re
 import time
 import traceback
@@ -110,6 +111,7 @@ class ResultDecorateStage(Stage):
         )
         for handler in handlers:
             try:
+                assert inspect.iscoroutinefunction(handler.handler)
                 logger.debug(
                     f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )

@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
 
 import jsonschema
@@ -6,6 +6,8 @@ import mcp
 from deprecated import deprecated
 from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
+
+from astrbot.core.message.message_event_result import MessageEventResult
 
 from .run_context import ContextWrapper, TContext
 
@@ -38,7 +40,10 @@ class ToolSchema:
 class FunctionTool(ToolSchema, Generic[TContext]):
     """A callable tool, for function calling."""
 
-    handler: Callable[..., Awaitable[Any]] | None = None
+    handler: (
+        Callable[..., Awaitable[str | None] | AsyncGenerator[MessageEventResult, None]]
+        | None
+    ) = None
     """a callable that implements the tool's functionality. It should be an async function."""
 
     handler_module_path: str | None = None

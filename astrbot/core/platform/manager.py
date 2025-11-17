@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import traceback
 from asyncio import Queue
 
@@ -138,6 +139,7 @@ class PlatformManager:
         )
         for handler in handlers:
             try:
+                assert inspect.iscoroutinefunction(handler.handler)
                 logger.info(
                     f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )

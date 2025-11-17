@@ -71,8 +71,8 @@ class AstrBotUpdator(RepoZipUpdator):
 
     async def check_update(
         self,
-        url: str,
-        current_version: str,
+        url: str | None,
+        current_version: str | None,
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
         """检查更新"""
