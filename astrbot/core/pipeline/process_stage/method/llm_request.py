@@ -114,7 +114,9 @@ class LLMRequestSubStage(Stage):
                 if not kb_result:
                     return
                 if req.system_prompt is not None:
-                    req.system_prompt += f"{req.system_prompt}\n\n[Related Knowledge Base Results]:\n{kb_result}"
+                    req.system_prompt += (
+                        f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
+                    )
             except Exception as e:
                 logger.error(f"Error occurred while retrieving knowledge base: {e}")
         else:
