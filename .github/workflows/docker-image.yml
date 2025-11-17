@@ -2,18 +2,16 @@ name: Docker Image CI/CD
 
 on:
   push:
-    branches:
-      - master
     tags:
-      - 'v*'
+      - "v*"
   schedule:
     # Run at 00:00 UTC every day
-    - cron: '0 0 * * *'
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
   build-nightly-image:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/master') || github.event_name == 'schedule'
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
