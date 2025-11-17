@@ -32,7 +32,7 @@ from ....astr_agent_run_util import AgentRunner, run_agent
 from ....astr_agent_tool_exec import FunctionToolExecutor
 from ...context import PipelineContext, call_event_hook
 from ..stage import Stage
-from ..utils import inject_kb_context
+from ..utils import KNOWLEDGE_BASE_QUERY_TOOL, retrieve_knowledge_base
 
 
 class LLMRequestSubStage(Stage):
@@ -57,6 +57,7 @@ class LLMRequestSubStage(Stage):
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_reasoning = settings.get("display_reasoning_text", False)
+        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
 
         for bwp in self.bot_wake_prefixs:
             if self.provider_wake_prefix.startswith(bwp):
@@ -95,20 +96,31 @@ class LLMRequestSubStage(Stage):
             raise RuntimeError("无法创建新的对话。")
         return conversation
 
-    async def _apply_kb_context(
+    async def _apply_kb(
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
     ):
-        """应用知识库上下文到请求中"""
-        try:
-            await inject_kb_context(
-                umo=event.unified_msg_origin,
-                p_ctx=self.ctx,
-                req=req,
-            )
-        except Exception as e:
-            logger.error(f"调用知识库时遇到问题: {e}")
+        """Apply knowledge base context to the provider request"""
+        if not self.kb_agentic_mode:
+            if req.prompt is None:
+                return
+            try:
+                kb_result = await retrieve_knowledge_base(
+                    query=req.prompt,
+                    umo=event.unified_msg_origin,
+                    context=self.ctx.plugin_manager.context,
+                )
+                if not kb_result:
+                    return
+                if req.system_prompt is not None:
+                    req.system_prompt += f"{req.system_prompt}\n\n[Related Knowledge Base Results]:\n{kb_result}"
+            except Exception as e:
+                logger.error(f"Error occurred while retrieving knowledge base: {e}")
+        else:
+            if req.func_tool is None:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
 
     def _truncate_contexts(
         self,
@@ -356,12 +368,12 @@ class LLMRequestSubStage(Stage):
             if not req.prompt and not req.image_urls:
                 return
 
-            # apply knowledge base context
-            await self._apply_kb_context(event, req)
-
             # call event hook
             if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                 return
+
+            # apply knowledge base feature
+            await self._apply_kb(event, req)
 
             # fix contexts json str
             if isinstance(req.contexts, str):
