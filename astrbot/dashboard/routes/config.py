@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
+from typing import Any, cast
 
 from quart import request
 
@@ -26,7 +27,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_path
 from .route import Response, Route, RouteContext
 
 
-def try_cast(value: str, type_: str):
+def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
             return int(value)
@@ -133,7 +134,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
                 is_core,
             )
         else:
-            errors, post_config = validate_config(post_config, config.schema, is_core)
+            errors, post_config = validate_config(
+                post_config, cast(dict, config.schema), is_core
+            )
     except BaseException as e:
         logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
@@ -287,6 +290,7 @@ class ConfigRoute(Route):
                     .ok({"config": abconf, "metadata": CONFIG_METADATA_3_SYSTEM})
                     .__dict__
                 )
+            assert abconf_id is not None
             abconf = self.acm.confs[abconf_id]
             return (
                 Response()
@@ -598,7 +602,9 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_id").__dict__
 
         prov_mgr = self.core_lifecycle.provider_manager
-        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        provider: Provider | None = cast(
+            Provider, prov_mgr.inst_map.get(provider_id, None)
+        )
         if not provider:
             return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
 
@@ -651,9 +657,9 @@ class ConfigRoute(Route):
             if not isinstance(inst, EmbeddingProvider):
                 return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
 
-            # 初始化
-            if getattr(inst, "initialize", None):
-                await inst.initialize()
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
 
             # 获取嵌入向量维度
             vec = await inst.get_embedding("echo")
@@ -906,7 +912,7 @@ class ConfigRoute(Route):
         return {"metadata": CONFIG_METADATA_2, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

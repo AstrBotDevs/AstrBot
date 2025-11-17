@@ -486,6 +486,7 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
+        assert plugin_obj.root_dir_name is not None
         plugin_dir = os.path.join(
             self.plugin_manager.plugin_store_path,
             plugin_obj.root_dir_name,

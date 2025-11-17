@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 from contextlib import asynccontextmanager
+from typing import cast
 
 from quart import Response as QuartResponse
 from quart import g, make_response, request
@@ -233,15 +234,19 @@ class ChatRoute(Route):
             ),
         )
 
-        response = await make_response(
-            stream(),
-            {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Transfer-Encoding": "chunked",
-                "Connection": "keep-alive",
-            },
+        response = cast(
+            QuartResponse,
+            await make_response(
+                stream(),
+                {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Transfer-Encoding": "chunked",
+                    "Connection": "keep-alive",
+                },
+            ),
         )
+
         response.timeout = None  # fix SSE auto disconnect issue
         return response
 
@@ -312,7 +317,7 @@ class ChatRoute(Route):
         # remove content
         conversations_ = []
         for conv in conversations:
-            conv.history = None
+            conv.history = None  # type: ignore[attr-defined]
             conversations_.append(conv)
         return Response().ok(data=conversations_).__dict__
 
