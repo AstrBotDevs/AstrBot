@@ -1,23 +1,64 @@
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
 from astrbot.api import logger, sp
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.star.context import Context
 
-from ..context import PipelineContext
+
+@dataclass
+class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
+    name: str = "astr_kb_search"
+    description: str = (
+        "Query the knowledge base for facts or relevant context. "
+        "Use this tool when the user's question requires factual information, "
+        "definitions, background knowledge, or previously indexed content. "
+        "Only send short keywords or a concise question as the query."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "A concise keyword query for the knowledge base.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        query = kwargs.get("query", "")
+        if not query:
+            return "error: Query parameter is empty."
+        result = await retrieve_knowledge_base(
+            query=kwargs.get("query", ""),
+            umo=context.context.event.unified_msg_origin,
+            context=context.context.context,
+        )
+        if not result:
+            return "No relevant knowledge found."
+        return result
 
 
-async def inject_kb_context(
+async def retrieve_knowledge_base(
+    query: str,
     umo: str,
-    p_ctx: PipelineContext,
-    req: ProviderRequest,
-) -> None:
+    context: Context,
+) -> str | None:
     """Inject knowledge base context into the provider request
 
     Args:
         umo: Unique message object (session ID)
         p_ctx: Pipeline context
-        req: Provider request
-
     """
-    kb_mgr = p_ctx.plugin_manager.context.kb_manager
+    kb_mgr = context.kb_manager
+    config = context.get_config(umo=umo)
 
     # 1. 优先读取会话级配置
     session_config = await sp.session_get(umo, "kb_config", default={})
@@ -54,18 +95,18 @@ async def inject_kb_context(
 
         logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
     else:
-        kb_names = p_ctx.astrbot_config.get("kb_names", [])
-        top_k = p_ctx.astrbot_config.get("kb_final_top_k", 5)
+        kb_names = config.get("kb_names", [])
+        top_k = config.get("kb_final_top_k", 5)
         logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
 
-    top_k_fusion = p_ctx.astrbot_config.get("kb_fusion_top_k", 20)
+    top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
         return
 
     logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
     kb_context = await kb_mgr.retrieve(
-        query=req.prompt,
+        query=query,
         kb_names=kb_names,
         top_k_fusion=top_k_fusion,
         top_m_final=top_k,
@@ -78,4 +119,7 @@ async def inject_kb_context(
     if formatted:
         results = kb_context.get("results", [])
         logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
-        req.system_prompt = f"{formatted}\n\n{req.system_prompt or ''}"
+        return formatted
+
+
+KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()

@@ -137,6 +137,7 @@ DEFAULT_CONFIG = {
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
+    "kb_agentic_mode": False,
 }
 
 
@@ -2146,6 +2147,7 @@ CONFIG_METADATA_2 = {
             "kb_names": {"type": "list", "items": {"type": "string"}},
             "kb_fusion_top_k": {"type": "int", "default": 20},
             "kb_final_top_k": {"type": "int", "default": 5},
+            "kb_agentic_mode": {"type": "bool"},
         },
     },
 }
@@ -2240,6 +2242,11 @@ CONFIG_METADATA_3 = {
                         "description": "最终返回结果数",
                         "type": "int",
                         "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
+                    },
+                    "kb_agentic_mode": {
+                        "description": "Agentic 知识库检索",
+                        "type": "bool",
+                        "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
                     },
                 },
             },
