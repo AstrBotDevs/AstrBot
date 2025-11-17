@@ -498,7 +498,10 @@ class KBHelper:
             IOError: 如果网络请求失败
         """
         # 获取 Tavily API 密钥
-        tavily_keys = self.prov_mgr.provider_settings.get("websearch_tavily_key", [])
+        config = self.prov_mgr.acm.default_conf
+        tavily_keys = config.get("provider_settings", {}).get(
+            "websearch_tavily_key", []
+        )
         if not tavily_keys:
             raise ValueError(
                 "Error: Tavily API key is not configured in provider_settings."
