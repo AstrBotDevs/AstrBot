@@ -57,7 +57,7 @@
     </v-card>
 
     <!-- 上传对话框 -->
-    <v-dialog v-model="showUploadDialog" max-width="600px" persistent @after-enter="initUploadSettings">
+    <v-dialog v-model="showUploadDialog" max-width="650px" persistent @after-enter="initUploadSettings">
       <v-card>
         <v-card-title class="pa-4 d-flex align-center">
           <span class="text-h5">{{ t('upload.title') }}</span>
@@ -75,7 +75,7 @@
           </v-tab>
         </v-tabs>
 
-        <v-card-text class="pa-6">
+        <v-card-text class="pa-6 pt-2">
           <v-window v-model="uploadMode">
             <!-- 文件上传 -->
             <v-window-item value="file">
@@ -123,20 +123,17 @@
                 <v-alert :type="tavilyConfigStatus === 'error' ? 'error' : 'info'" variant="tonal" density="compact">
                   <div class="d-flex align-center justify-space-between">
                     <span>
-                      {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置网页搜索提供商' }}
+                      {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置 Tavily Key' }}
                     </span>
                     <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
-                      快速配置
+                      配置
                     </v-btn>
                   </div>
                 </v-alert>
               </div>
 
-              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable
+              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable :disabled="tavilyConfigStatus === 'not_configured'"
                 autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
-              <v-alert type="warning" variant="tonal" density="compact" class="mt-4">
-                {{ t('upload.urlWarning') }}
-              </v-alert>
             </v-window-item>
           </v-window>
 
