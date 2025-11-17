@@ -6,11 +6,14 @@ on:
       - master
     tags:
       - 'v*'
+  schedule:
+    # Run at 00:00 UTC every day
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
   build-nightly-image:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/master')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/master') || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
@@ -22,6 +25,25 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Check for new commits today
+        if: github.event_name == 'schedule'
+        id: check-commits
+        run: |
+          # Get commits from the last 24 hours
+          commits=$(git log --since="24 hours ago" --oneline)
+          if [ -z "$commits" ]; then
+            echo "No commits in the last 24 hours, skipping build"
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found commits in the last 24 hours:"
+            echo "$commits"
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Exit if no commits
+        if: github.event_name == 'schedule' && steps.check-commits.outputs.has_commits == 'false'
+        run: exit 0
 
       - name: Build Dashboard
         run: |
@@ -38,7 +60,9 @@ jobs:
         id: test-meta
         run: |
           short_sha=$(echo "${GITHUB_SHA}" | cut -c1-12)
+          build_date=$(date +%Y%m%d)
           echo "short_sha=$short_sha" >> $GITHUB_OUTPUT
+          echo "build_date=$build_date" >> $GITHUB_OUTPUT
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v3
@@ -64,11 +88,11 @@ jobs:
         id: test-tags
         run: |
           TAGS="${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-latest
-          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.short_sha }}"
+          ${{ env.DOCKER_HUB_USERNAME }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
           if [ "${{ env.HAS_GHCR_TOKEN }}" = "true" ]; then
             TAGS="$TAGS
           ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-latest
-          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.short_sha }}"
+          ghcr.io/${{ env.GHCR_OWNER }}/astrbot:nightly-${{ steps.test-meta.outputs.build_date }}-${{ steps.test-meta.outputs.short_sha }}"
           fi
           echo "tags<<EOF" >> $GITHUB_OUTPUT
           echo "$TAGS" >> $GITHUB_OUTPUT
