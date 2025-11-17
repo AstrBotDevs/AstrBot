@@ -3,7 +3,7 @@ import urllib.parse
 from dataclasses import dataclass
 
 from aiohttp import ClientSession
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1; rv:84.0) Gecko/20100101 Firefox/84.0",
@@ -30,7 +30,7 @@ USER_AGENTS = [
 @dataclass
 class SearchResult:
     title: str
-    url: str
+    url: str | Tag
     snippet: str
 
     def __str__(self) -> str:
@@ -45,13 +45,13 @@ class SearchEngine:
         self.page = 1
         self.headers = HEADERS
 
-    def _set_selector(self, selector: str) -> None:
+    def _set_selector(self, selector: str) -> str:
         raise NotImplementedError
 
-    def _get_next_page(self):
+    def _get_next_page(self, query: str):
         raise NotImplementedError
 
-    async def _get_html(self, url: str, data: dict = None) -> str:
+    async def _get_html(self, url: str, data: dict | None = None) -> str:
         headers = self.headers
         headers["Referer"] = url
         headers["User-Agent"] = random.choice(USER_AGENTS)
@@ -92,9 +92,12 @@ class SearchEngine:
             links = soup.select(self._set_selector("links"))
             results = []
             for link in links:
-                title = self.tidy_text(
-                    link.select_one(self._set_selector("title")).text,
-                )
+                # Safely get the title text (select_one may return None)
+                title_elem = link.select_one(self._set_selector("title"))
+                title = ""
+                if title_elem is not None:
+                    title = self.tidy_text(title_elem.get_text())
+
                 url = link.select_one(self._set_selector("url"))
                 snippet = ""
                 if title and url:

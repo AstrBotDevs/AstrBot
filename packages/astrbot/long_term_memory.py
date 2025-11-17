@@ -172,8 +172,9 @@ class LongTermMemory:
         if event.unified_msg_origin not in self.session_chats:
             return
 
-        if event.get_result() and event.get_result().is_llm_result():
-            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
+        result = event.get_result()
+        if result is not None and result.is_llm_result():
+            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {result.get_plain_text()}"
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)
