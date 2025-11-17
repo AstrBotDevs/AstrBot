@@ -50,6 +50,10 @@
     "maxSize": "最大文件大小: 128MB",
     "chunkSettings": "分块设置",
     "batchSettings": "批处理设置",
+    "cleaningSettings": "清洗设置",
+    "enableCleaning": "启用内容清洗",
+    "cleaningProvider": "清洗服务提供商",
+    "cleaningProviderHint": "选择一个 LLM 服务商来对提取的网页内容进行清洗和总结",
     "chunkSize": "分块大小",
     "chunkSizeHint": "每个文本块的字符数 (默认: 512)",
     "chunkOverlap": "分块重叠",
@@ -62,7 +66,13 @@
     "maxRetriesHint": "上传失败任务的重试次数 (默认: 3)",
     "cancel": "取消",
     "submit": "上传",
-    "fileRequired": "请选择要上传的文件"
+    "fileRequired": "请选择要上传的文件",
+    "fileUpload": "文件上传",
+    "fromUrl": "从 URL",
+    "urlPlaceholder": "请输入要提取内容的网页 URL",
+    "urlRequired": "请输入 URL",
+    "urlHint": "将自动从目标 URL 提取主要内容作为文档。目前支持 {supported} 页面，请确保目标网页允许爬虫访问。",
+    "beta": "测试版"
   },
   "retrieval": {
     "title": "知识库检索",

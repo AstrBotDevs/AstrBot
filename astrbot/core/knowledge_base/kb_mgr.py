@@ -8,7 +8,7 @@ from astrbot.core.provider.manager import ProviderManager
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
-from .models import KnowledgeBase
+from .models import KBDocument, KnowledgeBase
 from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
@@ -284,3 +284,47 @@ class KnowledgeBaseManager:
                 await self.kb_db.close()
             except Exception as e:
                 logger.error(f"关闭知识库元数据数据库失败: {e}")
+
+    async def upload_from_url(
+        self,
+        kb_id: str,
+        url: str,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> KBDocument:
+        """从 URL 上传文档到指定的知识库
+
+        Args:
+            kb_id: 知识库 ID
+            url: 要提取内容的网页 URL
+            chunk_size: 文本块大小
+            chunk_overlap: 文本块重叠大小
+            batch_size: 批处理大小
+            tasks_limit: 并发任务限制
+            max_retries: 最大重试次数
+            progress_callback: 进度回调函数
+
+        Returns:
+            KBDocument: 上传的文档对象
+
+        Raises:
+            ValueError: 如果知识库不存在或 URL 为空
+            IOError: 如果网络请求失败
+        """
+        kb_helper = await self.get_kb(kb_id)
+        if not kb_helper:
+            raise ValueError(f"Knowledge base with id {kb_id} not found.")
+
+        return await kb_helper.upload_from_url(
+            url=url,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+        )

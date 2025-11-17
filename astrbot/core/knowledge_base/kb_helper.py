@@ -1,4 +1,7 @@
+import asyncio
 import json
+import re
+import time
 import uuid
 from pathlib import Path
 
@@ -8,12 +11,98 @@ from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.core.provider.provider import (
+    EmbeddingProvider,
+    RerankProvider,
+)
+from astrbot.core.provider.provider import (
+    Provider as LLMProvider,
+)
 
 from .chunking.base import BaseChunker
+from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
+from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
+from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
+
+
+class RateLimiter:
+    """一个简单的速率限制器"""
+
+    def __init__(self, max_rpm: int):
+        self.max_per_minute = max_rpm
+        self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
+        self.last_call_time = 0
+
+    async def __aenter__(self):
+        if self.interval == 0:
+            return
+
+        now = time.monotonic()
+        elapsed = now - self.last_call_time
+
+        if elapsed < self.interval:
+            await asyncio.sleep(self.interval - elapsed)
+
+        self.last_call_time = time.monotonic()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+async def _repair_and_translate_chunk_with_retry(
+    chunk: str,
+    repair_llm_service: LLMProvider,
+    rate_limiter: RateLimiter,
+    max_retries: int = 2,
+) -> list[str]:
+    """
+    Repairs, translates, and optionally re-chunks a single text chunk using the small LLM, with rate limiting.
+    """
+    # 为了防止 LLM 上下文污染，在 user_prompt 中也加入明确的指令
+    user_prompt = f"""IGNORE ALL PREVIOUS INSTRUCTIONS. Your ONLY task is to process the following text chunk according to the system prompt provided.
+
+Text chunk to process:
+---
+{chunk}
+---
+"""
+    for attempt in range(max_retries + 1):
+        try:
+            async with rate_limiter:
+                response = await repair_llm_service.text_chat(
+                    prompt=user_prompt, system_prompt=TEXT_REPAIR_SYSTEM_PROMPT
+                )
+
+            llm_output = response.completion_text
+
+            if "<discard_chunk />" in llm_output:
+                return []  # Signal to discard this chunk
+
+            # More robust regex to handle potential LLM formatting errors (spaces, newlines in tags)
+            matches = re.findall(
+                r"<\s*repaired_text\s*>\s*(.*?)\s*<\s*/\s*repaired_text\s*>",
+                llm_output,
+                re.DOTALL,
+            )
+
+            if matches:
+                # Further cleaning to ensure no empty strings are returned
+                return [m.strip() for m in matches if m.strip()]
+            else:
+                # If no valid tags and not explicitly discarded, discard it to be safe.
+                return []
+        except Exception as e:
+            logger.warning(
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
+            )
+
+    logger.error(
+        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
+    )
+    return [chunk]
 
 
 class KBHelper:
@@ -100,7 +189,7 @@ class KBHelper:
     async def upload_document(
         self,
         file_name: str,
-        file_content: bytes,
+        file_content: bytes | None,
         file_type: str,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
@@ -108,6 +197,7 @@ class KBHelper:
         tasks_limit: int = 3,
         max_retries: int = 3,
         progress_callback=None,
+        pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
 
@@ -130,46 +220,63 @@ class KBHelper:
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
+        file_size = 0
 
         # file_path = self.kb_files_dir / f"{doc_id}.{file_type}"
         # async with aiofiles.open(file_path, "wb") as f:
         #     await f.write(file_content)
 
         try:
-            # 阶段1: 解析文档
-            if progress_callback:
-                await progress_callback("parsing", 0, 100)
-
-            parser = await select_parser(f".{file_type}")
-            parse_result = await parser.parse(file_content, file_name)
-            text_content = parse_result.text
-            media_items = parse_result.media
-
-            if progress_callback:
-                await progress_callback("parsing", 100, 100)
-
-            # 保存媒体文件
+            chunks_text = []
             saved_media = []
-            for media_item in media_items:
-                media = await self._save_media(
-                    doc_id=doc_id,
-                    media_type=media_item.media_type,
-                    file_name=media_item.file_name,
-                    content=media_item.content,
-                    mime_type=media_item.mime_type,
+
+            if pre_chunked_text is not None:
+                # 如果提供了预分块文本，直接使用
+                chunks_text = pre_chunked_text
+                file_size = sum(len(chunk) for chunk in chunks_text)
+                logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
+            else:
+                # 否则，执行标准的文件解析和分块流程
+                if file_content is None:
+                    raise ValueError(
+                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
+                    )
+
+                file_size = len(file_content)
+
+                # 阶段1: 解析文档
+                if progress_callback:
+                    await progress_callback("parsing", 0, 100)
+
+                parser = await select_parser(f".{file_type}")
+                parse_result = await parser.parse(file_content, file_name)
+                text_content = parse_result.text
+                media_items = parse_result.media
+
+                if progress_callback:
+                    await progress_callback("parsing", 100, 100)
+
+                # 保存媒体文件
+                for media_item in media_items:
+                    media = await self._save_media(
+                        doc_id=doc_id,
+                        media_type=media_item.media_type,
+                        file_name=media_item.file_name,
+                        content=media_item.content,
+                        mime_type=media_item.mime_type,
+                    )
+                    saved_media.append(media)
+                    media_paths.append(Path(media.file_path))
+
+                # 阶段2: 分块
+                if progress_callback:
+                    await progress_callback("chunking", 0, 100)
+
+                chunks_text = await self.chunker.chunk(
+                    text_content,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
                 )
-                saved_media.append(media)
-                media_paths.append(Path(media.file_path))
-
-            # 阶段2: 分块
-            if progress_callback:
-                await progress_callback("chunking", 0, 100)
-
-            chunks_text = await self.chunker.chunk(
-                text_content,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
             contents = []
             metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
@@ -205,7 +312,7 @@ class KBHelper:
                 kb_id=self.kb.kb_id,
                 doc_name=file_name,
                 file_type=file_type,
-                file_size=len(file_content),
+                file_size=file_size,
                 # file_path=str(file_path),
                 file_path="",
                 chunk_count=len(chunks_text),
@@ -359,3 +466,177 @@ class KBHelper:
         )
 
         return media
+
+    async def upload_from_url(
+        self,
+        url: str,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+        enable_cleaning: bool = False,
+        cleaning_provider_id: str | None = None,
+    ) -> KBDocument:
+        """从 URL 上传并处理文档（带原子性保证和失败清理）
+        Args:
+            url: 要提取内容的网页 URL
+            chunk_size: 文本块大小
+            chunk_overlap: 文本块重叠大小
+            batch_size: 批处理大小
+            tasks_limit: 并发任务限制
+            max_retries: 最大重试次数
+            progress_callback: 进度回调函数，接收参数 (stage, current, total)
+                - stage: 当前阶段 ('extracting', 'cleaning', 'parsing', 'chunking', 'embedding')
+                - current: 当前进度
+                - total: 总数
+        Returns:
+            KBDocument: 上传的文档对象
+        Raises:
+            ValueError: 如果 URL 为空或无法提取内容
+            IOError: 如果网络请求失败
+        """
+        # 获取 Tavily API 密钥
+        config = self.prov_mgr.acm.default_conf
+        tavily_keys = config.get("provider_settings", {}).get(
+            "websearch_tavily_key", []
+        )
+        if not tavily_keys:
+            raise ValueError(
+                "Error: Tavily API key is not configured in provider_settings."
+            )
+
+        # 阶段1: 从 URL 提取内容
+        if progress_callback:
+            await progress_callback("extracting", 0, 100)
+
+        try:
+            text_content = await extract_text_from_url(url, tavily_keys)
+        except Exception as e:
+            logger.error(f"Failed to extract content from URL {url}: {e}")
+            raise OSError(f"Failed to extract content from URL {url}: {e}") from e
+
+        if not text_content:
+            raise ValueError(f"No content extracted from URL: {url}")
+
+        if progress_callback:
+            await progress_callback("extracting", 100, 100)
+
+        # 阶段2: (可选)清洗内容并分块
+        final_chunks = await self._clean_and_rechunk_content(
+            content=text_content,
+            url=url,
+            progress_callback=progress_callback,
+            enable_cleaning=enable_cleaning,
+            cleaning_provider_id=cleaning_provider_id,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
+        if enable_cleaning and not final_chunks:
+            raise ValueError(
+                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
+            )
+
+        # 创建一个虚拟文件名
+        file_name = url.split("/")[-1] or f"document_from_{url}"
+        if not Path(file_name).suffix:
+            file_name += ".url"
+
+        # 复用现有的 upload_document 方法，但传入预分块文本
+        return await self.upload_document(
+            file_name=file_name,
+            file_content=None,
+            file_type="url",  # 使用 'url' 作为特殊文件类型
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+            pre_chunked_text=final_chunks,
+        )
+
+    async def _clean_and_rechunk_content(
+        self,
+        content: str,
+        url: str,
+        progress_callback=None,
+        enable_cleaning: bool = False,
+        cleaning_provider_id: str | None = None,
+        repair_max_rpm: int = 60,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+    ) -> list[str]:
+        """
+        对从 URL 获取的内容进行清洗、修复、翻译和重新分块。
+        """
+        if not enable_cleaning:
+            # 如果不启用清洗，则使用从前端传递的参数进行分块
+            logger.info(
+                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+            )
+            return await self.chunker.chunk(
+                content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
+
+        if not cleaning_provider_id:
+            logger.warning(
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
+            )
+            return await self.chunker.chunk(content)
+
+        if progress_callback:
+            await progress_callback("cleaning", 0, 100)
+
+        try:
+            # 获取指定的 LLM Provider
+            llm_provider = await self.prov_mgr.get_provider_by_id(cleaning_provider_id)
+            if not llm_provider or not isinstance(llm_provider, LLMProvider):
+                raise ValueError(
+                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确"
+                )
+
+            # 初步分块
+            # 优化分隔符，优先按段落分割，以获得更高质量的文本块
+            text_splitter = RecursiveCharacterChunker(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
+            )
+            initial_chunks = await text_splitter.chunk(content)
+            logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
+
+            # 并发处理所有块
+            rate_limiter = RateLimiter(repair_max_rpm)
+            tasks = [
+                _repair_and_translate_chunk_with_retry(
+                    chunk, llm_provider, rate_limiter
+                )
+                for chunk in initial_chunks
+            ]
+
+            repaired_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            final_chunks = []
+            for i, result in enumerate(repaired_results):
+                if isinstance(result, Exception):
+                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
+                    final_chunks.append(initial_chunks[i])
+                elif isinstance(result, list):
+                    final_chunks.extend(result)
+
+            logger.info(
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
+            )
+
+            if progress_callback:
+                await progress_callback("cleaning", 100, 100)
+
+            return final_chunks
+
+        except Exception as e:
+            logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
+            # 清洗失败，返回默认分块结果，保证流程不中断
+            return await self.chunker.chunk(content)
