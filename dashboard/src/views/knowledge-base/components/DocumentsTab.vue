@@ -118,6 +118,20 @@
 
             <!-- URL上传 -->
             <v-window-item value="url" class="pt-2">
+              <!-- Tavily Key 快速配置 -->
+              <div v-if="tavilyConfigStatus === 'not_configured' || tavilyConfigStatus === 'error'" class="mb-4">
+                <v-alert :type="tavilyConfigStatus === 'error' ? 'error' : 'info'" variant="tonal" density="compact">
+                  <div class="d-flex align-center justify-space-between">
+                    <span>
+                      {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置网页搜索提供商' }}
+                    </span>
+                    <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
+                      快速配置
+                    </v-btn>
+                  </div>
+                </v-alert>
+              </div>
+
               <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable
                 autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
               <v-alert type="warning" variant="tonal" density="compact" class="mt-4">
@@ -225,10 +239,14 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <!-- Tavily Key 配置对话框 -->
+    <TavilyKeyDialog v-model="showTavilyDialog" @success="onTavilyKeySet" />
   </div>
 </template>
 
 <script setup lang="ts">
+import TavilyKeyDialog from './TavilyKeyDialog.vue'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
@@ -261,6 +279,8 @@ const uploadUrl = ref('')
 const llmProviders = ref<any[]>([])
 const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
+const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
+const showTavilyDialog = ref(false)
 
 const snackbar = ref({
   show: false,
@@ -752,9 +772,39 @@ const loadLlmProviders = async () => {
   }
 }
 
+// 检查Tavily Key配置
+const checkTavilyConfig = async () => {
+  tavilyConfigStatus.value = 'loading'
+  try {
+    const response = await axios.get('/api/config/abconf', {
+      params: { id: 'default' }
+    })
+    if (response.data.status === 'ok') {
+      const config = response.data.data.config
+      const tavilyKeys = config?.provider_settings?.websearch_tavily_key
+      if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
+        tavilyConfigStatus.value = 'configured'
+      } else {
+        tavilyConfigStatus.value = 'not_configured'
+      }
+    } else {
+      tavilyConfigStatus.value = 'error'
+    }
+  } catch (error) {
+    console.warn('Failed to check Tavily key config:', error)
+    tavilyConfigStatus.value = 'error'
+  }
+}
+
+const onTavilyKeySet = () => {
+  showSnackbar('Tavily API Key 配置成功', 'success')
+  checkTavilyConfig()
+}
+
 onMounted(() => {
   loadDocuments()
   loadLlmProviders()
+  checkTavilyConfig()
 })
 
 onUnmounted(() => {
