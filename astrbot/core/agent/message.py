@@ -76,7 +76,7 @@ class ImageURLPart(ContentPart):
         """The ID of the image, to allow LLMs to distinguish different images."""
 
     type: str = "image_url"
-    image_url: str
+    image_url: ImageURL
 
 
 class AudioURLPart(ContentPart):
