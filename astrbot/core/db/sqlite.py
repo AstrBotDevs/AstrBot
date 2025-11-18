@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import typing as T
+import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,10 +13,10 @@ from astrbot.core.db.po import (
     ConversationV2,
     Persona,
     PlatformMessageHistory,
+    PlatformSession,
     PlatformStat,
     Preference,
     SQLModel,
-    WebChatSession,
 )
 from astrbot.core.db.po import (
     Platform as DeprecatedPlatformStat,
@@ -712,25 +713,32 @@ class SQLiteDatabase(BaseDatabase):
         return result
 
     # ====
-    # WebChat Session Management
+    # Platform Session Management
     # ====
 
-    async def create_webchat_session(
+    async def create_platform_session(
         self,
         creator: str,
+        platform_id: str = "webchat",
         session_id: str | None = None,
+        display_name: str | None = None,
         is_group: int = 0,
-    ) -> WebChatSession:
-        """Create a new WebChat session."""
+    ) -> PlatformSession:
+        """Create a new Platform session."""
         kwargs = {}
         if session_id:
             kwargs["session_id"] = session_id
+        else:
+            # Auto-generate session_id with platform_id prefix
+            kwargs["session_id"] = f"{platform_id}_{uuid.uuid4()}"
 
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                new_session = WebChatSession(
+                new_session = PlatformSession(
                     creator=creator,
+                    platform_id=platform_id,
+                    display_name=display_name,
                     is_group=is_group,
                     **kwargs,
                 )
@@ -739,57 +747,68 @@ class SQLiteDatabase(BaseDatabase):
                 await session.refresh(new_session)
                 return new_session
 
-    async def get_webchat_session_by_id(self, session_id: str) -> WebChatSession | None:
-        """Get a WebChat session by its ID."""
+    async def get_platform_session_by_id(
+        self, session_id: str
+    ) -> PlatformSession | None:
+        """Get a Platform session by its ID."""
         async with self.get_db() as session:
             session: AsyncSession
-            query = select(WebChatSession).where(
-                WebChatSession.session_id == session_id,
+            query = select(PlatformSession).where(
+                PlatformSession.session_id == session_id,
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def get_webchat_sessions_by_creator(
+    async def get_platform_sessions_by_creator(
         self,
         creator: str,
+        platform_id: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[WebChatSession]:
-        """Get all WebChat sessions for a specific creator (username)."""
+    ) -> list[PlatformSession]:
+        """Get all Platform sessions for a specific creator (username) and optionally platform."""
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
+            query = select(PlatformSession).where(PlatformSession.creator == creator)
+
+            if platform_id:
+                query = query.where(PlatformSession.platform_id == platform_id)
+
             query = (
-                select(WebChatSession)
-                .where(WebChatSession.creator == creator)
-                .order_by(desc(WebChatSession.updated_at))
+                query.order_by(desc(PlatformSession.updated_at))
                 .offset(offset)
                 .limit(page_size)
             )
             result = await session.execute(query)
             return list(result.scalars().all())
 
-    async def update_webchat_session(
+    async def update_platform_session(
         self,
         session_id: str,
+        display_name: str | None = None,
     ) -> None:
-        """Update a WebChat session's updated_at timestamp."""
+        """Update a Platform session's updated_at timestamp and optionally display_name."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
+                values = {"updated_at": datetime.now()}
+                if display_name is not None:
+                    values["display_name"] = display_name
+
                 await session.execute(
-                    update(WebChatSession)
-                    .where(WebChatSession.session_id == session_id)
-                    .values(updated_at=datetime.now()),
+                    update(PlatformSession)
+                    .where(PlatformSession.session_id == session_id)
+                    .values(**values),
                 )
 
-    async def delete_webchat_session(self, session_id: str) -> None:
-        """Delete a WebChat session by its ID."""
+    async def delete_platform_session(self, session_id: str) -> None:
+        """Delete a Platform session by its ID."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(WebChatSession).where(
-                        WebChatSession.session_id == session_id,
+                    delete(PlatformSession).where(
+                        PlatformSession.session_id == session_id,
                     ),
                 )

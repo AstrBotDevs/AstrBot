@@ -13,10 +13,10 @@ from astrbot.core.db.po import (
     ConversationV2,
     Persona,
     PlatformMessageHistory,
+    PlatformSession,
     PlatformStat,
     Preference,
     Stats,
-    WebChatSession,
 )
 
 
@@ -316,43 +316,49 @@ class BaseDatabase(abc.ABC):
         ...
 
     # ====
-    # WebChat Session Management
+    # Platform Session Management
     # ====
 
     @abc.abstractmethod
-    async def create_webchat_session(
+    async def create_platform_session(
         self,
         creator: str,
+        platform_id: str = "webchat",
         session_id: str | None = None,
+        display_name: str | None = None,
         is_group: int = 0,
-    ) -> WebChatSession:
-        """Create a new WebChat session."""
+    ) -> PlatformSession:
+        """Create a new Platform session."""
         ...
 
     @abc.abstractmethod
-    async def get_webchat_session_by_id(self, session_id: str) -> WebChatSession | None:
-        """Get a WebChat session by its ID."""
+    async def get_platform_session_by_id(
+        self, session_id: str
+    ) -> PlatformSession | None:
+        """Get a Platform session by its ID."""
         ...
 
     @abc.abstractmethod
-    async def get_webchat_sessions_by_creator(
+    async def get_platform_sessions_by_creator(
         self,
         creator: str,
+        platform_id: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[WebChatSession]:
-        """Get all WebChat sessions for a specific creator (username)."""
+    ) -> list[PlatformSession]:
+        """Get all Platform sessions for a specific creator (username) and optionally platform."""
         ...
 
     @abc.abstractmethod
-    async def update_webchat_session(
+    async def update_platform_session(
         self,
         session_id: str,
+        display_name: str | None = None,
     ) -> None:
-        """Update a WebChat session's updated_at timestamp."""
+        """Update a Platform session's updated_at timestamp and optionally display_name."""
         ...
 
     @abc.abstractmethod
-    async def delete_webchat_session(self, session_id: str) -> None:
-        """Delete a WebChat session by its ID."""
+    async def delete_platform_session(self, session_id: str) -> None:
+        """Delete a Platform session by its ID."""
         ...

@@ -1,6 +1,12 @@
 """Migration script from version 4.6 to 4.7.
 
-This migration creates WebChat sessions from existing platform_message_history records.
+This migration creates PlatformSession from existing platform_message_history records.
+
+Changes:
+- Creates platform_sessions table
+- Adds platform_id field (default: 'webchat')
+- Adds display_name field
+- Session_id format: {platform_id}_{uuid}
 """
 
 from sqlalchemy import func, select
@@ -12,10 +18,10 @@ from astrbot.core.db.po import PlatformMessageHistory
 
 
 async def migrate_46_to_47(db_helper: BaseDatabase):
-    """Migrate WebChat data to the new session table.
+    """Create PlatformSession records from platform_message_history.
 
     This migration extracts all unique user_ids from platform_message_history
-    where platform_id='webchat' and creates corresponding WebChatSession records.
+    where platform_id='webchat' and creates corresponding PlatformSession records.
     """
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
@@ -28,7 +34,7 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
 
     try:
         async with db_helper.get_db() as session:
-            # 1. 查询所有 webchat 的唯一 user_id 以及它们的最早和最新消息时间
+            # 从 platform_message_history 创建 PlatformSession
             query = (
                 select(
                     col(PlatformMessageHistory.user_id),
@@ -51,7 +57,7 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
 
             logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
 
-            # 2. 为每个 user_id 创建 WebChatSession 记录
+            # 为每个 user_id 创建 PlatformSession 记录
             migrated_count = 0
             skipped_count = 0
 
@@ -60,27 +66,25 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
                 session_id = user_id
 
                 # sender_name 通常是 username，但可能为 None
-                # 从第一条消息中提取 creator
                 creator = sender_name if sender_name else "guest"
 
                 # 检查是否已经存在该会话
-                existing_session = await db_helper.get_webchat_session_by_id(session_id)
+                existing_session = await db_helper.get_platform_session_by_id(
+                    session_id
+                )
                 if existing_session:
                     logger.debug(f"会话 {session_id} 已存在，跳过")
                     skipped_count += 1
                     continue
 
-                # 创建新的 WebChatSession
+                # 创建新的 PlatformSession
                 try:
-                    await db_helper.create_webchat_session(
+                    await db_helper.create_platform_session(
                         creator=creator,
                         session_id=session_id,
+                        platform_id="webchat",
                         is_group=0,
                     )
-
-                    # 更新时间戳以匹配历史记录
-                    # 注意：这里我们需要直接更新数据库，因为 create 方法会设置当前时间
-                    # 但我们希望保留原始的创建和更新时间
 
                     migrated_count += 1
 

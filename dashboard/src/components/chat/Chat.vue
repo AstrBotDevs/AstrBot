@@ -59,7 +59,7 @@
                                 <v-list-item v-for="(session, i) in sessions" :key="session.session_id" :value="session.session_id"
                                     rounded="lg" class="session-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="session-title">
-                                        {{ tm('conversation.newConversation') }}
+                                        {{ session.display_name || tm('conversation.newConversation') }}
                                     </v-list-item-title>
                                     <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
                                         {{ formatDate(session.updated_at) }}
@@ -67,6 +67,9 @@
 
                                     <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
                                         <div class="session-actions">
+                                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                                                class="edit-session-btn" color="primary"
+                                                @click.stop="editSessionDisplayName(session)" />
                                             <v-btn icon="mdi-delete" size="x-small" variant="text"
                                                 class="delete-session-btn" color="error"
                                                 @click.stop="deleteSession(session.session_id)" />
@@ -228,6 +231,34 @@
             </v-card-text>
         </v-card>
     </v-dialog>
+
+    <!-- 编辑会话名称对话框 -->
+    <v-dialog v-model="editDisplayNameDialog" max-width="500px">
+        <v-card>
+            <v-card-title class="d-flex justify-space-between align-center pa-4">
+                <span>{{ tm('conversation.editDisplayName') }}</span>
+                <v-btn icon="mdi-close" variant="text" @click="editDisplayNameDialog = false" />
+            </v-card-title>
+            <v-card-text class="pa-4">
+                <v-text-field
+                    v-model="editingDisplayName"
+                    :label="tm('conversation.displayName')"
+                    variant="outlined"
+                    density="comfortable"
+                    @keydown.enter="saveDisplayName"
+                />
+            </v-card-text>
+            <v-card-actions class="pa-4">
+                <v-spacer />
+                <v-btn variant="text" @click="editDisplayNameDialog = false">
+                    {{ t('core.common.cancel') }}
+                </v-btn>
+                <v-btn color="primary" variant="flat" @click="saveDisplayName">
+                    {{ t('core.common.save') }}
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
 </template>
 
 <script>
@@ -272,7 +303,7 @@ export default {
         return {
             prompt: '',
             messages: [],
-            sessions: [], // WebChat 会话列表
+            sessions: [], // Platform 会话列表
             selectedSessions: [], // 当前选中的会话
             currSessionId: '', // 当前会话ID
             stagedImagesName: [], // 用于存储图片文件名的数组
@@ -318,6 +349,11 @@ export default {
             // 手机端相关变量
             isMobile: false,
             mobileMenuOpen: false,
+
+            // 编辑会话名称相关变量
+            editDisplayNameDialog: false,
+            editingDisplayName: '',
+            editingSession: null,
         }
     },
 
@@ -1095,6 +1131,37 @@ export default {
             });
             this.mediaCache = {};
         },
+
+        // 编辑会话显示名称
+        editSessionDisplayName(session) {
+            this.editingSession = session;
+            this.editingDisplayName = session.display_name || '';
+            this.editDisplayNameDialog = true;
+        },
+
+        // 保存会话显示名称
+        async saveDisplayName() {
+            if (!this.editingSession) return;
+
+            try {
+                await axios.post('/api/chat/update_session_display_name', {
+                    session_id: this.editingSession.session_id,
+                    display_name: this.editingDisplayName,
+                });
+
+                // 更新本地数据
+                this.editingSession.display_name = this.editingDisplayName;
+
+                // 刷新会话列表
+                this.getSessions();
+
+                this.editDisplayNameDialog = false;
+                useToast().success(this.tm('conversation.displayNameUpdated'), { timeout: 2000 });
+            } catch (err) {
+                console.error('更新会话名称失败:', err);
+                useToast().error(this.tm('conversation.displayNameUpdateFailed'), { timeout: 3000 });
+            }
+        },
     },
 }
 </script>
@@ -1368,14 +1435,31 @@ export default {
     transition: all 0.2s ease;
 }
 
+.session-item:hover .session-actions {
+    opacity: 1;
+    visibility: visible;
+}
+
+.session-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+}
+
 .edit-title-btn,
-.delete-conversation-btn {
+.delete-conversation-btn,
+.edit-session-btn,
+.delete-session-btn {
     opacity: 0.7;
     transition: opacity 0.2s ease;
 }
 
 .edit-title-btn:hover,
-.delete-conversation-btn:hover {
+.delete-conversation-btn:hover,
+.edit-session-btn:hover,
+.delete-session-btn:hover {
     opacity: 1;
 }
 
