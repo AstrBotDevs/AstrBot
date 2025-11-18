@@ -18,11 +18,11 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
     where platform_id='webchat' and creates corresponding WebChatSession records.
     """
     # 检查是否已经完成迁移
-    # migration_done = await db_helper.get_preference(
-    #     "global", "global", "migration_done_v47"
-    # )
-    # if migration_done:
-    #     return
+    migration_done = await db_helper.get_preference(
+        "global", "global", "migration_done_v47"
+    )
+    if migration_done:
+        return
 
     logger.info("开始执行数据库迁移（4.6 -> 4.7）...")
 
