@@ -15,6 +15,7 @@ from astrbot.core.db.po import (
     PlatformStat,
     Preference,
     SQLModel,
+    WebChatSession,
 )
 from astrbot.core.db.po import (
     Platform as DeprecatedPlatformStat,
@@ -709,3 +710,86 @@ class SQLiteDatabase(BaseDatabase):
         t.start()
         t.join()
         return result
+
+    # ====
+    # WebChat Session Management
+    # ====
+
+    async def create_webchat_session(
+        self,
+        creator: str,
+        session_id: str | None = None,
+        is_group: int = 0,
+    ) -> WebChatSession:
+        """Create a new WebChat session."""
+        kwargs = {}
+        if session_id:
+            kwargs["session_id"] = session_id
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_session = WebChatSession(
+                    creator=creator,
+                    is_group=is_group,
+                    **kwargs,
+                )
+                session.add(new_session)
+                await session.flush()
+                await session.refresh(new_session)
+                return new_session
+
+    async def get_webchat_session_by_id(self, session_id: str) -> WebChatSession | None:
+        """Get a WebChat session by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(WebChatSession).where(
+                WebChatSession.session_id == session_id,
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_webchat_sessions_by_creator(
+        self,
+        creator: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[WebChatSession]:
+        """Get all WebChat sessions for a specific creator (username)."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+            query = (
+                select(WebChatSession)
+                .where(WebChatSession.creator == creator)
+                .order_by(desc(WebChatSession.updated_at))
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def update_webchat_session(
+        self,
+        session_id: str,
+    ) -> None:
+        """Update a WebChat session's updated_at timestamp."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(WebChatSession)
+                    .where(WebChatSession.session_id == session_id)
+                    .values(updated_at=datetime.now()),
+                )
+
+    async def delete_webchat_session(self, session_id: str) -> None:
+        """Delete a WebChat session by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(WebChatSession).where(
+                        WebChatSession.session_id == session_id,
+                    ),
+                )
