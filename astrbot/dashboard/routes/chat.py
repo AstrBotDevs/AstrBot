@@ -39,6 +39,10 @@ class ChatRoute(Route):
             "/chat/sessions": ("GET", self.get_sessions),
             "/chat/get_session": ("GET", self.get_session),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
+            "/chat/update_session_display_name": (
+                "POST",
+                self.update_session_display_name,
+            ),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
@@ -246,56 +250,74 @@ class ChatRoute(Route):
         return response
 
     async def delete_webchat_session(self):
-        """Delete a WebChat session and all its related data."""
+        """Delete a Platform session and all its related data."""
         session_id = request.args.get("session_id")
         if not session_id:
             return Response().error("Missing key: session_id").__dict__
         username = g.get("username", "guest")
 
         # 验证会话是否存在且属于当前用户
-        session = await self.db.get_webchat_session_by_id(session_id)
+        session = await self.db.get_platform_session_by_id(session_id)
         if not session:
             return Response().error(f"Session {session_id} not found").__dict__
         if session.creator != username:
             return Response().error("Permission denied").__dict__
 
         # 删除该会话下的所有对话
-        unified_msg_origin = f"webchat:FriendMessage:webchat!{username}!{session_id}"
+        unified_msg_origin = f"{session.platform_id}:FriendMessage:{session.platform_id}!{username}!{session_id}"
         await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
 
         # 删除消息历史
         await self.platform_history_mgr.delete(
-            platform_id="webchat",
+            platform_id=session.platform_id,
             user_id=session_id,
             offset_sec=99999999,
         )
 
-        # 清理队列
-        webchat_queue_mgr.remove_queues(session_id)
+        # 清理队列（仅对 webchat）
+        if session.platform_id == "webchat":
+            webchat_queue_mgr.remove_queues(session_id)
 
         # 删除会话
-        await self.db.delete_webchat_session(session_id)
+        await self.db.delete_platform_session(session_id)
 
         return Response().ok().__dict__
 
     async def new_session(self):
-        """Create a new WebChat session."""
+        """Create a new Platform session (default: webchat)."""
         username = g.get("username", "guest")
 
+        # 获取可选的 platform_id 参数，默认为 webchat
+        platform_id = request.args.get("platform_id", "webchat")
+
         # 创建新会话
-        session = await self.db.create_webchat_session(
+        session = await self.db.create_platform_session(
             creator=username,
+            platform_id=platform_id,
             is_group=0,
         )
 
-        return Response().ok(data={"session_id": session.session_id}).__dict__
+        return (
+            Response()
+            .ok(
+                data={
+                    "session_id": session.session_id,
+                    "platform_id": session.platform_id,
+                }
+            )
+            .__dict__
+        )
 
     async def get_sessions(self):
-        """Get all WebChat sessions for the current user."""
+        """Get all Platform sessions for the current user."""
         username = g.get("username", "guest")
 
-        sessions = await self.db.get_webchat_sessions_by_creator(
+        # 获取可选的 platform_id 参数
+        platform_id = request.args.get("platform_id")
+
+        sessions = await self.db.get_platform_sessions_by_creator(
             creator=username,
+            platform_id=platform_id,
             page=1,
             page_size=100,  # 暂时返回前100个
         )
@@ -306,7 +328,9 @@ class ChatRoute(Route):
             sessions_data.append(
                 {
                     "session_id": session.session_id,
+                    "platform_id": session.platform_id,
                     "creator": session.creator,
+                    "display_name": session.display_name,
                     "is_group": session.is_group,
                     "created_at": int(session.created_at.timestamp()),
                     "updated_at": int(session.updated_at.timestamp()),
@@ -321,9 +345,13 @@ class ChatRoute(Route):
         if not session_id:
             return Response().error("Missing key: session_id").__dict__
 
+        # 获取会话信息以确定 platform_id
+        session = await self.db.get_platform_session_by_id(session_id)
+        platform_id = session.platform_id if session else "webchat"
+
         # Get platform message history using session_id
         history_ls = await self.platform_history_mgr.get(
-            platform_id="webchat",
+            platform_id=platform_id,
             user_id=session_id,
             page=1,
             page_size=1000,
@@ -341,3 +369,32 @@ class ChatRoute(Route):
             )
             .__dict__
         )
+
+    async def update_session_display_name(self):
+        """Update a Platform session's display name."""
+        post_data = await request.json
+
+        session_id = post_data.get("session_id")
+        display_name = post_data.get("display_name")
+
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if display_name is None:
+            return Response().error("Missing key: display_name").__dict__
+
+        username = g.get("username", "guest")
+
+        # 验证会话是否存在且属于当前用户
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        # 更新 display_name
+        await self.db.update_platform_session(
+            session_id=session_id,
+            display_name=display_name,
+        )
+
+        return Response().ok().__dict__

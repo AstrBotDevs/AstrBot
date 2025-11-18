@@ -104,7 +104,7 @@ class AstrBotCoreLifecycle:
             logger.error(f"Migration from version 4.5 to 4.6 failed: {e!s}")
             logger.error(traceback.format_exc())
 
-        # 4.6 to 4.7 migration for webchat sessions and group feature
+        # 4.6 to 4.7 migration for platform sessions and group feature
         try:
             await migrate_46_to_47(self.db)
         except Exception as e:
