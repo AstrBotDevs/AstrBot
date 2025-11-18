@@ -12,6 +12,8 @@ class RouteContext:
 
 
 class Route:
+    routes: list | dict
+
     def __init__(self, context: RouteContext):
         self.app = context.app
         self.config = context.config

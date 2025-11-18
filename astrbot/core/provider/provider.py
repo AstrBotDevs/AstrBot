@@ -1,6 +1,7 @@
 import abc
 import asyncio
 from collections.abc import AsyncGenerator
+from typing import TypeAlias, Union
 
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
@@ -11,6 +12,14 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.register import provider_cls_map
+
+Providers: TypeAlias = Union[
+    "Provider",
+    "STTProvider",
+    "TTSProvider",
+    "EmbeddingProvider",
+    "RerankProvider",
+]
 
 
 class AbstractProvider(abc.ABC):
@@ -132,7 +141,9 @@ class Provider(AbstractProvider):
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
-        ...
+        if False:  # pragma: no cover - make this an async generator for typing
+            yield None  # type: ignore
+        raise NotImplementedError()
 
     async def pop_record(self, context: list):
         """弹出 context 第一条非系统提示词对话记录"""

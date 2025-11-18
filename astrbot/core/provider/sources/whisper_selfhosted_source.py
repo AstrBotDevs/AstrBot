@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+from typing import cast
 
 import whisper
 
@@ -26,7 +27,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         provider_settings: dict,
     ) -> None:
         super().__init__(provider_config, provider_settings)
-        self.set_model(provider_config.get("model"))
+        self.set_model(provider_config["model"])
         self.model = None
 
     async def initialize(self):
@@ -75,5 +76,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 
-        result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
-        return result["text"]
+        result = await loop.run_in_executor(
+            None, cast(whisper.Whisper, self.model).transcribe, audio_url
+        )
+        return cast(str, result["text"])

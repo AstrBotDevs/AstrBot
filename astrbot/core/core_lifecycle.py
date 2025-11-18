@@ -10,6 +10,7 @@
 """
 
 import asyncio
+import inspect
 import os
 import threading
 import time
@@ -191,7 +192,7 @@ class AstrBotCoreLifecycle:
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))
+            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
         tasks_ = [event_bus_task, *extra_tasks]
         for task in tasks_:
@@ -233,6 +234,7 @@ class AstrBotCoreLifecycle:
         )
         for handler in handlers:
             try:
+                assert inspect.iscoroutinefunction(handler.handler)
                 logger.info(
                     f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )

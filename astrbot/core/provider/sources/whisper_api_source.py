@@ -33,7 +33,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
 
-        self.set_model(provider_config.get("model"))
+        self.set_model(provider_config["model"])
 
     async def _is_silk_file(self, file_path):
         silk_header = b"SILK"

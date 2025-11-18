@@ -129,6 +129,7 @@ class ProcessLLMRequest:
 
         # group name identifier
         if cfg.get("group_name_display") and event.message_obj.group_id:
+            assert event.message_obj.group is not None
             group_name = event.message_obj.group.group_name
             if group_name:
                 req.system_prompt += f"\nGroup name: {group_name}\n"

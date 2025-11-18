@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import botpy
 import botpy.message
@@ -34,7 +35,9 @@ class botClient(Client):
             MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.group_openid
+            abm.sender.user_id
+            if self.platform.unique_session
+            else cast(str, message.group_openid)
         )
         self._commit(abm)
 

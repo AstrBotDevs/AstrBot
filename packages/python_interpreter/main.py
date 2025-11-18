@@ -14,6 +14,7 @@ from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.message_components import File, Image
 from astrbot.api.provider import ProviderRequest
+from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_file, download_image_by_url
 
@@ -224,6 +225,7 @@ class Main(star.Star):
                     del self.user_waiting[uid]
             elif isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
+                assert image_url is not None
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
                 elif image_url.startswith("file:///"):
@@ -477,7 +479,9 @@ class Main(star.Star):
                         # file_s3_url = await self.file_upload(file_path)
                         # logger.info(f"文件上传到 AstrBot 云节点: {file_s3_url}")
                         file_name = os.path.basename(file_path)
-                        chain = [File(name=file_name, file=file_path)]
+                        chain: list[BaseMessageComponent] = [
+                            File(name=file_name, file=file_path)
+                        ]
                         yield event.set_result(MessageEventResult(chain=chain))
 
                 elif "Traceback (most recent call last)" in log or "[Error]: " in log:

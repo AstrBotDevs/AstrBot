@@ -18,7 +18,7 @@ class PlatformStat(SQLModel, table=True):
     Note: In astrbot v4, we moved `platform` table to here.
     """
 
-    __tablename__ = "platform_stats"
+    __tablename__: str = "platform_stats"
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
     timestamp: datetime = Field(nullable=False)
@@ -37,9 +37,10 @@ class PlatformStat(SQLModel, table=True):
 
 
 class ConversationV2(SQLModel, table=True):
-    __tablename__ = "conversations"
+    __tablename__: str = "conversations"
 
-    inner_conversation_id: int = Field(
+    inner_conversation_id: int | None = Field(
+        default=None,
         primary_key=True,
         sa_column_kwargs={"autoincrement": True},
     )
@@ -74,7 +75,7 @@ class Persona(SQLModel, table=True):
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__ = "personas"
+    __tablename__: str = "personas"
 
     id: int | None = Field(
         primary_key=True,
@@ -104,7 +105,7 @@ class Persona(SQLModel, table=True):
 class Preference(SQLModel, table=True):
     """This class represents preferences for bots."""
 
-    __tablename__ = "preferences"
+    __tablename__: str = "preferences"
 
     id: int | None = Field(
         default=None,
@@ -140,7 +141,7 @@ class PlatformMessageHistory(SQLModel, table=True):
     or platform-specific messages.
     """
 
-    __tablename__ = "platform_message_history"
+    __tablename__: str = "platform_message_history"
 
     id: int | None = Field(
         primary_key=True,
@@ -167,7 +168,7 @@ class Attachment(SQLModel, table=True):
     Attachments can be images, files, or other media types.
     """
 
-    __tablename__ = "attachments"
+    __tablename__: str = "attachments"
 
     inner_attachment_id: int | None = Field(
         primary_key=True,
@@ -225,17 +226,17 @@ class Personality(TypedDict):
     在 v4.0.0 版本及之后，推荐使用上面的 Persona 类。并且， mood_imitation_dialogs 字段已被废弃。
     """
 
-    prompt: str = ""
-    name: str = ""
-    begin_dialogs: list[str] = []
-    mood_imitation_dialogs: list[str] = []
+    prompt: str
+    name: str
+    begin_dialogs: list[str]
+    mood_imitation_dialogs: list[str]
     """情感模拟对话预设。在 v4.0.0 版本及之后，已被废弃。"""
-    tools: list[str] | None = None
+    tools: list[str] | None
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
 
     # cache
-    _begin_dialogs_processed: list[dict] = []
-    _mood_imitation_dialogs_processed: str = ""
+    _begin_dialogs_processed: list[dict]
+    _mood_imitation_dialogs_processed: str
 
 
 # ====

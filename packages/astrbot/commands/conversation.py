@@ -1,4 +1,5 @@
 import datetime
+from typing import cast
 
 from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -26,6 +27,7 @@ class ConversationCommands:
             session_id,
             curr,
         )
+        assert conv is not None
         return conv.persona_id
 
     def ltm_enabled(self, event: AstrMessageEvent):
@@ -287,7 +289,7 @@ class ConversationCommands:
         if sid:
             session = str(
                 MessageSesion(
-                    platform_name=message.platform_meta.id,
+                    platform_name=cast(str, message.platform_meta.id),
                     message_type=MessageType("GroupMessage"),
                     session_id=sid,
                 ),

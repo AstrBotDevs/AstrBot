@@ -1,5 +1,6 @@
 import random
 import re
+from typing import cast
 
 from bs4 import BeautifulSoup
 
@@ -29,7 +30,9 @@ class Sogo(SearchEngine):
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
         results = await super().search(query, num_results)
         for result in results:
-            result.url = result.url.get("href")
+            if isinstance(result.url, str):
+                continue
+            result.url = cast(str, result.url.get("href"))
             if result.url.startswith("/link?"):
                 result.url = self.base_url + result.url
                 result.url = await self._parse_url(result.url)
@@ -40,7 +43,10 @@ class Sogo(SearchEngine):
         soup = BeautifulSoup(html, "html.parser")
         script = soup.find("script")
         if script:
-            url = re.search(r'window.location.replace\("(.+?)"\)', script.string).group(
-                1,
+            script_text = (
+                script.string if script.string is not None else script.get_text()
             )
+            match = re.search(r'window.location.replace\("(.+?)"\)', script_text)
+            if match:
+                url = match.group(1)
         return url

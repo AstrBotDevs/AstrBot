@@ -68,7 +68,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         from pyffmpeg import FFmpeg
 
         ff = FFmpeg()
-        ff.convert(input=input_path, output=output_path)
+        ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
         logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
 

@@ -10,7 +10,7 @@ class PlatformMessageHistoryManager:
         self,
         platform_id: str,
         user_id: str,
-        content: list[dict],  # TODO: parse from message chain
+        content: dict,  # TODO: parse from message chain
         sender_id: str | None = None,
         sender_name: str | None = None,
     ):

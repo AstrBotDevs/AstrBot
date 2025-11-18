@@ -5,8 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
     Attachment,
@@ -31,7 +30,7 @@ class BaseDatabase(abc.ABC):
             echo=False,
             future=True,
         )
-        self.AsyncSessionLocal = sessionmaker(
+        self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
             expire_on_commit=False,

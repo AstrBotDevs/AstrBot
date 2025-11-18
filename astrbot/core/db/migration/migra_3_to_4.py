@@ -70,6 +70,7 @@ async def migration_conversation_table(
                         logger.info(
                             f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
                         )
+                        continue
                     if ":" not in conv.user_id:
                         continue
                     session = MessageSesion.from_str(session_str=conv.user_id)
@@ -207,6 +208,7 @@ async def migration_webchat_data(
                         logger.info(
                             f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
                         )
+                        continue
                     if ":" in conv.user_id:
                         continue
                     platform_id = "webchat"
