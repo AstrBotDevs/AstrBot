@@ -38,11 +38,11 @@
                     </div>
 
                     <div style="padding: 16px; padding-top: 8px;">
-                        <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currCid"
+                        <v-btn block variant="text" class="new-chat-btn" @click="newC" :disabled="!currSessionId"
                             v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-plus"
                             style="background-color: transparent !important; border-radius: 4px;">{{
                                 tm('actions.newChat') }}</v-btn>
-                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currCid" v-if="sidebarCollapsed && !isMobile"
+                        <v-btn icon="mdi-plus" rounded="lg" @click="newC" :disabled="!currSessionId" v-if="sidebarCollapsed && !isMobile"
                             elevation="0"></v-btn>
                     </div>
                     <div v-if="!sidebarCollapsed || isMobile">
@@ -52,26 +52,24 @@
 
                     <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
                         v-if="!sidebarCollapsed || isMobile">
-                        <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
-                            <v-list density="compact" nav class="conversation-list"
-                                style="background-color: transparent;" v-model:selected="selectedConversations"
-                                @update:selected="getConversationMessages">
-                                <v-list-item v-for="(item, i) in conversations" :key="item.cid" :value="item.cid"
-                                    rounded="lg" class="conversation-item" active-color="secondary">
-                                    <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title">{{ item.title
-                                        || tm('conversation.newConversation') }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">{{
-                                        formatDate(item.updated_at)
-                                        }}</v-list-item-subtitle>
+                        <v-card v-if="sessions.length > 0" flat style="background-color: transparent;">
+                            <v-list density="compact" nav class="session-list"
+                                style="background-color: transparent;" v-model:selected="selectedSessions"
+                                @update:selected="getSessionMessages">
+                                <v-list-item v-for="(session, i) in sessions" :key="session.session_id" :value="session.session_id"
+                                    rounded="lg" class="session-item" active-color="secondary">
+                                    <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="session-title">
+                                        {{ tm('conversation.newConversation') }}
+                                    </v-list-item-title>
+                                    <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
+                                        {{ formatDate(session.updated_at) }}
+                                    </v-list-item-subtitle>
 
                                     <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
-                                        <div class="conversation-actions">
-                                            <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                                                class="edit-title-btn"
-                                                @click.stop="showEditTitleDialog(item.cid, item.title)" />
+                                        <div class="session-actions">
                                             <v-btn icon="mdi-delete" size="x-small" variant="text"
-                                                class="delete-conversation-btn" color="error"
-                                                @click.stop="deleteConversation(item.cid)" />
+                                                class="delete-session-btn" color="error"
+                                                @click.stop="deleteSession(session.session_id)" />
                                         </div>
                                     </template>
                                 </v-list-item>
@@ -79,9 +77,9 @@
                         </v-card>
 
                         <v-fade-transition>
-                            <div class="no-conversations" v-if="conversations.length === 0">
+                            <div class="no-sessions" v-if="sessions.length === 0">
                                 <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
-                                <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded || isMobile">
+                                <div class="no-sessions-text" v-if="!sidebarCollapsed || sidebarHoverExpanded || isMobile">
                                     {{ tm('conversation.noHistory') }}</div>
                             </div>
                         </v-fade-transition>
@@ -109,7 +107,7 @@
                             <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props"
-                                        @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
+                                        @click="router.push(currSessionId ? `/chatbox/${currSessionId}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
@@ -131,7 +129,7 @@
                             <!-- router 推送到 /chat -->
                             <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
+                                    <v-icon v-bind="props" @click="router.push(currSessionId ? `/chat/${currSessionId}` : '/chat')"
                                         class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
                                 </template>
                             </v-tooltip>
@@ -217,21 +215,6 @@
             </div>
         </v-card-text>
     </v-card>
-    <!-- 编辑对话标题对话框 -->
-    <v-dialog v-model="editTitleDialog" max-width="400">
-        <v-card>
-            <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
-            <v-card-text>
-                <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined"
-                    hide-details class="mt-2" @keyup.enter="saveTitle" autofocus />
-            </v-card-text>
-            <v-card-actions>
-                <v-spacer></v-spacer>
-                <v-btn text @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn text @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
 
     <!-- 图片预览对话框 -->
     <v-dialog v-model="imagePreviewDialog" max-width="90vw" max-height="90vh">
@@ -289,9 +272,9 @@ export default {
         return {
             prompt: '',
             messages: [],
-            conversations: [],
-            selectedConversations: [], // 用于控制左侧列表的选中状态
-            currCid: '',
+            sessions: [], // WebChat 会话列表
+            selectedSessions: [], // 当前选中的会话
+            currSessionId: '', // 当前会话ID
             stagedImagesName: [], // 用于存储图片文件名的数组
             stagedImagesUrl: [], // 用于存储图片的blob URL数组
             loadingChat: false,
@@ -310,10 +293,6 @@ export default {
 
             mediaCache: {}, // Add a cache to store media blobs
 
-            // 添加对话标题编辑相关变量
-            editTitleDialog: false,
-            editingTitle: '',
-            editingCid: '',
 
             // 侧边栏折叠状态
             sidebarCollapsed: true,
@@ -346,10 +325,10 @@ export default {
         isDark() {
             return useCustomizerStore().uiTheme === 'PurpleThemeDark';
         },
-        // Get the current conversation from the conversations array
-        getCurrentConversation() {
-            if (!this.currCid) return null;
-            return this.conversations.find(c => c.cid === this.currCid);
+        // Get the current session from the sessions array
+        getCurrentSession() {
+            if (!this.currSessionId) return null;
+            return this.sessions.find(s => s.session_id === this.currSessionId);
         }
     },
 
@@ -364,43 +343,43 @@ export default {
                         (from.path.startsWith('/chatbox') && to.path.startsWith('/chat')))) {
                 }
 
-                // Check if the route matches /chat/<cid> or /chatbox/<cid> pattern
+                // Check if the route matches /chat/<session_id> or /chatbox/<session_id> pattern
                 if (to.path.startsWith('/chat/') || to.path.startsWith('/chatbox/')) {
-                    const pathCid = to.path.split('/')[2];
-                    console.log('Path CID:', pathCid);
-                    if (pathCid && pathCid !== this.currCid) {
-                        // If conversations are already loaded
-                        if (this.conversations.length > 0) {
-                            const conversation = this.conversations.find(c => c.cid === pathCid);
-                            if (conversation) {
-                                this.getConversationMessages([pathCid]);
+                    const pathSessionId = to.path.split('/')[2];
+                    console.log('Path Session ID:', pathSessionId);
+                    if (pathSessionId && pathSessionId !== this.currSessionId) {
+                        // If sessions are already loaded
+                        if (this.sessions.length > 0) {
+                            const session = this.sessions.find(s => s.session_id === pathSessionId);
+                            if (session) {
+                                this.getSessionMessages([pathSessionId]);
                             }
                         } else {
-                            // Store the cid to be used after conversations are loaded
-                            this.pendingCid = pathCid;
+                            // Store the session_id to be used after sessions are loaded
+                            this.pendingCid = pathSessionId;
                         }
                     }
                 }
             }
         },
 
-        // Watch for conversations loaded to handle pending cid
-        conversations: {
-            handler(newConversations) {
-                if (this.pendingCid && newConversations.length > 0) {
-                    const conversation = newConversations.find(c => c.cid === this.pendingCid);
-                    if (conversation) {
-                        // 先设置选中状态，然后加载对话消息
-                        this.selectedConversations = [this.pendingCid];
-                        this.getConversationMessages([this.pendingCid]);
+        // Watch for sessions loaded to handle pending session ID
+        sessions: {
+            handler(newSessions) {
+                if (this.pendingCid && newSessions.length > 0) {
+                    const session = newSessions.find(s => s.session_id === this.pendingCid);
+                    if (session) {
+                        // 先设置选中状态，然后加载会话消息
+                        this.selectedSessions = [this.pendingCid];
+                        this.getSessionMessages([this.pendingCid]);
                         this.pendingCid = null;
                     }
                 } else {
-                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
-                    if (!this.currCid && newConversations.length > 0) {
-                        const firstConversation = newConversations[0];
-                        this.selectedConversations = [firstConversation.cid];
-                        this.getConversationMessages([firstConversation.cid]);
+                    // 如果没有URL参数指定的会话，且当前没有选中会话，则默认选中第一个会话
+                    if (!this.currSessionId && newSessions.length > 0) {
+                        const firstSession = newSessions[0];
+                        this.selectedSessions = [firstSession.session_id];
+                        // 不自动加载消息，等用户点击或发送消息
                     }
                 }
             }
@@ -431,7 +410,7 @@ export default {
 
         // 设置输入框标签
         this.inputFieldLabel = this.tm('input.chatPrompt');
-        this.getConversations();
+        this.getSessions();
         let inputField = document.getElementById('input-field');
         inputField.addEventListener('paste', this.handlePaste);
         inputField.addEventListener('keydown', function (e) {
@@ -532,34 +511,6 @@ export default {
             this.sidebarHoverExpanded = false;
         },
 
-        // 显示编辑对话标题对话框
-        showEditTitleDialog(cid, title) {
-            this.editingCid = cid;
-            this.editingTitle = title || ''; // 如果标题为空，则设置为空字符串
-            this.editTitleDialog = true;
-        },
-
-        // 保存对话标题
-        saveTitle() {
-            if (!this.editingCid) return;
-
-            const trimmedTitle = this.editingTitle.trim();
-            axios.post('/api/chat/rename_conversation', {
-                conversation_id: this.editingCid,
-                title: trimmedTitle
-            })
-                .then(response => {
-                    // 更新本地对话列表中的标题
-                    const conversation = this.conversations.find(c => c.cid === this.editingCid);
-                    if (conversation) {
-                        conversation.title = trimmedTitle;
-                    }
-                    this.editTitleDialog = false;
-                })
-                .catch(err => {
-                    console.error('重命名对话失败:', err);
-                });
-        },
 
         async getMediaFile(filename) {
             if (this.mediaCache[filename]) {
@@ -691,9 +642,16 @@ export default {
             // Reset the input value to allow selecting the same file again
             event.target.value = '';
         },
-        getConversations() {
-            axios.get('/api/chat/conversations').then(response => {
-                this.conversations = response.data.data;
+        getSessions() {
+            axios.get('/api/chat/sessions').then(response => {
+                this.sessions = response.data.data;
+                // 使用 sessions 作为显示列表（兼容旧代码）
+                this.conversations = this.sessions.map(session => ({
+                    cid: session.session_id,
+                    title: this.tm('conversation.newConversation'), // 暂时使用默认标题
+                    updated_at: session.updated_at,
+                    created_at: session.created_at
+                }));
 
                 // If there's a pending conversation ID from the route
                 if (this.pendingCid) {
@@ -703,30 +661,33 @@ export default {
                         this.pendingCid = null;
                     }
                 } else {
-                    // 如果没有URL参数指定的对话，且当前没有选中对话，则默认打开第一个对话
-                    if (!this.currCid && this.conversations.length > 0) {
-                        const firstConversation = this.conversations[0];
-                        this.selectedConversations = [firstConversation.cid];
-                        this.getConversationMessages([firstConversation.cid]);
+                    // 如果没有URL参数指定的会话，且当前没有选中会话，则默认打开第一个会话
+                    if (!this.currSessionId && this.sessions.length > 0) {
+                        const firstSession = this.sessions[0];
+                        this.currSessionId = firstSession.session_id;
+                        this.selectedConversations = [firstSession.session_id];
+                        // 注意：现在不自动加载消息，等用户发送消息时再创建对话
                     }
                 }
             }).catch(err => {
-                if (err.response.status === 401) {
+                if (err.response && err.response.status === 401) {
                     this.$router.push('/auth/login?redirect=/chatbox');
                 }
                 console.error(err);
             });
         },
-        getConversationMessages(cid) {
-            if (!cid[0])
+        getSessionMessages(sessionIds) {
+            if (!sessionIds[0])
                 return;
 
-            // Update the URL to reflect the selected conversation
-            if (this.$route.path !== `/chat/${cid[0]}` && this.$route.path !== `/chatbox/${cid[0]}`) {
+            const sessionId = sessionIds[0];
+
+            // Update the URL to reflect the selected session
+            if (this.$route.path !== `/chat/${sessionId}` && this.$route.path !== `/chatbox/${sessionId}`) {
                 if (this.$route.path.startsWith('/chatbox')) {
-                    this.$router.push(`/chatbox/${cid[0]}`);
+                    this.$router.push(`/chatbox/${sessionId}`);
                 } else {
-                    this.$router.push(`/chat/${cid[0]}`);
+                    this.$router.push(`/chat/${sessionId}`);
                 }
                 return
             }
@@ -736,22 +697,22 @@ export default {
                 this.closeMobileSidebar();
             }
 
-            axios.get('/api/chat/get_conversation?conversation_id=' + cid[0]).then(async response => {
-                this.currCid = cid[0];
-                // Update the selected conversation in the sidebar
-                this.selectedConversations = [cid[0]];
+            axios.get('/api/chat/get_session?session_id=' + sessionId).then(async response => {
+                this.currSessionId = sessionId;
+                // Update the selected session in the sidebar
+                this.selectedSessions = [sessionId];
                 let history = response.data.data.history;
                 this.isConvRunning = response.data.data.is_running || false;
 
                 if (this.isConvRunning) {
                     if (!this.isToastedRunningInfo) {
-                        useToast().info("该对话正在运行中。", { timeout: 5000 });
+                        useToast().info("该会话正在运行中。", { timeout: 5000 });
                         this.isToastedRunningInfo = true;
                     }
 
-                    // 如果对话还在运行，3秒后重新获取消息
+                    // 如果会话还在运行，3秒后重新获取消息
                     setTimeout(() => {
-                        this.getConversationMessages([this.currCid]);
+                        this.getSessionMessages([this.currSessionId]);
                     }, 3000);
                 }
 
@@ -795,35 +756,40 @@ export default {
             });
         },
         async newConversation() {
-            return axios.get('/api/chat/new_conversation').then(response => {
-                const cid = response.data.data.conversation_id;
-                this.currCid = cid;
-                // Update the URL to reflect the new conversation
-                if (this.$route.path.startsWith('/chatbox')) {
-                    this.$router.push(`/chatbox/${cid}`);
-                } else {
-                    this.$router.push(`/chat/${cid}`);
-                }
-                this.getConversations();
-                return cid;
-            }).catch(err => {
-                console.error(err);
-                throw err;
-            });
+            // 懒加载：如果没有会话ID，先创建会话
+            if (!this.currSessionId) {
+                await this.newC();
+            }
+            // 返回会话ID作为"对话ID"（兼容旧逻辑）
+            return this.currSessionId;
         },
 
-        newC() {
-            this.currCid = '';
-            this.selectedConversations = []; // 清除选中状态
-            this.messages = [];
-            // 手机端关闭侧边栏
-            if (this.isMobile) {
-                this.closeMobileSidebar();
-            }
-            if (this.$route.path.startsWith('/chatbox')) {
-                this.$router.push('/chatbox');
-            } else {
-                this.$router.push('/chat');
+        async newC() {
+            // 创建新会话
+            try {
+                const response = await axios.get('/api/chat/new_session');
+                const sessionId = response.data.data.session_id;
+                
+                this.currSessionId = sessionId;
+                this.selectedSessions = [sessionId]; // 选中新会话
+                this.messages = [];
+                
+                // 手机端关闭侧边栏
+                if (this.isMobile) {
+                    this.closeMobileSidebar();
+                }
+                
+                // 更新URL
+                if (this.$route.path.startsWith('/chatbox')) {
+                    this.$router.push(`/chatbox/${sessionId}`);
+                } else {
+                    this.$router.push(`/chat/${sessionId}`);
+                }
+                
+                // 刷新会话列表
+                this.getSessions();
+            } catch (err) {
+                console.error('创建新会话失败:', err);
             }
         },
 
@@ -843,14 +809,24 @@ export default {
             return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
         },
 
-        deleteConversation(cid) {
-            axios.get('/api/chat/delete_conversation?conversation_id=' + cid).then(response => {
-                this.getConversations();
-                this.currCid = '';
-                this.selectedConversations = []; // 清除选中状态
-                this.messages = [];
+        deleteSession(sessionId) {
+            // 删除会话
+            axios.get('/api/chat/delete_session?session_id=' + sessionId).then(response => {
+                this.getSessions();
+                // 如果删除的是当前会话，清空状态
+                if (this.currSessionId === sessionId) {
+                    this.currSessionId = '';
+                    this.selectedSessions = [];
+                    this.messages = [];
+                    // 更新URL
+                    if (this.$route.path.startsWith('/chatbox')) {
+                        this.$router.push('/chatbox');
+                    } else {
+                        this.$router.push('/chat');
+                    }
+                }
             }).catch(err => {
-                console.error(err);
+                console.error('删除会话失败:', err);
             });
         },
 
@@ -868,9 +844,9 @@ export default {
                 return;
             }
 
-            if (this.currCid == '') {
-                const cid = await this.newConversation();
-                // URL is already updated in newConversation method
+            if (this.currSessionId == '') {
+                await this.newConversation();
+                // Session is created and URL is updated
             }
 
             // 保存当前要发送的数据到临时变量
@@ -935,7 +911,7 @@ export default {
                     },
                     body: JSON.stringify({
                         message: promptToSend,
-                        conversation_id: this.currCid,
+                        conversation_id: this.currSessionId,
                         image_url: imageNamesToSend,
                         audio_url: audioNameToSend ? [audioNameToSend] : [],
                         selected_provider: selectedProviderId,
@@ -1063,7 +1039,7 @@ export default {
                 this.loadingChat = false;
 
                 // get the latest conversations
-                this.getConversations();
+                this.getSessions();
 
             } catch (err) {
                 console.error('发送消息失败:', err);

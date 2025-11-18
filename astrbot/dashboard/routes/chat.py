@@ -10,7 +10,6 @@ from quart import g, make_response, request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -36,11 +35,10 @@ class ChatRoute(Route):
         super().__init__(context)
         self.routes = {
             "/chat/send": ("POST", self.chat),
-            "/chat/new_conversation": ("GET", self.new_conversation),
-            "/chat/conversations": ("GET", self.get_conversations),
-            "/chat/get_conversation": ("GET", self.get_conversation),
-            "/chat/delete_conversation": ("GET", self.delete_conversation),
-            "/chat/rename_conversation": ("POST", self.rename_conversation),
+            "/chat/new_session": ("GET", self.new_session),
+            "/chat/sessions": ("GET", self.get_sessions),
+            "/chat/get_session": ("GET", self.get_session),
+            "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
@@ -53,6 +51,7 @@ class ChatRoute(Route):
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
+        self.db = db
 
         self.running_convs: dict[str, bool] = {}
 
@@ -137,7 +136,8 @@ class ChatRoute(Route):
             return Response().error("conversation_id is empty").__dict__
 
         # 追加用户消息
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
+        # conversation_id 现在实际上是 session_id
+        webchat_conv_id = conversation_id
 
         # 获取会话特定的队列
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
@@ -245,88 +245,86 @@ class ChatRoute(Route):
         response.timeout = None  # fix SSE auto disconnect issue
         return response
 
-    async def _get_webchat_conv_id_from_conv_id(self, conversation_id: str) -> str:
-        """从对话 ID 中提取 WebChat 会话 ID
-
-        NOTE: 关于这里为什么要单独做一个 WebChat 的 Conversation ID 出来，这个是为了向前兼容。
-        """
-        conversation = await self.conv_mgr.get_conversation(
-            unified_msg_origin="webchat",
-            conversation_id=conversation_id,
-        )
-        if not conversation:
-            raise ValueError(f"Conversation with ID {conversation_id} not found.")
-        conv_user_id = conversation.user_id
-        webchat_session_id = MessageSession.from_str(conv_user_id).session_id
-        if "!" not in webchat_session_id:
-            raise ValueError(f"Invalid conv user ID: {conv_user_id}")
-        return webchat_session_id.split("!")[-1]
-
-    async def delete_conversation(self):
-        conversation_id = request.args.get("conversation_id")
-        if not conversation_id:
-            return Response().error("Missing key: conversation_id").__dict__
+    async def delete_webchat_session(self):
+        """Delete a WebChat session and all its related data."""
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
         username = g.get("username", "guest")
 
-        # Clean up queues when deleting conversation
-        webchat_queue_mgr.remove_queues(conversation_id)
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
-        await self.conv_mgr.delete_conversation(
-            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
-            conversation_id=conversation_id,
-        )
+        # 验证会话是否存在且属于当前用户
+        session = await self.db.get_webchat_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        # 删除该会话下的所有对话
+        unified_msg_origin = f"webchat:FriendMessage:webchat!{username}!{session_id}"
+        await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
+
+        # 删除消息历史
         await self.platform_history_mgr.delete(
             platform_id="webchat",
-            user_id=webchat_conv_id,
+            user_id=session_id,
             offset_sec=99999999,
         )
+
+        # 清理队列
+        webchat_queue_mgr.remove_queues(session_id)
+
+        # 删除会话
+        await self.db.delete_webchat_session(session_id)
+
         return Response().ok().__dict__
 
-    async def new_conversation(self):
+    async def new_session(self):
+        """Create a new WebChat session."""
         username = g.get("username", "guest")
-        webchat_conv_id = str(uuid.uuid4())
-        conv_id = await self.conv_mgr.new_conversation(
-            unified_msg_origin=f"webchat:FriendMessage:webchat!{username}!{webchat_conv_id}",
-            platform_id="webchat",
-            content=[],
+
+        # 创建新会话
+        session = await self.db.create_webchat_session(
+            creator=username,
+            is_group=0,
         )
-        return Response().ok(data={"conversation_id": conv_id}).__dict__
 
-    async def rename_conversation(self):
-        post_data = await request.json
-        if "conversation_id" not in post_data or "title" not in post_data:
-            return Response().error("Missing key: conversation_id or title").__dict__
+        return Response().ok(data={"session_id": session.session_id}).__dict__
 
-        conversation_id = post_data["conversation_id"]
-        title = post_data["title"]
+    async def get_sessions(self):
+        """Get all WebChat sessions for the current user."""
+        username = g.get("username", "guest")
 
-        await self.conv_mgr.update_conversation(
-            unified_msg_origin="webchat",  # fake
-            conversation_id=conversation_id,
-            title=title,
+        sessions = await self.db.get_webchat_sessions_by_creator(
+            creator=username,
+            page=1,
+            page_size=100,  # 暂时返回前100个
         )
-        return Response().ok(message="重命名成功！").__dict__
 
-    async def get_conversations(self):
-        conversations = await self.conv_mgr.get_conversations(platform_id="webchat")
-        # remove content
-        conversations_ = []
-        for conv in conversations:
-            conv.history = None
-            conversations_.append(conv)
-        return Response().ok(data=conversations_).__dict__
+        # 转换为字典格式，并添加额外信息
+        sessions_data = []
+        for session in sessions:
+            sessions_data.append(
+                {
+                    "session_id": session.session_id,
+                    "creator": session.creator,
+                    "is_group": session.is_group,
+                    "created_at": int(session.created_at.timestamp()),
+                    "updated_at": int(session.updated_at.timestamp()),
+                }
+            )
 
-    async def get_conversation(self):
-        conversation_id = request.args.get("conversation_id")
-        if not conversation_id:
-            return Response().error("Missing key: conversation_id").__dict__
+        return Response().ok(data=sessions_data).__dict__
 
-        webchat_conv_id = await self._get_webchat_conv_id_from_conv_id(conversation_id)
+    async def get_session(self):
+        """Get session information and message history by session_id."""
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
 
-        # Get platform message history
+        # Get platform message history using session_id
         history_ls = await self.platform_history_mgr.get(
             platform_id="webchat",
-            user_id=webchat_conv_id,
+            user_id=session_id,
             page=1,
             page_size=1000,
         )
@@ -338,7 +336,7 @@ class ChatRoute(Route):
             .ok(
                 data={
                     "history": history_res,
-                    "is_running": self.running_convs.get(webchat_conv_id, False),
+                    "is_running": self.running_convs.get(session_id, False),
                 },
             )
             .__dict__

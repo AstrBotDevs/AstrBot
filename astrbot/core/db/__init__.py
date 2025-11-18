@@ -16,6 +16,7 @@ from astrbot.core.db.po import (
     PlatformStat,
     Preference,
     Stats,
+    WebChatSession,
 )
 
 
@@ -312,4 +313,46 @@ class BaseDatabase(abc.ABC):
         platform: str | None = None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
+        ...
+
+    # ====
+    # WebChat Session Management
+    # ====
+
+    @abc.abstractmethod
+    async def create_webchat_session(
+        self,
+        creator: str,
+        session_id: str | None = None,
+        is_group: int = 0,
+    ) -> WebChatSession:
+        """Create a new WebChat session."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_session_by_id(self, session_id: str) -> WebChatSession | None:
+        """Get a WebChat session by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def get_webchat_sessions_by_creator(
+        self,
+        creator: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[WebChatSession]:
+        """Get all WebChat sessions for a specific creator (username)."""
+        ...
+
+    @abc.abstractmethod
+    async def update_webchat_session(
+        self,
+        session_id: str,
+    ) -> None:
+        """Update a WebChat session's updated_at timestamp."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_webchat_session(self, session_id: str) -> None:
+        """Delete a WebChat session by its ID."""
         ...
