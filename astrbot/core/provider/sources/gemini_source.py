@@ -404,18 +404,15 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                # gemini 返回的 function_call.id 可能为 None
-                llm_response.tools_call_ids.append(
-                    part.function_call.id or part.function_call.name,
-                )
+                # function_call.id might be None, use name as fallback
+                tool_call_id = part.function_call.id or part.function_call.name
+                llm_response.tools_call_ids.append(tool_call_id)
                 # extra_content
                 if part.thought_signature:
                     ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
-                    llm_response.tools_call_extra_content.append(
-                        {"google": {"thought_signature": ts_bs64}}
-                    )
-                else:
-                    llm_response.tools_call_extra_content.append(None)
+                    llm_response.tools_call_extra_content[tool_call_id] = {
+                        "google": {"thought_signature": ts_bs64}
+                    }
             elif (
                 part.inline_data
                 and part.inline_data.mime_type

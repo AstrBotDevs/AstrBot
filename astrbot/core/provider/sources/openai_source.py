@@ -96,22 +96,6 @@ class ProviderOpenAIOfficial(Provider):
         # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
         payloads["search_parameters"] = {"mode": mode}
 
-    def _fix_google_thought_signature(self, payloads: dict):
-        messages = payloads.get("messages", [])
-        for message in messages:
-            if "tool_calls" in message and isinstance(message["tool_calls"], list):
-                for tool in message["tool_calls"]:
-                    if "extra_content" in tool and "google" in tool["extra_content"]:
-                        ts_bs64 = (
-                            tool["extra_content"]
-                            .get("google", {})
-                            .get("thought_signature")
-                        )
-                        if ts_bs64:
-                            tool["extra_content"]["google"]["thought_signature"] = (
-                                base64.b64decode(ts_bs64)
-                            )
-
     async def get_models(self):
         try:
             models_str = []
@@ -295,7 +279,7 @@ class ProviderOpenAIOfficial(Provider):
             args_ls = []
             func_name_ls = []
             tool_call_ids = []
-            tool_call_extra_content_ls = []
+            tool_call_extra_content_dict = {}
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
@@ -316,19 +300,13 @@ class ProviderOpenAIOfficial(Provider):
 
                         # gemini-2.5 / gemini-3 series extra_content handling
                         extra_content = getattr(tool_call, "extra_content", None)
-                        if extra_content is not None and "google" in extra_content:
-                            ts_bs64 = extra_content["google"].get("thought_signature")
-                            if ts_bs64:
-                                # replace base64 string with bytes
-                                extra_content["google"]["thought_signature"] = (
-                                    base64.b64decode(ts_bs64)
-                                )
-                        tool_call_extra_content_ls.append(extra_content)
+                        if extra_content is not None:
+                            tool_call_extra_content_dict[tool_call.id] = extra_content
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
             llm_response.tools_call_ids = tool_call_ids
-            llm_response.tools_call_extra_content = tool_call_extra_content_ls
+            llm_response.tools_call_extra_content = tool_call_extra_content_dict
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
@@ -383,8 +361,6 @@ class ProviderOpenAIOfficial(Provider):
 
         # xAI origin search tool inject
         self._maybe_inject_xai_search(payloads, **kwargs)
-        # Google Thought Signature fix
-        self._fix_google_thought_signature(payloads)
 
         return payloads, context_query
 

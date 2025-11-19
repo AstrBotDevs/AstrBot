@@ -211,8 +211,8 @@ class LLMResponse:
     """Tool call names."""
     tools_call_ids: list[str] = field(default_factory=list)
     """Tool call IDs."""
-    tools_call_extra_content: list[dict[str, Any] | None] = field(default_factory=list)
-    """Tool call extra content."""
+    tools_call_extra_content: dict[str, dict[str, Any]] = field(default_factory=dict)
+    """Tool call extra content. tool_call_id -> extra_content dict"""
     reasoning_content: str = ""
     """The reasoning content extracted from the LLM, if any."""
 
@@ -235,7 +235,7 @@ class LLMResponse:
         tools_call_args: list[dict[str, Any]] | None = None,
         tools_call_name: list[str] | None = None,
         tools_call_ids: list[str] | None = None,
-        tools_call_extra_content: list[dict[str, Any]] | None = None,
+        tools_call_extra_content: dict[str, dict[str, Any]] | None = None,
         raw_completion: ChatCompletion
         | GenerateContentResponse
         | AnthropicMessage
@@ -260,7 +260,7 @@ class LLMResponse:
         if tools_call_ids is None:
             tools_call_ids = []
         if tools_call_extra_content is None:
-            tools_call_extra_content = []
+            tools_call_extra_content = {}
 
         self.role = role
         self.completion_text = completion_text
@@ -302,8 +302,10 @@ class LLMResponse:
                 },
                 "type": "function",
             }
-            if self.tools_call_extra_content[idx]:
-                payload["extra_content"] = self.tools_call_extra_content[idx]
+            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
+                payload["extra_content"] = self.tools_call_extra_content[
+                    self.tools_call_ids[idx]
+                ]
             ret.append(payload)
         return ret
 
@@ -319,7 +321,9 @@ class LLMResponse:
                         arguments=json.dumps(tool_call_arg),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
-                    extra_content=self.tools_call_extra_content[idx],
+                    extra_content=self.tools_call_extra_content.get(
+                        self.tools_call_ids[idx]
+                    ),
                 ),
             )
         return ret
