@@ -247,8 +247,7 @@ class WecomAIBotAdapter(Platform):
                     finish = True
                     self.queue_mgr.remove_queues(stream_id)
                     break
-                else:
-                    pass
+
             logger.debug(
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
