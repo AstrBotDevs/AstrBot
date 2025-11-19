@@ -43,7 +43,7 @@
     "exitFullscreen": "退出全屏"
   },
   "conversation": {
-    "newConversation": "新对话",
+    "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
     "systemStatus": "系统状态",
     "llmService": "LLM 服务",
