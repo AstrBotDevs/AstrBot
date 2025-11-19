@@ -151,7 +151,3 @@ class WecomAIQueueMgr:
             "output_queues": len(self.back_queues),
             "pending_responses": len(self.pending_responses),
         }
-
-
-# 全局队列管理器实例
-wecomai_queue_mgr = WecomAIQueueMgr()
