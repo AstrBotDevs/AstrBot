@@ -72,7 +72,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "delete": "Delete",
+    "copy": "Copy",
     "edit": "Edit",
     "noData": "No data available"
   }
-} 
+}
