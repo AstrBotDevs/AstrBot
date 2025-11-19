@@ -14,7 +14,7 @@ from sqlmodel import col
 
 from astrbot.api import logger, sp
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.db.po import PlatformMessageHistory, PlatformSession
 
 
 async def migrate_46_to_47(db_helper: BaseDatabase):
@@ -57,8 +57,13 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
 
             logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
 
-            # 为每个 user_id 创建 PlatformSession 记录
-            migrated_count = 0
+            # 检查已存在的会话
+            existing_query = select(col(PlatformSession.session_id))
+            existing_result = await session.execute(existing_query)
+            existing_session_ids = {row[0] for row in existing_result.fetchall()}
+
+            # 批量创建 PlatformSession 记录
+            sessions_to_add = []
             skipped_count = 0
 
             for user_id, sender_name, created_at, updated_at in webchat_users:
@@ -69,35 +74,32 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
                 creator = sender_name if sender_name else "guest"
 
                 # 检查是否已经存在该会话
-                existing_session = await db_helper.get_platform_session_by_id(
-                    session_id
-                )
-                if existing_session:
+                if session_id in existing_session_ids:
                     logger.debug(f"会话 {session_id} 已存在，跳过")
                     skipped_count += 1
                     continue
 
-                # 创建新的 PlatformSession
-                try:
-                    await db_helper.create_platform_session(
-                        creator=creator,
-                        session_id=session_id,
-                        platform_id="webchat",
-                        is_group=0,
-                    )
+                # 创建新的 PlatformSession（保留原有的时间戳）
+                new_session = PlatformSession(
+                    session_id=session_id,
+                    platform_id="webchat",
+                    creator=creator,
+                    is_group=0,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+                sessions_to_add.append(new_session)
 
-                    migrated_count += 1
+            # 批量插入
+            if sessions_to_add:
+                session.add_all(sessions_to_add)
+                await session.commit()
 
-                    if migrated_count % 100 == 0:
-                        logger.info(f"已迁移 {migrated_count} 个会话...")
-
-                except Exception as e:
-                    logger.error(f"迁移会话 {session_id} 失败: {e}")
-                    continue
-
-            logger.info(
-                f"WebChat 会话迁移完成！成功迁移: {migrated_count}, 跳过: {skipped_count}",
-            )
+                logger.info(
+                    f"WebChat 会话迁移完成！成功迁移: {len(sessions_to_add)}, 跳过: {skipped_count}",
+                )
+            else:
+                logger.info("没有新会话需要迁移")
 
         # 标记迁移完成
         await sp.put_async("global", "global", "migration_done_v47", True)
