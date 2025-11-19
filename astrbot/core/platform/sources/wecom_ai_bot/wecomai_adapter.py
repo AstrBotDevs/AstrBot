@@ -30,7 +30,7 @@ from .wecomai_api import (
     WecomAIBotStreamMessageBuilder,
 )
 from .wecomai_event import WecomAIBotMessageEvent
-from .wecomai_queue_mgr import WecomAIQueueMgr, wecomai_queue_mgr
+from .wecomai_queue_mgr import WecomAIQueueMgr
 from .wecomai_server import WecomAIBotServer
 from .wecomai_utils import (
     WecomAIBotConstants,
@@ -144,9 +144,12 @@ class WecomAIBotAdapter(Platform):
         # 事件循环和关闭信号
         self.shutdown_event = asyncio.Event()
 
+        # 队列管理器
+        self.queue_mgr = WecomAIQueueMgr()
+
         # 队列监听器
         self.queue_listener = WecomAIQueueListener(
-            wecomai_queue_mgr,
+            self.queue_mgr,
             self._handle_queued_message,
         )
 
@@ -189,7 +192,7 @@ class WecomAIBotAdapter(Platform):
                     stream_id,
                     session_id,
                 )
-                wecomai_queue_mgr.set_pending_response(stream_id, callback_params)
+                self.queue_mgr.set_pending_response(stream_id, callback_params)
 
                 resp = WecomAIBotStreamMessageBuilder.make_text_stream(
                     stream_id,
@@ -207,7 +210,7 @@ class WecomAIBotAdapter(Platform):
         elif msgtype == "stream":
             # wechat server is requesting for updates of a stream
             stream_id = message_data["stream"]["id"]
-            if not wecomai_queue_mgr.has_back_queue(stream_id):
+            if not self.queue_mgr.has_back_queue(stream_id):
                 logger.error(f"Cannot find back queue for stream_id: {stream_id}")
 
                 # 返回结束标志，告诉微信服务器流已结束
@@ -222,7 +225,7 @@ class WecomAIBotAdapter(Platform):
                     callback_params["timestamp"],
                 )
                 return resp
-            queue = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+            queue = self.queue_mgr.get_or_create_back_queue(stream_id)
             if queue.empty():
                 logger.debug(
                     f"No new messages in back queue for stream_id: {stream_id}",
@@ -242,10 +245,9 @@ class WecomAIBotAdapter(Platform):
                 elif msg["type"] == "end":
                     # stream end
                     finish = True
-                    wecomai_queue_mgr.remove_queues(stream_id)
+                    self.queue_mgr.remove_queues(stream_id)
                     break
-                else:
-                    pass
+
             logger.debug(
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
@@ -313,8 +315,8 @@ class WecomAIBotAdapter(Platform):
         session_id: str,
     ):
         """将消息放入队列进行异步处理"""
-        input_queue = wecomai_queue_mgr.get_or_create_queue(stream_id)
-        _ = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+        input_queue = self.queue_mgr.get_or_create_queue(stream_id)
+        _ = self.queue_mgr.get_or_create_back_queue(stream_id)
         message_payload = {
             "message_data": message_data,
             "callback_params": callback_params,
@@ -453,6 +455,7 @@ class WecomAIBotAdapter(Platform):
                 platform_meta=self.meta(),
                 session_id=message.session_id,
                 api_client=self.api_client,
+                queue_mgr=self.queue_mgr,
             )
 
             self.commit_event(message_event)
