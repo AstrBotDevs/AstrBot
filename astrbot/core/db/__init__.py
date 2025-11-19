@@ -184,7 +184,7 @@ class BaseDatabase(abc.ABC):
         user_id: str,
         offset_sec: int = 86400,
     ) -> None:
-        """Delete platform message history records older than the specified offset."""
+        """Delete platform message history records newer than the specified offset."""
         ...
 
     @abc.abstractmethod
