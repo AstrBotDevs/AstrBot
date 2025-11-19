@@ -3,13 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
-from sqlmodel import (
-    JSON,
-    Field,
-    SQLModel,
-    Text,
-    UniqueConstraint,
-)
+from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
 class PlatformStat(SQLModel, table=True):
@@ -18,7 +12,7 @@ class PlatformStat(SQLModel, table=True):
     Note: In astrbot v4, we moved `platform` table to here.
     """
 
-    __tablename__ = "platform_stats"
+    __tablename__ = "platform_stats"  # type: ignore
 
     id: int = Field(primary_key=True, sa_column_kwargs={"autoincrement": True})
     timestamp: datetime = Field(nullable=False)
@@ -37,7 +31,7 @@ class PlatformStat(SQLModel, table=True):
 
 
 class ConversationV2(SQLModel, table=True):
-    __tablename__ = "conversations"
+    __tablename__ = "conversations"  # type: ignore
 
     inner_conversation_id: int = Field(
         primary_key=True,
@@ -74,7 +68,7 @@ class Persona(SQLModel, table=True):
     It can be used to customize the behavior of LLMs.
     """
 
-    __tablename__ = "personas"
+    __tablename__ = "personas"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -104,7 +98,7 @@ class Persona(SQLModel, table=True):
 class Preference(SQLModel, table=True):
     """This class represents preferences for bots."""
 
-    __tablename__ = "preferences"
+    __tablename__ = "preferences"  # type: ignore
 
     id: int | None = Field(
         default=None,
@@ -140,7 +134,7 @@ class PlatformMessageHistory(SQLModel, table=True):
     or platform-specific messages.
     """
 
-    __tablename__ = "platform_message_history"
+    __tablename__ = "platform_message_history"  # type: ignore
 
     id: int | None = Field(
         primary_key=True,
@@ -167,7 +161,7 @@ class Attachment(SQLModel, table=True):
     Attachments can be images, files, or other media types.
     """
 
-    __tablename__ = "attachments"
+    __tablename__ = "attachments"  # type: ignore
 
     inner_attachment_id: int | None = Field(
         primary_key=True,
