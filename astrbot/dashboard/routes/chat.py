@@ -119,11 +119,14 @@ class ChatRoute(Route):
         if "message" not in post_data and "image_url" not in post_data:
             return Response().error("Missing key: message or image_url").__dict__
 
-        if "conversation_id" not in post_data:
-            return Response().error("Missing key: conversation_id").__dict__
+        if "session_id" not in post_data and "conversation_id" not in post_data:
+            return (
+                Response().error("Missing key: session_id or conversation_id").__dict__
+            )
 
         message = post_data["message"]
-        conversation_id = post_data["conversation_id"]
+        # conversation_id = post_data["conversation_id"]
+        session_id = post_data.get("session_id", post_data.get("conversation_id"))
         image_url = post_data.get("image_url")
         audio_url = post_data.get("audio_url")
         selected_provider = post_data.get("selected_provider")
@@ -136,12 +139,11 @@ class ChatRoute(Route):
                 .error("Message and image_url and audio_url are empty")
                 .__dict__
             )
-        if not conversation_id:
-            return Response().error("conversation_id is empty").__dict__
+        if not session_id:
+            return Response().error("session_id is empty").__dict__
 
         # 追加用户消息
-        # conversation_id 现在实际上是 session_id
-        webchat_conv_id = conversation_id
+        webchat_conv_id = session_id
 
         # 获取会话特定的队列
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
