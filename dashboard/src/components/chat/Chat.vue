@@ -947,7 +947,7 @@ export default {
                     },
                     body: JSON.stringify({
                         message: promptToSend,
-                        conversation_id: this.currSessionId,
+                        session_id: this.currSessionId,
                         image_url: imageNamesToSend,
                         audio_url: audioNameToSend ? [audioNameToSend] : [],
                         selected_provider: selectedProviderId,

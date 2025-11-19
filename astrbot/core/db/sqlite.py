@@ -729,8 +729,8 @@ class SQLiteDatabase(BaseDatabase):
         if session_id:
             kwargs["session_id"] = session_id
         else:
-            # Auto-generate session_id with platform_id prefix
-            kwargs["session_id"] = f"{platform_id}_{uuid.uuid4()}"
+            # Auto-generate session_id
+            kwargs["session_id"] = uuid.uuid4()
 
         async with self.get_db() as session:
             session: AsyncSession
