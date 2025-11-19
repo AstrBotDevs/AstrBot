@@ -119,6 +119,13 @@ class ToolCall(BaseModel):
     """The ID of the tool call."""
     function: FunctionBody
     """The function body of the tool call."""
+    extra_content: dict[str, Any] | None = None
+    """Extra metadata for the tool call."""
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        if self.extra_content is None:
+            kwargs.setdefault("exclude", set()).add("extra_content")
+        return super().model_dump(**kwargs)
 
 
 class ToolCallPart(BaseModel):
