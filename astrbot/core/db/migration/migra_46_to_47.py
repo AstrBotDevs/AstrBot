@@ -14,7 +14,7 @@ from sqlmodel import col
 
 from astrbot.api import logger, sp
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import PlatformMessageHistory, PlatformSession
+from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
 
 
 async def migrate_46_to_47(db_helper: BaseDatabase):
@@ -62,6 +62,22 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
             existing_result = await session.execute(existing_query)
             existing_session_ids = {row[0] for row in existing_result.fetchall()}
 
+            # 查询 Conversations 表中的 title，用于设置 display_name
+            # 对于每个 user_id，对应的 conversation user_id 格式为: webchat:FriendMessage:webchat!astrbot!{user_id}
+            user_ids_to_query = [
+                f"webchat:FriendMessage:webchat!astrbot!{user_id}"
+                for user_id, _, _, _ in webchat_users
+            ]
+            conv_query = select(
+                col(ConversationV2.user_id), col(ConversationV2.title)
+            ).where(col(ConversationV2.user_id).in_(user_ids_to_query))
+            conv_result = await session.execute(conv_query)
+            # 创建 user_id -> title 的映射字典
+            title_map = {
+                user_id.replace("webchat:FriendMessage:webchat!astrbot!", ""): title
+                for user_id, title in conv_result.fetchall()
+            }
+
             # 批量创建 PlatformSession 记录
             sessions_to_add = []
             skipped_count = 0
@@ -79,6 +95,9 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
                     skipped_count += 1
                     continue
 
+                # 从 Conversations 表中获取 display_name
+                display_name = title_map.get(user_id)
+
                 # 创建新的 PlatformSession（保留原有的时间戳）
                 new_session = PlatformSession(
                     session_id=session_id,
@@ -87,6 +106,7 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
                     is_group=0,
                     created_at=created_at,
                     updated_at=updated_at,
+                    display_name=display_name,
                 )
                 sessions_to_add.append(new_session)
 

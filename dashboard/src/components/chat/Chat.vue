@@ -57,7 +57,7 @@
                                 style="background-color: transparent;" v-model:selected="selectedSessions"
                                 @update:selected="getSessionMessages">
                                 <v-list-item v-for="(session, i) in sessions" :key="session.session_id" :value="session.session_id"
-                                    rounded="lg" class="session-item" active-color="secondary">
+                                    class="session-item" active-color="secondary">
                                     <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="session-title">
                                         {{ session.display_name || tm('conversation.newConversation') }}
                                     </v-list-item-title>
@@ -1433,6 +1433,16 @@ export default {
     opacity: 0;
     visibility: hidden;
     transition: all 0.2s ease;
+}
+
+.session-item {
+    margin-bottom: 6px;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+    height: auto !important;
+    min-height: 56px;
+    padding: 8px 16px !important;
+    position: relative;
 }
 
 .session-item:hover .session-actions {
