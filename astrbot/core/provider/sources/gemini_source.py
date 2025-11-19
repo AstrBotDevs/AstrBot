@@ -290,13 +290,24 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 elif not native_tool_enabled and "tool_calls" in message:
-                    parts = [
-                        types.Part.from_function_call(
+                    parts = []
+                    for tool in message["tool_calls"]:
+                        part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
                         )
-                        for tool in message["tool_calls"]
-                    ]
+                        # we should set thought_signature back to part if exists
+                        # for more info about thought_signature, see:
+                        # https://ai.google.dev/gemini-api/docs/thought-signatures
+                        if "extra_content" in tool:
+                            ts_bs64 = (
+                                tool["extra_content"]
+                                .get("google", {})
+                                .get("thought_signature")
+                            )
+                            if ts_bs64:
+                                part.thought_signature = base64.b64decode(ts_bs64)
+                        parts.append(part)
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
@@ -397,6 +408,14 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.tools_call_ids.append(
                     part.function_call.id or part.function_call.name,
                 )
+                # extra_content
+                if part.thought_signature:
+                    ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
+                    llm_response.tools_call_extra_content.append(
+                        {"google": {"thought_signature": ts_bs64}}
+                    )
+                else:
+                    llm_response.tools_call_extra_content.append(None)
             elif (
                 part.inline_data
                 and part.inline_data.mime_type
@@ -435,6 +454,7 @@ class ProviderGoogleGenAI(Provider):
                     contents=conversation,
                     config=config,
                 )
+                logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
                     logger.error(f"请求失败, 返回的 candidates 为空: {result}")

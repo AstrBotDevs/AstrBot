@@ -211,6 +211,8 @@ class LLMResponse:
     """Tool call names."""
     tools_call_ids: list[str] = field(default_factory=list)
     """Tool call IDs."""
+    tools_call_extra_content: list[dict[str, Any] | None] = field(default_factory=list)
+    """Tool call extra content."""
     reasoning_content: str = ""
     """The reasoning content extracted from the LLM, if any."""
 
@@ -233,6 +235,7 @@ class LLMResponse:
         tools_call_args: list[dict[str, Any]] | None = None,
         tools_call_name: list[str] | None = None,
         tools_call_ids: list[str] | None = None,
+        tools_call_extra_content: list[dict[str, Any]] | None = None,
         raw_completion: ChatCompletion
         | GenerateContentResponse
         | AnthropicMessage
@@ -256,6 +259,8 @@ class LLMResponse:
             tools_call_name = []
         if tools_call_ids is None:
             tools_call_ids = []
+        if tools_call_extra_content is None:
+            tools_call_extra_content = []
 
         self.role = role
         self.completion_text = completion_text
@@ -263,6 +268,7 @@ class LLMResponse:
         self.tools_call_args = tools_call_args
         self.tools_call_name = tools_call_name
         self.tools_call_ids = tools_call_ids
+        self.tools_call_extra_content = tools_call_extra_content
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 
@@ -288,16 +294,17 @@ class LLMResponse:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
-            ret.append(
-                {
-                    "id": self.tools_call_ids[idx],
-                    "function": {
-                        "name": self.tools_call_name[idx],
-                        "arguments": json.dumps(tool_call_arg),
-                    },
-                    "type": "function",
+            payload = {
+                "id": self.tools_call_ids[idx],
+                "function": {
+                    "name": self.tools_call_name[idx],
+                    "arguments": json.dumps(tool_call_arg),
                 },
-            )
+                "type": "function",
+            }
+            if self.tools_call_extra_content[idx]:
+                payload["extra_content"] = self.tools_call_extra_content[idx]
+            ret.append(payload)
         return ret
 
     def to_openai_to_calls_model(self) -> list[ToolCall]:
@@ -311,6 +318,8 @@ class LLMResponse:
                         name=self.tools_call_name[idx],
                         arguments=json.dumps(tool_call_arg),
                     ),
+                    # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
+                    extra_content=self.tools_call_extra_content[idx],
                 ),
             )
         return ret
