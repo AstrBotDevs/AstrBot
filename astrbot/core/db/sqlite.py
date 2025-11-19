@@ -414,7 +414,7 @@ class SQLiteDatabase(BaseDatabase):
         user_id,
         offset_sec=86400,
     ):
-        """Delete platform message history records older than the specified offset."""
+        """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -424,7 +424,7 @@ class SQLiteDatabase(BaseDatabase):
                     delete(PlatformMessageHistory).where(
                         col(PlatformMessageHistory.platform_id) == platform_id,
                         col(PlatformMessageHistory.user_id) == user_id,
-                        col(PlatformMessageHistory.created_at) < cutoff_time,
+                        col(PlatformMessageHistory.created_at) >= cutoff_time,
                     ),
                 )
 
