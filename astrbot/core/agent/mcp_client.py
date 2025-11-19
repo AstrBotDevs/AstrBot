@@ -123,7 +123,8 @@ class MCPClient:
         # Store connection config for reconnection
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
-        self._reconnecting: bool = False
+        self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
+        self._reconnecting: bool = False  # For logging and debugging
 
     async def connect_to_server(self, mcp_server_config: dict, name: str):
         """Connect to MCP server
@@ -246,41 +247,52 @@ class MCPClient:
     async def _reconnect(self) -> None:
         """Reconnect to the MCP server using the stored configuration.
 
+        Uses asyncio.Lock to ensure thread-safe reconnection in concurrent environments.
+
         Raises:
             Exception: raised when reconnection fails
         """
-        if self._reconnecting:
-            logger.debug(
-                f"MCP Client {self._server_name} is already reconnecting, skipping"
-            )
-            return
+        async with self._reconnect_lock:
+            # Check if already reconnecting (useful for logging)
+            if self._reconnecting:
+                logger.debug(
+                    f"MCP Client {self._server_name} is already reconnecting, skipping"
+                )
+                return
 
-        if not self._mcp_server_config or not self._server_name:
-            raise Exception("Cannot reconnect: missing connection configuration")
-        self._reconnecting = True
-        try:
-            logger.info(f"Attempting to reconnect to MCP server {self._server_name}...")
+            if not self._mcp_server_config or not self._server_name:
+                raise Exception("Cannot reconnect: missing connection configuration")
 
-            # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
-            if self.exit_stack:
-                self._old_exit_stacks.append(self.exit_stack)
+            self._reconnecting = True
+            try:
+                logger.info(
+                    f"Attempting to reconnect to MCP server {self._server_name}..."
+                )
 
-            # Mark old session as invalid
-            self.session = None
+                # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
+                if self.exit_stack:
+                    self._old_exit_stacks.append(self.exit_stack)
 
-            # Create new exit stack for new connection
-            self.exit_stack = AsyncExitStack()
+                # Mark old session as invalid
+                self.session = None
 
-            # Reconnect using stored config
-            await self.connect_to_server(self._mcp_server_config, self._server_name)
-            await self.list_tools_and_save()
+                # Create new exit stack for new connection
+                self.exit_stack = AsyncExitStack()
 
-            logger.info(f"Successfully reconnected to MCP server {self._server_name}")
-        except Exception as e:
-            logger.error(f"Failed to reconnect to MCP server {self._server_name}: {e}")
-            raise
-        finally:
-            self._reconnecting = False
+                # Reconnect using stored config
+                await self.connect_to_server(self._mcp_server_config, self._server_name)
+                await self.list_tools_and_save()
+
+                logger.info(
+                    f"Successfully reconnected to MCP server {self._server_name}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                )
+                raise
+            finally:
+                self._reconnecting = False
 
     async def call_tool_with_reconnect(
         self,
