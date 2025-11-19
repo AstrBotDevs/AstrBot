@@ -280,10 +280,10 @@ class FunctionToolManager:
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
         if name in self.mcp_client_dict:
+            client = self.mcp_client_dict.pop(name)
             try:
                 # 关闭MCP连接
-                await self.mcp_client_dict[name].cleanup()
-                self.mcp_client_dict.pop(name)
+                await client.cleanup()
             except Exception as e:
                 logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
             # 移除关联的FuncTool
