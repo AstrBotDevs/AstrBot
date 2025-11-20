@@ -280,19 +280,22 @@ class FunctionToolManager:
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
         if name in self.mcp_client_dict:
+            client = self.mcp_client_dict[name]
             try:
                 # 关闭MCP连接
-                await self.mcp_client_dict[name].cleanup()
-                self.mcp_client_dict.pop(name)
+                await client.cleanup()
             except Exception as e:
                 logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
-            # 移除关联的FuncTool
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
-            logger.info(f"已关闭 MCP 服务 {name}")
+            finally:
+                # Remove client from dict after cleanup attempt (successful or not)
+                self.mcp_client_dict.pop(name, None)
+                # 移除关联的FuncTool
+                self.func_list = [
+                    f
+                    for f in self.func_list
+                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+                ]
+                logger.info(f"已关闭 MCP 服务 {name}")
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
