@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router';
 export interface Session {
     session_id: string;
     display_name: string;
-    updated_at: number;
+    updated_at: string;
 }
 
 export function useSessions(chatboxMode: boolean = false) {

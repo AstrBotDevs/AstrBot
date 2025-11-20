@@ -162,7 +162,7 @@ class PlatformSession(SQLModel, table=True):
     Each session can have multiple conversations (对话) associated with it.
     """
 
-    __tablename__ = "platform_sessions"
+    __tablename__ = "platform_sessions"  # type: ignore
 
     inner_id: int | None = Field(
         primary_key=True,

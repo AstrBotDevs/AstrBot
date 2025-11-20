@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import typing as T
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
@@ -788,13 +788,13 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
-                values = {"updated_at": datetime.now()}
+                values: dict[str, T.Any] = {"updated_at": datetime.now(timezone.utc)}
                 if display_name is not None:
                     values["display_name"] = display_name
 
                 await session.execute(
                     update(PlatformSession)
-                    .where(PlatformSession.session_id == session_id)
+                    .where(col(PlatformSession.session_id == session_id))
                     .values(**values),
                 )
 
@@ -805,6 +805,6 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(PlatformSession).where(
-                        PlatformSession.session_id == session_id,
+                        col(PlatformSession.session_id == session_id),
                     ),
                 )
