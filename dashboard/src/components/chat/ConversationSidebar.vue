@@ -31,10 +31,10 @@
         </div>
 
         <div style="padding: 16px; padding-top: 8px;">
-            <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currCid"
+            <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId"
                 v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-plus"
                 style="background-color: transparent !important; border-radius: 4px;">{{ tm('actions.newChat') }}</v-btn>
-            <v-btn icon="mdi-plus" rounded="lg" @click="$emit('newChat')" :disabled="!currCid" 
+            <v-btn icon="mdi-plus" rounded="lg" @click="$emit('newChat')" :disabled="!currSessionId" 
                 v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
         </div>
         
@@ -44,27 +44,27 @@
 
         <div style="overflow-y: auto; flex-grow: 1;" :class="{ 'fade-in': sidebarHoverExpanded }"
             v-if="!sidebarCollapsed || isMobile">
-            <v-card v-if="conversations.length > 0" flat style="background-color: transparent;">
+            <v-card v-if="sessions.length > 0" flat style="background-color: transparent;">
                 <v-list density="compact" nav class="conversation-list"
-                    style="background-color: transparent;" :selected="selectedConversations"
+                    style="background-color: transparent;" :selected="selectedSessions"
                     @update:selected="$emit('selectConversation', $event)">
-                    <v-list-item v-for="item in conversations" :key="item.cid" :value="item.cid"
+                    <v-list-item v-for="item in sessions" :key="item.session_id" :value="item.session_id"
                         rounded="lg" class="conversation-item" active-color="secondary">
                         <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title">
-                            {{ item.title || tm('conversation.newConversation') }}
+                            {{ item.display_name || tm('conversation.newConversation') }}
                         </v-list-item-title>
                         <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
-                            {{ formatDate(item.updated_at) }}
+                            {{ new Date(item.updated_at).toLocaleString() }}
                         </v-list-item-subtitle>
 
                         <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
                             <div class="conversation-actions">
                                 <v-btn icon="mdi-pencil" size="x-small" variant="text"
                                     class="edit-title-btn"
-                                    @click.stop="$emit('editTitle', item.cid, item.title)" />
+                                    @click.stop="$emit('editTitle', item.session_id, item.display_name)" />
                                 <v-btn icon="mdi-delete" size="x-small" variant="text"
                                     class="delete-conversation-btn" color="error"
-                                    @click.stop="$emit('deleteConversation', item.cid)" />
+                                    @click.stop="$emit('deleteConversation', item.session_id)" />
                             </div>
                         </template>
                     </v-list-item>
@@ -72,7 +72,7 @@
             </v-card>
 
             <v-fade-transition>
-                <div class="no-conversations" v-if="conversations.length === 0">
+                <div class="no-conversations" v-if="sessions.length === 0">
                     <v-icon icon="mdi-message-text-outline" size="large" color="grey-lighten-1"></v-icon>
                     <div class="no-conversations-text" v-if="!sidebarCollapsed || sidebarHoverExpanded || isMobile">
                         {{ tm('conversation.noHistory') }}
@@ -86,12 +86,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import type { Conversation } from '@/composables/useConversations';
+import type { Session } from '@/composables/useSessions';
 
 interface Props {
-    conversations: Conversation[];
-    selectedConversations: string[];
-    currCid: string;
+    sessions: Session[];
+    selectedSessions: string[];
+    currSessionId: string;
     isDark: boolean;
     chatboxMode: boolean;
     isMobile: boolean;
@@ -102,9 +102,9 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
     newChat: [];
-    selectConversation: [cids: string[]];
-    editTitle: [cid: string, title: string];
-    deleteConversation: [cid: string];
+    selectConversation: [sessionIds: string[]];
+    editTitle: [sessionId: string, title: string];
+    deleteConversation: [sessionId: string];
     closeMobileSidebar: [];
 }>();
 
@@ -158,21 +158,6 @@ function handleSidebarMouseLeave() {
         sidebarCollapsed.value = true;
     }
     sidebarHoverExpanded.value = false;
-}
-
-function formatDate(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
-    const options: Intl.DateTimeFormatOptions = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    };
-    const locale = t('core.common.locale') || 'zh-CN';
-    return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
 }
 </script>
 
@@ -308,3 +293,4 @@ function formatDate(timestamp: number): string {
     }
 }
 </style>
+

@@ -47,7 +47,11 @@
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
     "llmService": "LLM Service",
-    "speechToText": "Speech to Text"
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session Name",
+    "displayName": "Session Name",
+    "displayNameUpdated": "Session name updated",
+    "displayNameUpdateFailed": "Failed to update session name"
   },
   "modes": {
     "darkMode": "Switch to Dark Mode",

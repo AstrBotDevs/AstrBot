@@ -6,9 +6,9 @@
             
             <div class="chat-layout">
                 <ConversationSidebar
-                    :conversations="conversations"
-                    :selectedConversations="selectedConversations"
-                    :currCid="currCid"
+                    :sessions="sessions"
+                    :selectedSessions="selectedSessions"
+                    :currSessionId="currSessionId"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -40,7 +40,7 @@
                             <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
                                 <template v-slot:activator="{ props }">
                                     <v-icon v-bind="props"
-                                        @click="router.push(currCid ? `/chatbox/${currCid}` : '/chatbox')"
+                                        @click="router.push(currSessionId ? `/chatbox/${currSessionId}` : '/chatbox')"
                                         class="fullscreen-icon">mdi-fullscreen</v-icon>
                                 </template>
                             </v-tooltip>
@@ -62,7 +62,7 @@
                             <!-- router 推送到 /chat -->
                             <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
                                 <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" @click="router.push(currCid ? `/chat/${currCid}` : '/chat')"
+                                    <v-icon v-bind="props" @click="router.push(currSessionId ? `/chat/${currSessionId}` : '/chat')"
                                         class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
                                 </template>
                             </v-tooltip>
@@ -142,7 +142,7 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import MessageList from '@/components/chat/MessageList.vue';
 import ConversationSidebar from '@/components/chat/ConversationSidebar.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
-import { useConversations } from '@/composables/useConversations';
+import { useSessions } from '@/composables/useSessions';
 import { useMessages } from '@/composables/useMessages';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
@@ -169,22 +169,22 @@ const previewImageUrl = ref('');
 
 // 使用 composables
 const {
-    conversations,
-    selectedConversations,
-    currCid,
-    pendingCid,
+    sessions,
+    selectedSessions,
+    currSessionId,
+    pendingSessionId,
     editTitleDialog,
     editingTitle,
-    editingCid,
-    getCurrentConversation,
-    getConversations,
-    newConversation,
-    deleteConversation: deleteConv,
+    editingSessionId,
+    getCurrentSession,
+    getSessions,
+    newSession,
+    deleteSession: deleteSessionFn,
     showEditTitleDialog,
     saveTitle,
-    updateConversationTitle,
+    updateSessionTitle,
     newChat
-} = useConversations(props.chatboxMode);
+} = useSessions(props.chatboxMode);
 
 const {
     stagedImagesName,
@@ -206,10 +206,10 @@ const {
     isStreaming,
     isConvRunning,
     enableStreaming,
-    getConversationMessages: getConvMessages,
+    getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
     toggleStreaming
-} = useMessages(currCid, getMediaFile, updateConversationTitle, getConversations);
+} = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
 // 组件引用
 const messageList = ref<InstanceType<typeof MessageList> | null>(null);
@@ -248,13 +248,13 @@ function openImagePreview(imageUrl: string) {
     imagePreviewDialog.value = true;
 }
 
-async function handleSelectConversation(cids: string[]) {
-    if (!cids[0]) return;
+async function handleSelectConversation(sessionIds: string[]) {
+    if (!sessionIds[0]) return;
 
     // 更新 URL
     const basePath = props.chatboxMode ? '/chatbox' : '/chat';
-    if (route.path !== `${basePath}/${cids[0]}`) {
-        router.push(`${basePath}/${cids[0]}`);
+    if (route.path !== `${basePath}/${sessionIds[0]}`) {
+        router.push(`${basePath}/${sessionIds[0]}`);
         return;
     }
 
@@ -263,10 +263,10 @@ async function handleSelectConversation(cids: string[]) {
         closeMobileSidebar();
     }
 
-    currCid.value = cids[0];
-    selectedConversations.value = [cids[0]];
+    currSessionId.value = sessionIds[0];
+    selectedSessions.value = [sessionIds[0]];
     
-    await getConvMessages(cids[0], router);
+    await getSessionMsg(sessionIds[0], router);
     
     nextTick(() => {
         messageList.value?.scrollToBottom();
@@ -278,8 +278,8 @@ function handleNewChat() {
     messages.value = [];
 }
 
-async function handleDeleteConversation(cid: string) {
-    await deleteConv(cid);
+async function handleDeleteConversation(sessionId: string) {
+    await deleteSessionFn(sessionId);
     messages.value = [];
 }
 
@@ -303,8 +303,8 @@ async function handleSendMessage() {
         return;
     }
 
-    if (!currCid.value) {
-        await newConversation();
+    if (!currSessionId.value) {
+        await newSession();
     }
 
     const promptToSend = prompt.value.trim();
@@ -340,15 +340,15 @@ watch(
         }
 
         if (to.startsWith('/chat/') || to.startsWith('/chatbox/')) {
-            const pathCid = to.split('/')[2];
-            if (pathCid && pathCid !== currCid.value) {
-                if (conversations.value.length > 0) {
-                    const conversation = conversations.value.find(c => c.cid === pathCid);
-                    if (conversation) {
-                        handleSelectConversation([pathCid]);
+            const pathSessionId = to.split('/')[2];
+            if (pathSessionId && pathSessionId !== currSessionId.value) {
+                if (sessions.value.length > 0) {
+                    const session = sessions.value.find(s => s.session_id === pathSessionId);
+                    if (session) {
+                        handleSelectConversation([pathSessionId]);
                     }
                 } else {
-                    pendingCid.value = pathCid;
+                    pendingSessionId.value = pathSessionId;
                 }
             }
         }
@@ -357,25 +357,25 @@ watch(
 );
 
 // 会话列表加载后处理待定会话
-watch(conversations, (newConversations) => {
-    if (pendingCid.value && newConversations.length > 0) {
-        const conversation = newConversations.find(c => c.cid === pendingCid.value);
-        if (conversation) {
-            selectedConversations.value = [pendingCid.value];
-            handleSelectConversation([pendingCid.value]);
-            pendingCid.value = null;
+watch(sessions, (newSessions) => {
+    if (pendingSessionId.value && newSessions.length > 0) {
+        const session = newSessions.find(s => s.session_id === pendingSessionId.value);
+        if (session) {
+            selectedSessions.value = [pendingSessionId.value];
+            handleSelectConversation([pendingSessionId.value]);
+            pendingSessionId.value = null;
         }
-    } else if (!currCid.value && newConversations.length > 0) {
-        const firstConversation = newConversations[0];
-        selectedConversations.value = [firstConversation.cid];
-        handleSelectConversation([firstConversation.cid]);
+    } else if (!currSessionId.value && newSessions.length > 0) {
+        const firstSession = newSessions[0];
+        selectedSessions.value = [firstSession.session_id];
+        handleSelectConversation([firstSession.session_id]);
     }
 });
 
 onMounted(() => {
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    getConversations();
+    getSessions();
 });
 
 onBeforeUnmount(() => {

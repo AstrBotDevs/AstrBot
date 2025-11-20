@@ -18,10 +18,10 @@ export interface Message {
 }
 
 export function useMessages(
-    currCid: Ref<string>,
+    currSessionId: Ref<string>,
     getMediaFile: (filename: string) => Promise<string>,
-    updateConversationTitle: (cid: string, title: string) => void,
-    onConversationsUpdate: () => void
+    updateSessionTitle: (sessionId: string, title: string) => void,
+    onSessionsUpdate: () => void
 ) {
     const messages = ref<Message[]>([]);
     const isStreaming = ref(false);
@@ -41,23 +41,23 @@ export function useMessages(
         localStorage.setItem('enableStreaming', JSON.stringify(enableStreaming.value));
     }
 
-    async function getConversationMessages(cid: string, router: any) {
-        if (!cid) return;
+    async function getSessionMessages(sessionId: string, router: any) {
+        if (!sessionId) return;
 
         try {
-            const response = await axios.get('/api/chat/get_conversation?conversation_id=' + cid);
+            const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
             isConvRunning.value = response.data.data.is_running || false;
             let history = response.data.data.history;
 
             if (isConvRunning.value) {
                 if (!isToastedRunningInfo.value) {
-                    useToast().info("该对话正在运行中。", { timeout: 5000 });
+                    useToast().info("该会话正在运行中。", { timeout: 5000 });
                     isToastedRunningInfo.value = true;
                 }
 
-                // 如果对话还在运行，3秒后重新获取消息
+                // 如果会话还在运行，3秒后重新获取消息
                 setTimeout(() => {
-                    getConversationMessages(currCid.value, router);
+                    getSessionMessages(currSessionId.value, router);
                 }, 3000);
             }
 
@@ -159,7 +159,7 @@ export function useMessages(
                 },
                 body: JSON.stringify({
                     message: prompt,
-                    conversation_id: currCid.value,
+                    session_id: currSessionId.value,
                     image_url: imageNames,
                     audio_url: audioName ? [audioName] : [],
                     selected_provider: selectedProviderId,
@@ -256,7 +256,7 @@ export function useMessages(
                                 }
                             }
                         } else if (chunk_json.type === 'update_title') {
-                            updateConversationTitle(chunk_json.cid, chunk_json.data);
+                            updateSessionTitle(chunk_json.session_id, chunk_json.data);
                         }
 
                         if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
@@ -272,8 +272,8 @@ export function useMessages(
                 }
             }
 
-            // 获取最新的对话列表
-            onConversationsUpdate();
+            // 获取最新的会话列表
+            onSessionsUpdate();
 
         } catch (err) {
             console.error('发送消息失败:', err);
@@ -296,8 +296,9 @@ export function useMessages(
         isStreaming,
         isConvRunning,
         enableStreaming,
-        getConversationMessages,
+        getSessionMessages,
         sendMessage,
         toggleStreaming
     };
 }
+

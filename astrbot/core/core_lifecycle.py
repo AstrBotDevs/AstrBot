@@ -22,6 +22,7 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
+from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
@@ -101,6 +102,13 @@ class AstrBotCoreLifecycle:
             await migrate_45_to_46(self.astrbot_config_mgr, self.umop_config_router)
         except Exception as e:
             logger.error(f"Migration from version 4.5 to 4.6 failed: {e!s}")
+            logger.error(traceback.format_exc())
+
+        # migration for webchat session
+        try:
+            await migrate_webchat_session(self.db)
+        except Exception as e:
+            logger.error(f"Migration for webchat session failed: {e!s}")
             logger.error(traceback.format_exc())
 
         # 初始化事件队列
