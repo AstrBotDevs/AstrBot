@@ -1318,7 +1318,6 @@ CONFIG_METADATA_2 = {
                         "rerank_api_base": "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
                         "rerank_model": "qwen3-rerank",
                         "timeout": 30,
-                        "top_n": 3,
                         "return_documents": False,
                         "instruct": "",
                     },
@@ -1355,11 +1354,6 @@ CONFIG_METADATA_2 = {
                     "rerank_model": {
                         "description": "重排序模型名称",
                         "type": "string",
-                    },
-                    "top_n": {
-                        "description": "返回排序后的top_n个文档",
-                        "type": "int",
-                        "hint": "默认返回全部文档。如果指定的值大于文档总数，将返回全部文档。",
                     },
                     "return_documents": {
                         "description": "是否在排序结果中返回文档原文",

@@ -32,7 +32,10 @@ class BailianRerankProvider(RerankProvider):
 
         self.model = provider_config.get("rerank_model", "qwen3-rerank")
         self.timeout = provider_config.get("timeout", 30)
-        self.default_top_n = provider_config.get("top_n", 5)
+        # 自动读取知识库配置的 kb_final_top_k，如果没有则使用配置中的 top_n
+        self.default_top_n = provider_settings.get(
+            "kb_final_top_k"
+        ) or provider_config.get("top_n", 5)
         self.return_documents = provider_config.get("return_documents", False)
         self.instruct = provider_config.get("instruct", "")
 
@@ -88,7 +91,7 @@ class BailianRerankProvider(RerankProvider):
             )
             documents = documents[:500]
 
-        # 使用传入的top_n或默认配置
+        # 优先使用传入的top_n参数（来自知识库配置），如果没有才使用默认配置
         final_top_n = top_n if top_n is not None else self.default_top_n
 
         try:
