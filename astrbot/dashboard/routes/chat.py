@@ -334,8 +334,8 @@ class ChatRoute(Route):
                     "creator": session.creator,
                     "display_name": session.display_name,
                     "is_group": session.is_group,
-                    "created_at": int(session.created_at.timestamp()),
-                    "updated_at": int(session.updated_at.timestamp()),
+                    "created_at": session.created_at.astimezone().isoformat(),
+                    "updated_at": session.updated_at.astimezone().isoformat(),
                 }
             )
 

@@ -54,7 +54,7 @@
                             {{ item.display_name || tm('conversation.newConversation') }}
                         </v-list-item-title>
                         <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
-                            {{ formatDate(item.updated_at) }}
+                            {{ new Date(item.updated_at).toLocaleString() }}
                         </v-list-item-subtitle>
 
                         <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
@@ -158,21 +158,6 @@ function handleSidebarMouseLeave() {
         sidebarCollapsed.value = true;
     }
     sidebarHoverExpanded.value = false;
-}
-
-function formatDate(timestamp: number): string {
-    const date = new Date(timestamp * 1000);
-    const options: Intl.DateTimeFormatOptions = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    };
-    const locale = t('core.common.locale') || 'zh-CN';
-    return date.toLocaleString(locale, options).replace(/\//g, '-').replace(/, /g, ' ');
 }
 </script>
 
