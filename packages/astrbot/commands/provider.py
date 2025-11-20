@@ -22,57 +22,99 @@ class ProviderCommands:
         if idx is None:
             parts = ["## 载入的 LLM 提供商\n"]
 
-            providers = list(self.context.get_all_providers())
+            # 获取所有类型的提供商
+            llms = list(self.context.get_all_providers())
+            ttss = self.context.get_all_tts_providers()
+            stts = self.context.get_all_stt_providers()
+
+            # 构造待检测列表: [(provider, type_label), ...]
+            all_providers = []
+            all_providers.extend([(p, "llm") for p in llms])
+            all_providers.extend([(p, "tts") for p in ttss])
+            all_providers.extend([(p, "stt") for p in stts])
 
             # 并发测试连通性
             async def _check_reachability(p):
                 try:
                     # 尝试获取模型列表作为连通性测试，超时设置为4秒
-                    await asyncio.wait_for(p.get_models(), timeout=4)
-                    return True
+                    # 大多数 Provider 实现了 get_models，若无此方法则视为跳过检测
+                    if hasattr(p, "get_models"):
+                        await asyncio.wait_for(p.get_models(), timeout=4)
+                        return True
+                    return None  # 表示不支持检测或无此方法
                 except Exception:
                     return False
 
             # 执行并发检查
-            results = await asyncio.gather(*[_check_reachability(p) for p in providers])
+            check_results = await asyncio.gather(
+                *[_check_reachability(p) for p, _ in all_providers]
+            )
 
-            for idx, (llm, is_reachable) in enumerate(zip(providers, results)):
-                id_ = llm.meta().id
-                reachability_mark = "✅" if is_reachable else "❌"
-                line = f"{idx + 1}. {id_} ({llm.meta().model}) {reachability_mark}"
+            # 整合结果
+            display_data = []
+            for (p, p_type), reachable in zip(all_providers, check_results):
+                meta = p.meta()
+                id_ = meta.id
+
+                # 根据类型构建显示名称
+                if p_type == "llm":
+                    info = f"{id_} ({meta.model})"
+                else:
+                    info = f"{id_}"
+
+                # 确定状态标记
+                if reachable is True:
+                    mark = " ✅"
+                elif reachable is False:
+                    mark = " ❌"
+                else:
+                    mark = ""  # 不支持检测时不显示标记
+
+                display_data.append(
+                    {"type": p_type, "info": info, "mark": mark, "provider": p}
+                )
+
+            # 分组输出
+            # 1. LLM
+            llm_data = [d for d in display_data if d["type"] == "llm"]
+            for i, d in enumerate(llm_data):
+                line = f"{i + 1}. {d['info']}{d['mark']}"
                 provider_using = self.context.get_using_provider(umo=umo)
-                if provider_using and provider_using.meta().id == id_:
+                if (
+                    provider_using
+                    and provider_using.meta().id == d["provider"].meta().id
+                ):
                     line += " (当前使用)"
                 parts.append(line + "\n")
 
-            tts_providers = self.context.get_all_tts_providers()
-            if tts_providers:
+            # 2. TTS
+            tts_data = [d for d in display_data if d["type"] == "tts"]
+            if tts_data:
                 parts.append("\n## 载入的 TTS 提供商\n")
-                for idx, tts in enumerate(tts_providers):
-                    id_ = tts.meta().id
-                    line = f"{idx + 1}. {id_}"
+                for i, d in enumerate(tts_data):
+                    line = f"{i + 1}. {d['info']}{d['mark']}"
                     tts_using = self.context.get_using_tts_provider(umo=umo)
-                    if tts_using and tts_using.meta().id == id_:
+                    if tts_using and tts_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
 
-            stt_providers = self.context.get_all_stt_providers()
-            if stt_providers:
+            # 3. STT
+            stt_data = [d for d in display_data if d["type"] == "stt"]
+            if stt_data:
                 parts.append("\n## 载入的 STT 提供商\n")
-                for idx, stt in enumerate(stt_providers):
-                    id_ = stt.meta().id
-                    line = f"{idx + 1}. {id_}"
+                for i, d in enumerate(stt_data):
+                    line = f"{i + 1}. {d['info']}{d['mark']}"
                     stt_using = self.context.get_using_stt_provider(umo=umo)
-                    if stt_using and stt_using.meta().id == id_:
+                    if stt_using and stt_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
 
             parts.append("\n使用 /provider <序号> 切换 LLM 提供商。")
             ret = "".join(parts)
 
-            if tts_providers:
+            if ttss:
                 ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
-            if stt_providers:
+            if stts:
                 ret += "\n使用 /provider stt <切换> STT 提供商。"
 
             event.set_result(MessageEventResult().message(ret))
