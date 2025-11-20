@@ -23,7 +23,7 @@ class ProviderCommands:
                 # 发送 "Ping" 测试对话
                 response = await asyncio.wait_for(
                     provider.text_chat(prompt="REPLY `PONG` ONLY"),
-                    timeout=10.0, # CLI 场景下稍微缩短一点超时时间，避免等待太久
+                    timeout=10.0,  # CLI 场景下稍微缩短一点超时时间，避免等待太久
                 )
                 if response is not None:
                     return True
@@ -62,7 +62,7 @@ class ProviderCommands:
                 return False
 
             elif provider_capability_type == ProviderType.RERANK:
-                 # 测试 Rerank
+                # 测试 Rerank
                 if isinstance(provider, RerankProvider):
                     await provider.rerank("Apple", documents=["apple", "banana"])
                     return True
@@ -73,7 +73,7 @@ class ProviderCommands:
                 if hasattr(provider, "get_models"):
                     await asyncio.wait_for(provider.get_models(), timeout=4)
                     return True
-                return True # 未知类型默认通过
+                return True  # 未知类型默认通过
 
         except Exception:
             return False
