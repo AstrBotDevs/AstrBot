@@ -1308,6 +1308,20 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "launch_model_if_not_running": False,
                     },
+                    "阿里云百炼重排序": {
+                        "id": "bailian_rerank",
+                        "type": "bailian_rerank",
+                        "provider": "bailian",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+                        "rerank_model": "qwen3-rerank",
+                        "timeout": 30,
+                        "top_n": 3,
+                        "return_documents": False,
+                        "instruct": "",
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -1341,6 +1355,21 @@ CONFIG_METADATA_2 = {
                     "rerank_model": {
                         "description": "重排序模型名称",
                         "type": "string",
+                    },
+                    "top_n": {
+                        "description": "返回排序后的top_n个文档",
+                        "type": "int",
+                        "hint": "默认返回全部文档。如果指定的值大于文档总数，将返回全部文档。",
+                    },
+                    "return_documents": {
+                        "description": "是否在排序结果中返回文档原文",
+                        "type": "bool",
+                        "hint": "默认值false，以减少网络传输开销。",
+                    },
+                    "instruct": {
+                        "description": "自定义排序任务类型说明",
+                        "type": "string",
+                        "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。",
                     },
                     "launch_model_if_not_running": {
                         "description": "模型未运行时自动启动",
