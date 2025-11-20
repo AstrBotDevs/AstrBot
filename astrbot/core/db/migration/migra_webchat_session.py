@@ -1,4 +1,4 @@
-"""Migration script from version 4.6 to 4.7.
+"""Migration script for WebChat sessions.
 
 This migration creates PlatformSession from existing platform_message_history records.
 
@@ -17,7 +17,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
 
 
-async def migrate_46_to_47(db_helper: BaseDatabase):
+async def migrate_webchat_session(db_helper: BaseDatabase):
     """Create PlatformSession records from platform_message_history.
 
     This migration extracts all unique user_ids from platform_message_history
@@ -25,12 +25,12 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
     """
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_v47"
+        "global", "global", "migration_done_webchat_session"
     )
     if migration_done:
         return
 
-    logger.info("开始执行数据库迁移（4.6 -> 4.7）...")
+    logger.info("开始执行数据库迁移（WebChat 会话迁移）...")
 
     try:
         async with db_helper.get_db() as session:
@@ -52,7 +52,9 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
 
             if not webchat_users:
                 logger.info("没有找到需要迁移的 WebChat 数据")
-                await sp.put_async("global", "global", "migration_done_v47", True)
+                await sp.put_async(
+                    "global", "global", "migration_done_webchat_session", True
+                )
                 return
 
             logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
@@ -122,7 +124,7 @@ async def migrate_46_to_47(db_helper: BaseDatabase):
                 logger.info("没有新会话需要迁移")
 
         # 标记迁移完成
-        await sp.put_async("global", "global", "migration_done_v47", True)
+        await sp.put_async("global", "global", "migration_done_webchat_session", True)
 
     except Exception as e:
         logger.error(f"迁移过程中发生错误: {e}", exc_info=True)
