@@ -1,5 +1,5 @@
-import re
 import asyncio
+import re
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
