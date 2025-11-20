@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import typing as T
-import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -728,9 +727,6 @@ class SQLiteDatabase(BaseDatabase):
         kwargs = {}
         if session_id:
             kwargs["session_id"] = session_id
-        else:
-            # Auto-generate session_id
-            kwargs["session_id"] = uuid.uuid4()
 
         async with self.get_db() as session:
             session: AsyncSession
