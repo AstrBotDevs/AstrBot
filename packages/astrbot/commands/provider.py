@@ -1,4 +1,5 @@
 import re
+import asyncio
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -20,9 +21,25 @@ class ProviderCommands:
 
         if idx is None:
             parts = ["## 载入的 LLM 提供商\n"]
-            for idx, llm in enumerate(self.context.get_all_providers()):
+            
+            providers = list(self.context.get_all_providers())
+            
+            # 并发测试连通性
+            async def _check_reachability(p):
+                try:
+                    # 尝试获取模型列表作为连通性测试，超时设置为4秒
+                    await asyncio.wait_for(p.get_models(), timeout=4)
+                    return True
+                except Exception:
+                    return False
+
+            # 执行并发检查
+            results = await asyncio.gather(*[_check_reachability(p) for p in providers])
+
+            for idx, (llm, is_reachable) in enumerate(zip(providers, results)):
                 id_ = llm.meta().id
-                line = f"{idx + 1}. {id_} ({llm.meta().model})"
+                reachability_mark = "✅" if is_reachable else "❌"
+                line = f"{idx + 1}. {id_} ({llm.meta().model}) {reachability_mark}"
                 provider_using = self.context.get_using_provider(umo=umo)
                 if provider_using and provider_using.meta().id == id_:
                     line += " (当前使用)"
