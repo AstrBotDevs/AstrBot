@@ -37,42 +37,49 @@
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">
-                            <!-- Reasoning Block (Collapsible) -->
-                            <div v-if="msg.content.reasoning && msg.content.reasoning.trim()" class="reasoning-container">
-                                <div class="reasoning-header" @click="toggleReasoning(index)">
-                                    <v-icon size="small" class="reasoning-icon">
-                                        {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                    </v-icon>
-                                    <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
-                                </div>
-                                <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                    <div v-html="md.render(msg.content.reasoning)" class="markdown-content reasoning-text"></div>
-                                </div>
+                            <!-- Loading state -->
+                            <div v-if="msg.content.isLoading" class="loading-container">
+                                <span class="loading-text">{{ tm('message.loading') }}</span>
                             </div>
                             
-                            <!-- Text -->
-                            <div v-if="msg.content.message && msg.content.message.trim()"
-                                v-html="md.render(msg.content.message)" class="markdown-content"></div>
-
-                            <!-- Image -->
-                            <div class="embedded-images"
-                                v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
-                                <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
-                                    class="embedded-image">
-                                    <img :src="img" class="bot-embedded-image"
-                                        @click="$emit('openImagePreview', img)" />
+                            <template v-else>
+                                <!-- Reasoning Block (Collapsible) -->
+                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()" class="reasoning-container">
+                                    <div class="reasoning-header" @click="toggleReasoning(index)">
+                                        <v-icon size="small" class="reasoning-icon">
+                                            {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                        </v-icon>
+                                        <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
+                                    </div>
+                                    <div v-if="isReasoningExpanded(index)" class="reasoning-content">
+                                        <div v-html="md.render(msg.content.reasoning)" class="markdown-content reasoning-text"></div>
+                                    </div>
                                 </div>
-                            </div>
+                                
+                                <!-- Text -->
+                                <div v-if="msg.content.message && msg.content.message.trim()"
+                                    v-html="md.render(msg.content.message)" class="markdown-content"></div>
 
-                            <!-- Audio -->
-                            <div class="embedded-audio" v-if="msg.content.embedded_audio">
-                                <audio controls class="audio-player">
-                                    <source :src="msg.content.embedded_audio" type="audio/wav">
-                                    {{ t('messages.errors.browser.audioNotSupported') }}
-                                </audio>
-                            </div>
+                                <!-- Image -->
+                                <div class="embedded-images"
+                                    v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
+                                    <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
+                                        class="embedded-image">
+                                        <img :src="img" class="bot-embedded-image"
+                                            @click="$emit('openImagePreview', img)" />
+                                    </div>
+                                </div>
+
+                                <!-- Audio -->
+                                <div class="embedded-audio" v-if="msg.content.embedded_audio">
+                                    <audio controls class="audio-player">
+                                        <source :src="msg.content.embedded_audio" type="audio/wav">
+                                        {{ t('messages.errors.browser.audioNotSupported') }}
+                                    </audio>
+                                </div>
+                            </template>
                         </div>
-                        <div class="message-actions">
+                        <div class="message-actions" v-if="!msg.content.isLoading">
                             <v-btn :icon="getCopyIcon(index)" size="small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
@@ -839,6 +846,29 @@ export default {
     max-width: 100%;
     border-radius: 8px;
     margin: 10px 0;
+}
+
+.loading-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    margin-top: 2px;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: var(--v-theme-secondaryText);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
 }
 
 .markdown-content blockquote {
