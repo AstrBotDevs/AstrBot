@@ -1,14 +1,82 @@
 import asyncio
+import os
 import re
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 
 class ProviderCommands:
     def __init__(self, context: star.Context):
         self.context = context
+
+    async def _test_provider_capability(self, provider):
+        """测试单个 provider 的可用性 (复用 Dashboard 的检测逻辑)"""
+        meta = provider.meta()
+        provider_capability_type = meta.provider_type
+
+        try:
+            if provider_capability_type == ProviderType.CHAT_COMPLETION:
+                # 发送 "Ping" 测试对话
+                response = await asyncio.wait_for(
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
+                    timeout=10.0, # CLI 场景下稍微缩短一点超时时间，避免等待太久
+                )
+                if response is not None:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.EMBEDDING:
+                # 测试 Embedding
+                embedding_result = await provider.get_embedding("health_check")
+                if isinstance(embedding_result, list) and (
+                    not embedding_result or isinstance(embedding_result[0], float)
+                ):
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
+                # 测试 TTS
+                audio_result = await provider.get_audio("你好")
+                if isinstance(audio_result, str) and audio_result:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
+                # 测试 STT
+                sample_audio_path = os.path.join(
+                    get_astrbot_path(),
+                    "samples",
+                    "stt_health_check.wav",
+                )
+                if not os.path.exists(sample_audio_path):
+                    # 如果样本文件不存在，降级为检查是否实现了方法
+                    return hasattr(provider, "get_text")
+
+                text_result = await provider.get_text(sample_audio_path)
+                if isinstance(text_result, str) and text_result:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.RERANK:
+                 # 测试 Rerank
+                if isinstance(provider, RerankProvider):
+                    await provider.rerank("Apple", documents=["apple", "banana"])
+                    return True
+                return False
+
+            else:
+                # 其他类型暂时视为通过，或者回退到 get_models
+                if hasattr(provider, "get_models"):
+                    await asyncio.wait_for(provider.get_models(), timeout=4)
+                    return True
+                return True # 未知类型默认通过
+
+        except Exception:
+            return False
 
     async def provider(
         self,
@@ -34,20 +102,8 @@ class ProviderCommands:
             all_providers.extend([(p, "stt") for p in stts])
 
             # 并发测试连通性
-            async def _check_reachability(p):
-                try:
-                    # 尝试获取模型列表作为连通性测试，超时设置为4秒
-                    # 大多数 Provider 实现了 get_models，若无此方法则视为跳过检测
-                    if hasattr(p, "get_models"):
-                        await asyncio.wait_for(p.get_models(), timeout=4)
-                        return True
-                    return None  # 表示不支持检测或无此方法
-                except Exception:
-                    return False
-
-            # 执行并发检查
             check_results = await asyncio.gather(
-                *[_check_reachability(p) for p, _ in all_providers]
+                *[self._test_provider_capability(p) for p, _ in all_providers]
             )
 
             # 整合结果
