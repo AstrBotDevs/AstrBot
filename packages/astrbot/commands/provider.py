@@ -21,9 +21,9 @@ class ProviderCommands:
 
         if idx is None:
             parts = ["## 载入的 LLM 提供商\n"]
-            
+
             providers = list(self.context.get_all_providers())
-            
+
             # 并发测试连通性
             async def _check_reachability(p):
                 try:
