@@ -14,6 +14,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+from astrbot.core.memory.memory_manager import MemoryManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
@@ -65,6 +66,7 @@ class Context:
         persona_manager: PersonaManager,
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
+        memory_manager: MemoryManager,
     ):
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -79,6 +81,7 @@ class Context:
         self.persona_manager = persona_manager
         self.astrbot_config_mgr = astrbot_config_mgr
         self.kb_manager = knowledge_base_manager
+        self.memory_manager = memory_manager
 
     async def llm_generate(
         self,
