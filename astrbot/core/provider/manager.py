@@ -331,6 +331,10 @@ class ProviderManager:
                     from .sources.xinference_rerank_source import (
                         XinferenceRerankProvider as XinferenceRerankProvider,
                     )
+                case "bailian_rerank":
+                    from .sources.bailian_rerank_source import (
+                        BailianRerankProvider as BailianRerankProvider,
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
