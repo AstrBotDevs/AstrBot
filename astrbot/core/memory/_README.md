@@ -1,94 +1,76 @@
-# AstrBot Long-Term Memory
+## Decay Score
 
-这个模块实现了 AstrBot 的长期记忆功能，基于 Function Calling 机制，允许模型调用预定义的 Tools 来管理记忆，并实现了简单的记忆遗忘机制。使用 AstrBot 向量数据库 API 存储和检索记忆片段。
+记忆衰减分数定义为：
 
-## 一些概念
+\[
+\text{decay\_score}
+= \alpha \cdot e^{-\lambda \cdot \Delta t \cdot \beta}
 
-### 相关理论
-
-1. 赫布理论：记忆通过神经元之间的连接（突触）进行存储和强化，频繁使用的连接会变得更强。
-2. 遗忘曲线：记忆会随着时间的推移而减弱，除非通过复习或使用来强化。
-
-#### 建模方案一
-
-为了建模上面两个理论，我们需要引入以下的变量：
-
-1. 记忆强度（Memory Strength）：表示记忆的持久性和易检索性。记忆强度越高，记忆越不容易遗忘。
-2. 使用频率（Usage Frequency）：表示记忆被访问或使用的频率。使用频率越高，记忆强度越高。
-3. 时间衰减（Time Decay）：表示记忆强度随时间的自然衰减。时间越长，记忆强度越低。
-4. 强化因子（Reinforcement Factor）：表示每次使用记忆时对记忆强度的提升效果。强化因子越大，记忆强度提升越显著。
-
-写入记忆时，我们可以初始化记忆强度和使用频率：
-
-- 记忆强度（S）初始化为一个基准值 S0。
-- 使用频率（F）初始化为 1。
-读取记忆时，我们可以根据以下公式计算记忆强度：
-
-S = S0 * e^(-λt) + kF
++ (1-\alpha)\cdot (1 - e^{-\gamma \cdot c})
+\]
 
 其中：
 
-- S0 是初始记忆强度。
-- λ 是时间衰减常数，表示记忆强度随时间的衰减速度。
-- t 是自记忆创建以来经过的时间。
-- k 是强化因子，表示每次使用记忆时对记忆强度的提升效果。
-- F 是使用频率，表示记忆被访问或使用的次数
++ \(\Delta t\)：自上次检索以来经过的时间（天），由 `last_retrieval_at` 计算；
++ \(c\)：检索次数，对应字段 `retrieval_count`；
++ \(\alpha\)：控制时间衰减和检索次数影响的权重；
++ \(\gamma\)：控制检索次数影响的速率；
++ \(\lambda\)：控制时间衰减的速率；
++ \(\beta\)：时间衰减调节因子；
 
-当记忆被访问时，我们更新使用频率和记忆强度：
+\[
+\beta = \frac{1}{1 + a \cdot c}
+\]
 
-- 使用频率（F）增加 1。
-- 记忆强度（S）根据上述公式重新计算。
++ \(a\)：控制检索次数对时间衰减影响的权重。
 
-相似记忆的合并：
+## ADD MEMORY
 
-对相似记忆我们有两种处理模式：
++ LLM 通过 `astr_add_memory` 工具调用，传入记忆内容和记忆类型。
++ 生成 `mem_id = uuid4()`。
++ 从上下文中获取 `owner_id = unified_message_origin`。
 
-- 过于相似的记忆，我们会执行合并成新的记忆。
-- 较为相似的记忆，比如某些实体相同，根据赫布理论，我们会提升相似记忆的记忆强度和使用频率。
+步骤：
 
-具体算法如下：
+1. 使用 VecDB 以新记忆内容为 query，检索前 20 条相似记忆。
+2. 从中取相似度最高的前 5 条：
+   + 若相似度超过“合并阈值”（如 `sim >= merge_threshold`）：
+     + 将该条记忆视为同一记忆，使用 LLM 将旧内容与新内容合并；
+     + 在同一个 `mem_id` 上更新 MemoryDB 和 VecDB（UPDATE，而非新建）。
+   + 否则：
+     + 作为全新的记忆插入：
+       + 写入 VecDB（metadata 中包含 `mem_id`, `owner_id`）；
+       + 写入 MemoryDB 的 `memory_chunks` 表，初始化：
+         + `created_at = now`
+         + `last_retrieval_at = now`
+         + `retrieval_count = 1` 等。
+3. 对 VecDB 返回的前 20 条记忆，如果相似度高于某个“赫布阈值”（`hebb_threshold`），则：
+   + `retrieval_count += 1`
+   + `last_retrieval_at = now`
 
-1. 计算新记忆与现有记忆的相似度。
-2. 根据相似度，执行以下操作：
-   - 如果相似度超过高阈值，合并记忆内容，更新记忆强度和使用频率。
-   - 如果相似度在中等范围内，提升现有记忆的记忆强度和使用频率。
-   - 如果不是高似记忆，都按正常流程存储新记忆。
+这一步体现了赫布学习：与新记忆共同被激活的旧记忆会获得一次强化。
 
-#### 建模方案二
+## QUERY MEMORY (STATIC)
 
-我们参考艾宾浩斯遗忘曲线，基于这两个变量设计了一个公式，其表示了每个对话总结的遗忘得分。
++ LLM 通过 `astr_query_memory` 工具调用，无参数。
 
-每个记忆节点带有
+步骤：
 
-1. last_retrieval_at
-2. retrieval_count
+1. 从 MemoryDB 的 `memory_chunks` 表中查询当前用户所有活跃记忆：
+   + `SELECT * FROM memory_chunks WHERE owner_id = ? AND is_active = 1`
+2. 对每条记忆，根据 `last_retrieval_at` 和 `retrieval_count` 计算对应的 `decay_score`。
+3. 按 `decay_score` 从高到低排序，返回前 `top_k` 条记忆内容给 LLM。
+4. 对返回的这 `top_k` 条记忆：
+   + `retrieval_count += 1`
+   + `last_retrieval_at = now`
 
-$decayscore = \alpha * exp(-\lambda * \delta_t * \beta) + (1-\alpha) * (1-exp(-\gamma * c))$
+## QUERY MEMORY (DYNAMIC)（暂不实现）
 
-其中：
-
-- $\delta_t$： 自上次检索以来经过的时间（以天为单位）。
-- $c$： 检索次数。
-- $\alpha$： 控制时间衰减和检索次数影响的权重
-- $\gamma$： 控制检索次数影响的速率
-- $\lambda$： 控制时间衰减影响的速率
-- $\beta$： 时间衰减的调节因子
-
-$\beta = \frac{1}{1 + a * c}$
-
-- $a$： 控制检索次数对时间衰减影响的权重
-
-相似记忆的合并：
-
-对相似记忆我们有两种处理模式：
-
-- 过于相似的记忆，我们会执行合并成新的记忆。
-- 较为相似的记忆，比如某些实体相同，根据赫布理论，我们会提升相似记忆的记忆强度和使用频率。
-
-具体算法如下：
-
-1. 计算新记忆与现有记忆的相似度。
-2. 根据相似度，执行以下操作：
-   - 如果相似度超过高阈值，合并记忆内容
-   - 如果相似度在中等范围内
-   - 如果不是高似记忆，都按正常流程存储新记忆。
++ LLM 提供查询内容作为语义 query。
++ 使用 VecDB 检索与该 query 最相似的前 `N` 条记忆（`N > top_k`）。
++ 根据 `mem_id` 从 `memory_chunks` 中加载对应记录。
++ 对这批候选记忆计算：
+  + 语义相似度（来自 VecDB）
+  + `decay_score`
+  + 最终排序分数（例如 `w1 * sim + w2 * decay_score`）
++ 按最终排序分数从高到低返回前 `top_k` 条记忆内容，并更新它们的 `retrieval_count` 和 `last_retrieval_at`。
