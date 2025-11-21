@@ -299,7 +299,7 @@ class ProviderGoogleGenAI(Provider):
                         # we should set thought_signature back to part if exists
                         # for more info about thought_signature, see:
                         # https://ai.google.dev/gemini-api/docs/thought-signatures
-                        if "extra_content" in tool:
+                        if "extra_content" in tool and tool["extra_content"]:
                             ts_bs64 = (
                                 tool["extra_content"]
                                 .get("google", {})

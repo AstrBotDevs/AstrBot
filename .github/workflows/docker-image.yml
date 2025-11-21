@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-      GHCR_OWNER: ${{ github.repository_owner }}
+      GHCR_OWNER: soulter
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     steps:
