@@ -9,7 +9,7 @@ class Result:
         id: str
         doc_id: str
         text: str
-        metadata: dict
+        metadata: str
         created_at: int
         updated_at: int
 

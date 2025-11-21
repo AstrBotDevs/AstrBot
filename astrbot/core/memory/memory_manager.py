@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,7 +115,7 @@ class MemoryManager:
             # Get all candidate memories from database
             candidate_memories: list[tuple[str, MemoryChunk]] = []
             for candidate in merge_candidates:
-                mem_id = candidate.data["metadata"]["mem_id"]
+                mem_id = json.loads(candidate.data["metadata"])["mem_id"]
                 memory = await self.mem_db.get_memory_by_id(mem_id)
                 if memory:
                     candidate_memories.append((mem_id, memory))
@@ -184,7 +185,7 @@ class MemoryManager:
 
         # Step 4: Apply Hebbian learning to similar memories
         hebb_mem_ids = [
-            r.data["metadata"]["mem_id"]
+            json.loads(r.data["metadata"])["mem_id"]
             for r in similar_results
             if r.similarity >= HEBB_THRESHOLD
         ]
