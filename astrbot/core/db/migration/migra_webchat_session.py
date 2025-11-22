@@ -43,7 +43,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase):
                     func.max(PlatformMessageHistory.updated_at).label("latest"),
                 )
                 .where(col(PlatformMessageHistory.platform_id) == "webchat")
-                .where(col(PlatformMessageHistory.sender_id) == "astrbot")
+                .where(col(PlatformMessageHistory.sender_id) != "bot")
                 .group_by(col(PlatformMessageHistory.user_id))
             )
 
