@@ -1,13 +1,82 @@
+import asyncio
+import os
 import re
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 
 class ProviderCommands:
     def __init__(self, context: star.Context):
         self.context = context
+
+    async def _test_provider_capability(self, provider):
+        """测试单个 provider 的可用性 (复用 Dashboard 的检测逻辑)"""
+        meta = provider.meta()
+        provider_capability_type = meta.provider_type
+
+        try:
+            if provider_capability_type == ProviderType.CHAT_COMPLETION:
+                # 发送 "Ping" 测试对话
+                response = await asyncio.wait_for(
+                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
+                    timeout=10.0,  # CLI 场景下稍微缩短一点超时时间，避免等待太久
+                )
+                if response is not None:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.EMBEDDING:
+                # 测试 Embedding
+                embedding_result = await provider.get_embedding("health_check")
+                if isinstance(embedding_result, list) and (
+                    not embedding_result or isinstance(embedding_result[0], float)
+                ):
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
+                # 测试 TTS
+                audio_result = await provider.get_audio("你好")
+                if isinstance(audio_result, str) and audio_result:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
+                # 测试 STT
+                sample_audio_path = os.path.join(
+                    get_astrbot_path(),
+                    "samples",
+                    "stt_health_check.wav",
+                )
+                if not os.path.exists(sample_audio_path):
+                    # 如果样本文件不存在，降级为检查是否实现了方法
+                    return hasattr(provider, "get_text")
+
+                text_result = await provider.get_text(sample_audio_path)
+                if isinstance(text_result, str) and text_result:
+                    return True
+                return False
+
+            elif provider_capability_type == ProviderType.RERANK:
+                # 测试 Rerank
+                if isinstance(provider, RerankProvider):
+                    await provider.rerank("Apple", documents=["apple", "banana"])
+                    return True
+                return False
+
+            else:
+                # 其他类型暂时视为通过，或者回退到 get_models
+                if hasattr(provider, "get_models"):
+                    await asyncio.wait_for(provider.get_models(), timeout=4)
+                    return True
+                return True  # 未知类型默认通过
+
+        except Exception:
+            return False
 
     async def provider(
         self,
@@ -17,46 +86,100 @@ class ProviderCommands:
     ):
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo).get("provider_settings", {})
+        reachability_check_enabled = cfg.get("reachability_check", True)
 
         if idx is None:
             parts = ["## 载入的 LLM 提供商\n"]
-            for idx, llm in enumerate(self.context.get_all_providers()):
-                id_ = llm.meta().id
-                line = f"{idx + 1}. {id_} ({llm.meta().model})"
+
+            # 获取所有类型的提供商
+            llms = list(self.context.get_all_providers())
+            ttss = self.context.get_all_tts_providers()
+            stts = self.context.get_all_stt_providers()
+
+            # 构造待检测列表: [(provider, type_label), ...]
+            all_providers = []
+            all_providers.extend([(p, "llm") for p in llms])
+            all_providers.extend([(p, "tts") for p in ttss])
+            all_providers.extend([(p, "stt") for p in stts])
+
+            # 并发测试连通性
+            if reachability_check_enabled:
+                check_results = await asyncio.gather(
+                    *[self._test_provider_capability(p) for p, _ in all_providers]
+                )
+            else:
+                # 用 None 表示未检测
+                check_results = [None for _ in all_providers]
+
+            # 整合结果
+            display_data = []
+            for (p, p_type), reachable in zip(all_providers, check_results):
+                meta = p.meta()
+                id_ = meta.id
+
+                # 根据类型构建显示名称
+                if p_type == "llm":
+                    info = f"{id_} ({meta.model})"
+                else:
+                    info = f"{id_}"
+
+                # 确定状态标记
+                if reachable is True:
+                    mark = " ✅"
+                elif reachable is False:
+                    mark = " ❌"
+                else:
+                    mark = ""  # 不支持检测时不显示标记
+
+                display_data.append(
+                    {"type": p_type, "info": info, "mark": mark, "provider": p}
+                )
+
+            # 分组输出
+            # 1. LLM
+            llm_data = [d for d in display_data if d["type"] == "llm"]
+            for i, d in enumerate(llm_data):
+                line = f"{i + 1}. {d['info']}{d['mark']}"
                 provider_using = self.context.get_using_provider(umo=umo)
-                if provider_using and provider_using.meta().id == id_:
+                if (
+                    provider_using
+                    and provider_using.meta().id == d["provider"].meta().id
+                ):
                     line += " (当前使用)"
                 parts.append(line + "\n")
 
-            tts_providers = self.context.get_all_tts_providers()
-            if tts_providers:
+            # 2. TTS
+            tts_data = [d for d in display_data if d["type"] == "tts"]
+            if tts_data:
                 parts.append("\n## 载入的 TTS 提供商\n")
-                for idx, tts in enumerate(tts_providers):
-                    id_ = tts.meta().id
-                    line = f"{idx + 1}. {id_}"
+                for i, d in enumerate(tts_data):
+                    line = f"{i + 1}. {d['info']}{d['mark']}"
                     tts_using = self.context.get_using_tts_provider(umo=umo)
-                    if tts_using and tts_using.meta().id == id_:
+                    if tts_using and tts_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
 
-            stt_providers = self.context.get_all_stt_providers()
-            if stt_providers:
+            # 3. STT
+            stt_data = [d for d in display_data if d["type"] == "stt"]
+            if stt_data:
                 parts.append("\n## 载入的 STT 提供商\n")
-                for idx, stt in enumerate(stt_providers):
-                    id_ = stt.meta().id
-                    line = f"{idx + 1}. {id_}"
+                for i, d in enumerate(stt_data):
+                    line = f"{i + 1}. {d['info']}{d['mark']}"
                     stt_using = self.context.get_using_stt_provider(umo=umo)
-                    if stt_using and stt_using.meta().id == id_:
+                    if stt_using and stt_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
 
             parts.append("\n使用 /provider <序号> 切换 LLM 提供商。")
             ret = "".join(parts)
 
-            if tts_providers:
+            if ttss:
                 ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
-            if stt_providers:
+            if stts:
                 ret += "\n使用 /provider stt <切换> STT 提供商。"
+            if not reachability_check_enabled:
+                ret += "\n（已跳过可达性检测，如需检测请开启 provider_settings.reachability_check）"
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":

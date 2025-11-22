@@ -69,6 +69,7 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "unsupported_streaming_strategy": "realtime_segmenting",
+        "reachability_check": True,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
@@ -2199,6 +2200,11 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
+                    },
+                    "provider_settings.reachability_check": {
+                        "description": "Provider 可达性检测",
+                        "type": "bool",
+                        "hint": "/provider 命令列出模型时是否并发检测连通性。",
                     },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",
