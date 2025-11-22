@@ -32,7 +32,7 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架。
+AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可无缝接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
 
 ## 主要功能
 
