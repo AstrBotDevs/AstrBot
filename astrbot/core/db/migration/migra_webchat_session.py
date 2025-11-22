@@ -25,7 +25,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase):
     """
     # 检查是否已经完成迁移
     migration_done = await db_helper.get_preference(
-        "global", "global", "migration_done_webchat_session"
+        "global", "global", "migration_done_webchat_session_1"
     )
     if migration_done:
         return
@@ -53,7 +53,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase):
             if not webchat_users:
                 logger.info("没有找到需要迁移的 WebChat 数据")
                 await sp.put_async(
-                    "global", "global", "migration_done_webchat_session", True
+                    "global", "global", "migration_done_webchat_session_1", True
                 )
                 return
 
@@ -124,7 +124,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase):
                 logger.info("没有新会话需要迁移")
 
         # 标记迁移完成
-        await sp.put_async("global", "global", "migration_done_webchat_session", True)
+        await sp.put_async("global", "global", "migration_done_webchat_session_1", True)
 
     except Exception as e:
         logger.error(f"迁移过程中发生错误: {e}", exc_info=True)
