@@ -86,6 +86,8 @@ class ProviderCommands:
     ):
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo).get("provider_settings", {})
+        reachability_check_enabled = cfg.get("reachability_check", True)
 
         if idx is None:
             parts = ["## 载入的 LLM 提供商\n"]
@@ -102,9 +104,13 @@ class ProviderCommands:
             all_providers.extend([(p, "stt") for p in stts])
 
             # 并发测试连通性
-            check_results = await asyncio.gather(
-                *[self._test_provider_capability(p) for p, _ in all_providers]
-            )
+            if reachability_check_enabled:
+                check_results = await asyncio.gather(
+                    *[self._test_provider_capability(p) for p, _ in all_providers]
+                )
+            else:
+                # 用 None 表示未检测
+                check_results = [None for _ in all_providers]
 
             # 整合结果
             display_data = []
@@ -172,6 +178,8 @@ class ProviderCommands:
                 ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
             if stts:
                 ret += "\n使用 /provider stt <切换> STT 提供商。"
+            if not reachability_check_enabled:
+                ret += "\n（已跳过可达性检测，如需检测请开启 provider_settings.reachability_check）"
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
