@@ -5,6 +5,7 @@ from .conversation import ConversationRoute
 from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
 from .log import LogRoute
+from .memory import MemoryRoute
 from .persona import PersonaRoute
 from .plugin import PluginRoute
 from .session_management import SessionManagementRoute
@@ -21,6 +22,7 @@ __all__ = [
     "FileRoute",
     "KnowledgeBaseRoute",
     "LogRoute",
+    "MemoryRoute",
     "PersonaRoute",
     "PluginRoute",
     "SessionManagementRoute",

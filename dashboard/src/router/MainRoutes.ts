@@ -90,6 +90,11 @@ const MainRoutes = {
         }
       ]
     },
+    {
+      name: 'Memory',
+      path: '/memory',
+      component: () => import('@/views/MemoryPage.vue')
+    },
 
     // 旧版本的知识库路由
     {

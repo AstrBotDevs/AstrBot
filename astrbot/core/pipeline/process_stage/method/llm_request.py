@@ -30,6 +30,7 @@ from ....astr_agent_context import AgentContextWrapper
 from ....astr_agent_hooks import MAIN_AGENT_HOOKS
 from ....astr_agent_run_util import AgentRunner, run_agent
 from ....astr_agent_tool_exec import FunctionToolExecutor
+from ....memory.tools import ADD_MEMORY_TOOL, QUERY_MEMORY_TOOL
 from ...context import PipelineContext, call_event_hook
 from ..stage import Stage
 from ..utils import KNOWLEDGE_BASE_QUERY_TOOL, retrieve_knowledge_base
@@ -123,6 +124,15 @@ class LLMRequestSubStage(Stage):
             if req.func_tool is None:
                 req.func_tool = ToolSet()
             req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+
+    async def _apply_memory(self, req: ProviderRequest):
+        mm = self.ctx.plugin_manager.context.memory_manager
+        if not mm or not mm._initialized:
+            return
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(ADD_MEMORY_TOOL)
+        req.func_tool.add_tool(QUERY_MEMORY_TOOL)
 
     def _truncate_contexts(
         self,
@@ -376,6 +386,9 @@ class LLMRequestSubStage(Stage):
 
             # apply knowledge base feature
             await self._apply_kb(event, req)
+
+            # apply memory feature
+            await self._apply_memory(req)
 
             # fix contexts json str
             if isinstance(req.contexts, str):
