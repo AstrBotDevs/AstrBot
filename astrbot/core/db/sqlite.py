@@ -794,7 +794,7 @@ class SQLiteDatabase(BaseDatabase):
 
                 await session.execute(
                     update(PlatformSession)
-                    .where(col(PlatformSession.session_id == session_id))
+                    .where(col(PlatformSession.session_id) == session_id)
                     .values(**values),
                 )
 
@@ -805,6 +805,6 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(PlatformSession).where(
-                        col(PlatformSession.session_id == session_id),
+                        col(PlatformSession.session_id) == session_id,
                     ),
                 )
