@@ -67,7 +67,7 @@ class ConversationCommands:
             )
             return
 
-        agent_runner_type = cfg["provider"]["agent_runner_type"]
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await sp.remove_async(
                 scope="umo",
@@ -152,7 +152,7 @@ class ConversationCommands:
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider"]["agent_runner_type"]
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             message.set_result(
                 MessageEventResult().message(
@@ -227,7 +227,7 @@ class ConversationCommands:
     async def new_conv(self, message: AstrMessageEvent):
         """创建新对话"""
         cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider"]["agent_runner_type"]
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await sp.remove_async(
                 scope="umo",
@@ -345,7 +345,7 @@ class ConversationCommands:
             )
             return
 
-        agent_runner_type = cfg["provider"]["agent_runner_type"]
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             await sp.remove_async(
                 scope="umo",
