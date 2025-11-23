@@ -51,7 +51,8 @@
     "editDisplayName": "Edit Session Name",
     "displayName": "Session Name",
     "displayNameUpdated": "Session name updated",
-    "displayNameUpdateFailed": "Failed to update session name"
+    "displayNameUpdateFailed": "Failed to update session name",
+    "confirmDelete": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
   },
   "modes": {
     "darkMode": "Switch to Dark Mode",
