@@ -64,7 +64,7 @@
                                     @click.stop="$emit('editTitle', item.session_id, item.display_name)" />
                                 <v-btn icon="mdi-delete" size="x-small" variant="text"
                                     class="delete-conversation-btn" color="error"
-                                    @click.stop="$emit('deleteConversation', item.session_id)" />
+                                    @click.stop="handleDeleteConversation(item)" />
                             </div>
                         </template>
                     </v-list-item>
@@ -85,7 +85,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
 
 interface Props {
@@ -109,7 +109,6 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
-const { t } = useI18n();
 
 const sidebarCollapsed = ref(true);
 const sidebarHovered = ref(false);
@@ -158,6 +157,14 @@ function handleSidebarMouseLeave() {
         sidebarCollapsed.value = true;
     }
     sidebarHoverExpanded.value = false;
+}
+
+function handleDeleteConversation(session: Session) {
+    const sessionTitle = session.display_name || tm('conversation.newConversation');
+    const message = tm('conversation.confirmDelete', { name: sessionTitle });
+    if (window.confirm(message)) {
+        emit('deleteConversation', session.session_id);
+    }
 }
 </script>
 

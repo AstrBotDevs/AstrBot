@@ -173,7 +173,7 @@ class PlatformSession(SQLModel, table=True):
         max_length=100,
         nullable=False,
         unique=True,
-        default_factory=lambda: f"webchat_{uuid.uuid4()}",
+        default_factory=lambda: str(uuid.uuid4()),
     )
     platform_id: str = Field(default="webchat", nullable=False)
     """Platform identifier (e.g., 'webchat', 'qq', 'discord')"""
