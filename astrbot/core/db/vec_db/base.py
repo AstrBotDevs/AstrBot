@@ -1,11 +1,20 @@
 import abc
 from dataclasses import dataclass
+from typing import TypedDict
 
 
 @dataclass
 class Result:
+    class ResultData(TypedDict):
+        id: str
+        doc_id: str
+        text: str
+        metadata: str
+        created_at: int
+        updated_at: int
+
     similarity: float
-    data: dict
+    data: ResultData | dict
 
 
 class BaseVecDB:
