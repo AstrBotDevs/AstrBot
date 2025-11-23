@@ -1,7 +1,7 @@
-import astrbot.api.star as star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult, MessageChain
-from astrbot.core.utils.io import download_dashboard
+from astrbot.api import star
+from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.io import download_dashboard
 
 
 class AdminCommands:
@@ -13,8 +13,8 @@ class AdminCommands:
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。"
-                )
+                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                ),
             )
             return
         self.context.get_config()["admins_id"].append(str(admin_id))
@@ -26,8 +26,8 @@ class AdminCommands:
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。"
-                )
+                    "使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                ),
             )
             return
         try:
@@ -36,7 +36,7 @@ class AdminCommands:
             event.set_result(MessageEventResult().message("取消授权成功。"))
         except ValueError:
             event.set_result(
-                MessageEventResult().message("此用户 ID 不在管理员名单内。")
+                MessageEventResult().message("此用户 ID 不在管理员名单内。"),
             )
 
     async def wl(self, event: AstrMessageEvent, sid: str = ""):
@@ -44,8 +44,8 @@ class AdminCommands:
         if not sid:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。"
-                )
+                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。",
+                ),
             )
             return
         cfg = self.context.get_config(umo=event.unified_msg_origin)
@@ -58,8 +58,8 @@ class AdminCommands:
         if not sid:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。"
-                )
+                    "使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。",
+                ),
             )
             return
         try:

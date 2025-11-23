@@ -11,8 +11,8 @@ class PlatformMessageHistoryManager:
         platform_id: str,
         user_id: str,
         content: list[dict],  # TODO: parse from message chain
-        sender_id: str = None,
-        sender_name: str = None,
+        sender_id: str | None = None,
+        sender_name: str | None = None,
     ):
         """Insert a new platform message history record."""
         await self.db.insert_platform_message_history(
@@ -43,5 +43,7 @@ class PlatformMessageHistoryManager:
     async def delete(self, platform_id: str, user_id: str, offset_sec: int = 86400):
         """Delete platform message history records older than the specified offset."""
         await self.db.delete_platform_message_offset(
-            platform_id=platform_id, user_id=user_id, offset_sec=offset_sec
+            platform_id=platform_id,
+            user_id=user_id,
+            offset_sec=offset_sec,
         )

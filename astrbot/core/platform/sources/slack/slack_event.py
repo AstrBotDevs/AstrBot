@@ -1,16 +1,18 @@
 import asyncio
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 from slack_sdk.web.async_client import AsyncWebClient
+
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    BaseMessageComponent,
+    File,
     Image,
     Plain,
-    File,
-    BaseMessageComponent,
 )
 from astrbot.api.platform import Group, MessageMember
-from astrbot.api import logger
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -27,12 +29,13 @@ class SlackMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _from_segment_to_slack_block(
-        segment: BaseMessageComponent, web_client: AsyncWebClient
+        segment: BaseMessageComponent,
+        web_client: AsyncWebClient,
     ) -> dict:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
             return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
-        elif isinstance(segment, Image):
+        if isinstance(segment, Image):
             # upload file
             url = segment.url or segment.file
             if url.startswith("http"):
@@ -61,7 +64,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 },
                 "alt_text": "图片",
             }
-        elif isinstance(segment, File):
+        if isinstance(segment, File):
             # upload file
             url = segment.url or segment.file
             response = await web_client.files_upload_v2(
@@ -82,12 +85,12 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": f"文件: <{file_url}|{segment.name or '文件'}>",
                 },
             }
-        else:
-            return {"type": "section", "text": {"type": "mrkdwn", "text": str(segment)}}
+        return {"type": "section", "text": {"type": "mrkdwn", "text": str(segment)}}
 
     @staticmethod
     async def _parse_slack_blocks(
-        message_chain: MessageChain, web_client: AsyncWebClient
+        message_chain: MessageChain,
+        web_client: AsyncWebClient,
     ):
         """解析成 Slack 块格式"""
         blocks = []
@@ -103,27 +106,29 @@ class SlackMessageEvent(AstrMessageEvent):
                         {
                             "type": "section",
                             "text": {"type": "mrkdwn", "text": text_content},
-                        }
+                        },
                     )
                     text_content = ""
 
                 # 添加其他类型的块
                 block = await SlackMessageEvent._from_segment_to_slack_block(
-                    segment, web_client
+                    segment,
+                    web_client,
                 )
                 blocks.append(block)
 
         # 如果最后还有文本内容
         if text_content.strip():
             blocks.append(
-                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}}
+                {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
 
         return blocks, "" if blocks else text_content
 
     async def send(self, message: MessageChain):
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
-            message, self.web_client
+            message,
+            self.web_client,
         )
 
         try:
@@ -143,28 +148,33 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
         except Exception:
             # 如果块发送失败，尝试只发送文本
-            fallback_text = ""
+            parts = []
             for segment in message.chain:
                 if isinstance(segment, Plain):
-                    fallback_text += segment.text
+                    parts.append(segment.text)
                 elif isinstance(segment, File):
-                    fallback_text += f" [文件: {segment.name}] "
+                    parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
-                    fallback_text += " [图片] "
+                    parts.append(" [图片] ")
+            fallback_text = "".join(parts)
 
             if self.get_group_id():
                 await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(), text=fallback_text
+                    channel=self.get_group_id(),
+                    text=fallback_text,
                 )
             else:
                 await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(), text=fallback_text
+                    channel=self.get_sender_id(),
+                    text=fallback_text,
                 )
 
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None
@@ -174,7 +184,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 else:
                     buffer.chain.extend(chain.chain)
             if not buffer:
-                return
+                return None
             buffer.squash_plain()
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
@@ -211,7 +221,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
             # 获取频道成员
             members_response = await self.web_client.conversations_members(
-                channel=channel_id
+                channel=channel_id,
             )
 
             members = []
@@ -224,7 +234,7 @@ class SlackMessageEvent(AstrMessageEvent):
                             user_id=member_id,
                             nickname=user_data.get("real_name")
                             or user_data.get("name", member_id),
-                        )
+                        ),
                     )
                 except Exception:
                     # 如果获取用户信息失败，使用默认信息

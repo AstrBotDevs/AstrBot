@@ -1,14 +1,13 @@
-import copy
-import astrbot.api.star as star
 import builtins
+import copy
 import datetime
 import zoneinfo
-from astrbot.api import logger
+
+from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.provider import Provider
-from astrbot.api.provider import ProviderRequest
-from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.api.message_components import Image, Reply
+from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.provider.func_tool_manager import ToolSet
 
 
 class ProcessLLMRequest:
@@ -64,11 +63,16 @@ class ProcessLLMRequest:
         logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
     async def _ensure_img_caption(
-        self, req: ProviderRequest, cfg: dict, img_cap_prov_id: str
+        self,
+        req: ProviderRequest,
+        cfg: dict,
+        img_cap_prov_id: str,
     ):
         try:
             caption = await self._request_img_caption(
-                img_cap_prov_id, cfg, req.image_urls
+                img_cap_prov_id,
+                cfg,
+                req.image_urls,
             )
             if caption:
                 req.prompt = f"(Image Caption: {caption})\n\n{req.prompt}"
@@ -77,12 +81,16 @@ class ProcessLLMRequest:
             logger.error(f"处理图片描述失败: {e}")
 
     async def _request_img_caption(
-        self, provider_id: str, cfg: dict, image_urls: list[str]
+        self,
+        provider_id: str,
+        cfg: dict,
+        image_urls: list[str],
     ) -> str:
         if prov := self.ctx.get_provider_by_id(provider_id):
             if isinstance(prov, Provider):
                 img_cap_prompt = cfg.get(
-                    "image_caption_prompt", "Please describe the image."
+                    "image_caption_prompt",
+                    "Please describe the image.",
                 )
                 logger.debug(f"Processing image caption with provider: {provider_id}")
                 llm_resp = await prov.text_chat(
@@ -90,14 +98,12 @@ class ProcessLLMRequest:
                     image_urls=image_urls,
                 )
                 return llm_resp.completion_text
-            else:
-                raise ValueError(
-                    f"Cannot get image caption because provider `{provider_id}` is not a valid Provider, it is {type(prov)}."
-                )
-        else:
             raise ValueError(
-                f"Cannot get image caption because provider `{provider_id}` is not exist."
+                f"Cannot get image caption because provider `{provider_id}` is not a valid Provider, it is {type(prov)}.",
             )
+        raise ValueError(
+            f"Cannot get image caption because provider `{provider_id}` is not exist.",
+        )
 
     async def process_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""

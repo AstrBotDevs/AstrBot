@@ -10,6 +10,7 @@ import { useCommonStore } from '@/stores/common';
 import MarkdownIt from 'markdown-it';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
+import { useTheme } from 'vuetify';
 
 // 配置markdown-it，默认安全设置
 const md = new MarkdownIt({
@@ -20,6 +21,7 @@ const md = new MarkdownIt({
 });
 
 const customizer = useCustomizerStore();
+const theme = useTheme();
 const { t } = useI18n();
 let dialog = ref(false);
 let accountWarning = ref(false)
@@ -40,6 +42,11 @@ let releases = ref([]);
 let devCommits = ref<{ sha: string; date: string; message: string }[]>([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
+
+// Release Notes Modal
+let releaseNotesDialog = ref(false);
+let selectedReleaseNotes = ref('');
+let selectedReleaseTag = ref('');
 
 let tab = ref(0);
 
@@ -191,7 +198,7 @@ function getReleases() {
 
 function getDevCommits() {
   let proxy = localStorage.getItem('selectedGitHubProxy') || '';
-  const originalUrl = "https://api.github.com/repos/Soulter/AstrBot/commits";
+  const originalUrl = "https://api.github.com/repos/AstrBotDevs/AstrBot/commits";
   let commits_url = originalUrl;
   if (proxy !== '') {
     proxy = proxy.endsWith('/') ? proxy : proxy + '/';
@@ -276,7 +283,15 @@ function updateDashboard() {
 }
 
 function toggleDarkMode() {
-  customizer.SET_UI_THEME(customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark');
+  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
+  customizer.SET_UI_THEME(newTheme);
+  theme.global.name.value = newTheme;
+}
+
+function openReleaseNotesDialog(body: string, tag: string) {
+  selectedReleaseNotes.value = body;
+  selectedReleaseTag.value = tag;
+  releaseNotesDialog.value = true;
 }
 
 getVersion();
@@ -397,7 +412,7 @@ commonStore.getStartTime();
                     <strong>{{ t('core.header.updateDialog.preReleaseWarning.title') }}</strong>
                     <br>
                     {{ t('core.header.updateDialog.preReleaseWarning.description') }}
-                    <a href="https://github.com/Soulter/AstrBot/issues" target="_blank" class="text-decoration-none">
+                    <a href="https://github.com/AstrBotDevs/AstrBot/issues" target="_blank" class="text-decoration-none">
                       {{ t('core.header.updateDialog.preReleaseWarning.issueLink') }}
                     </a>
                   </div>
@@ -413,13 +428,10 @@ commonStore.getStartTime();
                       </v-chip>
                     </div>
                   </template>
-                  <template v-slot:item.body="{ item }: { item: { body: string } }">
-                    <v-tooltip :text="item.body">
-                      <template v-slot:activator="{ props }">
-                        <v-btn v-bind="props" rounded="xl" variant="tonal" color="primary" size="x-small">{{
-                          t('core.header.updateDialog.table.view') }}</v-btn>
-                      </template>
-                    </v-tooltip>
+                  <template v-slot:item.body="{ item }: { item: { body: string; tag_name: string } }">
+                    <v-btn @click="openReleaseNotesDialog(item.body, item.tag_name)" rounded="xl" variant="tonal"
+                      color="primary" size="x-small">{{
+                        t('core.header.updateDialog.table.view') }}</v-btn>
                   </template>
                   <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
                     <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
@@ -456,7 +468,7 @@ commonStore.getStartTime();
             <div class="mb-4">
               <small>{{ t('core.header.updateDialog.manualInput.hint') }}</small>
               <br>
-              <a href="https://github.com/Soulter/AstrBot/commits/master"><small>{{
+              <a href="https://github.com/AstrBotDevs/AstrBot/commits/master"><small>{{
                 t('core.header.updateDialog.manualInput.linkText') }}</small></a>
             </div>
             <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
@@ -492,6 +504,25 @@ commonStore.getStartTime();
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="blue-darken-1" variant="text" @click="updateStatusDialog = false">
+            {{ t('core.common.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Release Notes Modal -->
+    <v-dialog v-model="releaseNotesDialog" max-width="800">
+      <v-card>
+        <v-card-title class="text-h5">
+          {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
+        </v-card-title>
+        <v-card-text
+          style="font-size: 14px; max-height: 400px; overflow-y: auto;"
+          v-html="md.render(selectedReleaseNotes)" class="markdown-content">
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="blue-darken-1" variant="text" @click="releaseNotesDialog = false">
             {{ t('core.common.close') }}
           </v-btn>
         </v-card-actions>

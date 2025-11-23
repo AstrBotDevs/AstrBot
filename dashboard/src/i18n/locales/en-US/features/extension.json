@@ -79,6 +79,14 @@
     "devDocs": "Extension Development Docs",
     "submitRepo": "Submit Extension Repository"
   },
+  "sort": {
+    "default": "Default",
+    "stars": "Stars",
+    "author": "Author",
+    "updated": "Last Updated",
+    "ascending": "Ascending",
+    "descending": "Descending"
+  },
   "tags": {
     "danger": "Danger"
   },
@@ -97,7 +105,11 @@
     },
     "uninstall": {
       "title": "Confirm Deletion",
-      "message": "Are you sure you want to delete this extension?"
+      "message": "Are you sure you want to delete this extension?",
+      "deleteConfig": "Also delete plugin configuration file",
+      "deleteData": "Also delete plugin persistent data",
+      "configHint": "Configuration file located in data/config directory",
+      "dataHint": "Deletes data in data/plugin_data and data/plugins_data"
     },
     "install": {
       "title": "Install Extension",

@@ -45,8 +45,8 @@ const sidebarItem: menu[] = [
   },
   {
     title: 'core.navigation.knowledgeBase',
-    icon: 'mdi-text-box-search',
-    to: '/alkaid/knowledge-base',
+    icon: 'mdi-book-open-variant',
+    to: '/knowledge-base',
   },
   {
     title: 'core.navigation.chat',

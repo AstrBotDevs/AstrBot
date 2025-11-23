@@ -1,8 +1,8 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="800px" height="90%">
+  <v-dialog v-model="showDialog" max-width="800px" height="90%" @after-enter="prepareData">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
-      <v-card-text class="pa-4 ml-2" style="overflow-y: auto;">
+  <v-card-text ref="dialogScrollContainer" class="pa-4 ml-2" style="overflow-y: auto;">
         <div class="d-flex align-start" style="width: 100%;">
           <div>
             <v-icon icon="mdi-numeric-1-circle" class="mr-3"></v-icon>
@@ -74,7 +74,7 @@
                 <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
               </div>
               <div>
-                <v-btn variant="plain" icon @click="showConfigSection = !showConfigSection" class="mt-2">
+                <v-btn variant="plain" icon @click="toggleConfigSection" class="mt-2">
                   <v-icon>{{ showConfigSection ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                 </v-btn>
               </div>
@@ -89,10 +89,16 @@
                       <span>使用现有配置文件</span>
                     </template>
                   </v-radio>
-                  <v-select v-if="aBConfigRadioVal === '0'" v-model="selectedAbConfId" :items="configInfoList"
-                    item-title="name" item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
-                    style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
-                  </v-select>
+                  <div class="d-flex align-center ml-10 my-2" v-if="aBConfigRadioVal === '0'">
+                    <v-select v-model="selectedAbConfId" :items="configInfoList" item-title="name"
+                      item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
+                      style="max-width: 30%; min-width: 200px;">
+                    </v-select>
+                    <v-btn icon variant="text" density="comfortable" class="ml-2"
+                      :disabled="!selectedAbConfId" @click="openConfigDrawer(selectedAbConfId)">
+                      <v-icon>mdi-arrow-top-right-thick</v-icon>
+                    </v-btn>
+                  </div>
                   <v-radio value="1" label="创建新配置文件">
                   </v-radio>
                   <div class="d-flex align-center" v-if="aBConfigRadioVal === '1'">
@@ -104,7 +110,7 @@
                 </v-radio-group>
 
                 <!-- 现有配置文件预览区域 -->
-                <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
+                <!-- <div v-if="aBConfigRadioVal === '0' && selectedAbConfId" class="mt-4">
                   <div v-if="configPreviewLoading" class="d-flex justify-center py-4">
                     <v-progress-circular indeterminate color="primary"></v-progress-circular>
                   </div>
@@ -117,8 +123,7 @@
                     <v-icon>mdi-information-outline</v-icon>
                     <p class="mt-2">无法加载配置文件预览</p>
                   </div>
-                </div>
-
+                </div> -->
 
                 <!-- 新配置文件编辑区域 -->
                 <div v-if="aBConfigRadioVal === '1'" class="mt-4">
@@ -145,34 +150,48 @@
                       添加路由规则
                     </v-btn>
                   </div>
-                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small" @click="toggleEditMode">
+                  <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small"
+                    @click="toggleEditMode">
                     <v-icon start>{{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
                     {{ isEditingRoutes ? '查看' : '编辑' }}
                   </v-btn>
                 </div>
 
                 <v-data-table :headers="routeTableHeaders" :items="platformRoutes" item-value="umop"
-                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2" variant="outlined">
-                  
+                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2"
+                  variant="outlined">
+
                   <template v-slot:item.source="{ item }">
                     <div class="d-flex align-center" style="min-width: 250px;">
-                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions" item-title="label" item-value="value"
-                        variant="outlined" density="compact" hide-details style="max-width: 120px;" class="mr-2">
+                      <v-select v-if="isEditingRoutes" v-model="item.messageType" :items="messageTypeOptions"
+                        item-title="label" item-value="value" variant="outlined" density="compact" hide-details
+                        style="max-width: 140px;">
                       </v-select>
-                      <span v-else class="mr-2">{{ getMessageTypeLabel(item.messageType) }}</span>
-                      <span class="mx-1">:</span>
-                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact" hide-details
-                        placeholder="会话ID或*" style="max-width: 120px;">
+                      <small v-else>{{ getMessageTypeLabel(item.messageType) }}</small>
+                      <small class="mx-1">:</small>
+                      <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact"
+                        hide-details placeholder="会话ID或*">
                       </v-text-field>
-                      <span v-else>{{ item.sessionId === '*' ? '全部会话' : item.sessionId }}</span>
+                      <small v-else>{{ item.sessionId === '*' ? '全部会话' : item.sessionId }}</small>
                     </div>
                   </template>
 
                   <template v-slot:item.configId="{ item }">
-                    <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList" item-title="name" item-value="id"
-                      variant="outlined" density="compact" hide-details style="min-width: 200px;">
-                    </v-select>
-                    <span v-else>{{ getConfigName(item.configId) }}</span>
+                    <div class="d-flex align-center">
+                      <v-select v-if="isEditingRoutes" v-model="item.configId" :items="configInfoList"
+                        item-title="name" item-value="id" variant="outlined" density="compact"
+                        style="min-width: 200px;" hide-details>
+                      </v-select>
+                      <div v-else>
+                        <small>{{ getConfigName(item.configId) }}</small>
+                      </div>
+                      <v-btn icon variant="text" density="compact" class="ml-2"
+                        :disabled="!item.configId" @click="openConfigDrawer(item.configId)">
+                        <v-icon size="18">mdi-arrow-top-right-thick</v-icon>
+                      </v-btn>
+                    </div>
+                    <small v-if="configInfoList.findIndex(c => c.id === item.configId) === -1" style="color: red;"
+                      class="ml-2">配置文件不存在</small>
                   </template>
 
                   <template v-slot:item.actions="{ item, index }">
@@ -180,7 +199,8 @@
                       <v-btn icon size="x-small" variant="text" @click="moveRouteUp(index)" :disabled="index === 0">
                         <v-icon>mdi-arrow-up</v-icon>
                       </v-btn>
-                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)" :disabled="index === platformRoutes.length - 1">
+                      <v-btn icon size="x-small" variant="text" @click="moveRouteDown(index)"
+                        :disabled="index === platformRoutes.length - 1">
                         <v-icon>mdi-arrow-down</v-icon>
                       </v-btn>
                       <v-btn icon size="x-small" variant="text" color="error" @click="deleteRoute(index)">
@@ -191,7 +211,8 @@
                   </template>
 
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。</small>
+                <small class="ml-2 mt-2 d-block" style="color: grey">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话
+                  ID。全部不匹配时将使用默认配置文件。</small>
               </div>
             </div>
 
@@ -253,6 +274,33 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <v-overlay
+    v-model="showConfigDrawer"
+    class="config-drawer-overlay"
+    location="right"
+    transition="slide-x-reverse-transition"
+    :scrim="true"
+    @click:outside="closeConfigDrawer"
+  >
+    <v-card class="config-drawer-card" elevation="12">
+      <div class="config-drawer-header">
+        <div>
+          <span class="text-h6">配置文件管理</span>
+          <div v-if="configDrawerTargetId" class="text-caption text-grey">
+            ID: {{ configDrawerTargetId }}
+          </div>
+        </div>
+        <v-btn icon variant="text" @click="closeConfigDrawer">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </div>
+      <v-divider></v-divider>
+      <div class="config-drawer-content">
+        <ConfigPage v-if="showConfigDrawer" :initial-config-id="configDrawerTargetId" />
+      </div>
+    </v-card>
+  </v-overlay>
 </template>
 
 
@@ -262,10 +310,11 @@ import { useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getPlatformDescription, getTutorialLink } from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
+import ConfigPage from '@/views/ConfigPage.vue';
 
 export default {
   name: 'AddNewPlatform',
-  components: { AstrBotConfig, AstrBotCoreConfigWrapper },
+  components: { AstrBotConfig, AstrBotCoreConfigWrapper, ConfigPage },
   emits: ['update:show', 'show-toast', 'refresh-config'],
   props: {
     show: {
@@ -318,8 +367,8 @@ export default {
       // 平台路由表
       platformRoutes: [],
       routeTableHeaders: [
-        { title: '消息会话来源(消息类型:会话 ID)', key: 'source', sortable: false, width: '40%' },
-        { title: '使用配置文件', key: 'configId', sortable: false, width: '40%' },
+        { title: '消息会话来源(消息类型:会话 ID)', key: 'source', sortable: false, width: '60%' },
+        { title: '使用配置文件', key: 'configId', sortable: false, width: '20%' },
         { title: '操作', key: 'actions', sortable: false, align: 'center', width: '20%' },
       ],
       messageTypeOptions: [
@@ -341,6 +390,10 @@ export default {
       loading: false,
 
       showConfigSection: false,
+
+      // 配置抽屉
+      showConfigDrawer: false,
+      configDrawerTargetId: null,
     };
   },
   setup() {
@@ -437,6 +490,11 @@ export default {
       if (newValue && !this.updatingMode && this.aBConfigRadioVal === '0') {
         this.getConfigForPreview(this.selectedAbConfId);
       }
+      if (newValue) {
+        this.$nextTick(() => {
+          this.scrollDialogToBottom();
+        });
+      }
     },
     // 监听编辑模式变化，自动展开配置文件部分
     updatingMode: {
@@ -472,6 +530,9 @@ export default {
 
       this.showConfigSection = false;
       this.isEditingRoutes = false; // 重置编辑模式
+
+      this.showConfigDrawer = false;
+      this.configDrawerTargetId = null;
     },
     closeDialog() {
       this.resetForm();
@@ -527,6 +588,19 @@ export default {
     openTutorial() {
       const tutorialUrl = getTutorialLink(this.selectedPlatformConfig.type);
       window.open(tutorialUrl, '_blank');
+    },
+    openConfigDrawer(configId) {
+      const targetId = configId || 'default';
+
+      if (configId && this.configInfoList.findIndex(c => c.id === configId) === -1) {
+        this.showError('目标配置文件不存在，已打开配置页面以便检查。');
+      }
+
+      this.configDrawerTargetId = targetId;
+      this.showConfigDrawer = true;
+    },
+    closeConfigDrawer() {
+      this.showConfigDrawer = false;
     },
     newPlatform() {
       this.loading = true;
@@ -674,7 +748,7 @@ export default {
 
         const newConfigId = createRes.data.data.conf_id;
         console.log(`成功创建新配置文件 ${configName}，ID: ${newConfigId}`);
-        
+
         return newConfigId;
       } catch (err) {
         console.error('创建新配置文件失败:', err);
@@ -754,7 +828,7 @@ export default {
         }
 
         this.platformRoutes = routes;
-        
+
         // 如果没有路由，添加一个默认的空路由供用户编辑
         if (this.platformRoutes.length === 0) {
           this.platformRoutes.push({
@@ -833,7 +907,7 @@ export default {
           const messageType = route.messageType === '*' ? '*' : route.messageType;
           const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
           const newUmop = `${platformId}:${messageType}:${sessionId}`;
-          
+
           if (route.configId) {
             fullRoutingTable[newUmop] = route.configId;
           }
@@ -852,6 +926,9 @@ export default {
     // 切换编辑模式
     toggleEditMode() {
       this.isEditingRoutes = !this.isEditingRoutes;
+    },
+    toggleConfigSection() {
+      this.showConfigSection = !this.showConfigSection;
     },
 
     // 根据配置文件ID获取名称
@@ -882,21 +959,61 @@ export default {
     toggleShowConfigSection() {
       this.showConfigSection = false;
       this.showConfigSection = true;
+    },
+
+    prepareData() {
+      this.getConfigInfoList();
+      this.getConfigForPreview(this.selectedAbConfId);
+      if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
+        this.getPlatformConfigs(this.updatingPlatformConfig.id);
+      }
+    },
+    scrollDialogToBottom() {
+      const containerRef = this.$refs.dialogScrollContainer;
+      const el = containerRef?.$el || containerRef;
+      if (!el) {
+        return;
+      }
+      const scrollOptions = { top: el.scrollHeight, behavior: 'smooth' };
+      if (typeof el.scrollTo === 'function') {
+        el.scrollTo(scrollOptions);
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     }
 
   },
-  mounted() {
-    this.getConfigInfoList();
-    this.getConfigForPreview(this.selectedAbConfId);
-    if (this.updatingMode && this.updatingPlatformConfig && this.updatingPlatformConfig.id) {
-      this.getPlatformConfigs(this.updatingPlatformConfig.id);
-    }
-  }
 }
 </script>
 
 <style>
 .v-select__selection-text {
   font-size: 12px;
+}
+
+.config-drawer-overlay {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.config-drawer-card {
+  width: clamp(320px, 60vw, 820px);
+  height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  margin: 16px;
+}
+
+.config-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px 20px;
+}
+
+.config-drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 24px 16px;
 }
 </style>

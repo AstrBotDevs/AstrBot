@@ -1,13 +1,22 @@
 import asyncio
 import json
 import time
+from xml.etree import ElementTree as ET
+
 import websockets
-from websockets.asyncio.client import connect
-from typing import Optional
 from aiohttp import ClientSession, ClientTimeout
-from websockets.asyncio.client import ClientConnection
+from websockets.asyncio.client import ClientConnection, connect
+
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
+from astrbot.api.message_components import (
+    At,
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+)
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -17,35 +26,30 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
-from astrbot.api.message_components import (
-    Plain,
-    Image,
-    At,
-    File,
-    Record,
-    Reply,
-)
-from xml.etree import ElementTree as ET
 
 
 @register_platform_adapter(
-    "satori",
-    "Satori 协议适配器",
+    "satori", "Satori 协议适配器", support_streaming_message=False
 )
 class SatoriPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settings = platform_settings
 
         self.api_base_url = self.config.get(
-            "satori_api_base_url", "http://localhost:5140/satori/v1"
+            "satori_api_base_url",
+            "http://localhost:5140/satori/v1",
         )
         self.token = self.config.get("satori_token", "")
         self.endpoint = self.config.get(
-            "satori_endpoint", "ws://localhost:5140/satori/v1/events"
+            "satori_endpoint",
+            "ws://localhost:5140/satori/v1/events",
         )
         self.auto_reconnect = self.config.get("satori_auto_reconnect", True)
         self.heartbeat_interval = self.config.get("satori_heartbeat_interval", 10)
@@ -55,23 +59,28 @@ class SatoriPlatformAdapter(Platform):
             name="satori",
             description="Satori 通用协议适配器",
             id=self.config["id"],
+            support_streaming_message=False,
         )
 
-        self.ws: Optional[ClientConnection] = None
-        self.session: Optional[ClientSession] = None
+        self.ws: ClientConnection | None = None
+        self.session: ClientSession | None = None
         self.sequence = 0
         self.logins = []
         self.running = False
-        self.heartbeat_task: Optional[asyncio.Task] = None
+        self.heartbeat_task: asyncio.Task | None = None
         self.ready_received = False
 
     async def send_by_session(
-        self, session: MessageSession, message_chain: MessageChain
+        self,
+        session: MessageSession,
+        message_chain: MessageChain,
     ):
         from .satori_event import SatoriPlatformEvent
 
         await SatoriPlatformEvent.send_with_adapter(
-            self, message_chain, session.session_id
+            self,
+            message_chain,
+            session.session_id,
         )
         await super().send_by_session(session, message_chain)
 
@@ -85,10 +94,9 @@ class SatoriPlatformAdapter(Platform):
         try:
             if hasattr(ws, "closed"):
                 return ws.closed
-            elif hasattr(ws, "close_code"):
+            if hasattr(ws, "close_code"):
                 return ws.close_code is not None
-            else:
-                return False
+            return False
         except AttributeError:
             return False
 
@@ -240,7 +248,7 @@ class SatoriPlatformAdapter(Platform):
                         user_id = user.get("id", "")
                         user_name = user.get("name", "")
                         logger.info(
-                            f"Satori 连接成功 - Bot {i + 1}: platform={platform}, user_id={user_id}, user_name={user_name}"
+                            f"Satori 连接成功 - Bot {i + 1}: platform={platform}, user_id={user_id}, user_name={user_name}",
                         )
 
                 if "sn" in body:
@@ -282,7 +290,12 @@ class SatoriPlatformAdapter(Platform):
                     return
 
                 abm = await self.convert_satori_message(
-                    message, user, channel, guild, login, timestamp
+                    message,
+                    user,
+                    channel,
+                    guild,
+                    login,
+                    timestamp,
                 )
                 if abm:
                     await self.handle_msg(abm)
@@ -295,10 +308,10 @@ class SatoriPlatformAdapter(Platform):
         message: dict,
         user: dict,
         channel: dict,
-        guild: Optional[dict],
+        guild: dict | None,
         login: dict,
-        timestamp: Optional[int] = None,
-    ) -> Optional[AstrBotMessage]:
+        timestamp: int | None = None,
+    ) -> AstrBotMessage | None:
         try:
             abm = AstrBotMessage()
             abm.message_id = message.get("id", "")
@@ -438,7 +451,7 @@ class SatoriPlatformAdapter(Platform):
 
         return prefixes
 
-    async def _extract_quote_element(self, content: str) -> Optional[dict]:
+    async def _extract_quote_element(self, content: str) -> dict | None:
         """提取<quote>标签信息"""
         try:
             # 处理命名空间前缀问题
@@ -451,7 +464,7 @@ class SatoriPlatformAdapter(Platform):
                     [
                         f'xmlns:{prefix}="http://temp.uri/{prefix}"'
                         for prefix in prefixes
-                    ]
+                    ],
                 )
 
                 # 包装内容
@@ -483,14 +496,17 @@ class SatoriPlatformAdapter(Platform):
                     inner_content += quote_element.text
                 for child in quote_element:
                     inner_content += ET.tostring(
-                        child, encoding="unicode", method="xml"
+                        child,
+                        encoding="unicode",
+                        method="xml",
                     )
                     if child.tail:
                         inner_content += child.tail
 
                 # 构造移除了<quote>标签的内容
                 content_without_quote = content.replace(
-                    ET.tostring(quote_element, encoding="unicode", method="xml"), ""
+                    ET.tostring(quote_element, encoding="unicode", method="xml"),
+                    "",
                 )
 
                 return {
@@ -506,7 +522,7 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"提取<quote>标签时发生错误: {e}")
             return None
 
-    async def _extract_quote_with_regex(self, content: str) -> Optional[dict]:
+    async def _extract_quote_with_regex(self, content: str) -> dict | None:
         """使用正则表达式提取quote标签信息"""
         import re
 
@@ -529,7 +545,7 @@ class SatoriPlatformAdapter(Platform):
             "content_without_quote": content_without_quote,
         }
 
-    async def _convert_quote_message(self, quote: dict) -> Optional[AstrBotMessage]:
+    async def _convert_quote_message(self, quote: dict) -> AstrBotMessage | None:
         """转换引用消息"""
         try:
             quote_abm = AstrBotMessage()
@@ -587,7 +603,7 @@ class SatoriPlatformAdapter(Platform):
                     [
                         f'xmlns:{prefix}="http://temp.uri/{prefix}"'
                         for prefix in prefixes
-                    ]
+                    ],
                 )
 
                 # 包装内容
@@ -747,13 +763,15 @@ class SatoriPlatformAdapter(Platform):
 
         try:
             async with self.session.request(
-                method, url, json=data, headers=headers
+                method,
+                url,
+                json=data,
+                headers=headers,
             ) as response:
                 if response.status == 200:
                     result = await response.json()
                     return result
-                else:
-                    return {}
+                return {}
         except Exception as e:
             logger.error(f"Satori HTTP 请求异常: {e}")
             return {}

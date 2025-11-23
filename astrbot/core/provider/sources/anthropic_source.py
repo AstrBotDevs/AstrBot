@@ -1,39 +1,38 @@
-import json
-import anthropic
 import base64
-from typing import List
+import json
+from collections.abc import AsyncGenerator
 from mimetypes import guess_type
 
+import anthropic
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 
-from astrbot.core.utils.io import download_image_by_url
-from astrbot.api.provider import Provider
 from astrbot import logger
-from astrbot.core.provider.func_tool_manager import FuncCall
-from ..register import register_provider_adapter
+from astrbot.api.provider import Provider
 from astrbot.core.provider.entities import LLMResponse
-from typing import AsyncGenerator
+from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.utils.io import download_image_by_url
+
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "anthropic_chat_completion", "Anthropic Claude API 提供商适配器"
+    "anthropic_chat_completion",
+    "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
     def __init__(
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
 
         self.chosen_api_key: str = ""
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
@@ -41,7 +40,9 @@ class ProviderAnthropic(Provider):
             self.timeout = int(self.timeout)
 
         self.client = AsyncAnthropic(
-            api_key=self.chosen_api_key, timeout=self.timeout, base_url=self.base_url
+            api_key=self.chosen_api_key,
+            timeout=self.timeout,
+            base_url=self.base_url,
         )
 
         self.set_model(provider_config["model_config"]["model"])
@@ -54,6 +55,7 @@ class ProviderAnthropic(Provider):
         Returns:
             system_prompt: 系统提示内容
             new_messages: 处理后的消息列表，去除系统提示
+
         """
         system_prompt = ""
         new_messages = []
@@ -73,18 +75,19 @@ class ProviderAnthropic(Provider):
                                 "input": (
                                     json.loads(tool_call["function"]["arguments"])
                                     if isinstance(
-                                        tool_call["function"]["arguments"], str
+                                        tool_call["function"]["arguments"],
+                                        str,
                                     )
                                     else tool_call["function"]["arguments"]
                                 ),
                                 "id": tool_call["id"],
-                            }
+                            },
                         )
                 new_messages.append(
                     {
                         "role": "assistant",
                         "content": blocks,
-                    }
+                    },
                 )
             elif message["role"] == "tool":
                 new_messages.append(
@@ -95,16 +98,16 @@ class ProviderAnthropic(Provider):
                                 "type": "tool_result",
                                 "tool_use_id": message["tool_call_id"],
                                 "content": message["content"],
-                            }
+                            },
                         ],
-                    }
+                    },
                 )
             else:
                 new_messages.append(message)
 
         return system_prompt, new_messages
 
-    async def _query(self, payloads: dict, tools: FuncCall) -> LLMResponse:
+    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -135,7 +138,9 @@ class ProviderAnthropic(Provider):
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: FuncCall
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -154,7 +159,9 @@ class ProviderAnthropic(Provider):
                     if event.content_block.type == "text":
                         # 文本块开始
                         yield LLMResponse(
-                            role="assistant", completion_text="", is_chunk=True
+                            role="assistant",
+                            completion_text="",
+                            is_chunk=True,
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
@@ -198,7 +205,7 @@ class ProviderAnthropic(Provider):
                                     "id": tool_info["id"],
                                     "name": tool_info["name"],
                                     "input": tool_info["input"],
-                                }
+                                },
                             )
 
                             yield LLMResponse(
@@ -218,7 +225,9 @@ class ProviderAnthropic(Provider):
 
         # 返回最终的完整结果
         final_response = LLMResponse(
-            role="assistant", completion_text=final_text, is_chunk=False
+            role="assistant",
+            completion_text=final_text,
+            is_chunk=False,
         )
 
         if final_tool_calls:
@@ -232,7 +241,7 @@ class ProviderAnthropic(Provider):
 
     async def text_chat(
         self,
-        prompt,
+        prompt=None,
         session_id=None,
         image_urls=None,
         func_tool=None,
@@ -244,8 +253,13 @@ class ProviderAnthropic(Provider):
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
+
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -295,8 +309,12 @@ class ProviderAnthropic(Provider):
     ):
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -326,7 +344,7 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: List[str] = None):
+    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
         """组装上下文，支持文本和图片"""
         if not image_urls:
             return {"role": "user", "content": text}
@@ -365,15 +383,13 @@ class ProviderAnthropic(Provider):
                             else image_data
                         ),
                     },
-                }
+                },
             )
 
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """
-        将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:
@@ -384,7 +400,7 @@ class ProviderAnthropic(Provider):
     def get_current_key(self) -> str:
         return self.chosen_api_key
 
-    async def get_models(self) -> List[str]:
+    async def get_models(self) -> list[str]:
         models_str = []
         models = await self.client.models.list()
         models = sorted(models.data, key=lambda x: x.id)

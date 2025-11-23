@@ -1,13 +1,14 @@
 import datetime
-import uuid
 import random
-import astrbot.api.star as star
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.platform import MessageType
-from astrbot.api.provider import ProviderRequest
-from astrbot.api.message_components import Plain, Image
-from astrbot import logger
+import uuid
 from collections import defaultdict
+
+from astrbot import logger
+from astrbot.api import star
+from astrbot.api.event import AstrMessageEvent
+from astrbot.api.message_components import Image, Plain
+from astrbot.api.platform import MessageType
+from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -32,6 +33,7 @@ class LongTermMemory:
         image_caption = (
             True
             if cfg["provider_settings"]["default_image_caption_provider_id"]
+            and cfg["provider_ltm_settings"]["image_caption"]
             else False
         )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
@@ -65,7 +67,10 @@ class LongTermMemory:
         return cnt
 
     async def get_image_caption(
-        self, image_url: str, image_caption_provider_id: str, image_caption_prompt: str
+        self,
+        image_url: str,
+        image_caption_provider_id: str,
+        image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
@@ -73,6 +78,8 @@ class LongTermMemory:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
+        if not isinstance(provider, Provider):
+            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -112,26 +119,31 @@ class LongTermMemory:
         if event.get_message_type() == MessageType.GROUP_MESSAGE:
             datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
 
-            final_message = f"[{event.message_obj.sender.nickname}/{datetime_str}]: "
+            parts = [f"[{event.message_obj.sender.nickname}/{datetime_str}]: "]
 
             cfg = self.cfg(event)
 
             for comp in event.get_messages():
                 if isinstance(comp, Plain):
-                    final_message += f" {comp.text}"
+                    parts.append(f" {comp.text}")
                 elif isinstance(comp, Image):
                     if cfg["image_caption"]:
                         try:
+                            url = comp.url if comp.url else comp.file
+                            if not url:
+                                raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
-                                comp.url if comp.url else comp.file,
+                                url,
                                 cfg["image_caption_provider_id"],
                                 cfg["image_caption_prompt"],
                             )
-                            final_message += f" [Image: {caption}]"
+                            parts.append(f" [Image: {caption}]")
                         except Exception as e:
                             logger.error(f"获取图片描述失败: {e}")
                     else:
-                        final_message += " [Image]"
+                        parts.append(" [Image]")
+
+            final_message = "".join(parts)
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:

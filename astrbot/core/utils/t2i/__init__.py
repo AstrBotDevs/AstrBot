@@ -8,6 +8,9 @@ class RenderStrategy(ABC):
 
     @abstractmethod
     def render_custom_template(
-        self, tmpl_str: str, tmpl_data: dict, return_url: bool
+        self,
+        tmpl_str: str,
+        tmpl_data: dict,
+        return_url: bool,
     ) -> str:
         pass

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -10,8 +11,8 @@ from astrbot import logger
 from astrbot.core.message.components import (
     Image,
     Plain,
-    WechatEmoji,
     Record,
+    WechatEmoji,
 )  # Import Image
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -50,14 +51,29 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                     await self._send_voice(session, comp)
         await super().send(message)
 
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return None
+        buffer.squash_plain()
+        await self.send(buffer)
+        return await super().send_streaming(generator, use_fallback)
+
     async def _send_image(self, session: aiohttp.ClientSession, comp: Image):
         b64 = await comp.convert_to_base64()
         raw = self._validate_base64(b64)
         b64c = self._compress_image(raw)
         payload = {
             "MsgItem": [
-                {"ImageContent": b64c, "MsgType": 3, "ToUserName": self.session_id}
-            ]
+                {"ImageContent": b64c, "MsgType": 3, "ToUserName": self.session_id},
+            ],
         }
         url = f"{self.adapter.base_url}/message/SendImageNewMessage"
         await self._post(session, url, payload)
@@ -66,7 +82,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         if (
             self.message_obj.type == MessageType.GROUP_MESSAGE  # 确保是群聊消息
             and self.adapter.settings.get(
-                "reply_with_mention", False
+                "reply_with_mention",
+                False,
             )  # 检查适配器设置是否启用 reply_with_mention
             and self.message_obj.sender  # 确保有发送者信息
             and (
@@ -91,8 +108,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                     "MsgType": 1,
                     "TextContent": message_text,
                     "ToUserName": session_id,
-                }
-            ]
+                },
+            ],
         }
         url = f"{self.adapter.base_url}/message/SendTextMessage"
         await self._post(session, url, payload)
@@ -104,8 +121,8 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
                     "EmojiMd5": comp.md5,
                     "EmojiSize": comp.md5_len,
                     "ToUserName": self.session_id,
-                }
-            ]
+                },
+            ],
         }
         url = f"{self.adapter.base_url}/message/SendEmojiMessage"
         await self._post(session, url, payload)

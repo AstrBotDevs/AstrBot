@@ -1,23 +1,26 @@
-import time
 import asyncio
-import uuid
 import os
-from typing import Awaitable, Any, Callable
+import time
+import uuid
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from astrbot import logger
+from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.message.components import Plain, Image, Record  # noqa: F403
-from astrbot import logger
-from .webchat_queue_mgr import webchat_queue_mgr, WebChatQueueMgr
-from .webchat_event import WebChatMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
-from ...register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from ...register import register_platform_adapter
+from .webchat_event import WebChatMessageEvent
+from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
 
 
 class QueueListener:
@@ -35,7 +38,7 @@ class QueueListener:
                 await self.callback(data)
             except Exception as e:
                 logger.error(
-                    f"Error processing message from conversation {conversation_id}: {e}"
+                    f"Error processing message from conversation {conversation_id}: {e}",
                 )
                 break
 
@@ -66,7 +69,10 @@ class QueueListener:
 @register_platform_adapter("webchat", "webchat")
 class WebChatAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -77,11 +83,15 @@ class WebChatAdapter(Platform):
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.metadata = PlatformMetadata(
-            name="webchat", description="webchat", id="webchat"
+            name="webchat",
+            description="webchat",
+            id="webchat",
         )
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         await WebChatMessageEvent._send(message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
@@ -106,13 +116,13 @@ class WebChatAdapter(Platform):
             if isinstance(payload["image_url"], list):
                 for img in payload["image_url"]:
                     abm.message.append(
-                        Image.fromFileSystem(os.path.join(self.imgs_dir, img))
+                        Image.fromFileSystem(os.path.join(self.imgs_dir, img)),
                     )
             else:
                 abm.message.append(
                     Image.fromFileSystem(
-                        os.path.join(self.imgs_dir, payload["image_url"])
-                    )
+                        os.path.join(self.imgs_dir, payload["image_url"]),
+                    ),
                 )
         if payload["audio_url"]:
             if isinstance(payload["audio_url"], list):
@@ -153,6 +163,9 @@ class WebChatAdapter(Platform):
         _, _, payload = message.raw_message  # type: ignore
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
+        message_event.set_extra(
+            "enable_streaming", payload.get("enable_streaming", True)
+        )
 
         self.commit_event(message_event)
 

@@ -1,20 +1,20 @@
-import logging
 import asyncio
+import logging
 import sys
 
 logger = logging.getLogger("astrbot")
 
 
 class PipInstaller:
-    def __init__(self, pip_install_arg: str, pypi_index_url: str = None):
+    def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None):
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
 
     async def install(
         self,
-        package_name: str = None,
-        requirements_path: str = None,
-        mirror: str = None,
+        package_name: str | None = None,
+        requirements_path: str | None = None,
+        mirror: str | None = None,
     ):
         args = ["install"]
         if package_name:

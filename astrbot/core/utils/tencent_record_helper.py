@@ -1,10 +1,11 @@
+import asyncio
 import base64
-import wave
 import os
 import subprocess
-from io import BytesIO
-import asyncio
 import tempfile
+import wave
+from io import BytesIO
+
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -35,7 +36,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库"
+            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库",
         )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())
@@ -60,8 +61,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """
-    将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
+    """将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
     若转换失败则抛出异常。
     """
     try:
@@ -99,13 +99,11 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         return output_path
-    else:
-        raise RuntimeError("生成的WAV文件不存在或为空")
+    raise RuntimeError("生成的WAV文件不存在或为空")
 
 
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
-    """
-    将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
+    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
 
     参数:
     - audio_path: 输入音频文件路径（.mp3 或 .wav）
@@ -125,7 +123,9 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     # 是否需要转换为 WAV
     ext = os.path.splitext(audio_path)[1].lower()
     temp_wav = tempfile.NamedTemporaryFile(
-        suffix=".wav", delete=False, dir=temp_dir
+        suffix=".wav",
+        delete=False,
+        dir=temp_dir,
     ).name
 
     if ext != ".wav":
@@ -140,12 +140,18 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
         rate = wav_file.getframerate()
 
     silk_path = tempfile.NamedTemporaryFile(
-        suffix=".silk", delete=False, dir=temp_dir
+        suffix=".silk",
+        delete=False,
+        dir=temp_dir,
     ).name
 
     try:
         duration = await asyncio.to_thread(
-            pilk.encode, wav_path, silk_path, pcm_rate=rate, tencent=True
+            pilk.encode,
+            wav_path,
+            silk_path,
+            pcm_rate=rate,
+            tencent=True,
         )
 
         with open(silk_path, "rb") as f:

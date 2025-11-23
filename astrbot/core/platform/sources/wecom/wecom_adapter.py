@@ -41,10 +41,14 @@ class WecomServer:
         self.port = int(config.get("port"))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
-            "/callback/command", view_func=self.verify, methods=["GET"]
+            "/callback/command",
+            view_func=self.verify,
+            methods=["GET"],
         )
         self.server.add_url_rule(
-            "/callback/command", view_func=self.callback_command, methods=["POST"]
+            "/callback/command",
+            view_func=self.callback_command,
+            methods=["POST"],
         )
         self.event_queue = event_queue
 
@@ -94,7 +98,7 @@ class WecomServer:
 
     async def start_polling(self):
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。"
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。",
         )
         await self.server.run_task(
             host=self.callback_server_host,
@@ -106,24 +110,27 @@ class WecomServer:
         await self.shutdown_event.wait()
 
 
-@register_platform_adapter("wecom", "wecom 适配器")
+@register_platform_adapter("wecom", "wecom 适配器", support_streaming_message=False)
 class WecomPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
-            "api_base_url", "https://qyapi.weixin.qq.com/cgi-bin/"
+            "api_base_url",
+            "https://qyapi.weixin.qq.com/cgi-bin/",
         )
 
         if not self.api_base_url:
             self.api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
 
-        if self.api_base_url.endswith("/"):
-            self.api_base_url = self.api_base_url[:-1]
+        self.api_base_url = self.api_base_url.removesuffix("/")
         if not self.api_base_url.endswith("/cgi-bin"):
             self.api_base_url += "/cgi-bin"
 
@@ -165,7 +172,8 @@ class WecomPlatformAdapter(Platform):
                     return None
 
                 msg_new = await asyncio.get_event_loop().run_in_executor(
-                    None, get_latest_msg_item
+                    None,
+                    get_latest_msg_item,
                 )
                 if msg_new:
                     await self.convert_wechat_kf_message(msg_new)
@@ -176,7 +184,9 @@ class WecomPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         await super().send_by_session(session, message_chain)
 
@@ -186,6 +196,7 @@ class WecomPlatformAdapter(Platform):
             "wecom",
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
+            support_streaming_message=False,
         )
 
     @override
@@ -195,10 +206,11 @@ class WecomPlatformAdapter(Platform):
             try:
                 acc_list = (
                     await loop.run_in_executor(
-                        None, self.wechat_kf_api.get_account_list
+                        None,
+                        self.wechat_kf_api.get_account_list,
                     )
                 ).get("account_list", [])
-                logger.debug(f"获取到微信客服列表: {str(acc_list)}")
+                logger.debug(f"获取到微信客服列表: {acc_list!s}")
                 for acc in acc_list:
                     name = acc.get("name", None)
                     if name != self.kf_name:
@@ -206,7 +218,7 @@ class WecomPlatformAdapter(Platform):
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
                         logger.error("获取微信客服失败，open_kfid 为空。")
-                    logger.debug(f"Found open_kfid: {str(open_kfid)}")
+                    logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
                             None,
@@ -216,7 +228,7 @@ class WecomPlatformAdapter(Platform):
                         )
                     ).get("url", "")
                     logger.info(
-                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}"
+                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
                     )
             except Exception as e:
                 logger.error(e)
@@ -256,7 +268,9 @@ class WecomPlatformAdapter(Platform):
             assert isinstance(msg, VoiceMessage)
 
             resp: Response = await asyncio.get_event_loop().run_in_executor(
-                None, self.client.media.download, msg.media_id
+                None,
+                self.client.media.download,
+                msg.media_id,
             )
             temp_dir = os.path.join(get_astrbot_data_path(), "temp")
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
@@ -294,8 +308,8 @@ class WecomPlatformAdapter(Platform):
         await self.handle_msg(abm)
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
-        msgtype = msg.get("msgtype", None)
-        external_userid = msg.get("external_userid", None)
+        msgtype = msg.get("msgtype")
+        external_userid = msg.get("external_userid")
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
@@ -312,7 +326,9 @@ class WecomPlatformAdapter(Platform):
         elif msgtype == "image":
             media_id = msg.get("image", {}).get("media_id", "")
             resp: Response = await asyncio.get_event_loop().run_in_executor(
-                None, self.client.media.download, media_id
+                None,
+                self.client.media.download,
+                media_id,
             )
             path = f"data/temp/wechat_kf_{media_id}.jpg"
             with open(path, "wb") as f:
@@ -321,7 +337,9 @@ class WecomPlatformAdapter(Platform):
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
             resp: Response = await asyncio.get_event_loop().run_in_executor(
-                None, self.client.media.download, media_id
+                None,
+                self.client.media.download,
+                media_id,
             )
 
             temp_dir = os.path.join(get_astrbot_data_path(), "temp")

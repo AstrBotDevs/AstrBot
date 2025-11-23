@@ -1,19 +1,20 @@
-from typing import List, Dict, Type
-from .platform_metadata import PlatformMetadata
 from astrbot.core import logger
 
-platform_registry: List[PlatformMetadata] = []
+from .platform_metadata import PlatformMetadata
+
+platform_registry: list[PlatformMetadata] = []
 """维护了通过装饰器注册的平台适配器"""
-platform_cls_map: Dict[str, Type] = {}
+platform_cls_map: dict[str, type] = {}
 """维护了平台适配器名称和适配器类的映射"""
 
 
 def register_platform_adapter(
     adapter_name: str,
     desc: str,
-    default_config_tmpl: dict = None,
-    adapter_display_name: str = None,
-    logo_path: str = None,
+    default_config_tmpl: dict | None = None,
+    adapter_display_name: str | None = None,
+    logo_path: str | None = None,
+    support_streaming_message: bool = True,
 ):
     """用于注册平台适配器的带参装饰器。
 
@@ -24,7 +25,7 @@ def register_platform_adapter(
     def decorator(cls):
         if adapter_name in platform_cls_map:
             raise ValueError(
-                f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。"
+                f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",
             )
 
         # 添加必备选项
@@ -42,6 +43,7 @@ def register_platform_adapter(
             default_config_tmpl=default_config_tmpl,
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,
+            support_streaming_message=support_streaming_message,
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls

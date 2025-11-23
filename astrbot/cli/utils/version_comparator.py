@@ -1,6 +1,4 @@
-"""
-拷贝自 astrbot.core.utils.version_comparator
-"""
+"""拷贝自 astrbot.core.utils.version_comparator"""
 
 import re
 
@@ -42,15 +40,15 @@ class VersionComparator:
         for i in range(length):
             if v1_parts[i] > v2_parts[i]:
                 return 1
-            elif v1_parts[i] < v2_parts[i]:
+            if v1_parts[i] < v2_parts[i]:
                 return -1
 
         # 比较预发布标签
         if v1_prerelease is None and v2_prerelease is not None:
             return 1  # 没有预发布标签的版本高于有预发布标签的版本
-        elif v1_prerelease is not None and v2_prerelease is None:
+        if v1_prerelease is not None and v2_prerelease is None:
             return -1  # 有预发布标签的版本低于没有预发布标签的版本
-        elif v1_prerelease is not None and v2_prerelease is not None:
+        if v1_prerelease is not None and v2_prerelease is not None:
             len_pre = max(len(v1_prerelease), len(v2_prerelease))
             for i in range(len_pre):
                 p1 = v1_prerelease[i] if i < len(v1_prerelease) else None
@@ -58,21 +56,21 @@ class VersionComparator:
 
                 if p1 is None and p2 is not None:
                     return -1
-                elif p1 is not None and p2 is None:
+                if p1 is not None and p2 is None:
                     return 1
-                elif isinstance(p1, int) and isinstance(p2, str):
+                if isinstance(p1, int) and isinstance(p2, str):
                     return -1
-                elif isinstance(p1, str) and isinstance(p2, int):
+                if isinstance(p1, str) and isinstance(p2, int):
                     return 1
-                elif isinstance(p1, int) and isinstance(p2, int):
+                if isinstance(p1, int) and isinstance(p2, int):
                     if p1 > p2:
                         return 1
-                    elif p1 < p2:
+                    if p1 < p2:
                         return -1
                 elif isinstance(p1, str) and isinstance(p2, str):
                     if p1 > p2:
                         return 1
-                    elif p1 < p2:
+                    if p1 < p2:
                         return -1
             return 0  # 预发布标签完全相同
 

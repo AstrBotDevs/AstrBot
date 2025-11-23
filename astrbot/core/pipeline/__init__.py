@@ -27,15 +27,15 @@ STAGES_ORDER = [
 ]
 
 __all__ = [
-    "WakingCheckStage",
-    "WhitelistCheckStage",
-    "SessionStatusCheckStage",
-    "RateLimitStage",
     "ContentSafetyCheckStage",
+    "EventResultType",
+    "MessageEventResult",
     "PreProcessStage",
     "ProcessStage",
-    "ResultDecorateStage",
+    "RateLimitStage",
     "RespondStage",
-    "MessageEventResult",
-    "EventResultType",
+    "ResultDecorateStage",
+    "SessionStatusCheckStage",
+    "WakingCheckStage",
+    "WhitelistCheckStage",
 ]

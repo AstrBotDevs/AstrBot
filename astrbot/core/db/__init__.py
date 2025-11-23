@@ -1,27 +1,28 @@
 import abc
 import datetime
 import typing as T
-from deprecated import deprecated
-from dataclasses import dataclass
-from astrbot.core.db.po import (
-    Stats,
-    PlatformStat,
-    ConversationV2,
-    PlatformMessageHistory,
-    Attachment,
-    Persona,
-    Preference,
-)
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+
+from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+
+from astrbot.core.db.po import (
+    Attachment,
+    ConversationV2,
+    Persona,
+    PlatformMessageHistory,
+    PlatformSession,
+    PlatformStat,
+    Preference,
+    Stats,
+)
 
 
 @dataclass
 class BaseDatabase(abc.ABC):
-    """
-    数据库基类
-    """
+    """数据库基类"""
 
     DATABASE_URL = ""
 
@@ -32,12 +33,13 @@ class BaseDatabase(abc.ABC):
             future=True,
         )
         self.AsyncSessionLocal = sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
+            self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
         )
 
     async def initialize(self):
         """初始化数据库连接"""
-        pass
 
     @asynccontextmanager
     async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
@@ -91,7 +93,9 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_conversations(
-        self, user_id: str | None = None, platform_id: str | None = None
+        self,
+        user_id: str | None = None,
+        platform_id: str | None = None,
     ) -> list[ConversationV2]:
         """Get all conversations for a specific user and platform_id(optional).
 
@@ -106,7 +110,9 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_all_conversations(
-        self, page: int = 1, page_size: int = 20
+        self,
+        page: int = 1,
+        page_size: int = 20,
     ) -> list[ConversationV2]:
         """Get all conversations with pagination."""
         ...
@@ -173,9 +179,12 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def delete_platform_message_offset(
-        self, platform_id: str, user_id: str, offset_sec: int = 86400
+        self,
+        platform_id: str,
+        user_id: str,
+        offset_sec: int = 86400,
     ) -> None:
-        """Delete platform message history records older than the specified offset."""
+        """Delete platform message history records newer than the specified offset."""
         ...
 
     @abc.abstractmethod
@@ -243,7 +252,11 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def insert_preference_or_update(
-        self, scope: str, scope_id: str, key: str, value: dict
+        self,
+        scope: str,
+        scope_id: str,
+        key: str,
+        value: dict,
     ) -> Preference:
         """Insert a new preference record."""
         ...
@@ -255,7 +268,10 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def get_preferences(
-        self, scope: str, scope_id: str | None = None, key: str | None = None
+        self,
+        scope: str,
+        scope_id: str | None = None,
+        key: str | None = None,
     ) -> list[Preference]:
         """Get all preferences for a specific scope ID or key."""
         ...
@@ -297,4 +313,52 @@ class BaseDatabase(abc.ABC):
         platform: str | None = None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
+        ...
+
+    # ====
+    # Platform Session Management
+    # ====
+
+    @abc.abstractmethod
+    async def create_platform_session(
+        self,
+        creator: str,
+        platform_id: str = "webchat",
+        session_id: str | None = None,
+        display_name: str | None = None,
+        is_group: int = 0,
+    ) -> PlatformSession:
+        """Create a new Platform session."""
+        ...
+
+    @abc.abstractmethod
+    async def get_platform_session_by_id(
+        self, session_id: str
+    ) -> PlatformSession | None:
+        """Get a Platform session by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def get_platform_sessions_by_creator(
+        self,
+        creator: str,
+        platform_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[PlatformSession]:
+        """Get all Platform sessions for a specific creator (username) and optionally platform."""
+        ...
+
+    @abc.abstractmethod
+    async def update_platform_session(
+        self,
+        session_id: str,
+        display_name: str | None = None,
+    ) -> None:
+        """Update a Platform session's updated_at timestamp and optionally display_name."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_platform_session(self, session_id: str) -> None:
+        """Delete a Platform session by its ID."""
         ...

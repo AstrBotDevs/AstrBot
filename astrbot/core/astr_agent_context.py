@@ -1,12 +1,19 @@
-from dataclasses import dataclass
-from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderRequest
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.star.context import Context
 
 
-@dataclass
+@dataclass(config={"arbitrary_types_allowed": True})
 class AstrAgentContext:
-    provider: Provider
-    first_provider_request: ProviderRequest
-    curr_provider_request: ProviderRequest
-    streaming: bool
-    tool_call_timeout: int = 60  # Default tool call timeout in seconds
+    context: Context
+    """The star context instance"""
+    event: AstrMessageEvent
+    """The message event associated with the agent context."""
+    extra: dict[str, str] = Field(default_factory=dict)
+    """Customized extra data."""
+
+
+AgentContextWrapper = ContextWrapper[AstrAgentContext]

@@ -7,6 +7,8 @@ import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import { useI18n } from '@/i18n/composables'
+import axios from 'axios'
+import { useToast } from '@/utils/toast'
 
 const props = defineProps({
   metadata: {
@@ -40,6 +42,7 @@ const currentEditingKey = ref('')
 const currentEditingLanguage = ref('json')
 const currentEditingTheme = ref('vs-light')
 let currentEditingKeyIterable = null
+const loadingEmbeddingDim = ref(false)
 
 function openEditorDialog(key, value, theme, language) {
   currentEditingKey.value = key
@@ -49,8 +52,32 @@ function openEditorDialog(key, value, theme, language) {
   dialog.value = true
 }
 
+
 function saveEditedContent() {
   dialog.value = false
+}
+
+async function getEmbeddingDimensions(providerConfig) {
+  if (loadingEmbeddingDim.value) return
+  
+  loadingEmbeddingDim.value = true
+  try {
+    const response = await axios.post('/api/config/provider/get_embedding_dim', {
+      provider_config: providerConfig
+    })
+    
+    if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
+      console.log(response.data.data.embedding_dimensions)
+      providerConfig.embedding_dimensions = response.data.data.embedding_dimensions
+      useToast().success("获取成功: " + response.data.data.embedding_dimensions)
+    } else {
+      useToast().error(response.data.message)
+    }
+  } catch (error) {
+    console.error('Error getting embedding dimensions:', error)
+  } finally {
+    loadingEmbeddingDim.value = false
+  }
 }
 
 function getValueBySelector(obj, selector) {
@@ -184,6 +211,29 @@ function hasVisibleItemsAfter(items, currentIndex) {
                     v-model="iterable[key]"
                   />
                 </div>
+                <!-- Numeric input with get_embedding_dim button -->
+                <div v-else-if="metadata[metadataKey].items[key]?._special === 'get_embedding_dim'"
+                  class="d-flex align-center gap-2">
+                  <v-text-field
+                    v-model="iterable[key]"
+                    density="compact"
+                    variant="outlined"
+                    class="config-field"
+                    type="number"
+                    hide-details
+                  ></v-text-field>
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    size="small"
+                    @click="getEmbeddingDimensions(iterable)"
+                    :loading="loadingEmbeddingDim"
+                    class="ml-2"
+                  >
+                    自动检测
+                  </v-btn>
+                </div>
+
                 <!-- List item with options-->
                 <div v-else-if="metadata[metadataKey].items[key]?.type === 'list' && metadata[metadataKey].items[key]?.options && !metadata[metadataKey].items[key]?.invisible && metadata[metadataKey].items[key]?.render_type === 'checkbox'"
                   class="d-flex flex-wrap gap-20">

@@ -1,21 +1,20 @@
-import uuid
 import asyncio
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.api.message_components import Plain, Image, Record
-from wechatpy import WeChatClient
-from wechatpy.replies import TextReply, ImageReply, VoiceReply
+import uuid
 
+from wechatpy import WeChatClient
+from wechatpy.replies import ImageReply, TextReply, VoiceReply
 
 from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 
 try:
     import pydub
 except Exception:
     logger.warning(
-        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 控制台 -> 安装 Pip 库安装 pydub。"
+        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 控制台 -> 安装 Pip 库安装 pydub。",
     )
-    pass
 
 
 class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
@@ -32,7 +31,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     @staticmethod
     async def send_with_client(
-        client: WeChatClient, message: MessageChain, user_name: str
+        client: WeChatClient,
+        message: MessageChain,
+        user_name: str,
     ):
         pass
 
@@ -43,44 +44,44 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             plain (str): 要分割的长文本
         Returns:
             list[str]: 分割后的文本列表
+
         """
         if len(plain) <= 2048:
             return [plain]
-        else:
-            result = []
-            start = 0
-            while start < len(plain):
-                # 剩下的字符串长度<2048时结束
-                if start + 2048 >= len(plain):
-                    result.append(plain[start:])
+        result = []
+        start = 0
+        while start < len(plain):
+            # 剩下的字符串长度<2048时结束
+            if start + 2048 >= len(plain):
+                result.append(plain[start:])
+                break
+
+            # 向前搜索分割标点符号
+            end = min(start + 2048, len(plain))
+            cut_position = end
+            for i in range(end, start, -1):
+                if i < len(plain) and plain[i - 1] in [
+                    "。",
+                    "！",
+                    "？",
+                    ".",
+                    "!",
+                    "?",
+                    "\n",
+                    ";",
+                    "；",
+                ]:
+                    cut_position = i
                     break
 
-                # 向前搜索分割标点符号
-                end = min(start + 2048, len(plain))
+            # 没找到合适的位置分割, 直接切分
+            if cut_position == end and end < len(plain):
                 cut_position = end
-                for i in range(end, start, -1):
-                    if i < len(plain) and plain[i - 1] in [
-                        "。",
-                        "！",
-                        "？",
-                        ".",
-                        "!",
-                        "?",
-                        "\n",
-                        ";",
-                        "；",
-                    ]:
-                        cut_position = i
-                        break
 
-                # 没找到合适的位置分割, 直接切分
-                if cut_position == end and end < len(plain):
-                    cut_position = end
+            result.append(plain[start:cut_position])
+            start = cut_position
 
-                result.append(plain[start:cut_position])
-                start = cut_position
-
-            return result
+        return result
 
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
@@ -111,7 +112,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"微信公众平台上传图片失败: {e}")
                         await self.send(
-                            MessageChain().message(f"微信公众平台上传图片失败: {e}")
+                            MessageChain().message(f"微信公众平台上传图片失败: {e}"),
                         )
                         return
                     logger.debug(f"微信公众平台上传图片返回: {response}")
@@ -136,7 +137,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 # 转成amr
                 record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
                 pydub.AudioSegment.from_wav(record_path).export(
-                    record_path_amr, format="amr"
+                    record_path_amr,
+                    format="amr",
                 )
 
                 with open(record_path_amr, "rb") as f:
@@ -145,7 +147,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"微信公众平台上传语音失败: {e}")
                         await self.send(
-                            MessageChain().message(f"微信公众平台上传语音失败: {e}")
+                            MessageChain().message(f"微信公众平台上传语音失败: {e}"),
                         )
                         return
                     logger.info(f"微信公众平台上传语音返回: {response}")
@@ -178,7 +180,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return
+            return None
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import List, Union
+from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from . import HandlerFilter
 from .command import CommandFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.config import AstrBotConfig
 from .custom_filter import CustomFilter
 
 
@@ -18,25 +18,27 @@ class CommandGroupFilter(HandlerFilter):
     ):
         self.group_name = group_name
         self.alias = alias if alias else set()
-        self.sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]] = []
-        self.custom_filter_list: List[CustomFilter] = []
+        self.sub_command_filters: list[CommandFilter | CommandGroupFilter] = []
+        self.custom_filter_list: list[CustomFilter] = []
         self.parent_group = parent_group
 
         # Cache for complete command names list
         self._cmpl_cmd_names: list | None = None
 
     def add_sub_command_filter(
-        self, sub_command_filter: Union[CommandFilter, CommandGroupFilter]
+        self,
+        sub_command_filter: CommandFilter | CommandGroupFilter,
     ):
         self.sub_command_filters.append(sub_command_filter)
 
     def add_custom_filter(self, custom_filter: CustomFilter):
         self.custom_filter_list.append(custom_filter)
 
-    def get_complete_command_names(self) -> List[str]:
+    def get_complete_command_names(self) -> list[str]:
         """遍历父节点获取完整的指令名。
 
-        新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。"""
+        新版本 v3.4.29 采用预编译指令，不再从指令组递归遍历子指令，因此这个方法是返回包括别名在内的整个指令名列表。
+        """
         if self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
 
@@ -59,12 +61,12 @@ class CommandGroupFilter(HandlerFilter):
     # 以树的形式打印出来
     def print_cmd_tree(
         self,
-        sub_command_filters: List[Union[CommandFilter, CommandGroupFilter]],
+        sub_command_filters: list[CommandFilter | CommandGroupFilter],
         prefix: str = "",
         event: AstrMessageEvent | None = None,
         cfg: AstrBotConfig | None = None,
     ) -> str:
-        result = ""
+        parts = []
         for sub_filter in sub_command_filters:
             if isinstance(sub_filter, CommandFilter):
                 custom_filter_pass = True
@@ -72,31 +74,32 @@ class CommandGroupFilter(HandlerFilter):
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
                     cmd_th = sub_filter.print_types()
-                    result += f"{prefix}├── {sub_filter.command_name}"
+                    line = f"{prefix}├── {sub_filter.command_name}"
                     if cmd_th:
-                        result += f" ({cmd_th})"
+                        line += f" ({cmd_th})"
                     else:
-                        result += " (无参数指令)"
+                        line += " (无参数指令)"
 
                     if sub_filter.handler_md and sub_filter.handler_md.desc:
-                        result += f": {sub_filter.handler_md.desc}"
+                        line += f": {sub_filter.handler_md.desc}"
 
-                    result += "\n"
+                    parts.append(line + "\n")
             elif isinstance(sub_filter, CommandGroupFilter):
                 custom_filter_pass = True
                 if event and cfg:
                     custom_filter_pass = sub_filter.custom_filter_ok(event, cfg)
                 if custom_filter_pass:
-                    result += f"{prefix}├── {sub_filter.group_name}"
-                    result += "\n"
-                    result += sub_filter.print_cmd_tree(
-                        sub_filter.sub_command_filters,
-                        prefix + "│   ",
-                        event=event,
-                        cfg=cfg,
+                    parts.append(f"{prefix}├── {sub_filter.group_name}\n")
+                    parts.append(
+                        sub_filter.print_cmd_tree(
+                            sub_filter.sub_command_filters,
+                            prefix + "│   ",
+                            event=event,
+                            cfg=cfg,
+                        )
                     )
 
-        return result
+        return "".join(parts)
 
     def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
         for custom_filter in self.custom_filter_list:
@@ -125,7 +128,7 @@ class CommandGroupFilter(HandlerFilter):
                 + self.print_cmd_tree(self.sub_command_filters, event=event, cfg=cfg)
             )
             raise ValueError(
-                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree
+                f"参数不足。{self.group_name} 指令组下有如下指令，请参考：\n" + tree,
             )
 
         return self.startswith(event.message_str)

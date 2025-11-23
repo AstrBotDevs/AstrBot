@@ -1,8 +1,9 @@
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
+
+from astrbot.core.config import AstrBotConfig
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.config import AstrBotConfig
 
 
 class CustomFilterMeta(ABCMeta):
@@ -38,7 +39,7 @@ class CustomFilterOr(CustomFilter):
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter."
+                "CustomFilter lass can only operate with other CustomFilter.",
             )
         self.filter1 = filter1
         self.filter2 = filter2
@@ -52,7 +53,7 @@ class CustomFilterAnd(CustomFilter):
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter."
+                "CustomFilter lass can only operate with other CustomFilter.",
             )
         self.filter1 = filter1
         self.filter2 = filter2

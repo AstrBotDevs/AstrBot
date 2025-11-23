@@ -1,9 +1,11 @@
-from . import STAGES_ORDER
-from .stage import registered_stages
-from .context import PipelineContext
-from typing import AsyncGenerator
-from astrbot.core.platform import AstrMessageEvent
+from collections.abc import AsyncGenerator
+
 from astrbot.core import logger
+from astrbot.core.platform import AstrMessageEvent
+
+from . import STAGES_ORDER
+from .context import PipelineContext
+from .stage import registered_stages
 
 
 class PipelineScheduler:
@@ -11,7 +13,7 @@ class PipelineScheduler:
 
     def __init__(self, context: PipelineContext):
         registered_stages.sort(
-            key=lambda x: STAGES_ORDER.index(x.__name__)
+            key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
         self.stages = []  # 存储阶段实例
@@ -29,12 +31,13 @@ class PipelineScheduler:
         Args:
             event (AstrMessageEvent): 事件对象
             from_stage (int): 从第几个阶段开始执行, 默认从0开始
+
         """
         for i in range(from_stage, len(self.stages)):
             stage = self.stages[i]  # 获取当前要执行的阶段
             # logger.debug(f"执行阶段 {stage.__class__.__name__}")
             coroutine = stage.process(
-                event
+                event,
             )  # 调用阶段的process方法, 返回协程或者异步生成器
 
             if isinstance(coroutine, AsyncGenerator):
@@ -43,7 +46,7 @@ class PipelineScheduler:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。"
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
 
@@ -53,7 +56,7 @@ class PipelineScheduler:
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。"
+                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
                         )
                         break
             else:
@@ -70,6 +73,7 @@ class PipelineScheduler:
 
         Args:
             event (AstrMessageEvent): 事件对象
+
         """
         await self._process_stages(event)
 

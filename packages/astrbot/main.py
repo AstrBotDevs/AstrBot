@@ -1,29 +1,28 @@
 import traceback
-import astrbot.api.star as star
-import astrbot.api.event.filter as filter
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.provider import ProviderRequest
-from astrbot.core.provider.sources.dify_source import ProviderDify
-from .long_term_memory import LongTermMemory
+
+from astrbot.api import star
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.message_components import Image, Plain
+from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
-from astrbot.api.message_components import Plain, Image
-from typing import Union
+from astrbot.core.provider.sources.dify_source import ProviderDify
 
 from .commands import (
+    AdminCommands,
+    AlterCmdCommands,
+    ConversationCommands,
     HelpCommand,
     LLMCommands,
-    ToolCommands,
-    PluginCommands,
-    AdminCommands,
-    ConversationCommands,
-    ProviderCommands,
     PersonaCommands,
-    AlterCmdCommands,
+    PluginCommands,
+    ProviderCommands,
     SetUnsetCommands,
-    T2ICommand,
-    TTSCommand,
     SIDCommand,
+    T2ICommand,
+    ToolCommands,
+    TTSCommand,
 )
+from .long_term_memory import LongTermMemory
 from .process_llm_request import ProcessLLMRequest
 
 
@@ -182,7 +181,9 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(
-        self, message: AstrMessageEvent, idx_or_name: Union[int, str, None] = None
+        self,
+        message: AstrMessageEvent,
+        idx_or_name: int | str | None = None,
     ):
         """查看或者切换模型"""
         await self.provider_c.model_ls(message, idx_or_name)
@@ -199,9 +200,7 @@ class Main(star.Star):
 
     @filter.command("new")
     async def new_conv(self, message: AstrMessageEvent):
-        """
-        创建新对话
-        """
+        """创建新对话"""
         await self.conversation_c.new_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
@@ -253,7 +252,6 @@ class Main(star.Star):
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
         """群聊记忆增强"""
-
         has_image_or_plain = False
         for comp in event.message_obj.message:
             if isinstance(comp, Plain) or isinstance(comp, Image):
@@ -283,27 +281,29 @@ class Main(star.Star):
                     conv = None
                     if provider.meta().type != "dify":
                         session_curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
-                            event.unified_msg_origin
+                            event.unified_msg_origin,
                         )
 
                         if not session_curr_cid:
                             logger.error(
-                                "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。"
+                                "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
                             )
                             return
 
                         conv = await self.context.conversation_manager.get_conversation(
-                            event.unified_msg_origin, session_curr_cid
+                            event.unified_msg_origin,
+                            session_curr_cid,
                         )
                     else:
                         # Dify 自己有维护对话，不需要 bot 端维护。
                         assert isinstance(provider, ProviderDify)
                         cid = provider.conversation_ids.get(
-                            event.unified_msg_origin, None
+                            event.unified_msg_origin,
+                            None,
                         )
                         if cid is None:
                             logger.error(
-                                "[Dify] 当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。"
+                                "[Dify] 当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
                             )
                             return
 
@@ -333,6 +333,17 @@ class Main(star.Star):
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
                 logger.error(f"ltm: {e}")
+
+    @filter.on_llm_response()
+    async def inject_reasoning(self, event: AstrMessageEvent, resp: LLMResponse):
+        """在 LLM 响应后基于配置注入思考过程文本"""
+        umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo).get("provider_settings", {})
+        show_reasoning = cfg.get("display_reasoning_text", False)
+        if show_reasoning and resp.reasoning_content:
+            resp.completion_text = (
+                f"🤔 思考: {resp.reasoning_content}\n\n{resp.completion_text}"
+            )
 
     @filter.after_message_sent()
     async def after_llm_req(self, event: AstrMessageEvent):

@@ -1,10 +1,10 @@
-import astrbot.api.star as star
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.star.star_handler import star_handlers_registry, StarHandlerMetadata
+from astrbot.core import DEMO_MODE, logger
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core import DEMO_MODE, logger
 
 
 class PluginCommands:
@@ -13,18 +13,21 @@ class PluginCommands:
 
     async def plugin_ls(self, event: AstrMessageEvent):
         """获取已经安装的插件列表。"""
-        plugin_list_info = "已加载的插件：\n"
+        parts = ["已加载的插件：\n"]
         for plugin in self.context.get_all_stars():
-            plugin_list_info += f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
+            line = f"- `{plugin.name}` By {plugin.author}: {plugin.desc}"
             if not plugin.activated:
-                plugin_list_info += " (未启用)"
-            plugin_list_info += "\n"
-        if plugin_list_info.strip() == "":
+                line += " (未启用)"
+            parts.append(line + "\n")
+
+        if len(parts) == 1:
             plugin_list_info = "没有加载任何插件。"
+        else:
+            plugin_list_info = "".join(parts)
 
         plugin_list_info += "\n使用 /plugin help <插件名> 查看插件帮助和加载的指令。\n使用 /plugin on/off <插件名> 启用或者禁用插件。"
         event.set_result(
-            MessageEventResult().message(f"{plugin_list_info}").use_t2i(False)
+            MessageEventResult().message(f"{plugin_list_info}").use_t2i(False),
         )
 
     async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = ""):
@@ -34,7 +37,7 @@ class PluginCommands:
             return
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin off <插件名> 禁用插件。")
+                MessageEventResult().message("/plugin off <插件名> 禁用插件。"),
             )
             return
         await self.context._star_manager.turn_off_plugin(plugin_name)  # type: ignore
@@ -47,7 +50,7 @@ class PluginCommands:
             return
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin on <插件名> 启用插件。")
+                MessageEventResult().message("/plugin on <插件名> 启用插件。"),
             )
             return
         await self.context._star_manager.turn_on_plugin(plugin_name)  # type: ignore
@@ -60,7 +63,7 @@ class PluginCommands:
             return
         if not plugin_repo:
             event.set_result(
-                MessageEventResult().message("/plugin get <插件仓库地址> 安装插件")
+                MessageEventResult().message("/plugin get <插件仓库地址> 安装插件"),
             )
             return
         logger.info(f"准备从 {plugin_repo} 安装插件。")
@@ -78,7 +81,7 @@ class PluginCommands:
         """获取插件帮助"""
         if not plugin_name:
             event.set_result(
-                MessageEventResult().message("/plugin help <插件名> 查看插件信息。")
+                MessageEventResult().message("/plugin help <插件名> 查看插件信息。"),
             )
             return
         plugin = self.context.get_registered_star(plugin_name)
@@ -98,19 +101,19 @@ class PluginCommands:
                     command_handlers.append(handler)
                     command_names.append(filter_.command_name)
                     break
-                elif isinstance(filter_, CommandGroupFilter):
+                if isinstance(filter_, CommandGroupFilter):
                     command_handlers.append(handler)
                     command_names.append(filter_.group_name)
 
         if len(command_handlers) > 0:
-            help_msg += "\n\n🔧 指令列表：\n"
+            parts = ["\n\n🔧 指令列表：\n"]
             for i in range(len(command_handlers)):
-                help_msg += f"- {command_names[i]}"
+                line = f"- {command_names[i]}"
                 if command_handlers[i].desc:
-                    help_msg += f": {command_handlers[i].desc}"
-                help_msg += "\n"
-
-            help_msg += "\nTip: 指令的触发需要添加唤醒前缀，默认为 /。"
+                    line += f": {command_handlers[i].desc}"
+                parts.append(line + "\n")
+            parts.append("\nTip: 指令的触发需要添加唤醒前缀，默认为 /。")
+            help_msg += "".join(parts)
 
         ret = f"🧩 插件 {plugin_name} 帮助信息：\n" + help_msg
         ret += "更多帮助信息请查看插件仓库 README。"

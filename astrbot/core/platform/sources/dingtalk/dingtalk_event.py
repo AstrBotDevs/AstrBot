@@ -1,8 +1,10 @@
 import asyncio
+
 import dingtalk_stream
+
 import astrbot.api.message_components as Comp
-from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
 
 
 class DingtalkMessageEvent(AstrMessageEvent):
@@ -18,7 +20,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self.client = client
 
     async def send_with_client(
-        self, client: dingtalk_stream.ChatbotHandler, message: MessageChain
+        self,
+        client: dingtalk_stream.ChatbotHandler,
+        message: MessageChain,
     ):
         for segment in message.chain:
             if isinstance(segment, Comp.Plain):
@@ -69,7 +73,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return
+            return None
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

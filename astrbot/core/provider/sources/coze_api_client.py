@@ -1,8 +1,11 @@
-import json
 import asyncio
-import aiohttp
 import io
-from typing import Dict, List, Any, AsyncGenerator
+import json
+from collections.abc import AsyncGenerator
+from typing import Any
+
+import aiohttp
+
 from astrbot.core import logger
 
 
@@ -32,7 +35,9 @@ class CozeAPIClient:
                 "Accept": "text/event-stream",
             }
             self.session = aiohttp.ClientSession(
-                headers=headers, timeout=timeout, connector=connector
+                headers=headers,
+                timeout=timeout,
+                connector=connector,
             )
         return self.session
 
@@ -46,6 +51,7 @@ class CozeAPIClient:
             file_data (bytes): 文件的二进制数据
         Returns:
             str: 上传成功后返回的 file_id
+
         """
         session = await self._ensure_session()
         url = f"{self.api_base}/v1/files/upload"
@@ -64,12 +70,12 @@ class CozeAPIClient:
 
                 response_text = await response.text()
                 logger.debug(
-                    f"文件上传响应状态: {response.status}, 内容: {response_text}"
+                    f"文件上传响应状态: {response.status}, 内容: {response_text}",
                 )
 
                 if response.status != 200:
                     raise Exception(
-                        f"文件上传失败，状态码: {response.status}, 响应: {response_text}"
+                        f"文件上传失败，状态码: {response.status}, 响应: {response_text}",
                     )
 
                 try:
@@ -88,8 +94,8 @@ class CozeAPIClient:
             logger.error("文件上传超时")
             raise Exception("文件上传超时")
         except Exception as e:
-            logger.error(f"文件上传失败: {str(e)}")
-            raise Exception(f"文件上传失败: {str(e)}")
+            logger.error(f"文件上传失败: {e!s}")
+            raise Exception(f"文件上传失败: {e!s}")
 
     async def download_image(self, image_url: str) -> bytes:
         """下载图片并返回字节数据
@@ -98,6 +104,7 @@ class CozeAPIClient:
             image_url (str): 图片的URL
         Returns:
             bytes: 图片的二进制数据
+
         """
         session = await self._ensure_session()
 
@@ -110,19 +117,19 @@ class CozeAPIClient:
                 return image_data
 
         except Exception as e:
-            logger.error(f"下载图片失败 {image_url}: {str(e)}")
-            raise Exception(f"下载图片失败: {str(e)}")
+            logger.error(f"下载图片失败 {image_url}: {e!s}")
+            raise Exception(f"下载图片失败: {e!s}")
 
     async def chat_messages(
         self,
         bot_id: str,
         user_id: str,
-        additional_messages: List[Dict] | None = None,
+        additional_messages: list[dict] | None = None,
         conversation_id: str | None = None,
         auto_save_history: bool = True,
         stream: bool = True,
         timeout: float = 120,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """发送聊天消息并返回流式响应
 
         Args:
@@ -133,6 +140,7 @@ class CozeAPIClient:
             auto_save_history: 是否自动保存历史
             stream: 是否流式响应
             timeout: 超时时间
+
         """
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/chat"
@@ -198,7 +206,7 @@ class CozeAPIClient:
         except asyncio.TimeoutError:
             raise Exception(f"Coze API 流式请求超时 ({timeout}秒)")
         except Exception as e:
-            raise Exception(f"Coze API 流式请求失败: {str(e)}")
+            raise Exception(f"Coze API 流式请求失败: {e!s}")
 
     async def clear_context(self, conversation_id: str):
         """清空会话上下文
@@ -207,6 +215,7 @@ class CozeAPIClient:
             conversation_id: 会话ID
         Returns:
             dict: API响应结果
+
         """
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/conversation/message/clear_context"
@@ -230,7 +239,7 @@ class CozeAPIClient:
         except asyncio.TimeoutError:
             raise Exception("Coze API 请求超时")
         except aiohttp.ClientError as e:
-            raise Exception(f"Coze API 请求失败: {str(e)}")
+            raise Exception(f"Coze API 请求失败: {e!s}")
 
     async def get_message_list(
         self,
@@ -248,6 +257,7 @@ class CozeAPIClient:
             offset: 偏移量
         Returns:
             dict: API响应结果
+
         """
         session = await self._ensure_session()
         url = f"{self.api_base}/v3/conversation/message/list"
@@ -264,8 +274,8 @@ class CozeAPIClient:
                 return await response.json()
 
         except Exception as e:
-            logger.error(f"获取Coze消息列表失败: {str(e)}")
-            raise Exception(f"获取Coze消息列表失败: {str(e)}")
+            logger.error(f"获取Coze消息列表失败: {e!s}")
+            raise Exception(f"获取Coze消息列表失败: {e!s}")
 
     async def close(self):
         """关闭会话"""
@@ -275,8 +285,8 @@ class CozeAPIClient:
 
 
 if __name__ == "__main__":
-    import os
     import asyncio
+    import os
 
     async def test_coze_api_client():
         api_key = os.getenv("COZE_API_KEY", "")

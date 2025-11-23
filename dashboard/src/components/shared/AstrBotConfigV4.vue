@@ -130,19 +130,6 @@ function hasVisibleItemsAfter(items, currentIndex) {
   return false
 }
 
-// 将 options 和 labels 转换为 v-select 的 items 格式
-function getSelectItems(itemMeta) {
-  if (!itemMeta?.options) {
-    return []
-  }
-  if (itemMeta?.labels && itemMeta.labels.length === itemMeta.options.length) {
-    return itemMeta.options.map((value, index) => ({
-      title: itemMeta.labels[index],
-      value: value
-    }))
-  }
-  return itemMeta.options
-}
 </script>
 
 <template>
@@ -184,7 +171,8 @@ function getSelectItems(itemMeta) {
               <div class="w-100" v-if="!itemMeta?._special">
                 <!-- Select input for JSON selector -->
                 <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
-                  :items="getSelectItems(itemMeta)" :disabled="itemMeta?.readonly" density="compact" variant="outlined"
+                  :items="itemMeta?.labels ? itemMeta.options.map((value, index) => ({ title: itemMeta.labels[index] || value, value: value })) : itemMeta.options" 
+                  :disabled="itemMeta?.readonly" density="compact" variant="outlined"
                   class="config-field" hide-details></v-select>
 
                 <!-- Code Editor for JSON selector -->

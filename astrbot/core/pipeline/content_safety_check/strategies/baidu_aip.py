@@ -1,9 +1,8 @@
-"""
-使用此功能应该先 pip install baidu-aip
-"""
+"""使用此功能应该先 pip install baidu-aip"""
+
+from aip import AipContentCensor
 
 from . import ContentSafetyStrategy
-from aip import AipContentCensor
 
 
 class BaiduAipStrategy(ContentSafetyStrategy):
@@ -19,12 +18,12 @@ class BaiduAipStrategy(ContentSafetyStrategy):
             return False, ""
         if res["conclusionType"] == 1:
             return True, ""
-        else:
-            if "data" not in res:
-                return False, ""
-            count = len(res["data"])
-            info = f"百度审核服务发现 {count} 处违规：\n"
-            for i in res["data"]:
-                info += f"{i['msg']}；\n"
-            info += "\n判断结果：" + res["conclusion"]
-            return False, info
+        if "data" not in res:
+            return False, ""
+        count = len(res["data"])
+        parts = [f"百度审核服务发现 {count} 处违规：\n"]
+        for i in res["data"]:
+            parts.append(f"{i['msg']}；\n")
+        parts.append("\n判断结果：" + res["conclusion"])
+        info = "".join(parts)
+        return False, info

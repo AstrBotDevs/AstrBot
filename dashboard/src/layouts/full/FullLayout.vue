@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router';
-import { ref, onMounted } from 'vue';
+import { RouterView, useRoute } from 'vue-router';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
 import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
@@ -8,6 +8,12 @@ import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 
 const customizer = useCustomizerStore();
+const route = useRoute();
+
+// 计算是否在聊天页面（非全屏模式）
+const isChatPage = computed(() => {
+  return route.path.startsWith('/chat');
+});
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 
 // 检查是否需要迁移
@@ -45,7 +51,10 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue />
       <v-main>
-        <v-container fluid class="page-wrapper" style="height: calc(100% - 8px)">
+        <v-container fluid class="page-wrapper" :style="{ 
+          height: 'calc(100% - 8px)',
+          padding: isChatPage ? '0' : undefined 
+        }">
           <div style="height: 100%;">
             <RouterView />
           </div>

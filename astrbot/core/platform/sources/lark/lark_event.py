@@ -1,27 +1,34 @@
+import base64
 import json
 import os
 import uuid
-import base64
-import lark_oapi as lark
 from io import BytesIO
-from typing import List
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image as AstrBotImage, At
-from astrbot.core.utils.io import download_image_by_url
+
+import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
+
 from astrbot import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import Image as AstrBotImage
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_image_by_url
 
 
 class LarkMessageEvent(AstrMessageEvent):
     def __init__(
-        self, message_str, message_obj, platform_meta, session_id, bot: lark.Client
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: lark.Client,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
 
     @staticmethod
-    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> List:
+    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
         ret = []
         _stage = []
         for comp in message.chain:
@@ -58,7 +65,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         CreateImageRequestBody.builder()
                         .image_type("message")
                         .image(image_file)
-                        .build()
+                        .build(),
                     )
                     .build()
                 )
@@ -83,7 +90,7 @@ class LarkMessageEvent(AstrMessageEvent):
             "zh_cn": {
                 "title": "",
                 "content": res,
-            }
+            },
         }
 
         request = (
@@ -95,7 +102,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 .msg_type("post")
                 .uuid(str(uuid.uuid4()))
                 .reply_in_thread(False)
-                .build()
+                .build(),
             )
             .build()
         )
@@ -114,14 +121,14 @@ class LarkMessageEvent(AstrMessageEvent):
             .request_body(
                 CreateMessageReactionRequestBody.builder()
                 .reaction_type(Emoji.builder().emoji_type(emoji).build())
-                .build()
+                .build(),
             )
             .build()
         )
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
-            return None
+            return
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
@@ -131,7 +138,7 @@ class LarkMessageEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return
+            return None
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

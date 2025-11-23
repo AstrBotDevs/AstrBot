@@ -1,29 +1,26 @@
+import base64
+import logging
 import os
-import ssl
 import shutil
 import socket
+import ssl
 import time
-import aiohttp
-import base64
-import zipfile
 import uuid
-import psutil
-import logging
+import zipfile
+from pathlib import Path
 
+import aiohttp
 import certifi
-
-from typing import Union
-
+import psutil
 from PIL import Image
+
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 
 
 def on_error(func, path, exc_info):
-    """
-    a callback of the rmtree function.
-    """
+    """A callback of the rmtree function."""
     import stat
 
     if not os.access(path, os.W_OK):
@@ -52,7 +49,7 @@ def port_checker(port: int, host: str = "localhost"):
         return False
 
 
-def save_temp_img(img: Union[Image.Image, str]) -> str:
+def save_temp_img(img: Image.Image | str) -> str:
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     # 获得文件创建时间，清除超过 12 小时的
     try:
@@ -78,61 +75,75 @@ def save_temp_img(img: Union[Image.Image, str]) -> str:
 
 
 async def download_image_by_url(
-    url: str, post: bool = False, post_data: dict = None, path=None
+    url: str,
+    post: bool = False,
+    post_data: dict | None = None,
+    path: str | None = None,
 ) -> str:
-    """
-    下载图片, 返回 path
-    """
+    """下载图片, 返回 path"""
     try:
         ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
+            cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)  # 使用 certifi 的根证书
         async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
+            trust_env=True,
+            connector=connector,
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
-                    else:
-                        with open(path, "wb") as f:
-                            f.write(await resp.read())
-                        return path
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
             else:
                 async with session.get(url) as resp:
                     if not path:
                         return save_temp_img(await resp.read())
-                    else:
-                        with open(path, "wb") as f:
-                            f.write(await resp.read())
-                        return path
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        logger.warning(
+            f"SSL certificate verification failed for {url}. "
+            "Disabling SSL verification (CERT_NONE) as a fallback. "
+            "This is insecure and exposes the application to man-in-the-middle attacks. "
+            "Please investigate and resolve certificate issues."
+        )
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             if post:
-                async with session.get(url, ssl=ssl_context) as resp:
-                    return save_temp_img(await resp.read())
+                async with session.post(url, json=post_data, ssl=ssl_context) as resp:
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
-                    return save_temp_img(await resp.read())
+                    if not path:
+                        return save_temp_img(await resp.read())
+                    with open(path, "wb") as f:
+                        f.write(await resp.read())
+                    return path
     except Exception as e:
         raise e
 
 
 async def download_file(url: str, path: str, show_progress: bool = False):
-    """
-    从指定 url 下载文件到指定路径 path
-    """
+    """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(
-            cafile=certifi.where()
+            cafile=certifi.where(),
         )  # 使用 certifi 提供的 CA 证书
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
+            trust_env=True,
+            connector=connector,
         ) as session:
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
@@ -150,16 +161,30 @@ async def download_file(url: str, path: str, show_progress: bool = False):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if show_progress:
-                            elapsed_time = time.time() - start_time
+                            elapsed_time = (
+                                time.time() - start_time
+                                if time.time() - start_time > 0
+                                else 1
+                            )
                             speed = downloaded_size / 1024 / elapsed_time  # KB/s
                             print(
                                 f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
                                 end="",
                             )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
-        # 关闭SSL验证
+        # 关闭SSL验证（仅在证书验证失败时作为fallback）
+        logger.warning(
+            "SSL 证书验证失败，已关闭 SSL 验证（不安全，仅用于临时下载）。请检查目标服务器的证书配置。"
+        )
+        logger.warning(
+            f"SSL certificate verification failed for {url}. "
+            "Falling back to unverified connection (CERT_NONE). "
+            "This is insecure and exposes the application to man-in-the-middle attacks. "
+            "Please investigate certificate issues with the remote server."
+        )
         ssl_context = ssl.create_default_context()
-        ssl_context.set_ciphers("DEFAULT")
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))
@@ -209,7 +234,7 @@ async def get_dashboard_version():
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with open(version_file, encoding="utf-8") as f:
                 v = f.read().strip()
                 return v
     return None
@@ -221,32 +246,42 @@ async def download_dashboard(
     latest: bool = True,
     version: str | None = None,
     proxy: str | None = None,
-):
+) -> None:
     """下载管理面板文件"""
     if path is None:
-        path = os.path.join(get_astrbot_data_path(), "dashboard.zip")
+        zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
+    else:
+        zip_path = Path(path).absolute()
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
         dashboard_release_url = f"https://astrbot-registry.soulter.top/download/astrbot-dashboard/{ver_name}/dist.zip"
         logger.info(
-            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}"
+            f"准备下载指定发行版本的 AstrBot WebUI 文件: {dashboard_release_url}",
         )
         try:
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
+            )
         except BaseException as _:
             if latest:
-                dashboard_release_url = "https://github.com/Soulter/AstrBot/releases/latest/download/dist.zip"
+                dashboard_release_url = "https://github.com/AstrBotDevs/AstrBot/releases/latest/download/dist.zip"
             else:
-                dashboard_release_url = f"https://github.com/Soulter/AstrBot/releases/download/{version}/dist.zip"
+                dashboard_release_url = f"https://github.com/AstrBotDevs/AstrBot/releases/download/{version}/dist.zip"
             if proxy:
                 dashboard_release_url = f"{proxy}/{dashboard_release_url}"
-            await download_file(dashboard_release_url, path, show_progress=True)
+            await download_file(
+                dashboard_release_url,
+                str(zip_path),
+                show_progress=True,
+            )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"准备下载指定版本的 AstrBot WebUI: {url}")
         if proxy:
             url = f"{proxy}/{url}"
-        await download_file(url, path, show_progress=True)
-    with zipfile.ZipFile(path, "r") as z:
+        await download_file(url, str(zip_path), show_progress=True)
+    with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

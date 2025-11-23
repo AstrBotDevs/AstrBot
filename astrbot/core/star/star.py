@@ -16,8 +16,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class StarMetadata:
-    """
-    插件的元数据。
+    """插件的元数据。
 
     当 activated 为 False 时，star_cls 可能为 None，请不要在插件未激活时调用 star_cls 的方法。
     """
@@ -55,6 +54,12 @@ class StarMetadata:
 
     star_handler_full_names: list[str] = field(default_factory=list)
     """注册的 Handler 的全名列表"""
+
+    display_name: str | None = None
+    """用于展示的插件名称"""
+
+    logo_path: str | None = None
+    """插件 Logo 的路径"""
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"

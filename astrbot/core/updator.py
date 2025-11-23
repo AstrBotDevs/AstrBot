@@ -1,12 +1,15 @@
 import os
-import psutil
 import sys
 import time
-from .zip_updator import ReleaseInfo, RepoZipUpdator
+
+import psutil
+
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
-from astrbot.core.utils.io import download_file
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.io import download_file
+
+from .zip_updator import ReleaseInfo, RepoZipUpdator
 
 
 class AstrBotUpdator(RepoZipUpdator):
@@ -67,11 +70,16 @@ class AstrBotUpdator(RepoZipUpdator):
             raise e
 
     async def check_update(
-        self, url: str, current_version: str, consider_prerelease: bool = True
+        self,
+        url: str,
+        current_version: str,
+        consider_prerelease: bool = True,
     ) -> ReleaseInfo:
         """检查更新"""
         return await super().check_update(
-            self.ASTRBOT_RELEASE_API, VERSION, consider_prerelease
+            self.ASTRBOT_RELEASE_API,
+            VERSION,
+            consider_prerelease,
         )
 
     async def get_releases(self) -> list:
@@ -99,7 +107,7 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = f"https://github.com/Soulter/AstrBot/archive/{version}.zip"
+            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
         if proxy:

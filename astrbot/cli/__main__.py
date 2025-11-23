@@ -1,11 +1,11 @@
-"""
-AstrBot CLI入口
-"""
+"""AstrBot CLI入口"""
+
+import sys
 
 import click
-import sys
+
 from . import __version__
-from .commands import init, run, plug, conf
+from .commands import conf, init, plug, run
 
 logo_tmpl = r"""
      ___           _______.___________..______      .______     ______   .___________.

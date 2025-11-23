@@ -19,5 +19,15 @@
       "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
       "button": "Start Migration Assistant"
     }
+  },
+  "sidebar": {
+    "title": "Sidebar",
+    "customize": {
+      "title": "Customize Sidebar",
+      "subtitle": "Drag to reorder modules, or move modules in/out of the \"More Features\" group. Settings are saved locally in your browser.",
+      "reset": "Reset to Default",
+      "mainItems": "Main Modules",
+      "moreItems": "More Features"
+    }
   }
 } 

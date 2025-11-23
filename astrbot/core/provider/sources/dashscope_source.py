@@ -1,15 +1,17 @@
-import re
 import asyncio
 import functools
-from typing import List
-from .. import Provider, Personality
-from ..entities import LLMResponse
-from ..func_tool_manager import FuncCall
-from ..register import register_provider_adapter
-from astrbot.core.message.message_event_result import MessageChain
-from .openai_source import ProviderOpenAIOfficial
-from astrbot.core import logger, sp
+import re
+
 from dashscope import Application
+from dashscope.app.application_response import ApplicationResponse
+
+from astrbot.core import logger, sp
+from astrbot.core.message.message_event_result import MessageChain
+
+from .. import Provider
+from ..entities import LLMResponse
+from ..register import register_provider_adapter
+from .openai_source import ProviderOpenAIOfficial
 
 
 @register_provider_adapter("dashscope", "Dashscope APP 适配器。")
@@ -18,13 +20,11 @@ class ProviderDashscope(ProviderOpenAIOfficial):
         self,
         provider_config: dict,
         provider_settings: dict,
-        default_persona: Personality | None = None,
     ) -> None:
         Provider.__init__(
             self,
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_key = provider_config.get("dashscope_api_key", "")
         if not self.api_key:
@@ -51,6 +51,7 @@ class ProviderDashscope(ProviderOpenAIOfficial):
 
         Returns:
             bool: 是否有 RAG 选项
+
         """
         if self.rag_options and (
             len(self.rag_options.get("pipeline_ids", [])) > 0
@@ -62,14 +63,16 @@ class ProviderDashscope(ProviderOpenAIOfficial):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = [],
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
         model=None,
         **kwargs,
     ) -> LLMResponse:
+        if image_urls is None:
+            image_urls = []
         if contexts is None:
             contexts = []
         # 获得会话变量
@@ -122,31 +125,34 @@ class ProviderDashscope(ProviderOpenAIOfficial):
             )
             response = await asyncio.get_event_loop().run_in_executor(None, partial)
 
+        assert isinstance(response, ApplicationResponse)
+
         logger.debug(f"dashscope resp: {response}")
 
         if response.status_code != 200:
             logger.error(
-                f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code"
+                f"阿里云百炼请求失败: request_id={response.request_id}, code={response.status_code}, message={response.message}, 请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code",
             )
             return LLMResponse(
                 role="err",
                 result_chain=MessageChain().message(
-                    f"阿里云百炼请求失败: message={response.message} code={response.status_code}"
+                    f"阿里云百炼请求失败: message={response.message} code={response.status_code}",
                 ),
             )
 
-        output_text = response.output.get("text", "")
+        output_text = response.output.get("text", "") or ""
         # RAG 引用脚标格式化
         output_text = re.sub(r"<ref>\[(\d+)\]</ref>", r"[\1]", output_text)
         if self.output_reference and response.output.get("doc_references", None):
-            ref_str = ""
-            for ref in response.output.get("doc_references", []):
+            ref_parts = []
+            for ref in response.output.get("doc_references", []) or []:
                 ref_title = (
                     ref.get("title", "")
                     if ref.get("title")
                     else ref.get("doc_name", "")
                 )
-                ref_str += f"{ref['index_id']}. {ref_title}\n"
+                ref_parts.append(f"{ref['index_id']}. {ref_title}\n")
+            ref_str = "".join(ref_parts)
             output_text += f"\n\n回答来源:\n{ref_str}"
 
         llm_response = LLMResponse("assistant")

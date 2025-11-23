@@ -15,7 +15,10 @@ class UmopConfigRouter:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
         sp_data = self.sp.get(
-            "umop_config_routing", {}, scope="global", scope_id="global"
+            "umop_config_routing",
+            {},
+            scope="global",
+            scope_id="global",
         )
         self.umop_to_conf_id = sp_data
 
@@ -37,6 +40,7 @@ class UmopConfigRouter:
 
         Returns:
             str | None: 配置文件 ID，如果没有找到则返回 None
+
         """
         for pattern, conf_id in self.umop_to_conf_id.items():
             if self._is_umo_match(pattern, umo):
@@ -52,11 +56,12 @@ class UmopConfigRouter:
 
         Raises:
             ValueError: 如果 new_routing 中的 key 格式不正确
+
         """
-        for part in new_routing.keys():
+        for part in new_routing:
             if not isinstance(part, str) or len(part.split(":")) != 3:
                 raise ValueError(
-                    "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all"
+                    "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
                 )
 
         self.umop_to_conf_id = new_routing
@@ -71,10 +76,11 @@ class UmopConfigRouter:
 
         Raises:
             ValueError: 如果 umo 格式不正确
+
         """
         if not isinstance(umo, str) or len(umo.split(":")) != 3:
             raise ValueError(
-                "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all"
+                "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
             )
 
         self.umop_to_conf_id[umo] = conf_id

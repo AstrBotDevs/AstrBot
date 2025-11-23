@@ -1,19 +1,18 @@
+import asyncio
 import os
 import sys
+import traceback
 from pathlib import Path
 
 import click
-import asyncio
-import traceback
-
 from filelock import FileLock, Timeout
 
-from ..utils import check_dashboard, check_astrbot_root, get_astrbot_root
+from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 
 async def run_astrbot(astrbot_root: Path):
     """运行 AstrBot"""
-    from astrbot.core import logger, LogManager, LogBroker, db_helper
+    from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
     await check_dashboard(astrbot_root / "data")
@@ -38,7 +37,7 @@ def run(reload: bool, port: str) -> None:
 
         if not check_astrbot_root(astrbot_root):
             raise click.ClickException(
-                f"{astrbot_root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+                f"{astrbot_root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
             )
 
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)

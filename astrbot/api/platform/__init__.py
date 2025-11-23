@@ -1,23 +1,22 @@
+from astrbot.core.message.components import *
 from astrbot.core.platform import (
-    AstrMessageEvent,
-    Platform,
     AstrBotMessage,
+    AstrMessageEvent,
+    Group,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
-    Group,
 )
-
 from astrbot.core.platform.register import register_platform_adapter
-from astrbot.core.message.components import *
 
 __all__ = [
-    "AstrMessageEvent",
-    "Platform",
     "AstrBotMessage",
+    "AstrMessageEvent",
+    "Group",
     "MessageMember",
     "MessageType",
+    "Platform",
     "PlatformMetadata",
     "register_platform_adapter",
-    "Group",
 ]

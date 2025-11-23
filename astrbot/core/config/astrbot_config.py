@@ -1,10 +1,11 @@
-import os
+import enum
 import json
 import logging
-import enum
-from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
-from typing import Dict
+import os
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
@@ -27,7 +28,7 @@ class AstrBotConfig(dict):
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
-        schema: dict = None,
+        schema: dict | None = None,
     ):
         super().__init__()
 
@@ -45,7 +46,7 @@ class AstrBotConfig(dict):
                 json.dump(default_config, f, indent=4, ensure_ascii=False)
                 object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
-        with open(config_path, "r", encoding="utf-8-sig") as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             conf = json.loads(conf_str)
 
@@ -65,7 +66,7 @@ class AstrBotConfig(dict):
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
-                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}"
+                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
                     )
                 if "default" in v:
                     default = v["default"]
@@ -82,7 +83,7 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: Dict, conf: Dict, path=""):
+    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
@@ -97,27 +98,28 @@ class AstrBotConfig(dict):
                 logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
                 new_conf[key] = value
                 has_new = True
-            else:
-                if conf[key] is None:
-                    # 配置项为 None，使用默认值
+            elif conf[key] is None:
+                # 配置项为 None，使用默认值
+                new_conf[key] = value
+                has_new = True
+            elif isinstance(value, dict):
+                # 递归检查子配置项
+                if not isinstance(conf[key], dict):
+                    # 类型不匹配，使用默认值
                     new_conf[key] = value
                     has_new = True
-                elif isinstance(value, dict):
-                    # 递归检查子配置项
-                    if not isinstance(conf[key], dict):
-                        # 类型不匹配，使用默认值
-                        new_conf[key] = value
-                        has_new = True
-                    else:
-                        # 递归检查并同步顺序
-                        child_has_new = self.check_config_integrity(
-                            value, conf[key], path + "." + key if path else key
-                        )
-                        new_conf[key] = conf[key]
-                        has_new |= child_has_new
                 else:
-                    # 直接使用现有配置
+                    # 递归检查并同步顺序
+                    child_has_new = self.check_config_integrity(
+                        value,
+                        conf[key],
+                        path + "." + key if path else key,
+                    )
                     new_conf[key] = conf[key]
+                    has_new |= child_has_new
+            else:
+                # 直接使用现有配置
+                new_conf[key] = conf[key]
 
         # 检查是否存在参考配置中没有的配置项
         for key in list(conf.keys()):
@@ -140,7 +142,7 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: Dict = None):
+    def save_config(self, replace_config: dict | None = None):
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config

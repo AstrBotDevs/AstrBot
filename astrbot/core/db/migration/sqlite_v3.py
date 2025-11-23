@@ -1,8 +1,9 @@
 import sqlite3
 import time
-from astrbot.core.db.po import Platform, Stats
-from typing import Tuple, List, Dict, Any
 from dataclasses import dataclass
+from typing import Any
+
+from astrbot.core.db.po import Platform, Stats
 
 
 @dataclass
@@ -94,7 +95,7 @@ class SQLiteDatabase:
         c.execute(
             """
             PRAGMA table_info(webchat_conversation)
-            """
+            """,
         )
         res = c.fetchall()
         has_title = False
@@ -108,14 +109,14 @@ class SQLiteDatabase:
             c.execute(
                 """
                 ALTER TABLE webchat_conversation ADD COLUMN title TEXT;
-                """
+                """,
             )
             self.conn.commit()
         if not has_persona_id:
             c.execute(
                 """
                 ALTER TABLE webchat_conversation ADD COLUMN persona_id TEXT;
-                """
+                """,
             )
             self.conn.commit()
 
@@ -126,7 +127,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: Tuple = None):
+    def _exec_sql(self, sql: str, params: tuple = None):
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -174,7 +175,7 @@ class SQLiteDatabase:
             """
             SELECT * FROM platform
             """
-            + where_clause
+            + where_clause,
         )
 
         platform = []
@@ -194,7 +195,7 @@ class SQLiteDatabase:
         c.execute(
             """
             SELECT SUM(count) FROM platform
-            """
+            """,
         )
         res = c.fetchone()
         c.close()
@@ -214,7 +215,7 @@ class SQLiteDatabase:
             SELECT name, SUM(count), timestamp FROM platform
             """
             + where_clause
-            + " GROUP BY name"
+            + " GROUP BY name",
         )
 
         platform = []
@@ -242,7 +243,7 @@ class SQLiteDatabase:
         c.close()
 
         if not res:
-            return
+            return None
 
         return Conversation(*res)
 
@@ -257,7 +258,7 @@ class SQLiteDatabase:
             (user_id, cid, history, updated_at, created_at),
         )
 
-    def get_conversations(self, user_id: str) -> Tuple:
+    def get_conversations(self, user_id: str) -> tuple:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -280,7 +281,7 @@ class SQLiteDatabase:
             title = row[3]
             persona_id = row[4]
             conversations.append(
-                Conversation("", cid, "[]", created_at, updated_at, title, persona_id)
+                Conversation("", cid, "[]", created_at, updated_at, title, persona_id),
             )
         return conversations
 
@@ -319,8 +320,10 @@ class SQLiteDatabase:
         )
 
     def get_all_conversations(
-        self, page: int = 1, page_size: int = 20
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        self,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取所有对话，支持分页，按更新时间降序排序"""
         try:
             c = self.conn.cursor()
@@ -366,7 +369,7 @@ class SQLiteDatabase:
                         "persona_id": persona_id or "",
                         "created_at": created_at or 0,
                         "updated_at": updated_at or 0,
-                    }
+                    },
                 )
 
             return conversations, total_count
@@ -381,12 +384,12 @@ class SQLiteDatabase:
         self,
         page: int = 1,
         page_size: int = 20,
-        platforms: List[str] = None,
-        message_types: List[str] = None,
-        search_query: str = None,
-        exclude_ids: List[str] = None,
-        exclude_platforms: List[str] = None,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        platforms: list[str] | None = None,
+        message_types: list[str] | None = None,
+        search_query: str | None = None,
+        exclude_ids: list[str] | None = None,
+        exclude_platforms: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
         """获取筛选后的对话列表"""
         try:
             c = self.conn.cursor()
@@ -422,7 +425,7 @@ class SQLiteDatabase:
             if search_query:
                 search_query = search_query.encode("unicode_escape").decode("utf-8")
                 where_clauses.append(
-                    "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)"
+                    "(title LIKE ? OR user_id LIKE ? OR cid LIKE ? OR history LIKE ?)",
                 )
                 search_param = f"%{search_query}%"
                 params.extend([search_param, search_param, search_param, search_param])
@@ -482,7 +485,7 @@ class SQLiteDatabase:
                         "persona_id": persona_id or "",
                         "created_at": created_at or 0,
                         "updated_at": updated_at or 0,
-                    }
+                    },
                 )
 
             return conversations, total_count

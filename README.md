@@ -4,24 +4,35 @@
 
 <div align="center">
 
-<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<br>
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Soulter/AstrBot?style=for-the-badge&color=76bad9)](https://github.com/Soulter/AstrBot/releases/latest)
+<div>
+<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+</div>
+
+<br>
+
+<div>
+<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?style=for-the-badge&color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
 <img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&color=76bad9" alt="python">
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?style=for-the-badge&color=76bad9"/></a>
-<a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
-<a  href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600)
+<a href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
+<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+<img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600">
+</div>
 
-<a href="https://github.com/Soulter/AstrBot/blob/master/README_en.md">English</a> ｜
-<a href="https://github.com/Soulter/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<br>
+
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
-<a href="https://github.com/Soulter/AstrBot/issues">问题提交</a>
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架。
+AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可无缝接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
 
 ## 主要功能
 
@@ -31,7 +42,7 @@ AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架�
 4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，社区插件生态丰富。
 5. **WebUI**。可视化配置和管理机器人，功能齐全。
 
-## 部署方式
+## 部署方式 
 
 #### Docker 部署(推荐 🥳)
 
@@ -61,7 +72,7 @@ AstrBot 已由雨云官方上架至云应用平台，可一键部署。
 
 社区贡献的部署方式。
 
-[![Run on Repl.it](https://repl.it/badge/github/Soulter/AstrBot)](https://repl.it/github/Soulter/AstrBot)
+[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 #### Windows 一键安装器部署
 
@@ -108,83 +119,73 @@ uv run main.py
 
 <a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 
-## ⚡ 消息平台支持情况
+## 支持的消息平台
 
 **官方维护**
 
-| 平台    | 支持性 |
-| -------- | ------- |
-| QQ(官方平台) | ✔    |
-| QQ(OneBot)      | ✔    |
-| Telegram   | ✔    |
-| 企微应用    | ✔    |
-| 企微智能机器人 | ✔ |
-| 微信客服    | ✔    |
-| 微信公众号    | ✔    |
-| 飞书   | ✔    |
-| 钉钉   | ✔    |
-| Slack   | ✔    |
-| Discord   | ✔    |
-| Satori   | ✔    |
-| Misskey   | ✔    |
-| Whatsapp | 将支持 |
-| LINE | 将支持 |
+- QQ (官方平台 & OneBot)
+- Telegram
+- 企微应用 & 企微智能机器人
+- 微信客服 & 微信公众号
+- 飞书
+- 钉钉
+- Slack
+- Discord
+- Satori
+- Misskey
+- Whatsapp (将支持)
+- LINE (将支持)
 
 **社区维护**
 
-| 平台    | 支持性 |
-| -------- | ------- |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
-| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
-| [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)   | ✔    |
-| [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)   | ✔    |
+- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
+- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+- [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
+- [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)
 
-## ⚡ 提供商支持情况
+## 支持的模型服务
 
 **大模型服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| OpenAI | ✔    | 支持任何兼容 OpenAI API 的服务 |
-| Anthropic | ✔    |  |
-| Google Gemini | ✔   |  |
-| Moonshot AI | ✔   |  |
-| 智谱 AI | ✔   |  |
-| DeepSeek | ✔   |  |
-| Ollama | ✔     | 本地部署 DeepSeek 等开源语言模型 |
-| LM Studio | ✔    | 本地部署 DeepSeek 等开源语言模型 |
-| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔  |  |
-| [302.AI](https://share.302.ai/rr1M3l) | ✔   |  |
-| [小马算力](https://www.tokenpony.cn/3YPyf) | ✔   |  |
-| 硅基流动 | ✔    |  |
-| PPIO 派欧云 | ✔    |  |
-| ModelScope | ✔    |  |
-| OneAPI | ✔    |  |
-| Dify | ✔    |  |
-| 阿里云百炼应用 | ✔    |  |
-| Coze | ✔    |  |
+- OpenAI 及兼容服务
+- Anthropic
+- Google Gemini
+- Moonshot AI
+- 智谱 AI
+- DeepSeek
+- Ollama (本地部署)
+- LM Studio (本地部署)
+- [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
+- [302.AI](https://share.302.ai/rr1M3l)
+- [小马算力](https://www.tokenpony.cn/3YPyf)
+- [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
+- [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE)
+- ModelScope
+- OneAPI
+
+**LLMOps 平台**
+
+- Dify
+- 阿里云百炼应用
+- Coze
 
 **语音转文本服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| Whisper | ✔    | 支持 API、本地部署 |
-| SenseVoice | ✔   | 本地部署 |
+- OpenAI Whisper
+- SenseVoice
 
 **文本转语音服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| OpenAI TTS | ✔    |  |
-| Gemini TTS | ✔    |  |
-| GSVI | ✔    | GPT-Sovits-Inference |
-| GPT-SoVITs | ✔     | GPT-Sovits |
-| FishAudio | ✔    | |
-| Edge TTS | ✔    | Edge 浏览器的免费 TTS |
-| 阿里云百炼 TTS | ✔    |  |
-| Azure TTS | ✔   | |
-| Minimax TTS | ✔   | |
-| 火山引擎 TTS | ✔   | |
+- OpenAI TTS
+- Gemini TTS
+- GPT-Sovits-Inference
+- GPT-Sovits
+- FishAudio
+- Edge TTS
+- 阿里云百炼 TTS
+- Azure TTS
+- Minimax TTS
+- 火山引擎 TTS
 
 ## ❤️ 贡献
 
@@ -199,7 +200,7 @@ uv run main.py
 AstrBot 使用 `ruff` 进行代码格式化和检查。
 
 ```bash
-git clone https://github.com/Soulter/AstrBot
+git clone https://github.com/AstrBotDevs/AstrBot
 pip install pre-commit
 pre-commit install
 ```
@@ -218,12 +219,12 @@ pre-commit install
 
 ## ⭐ Star History
 
-> [!TIP] 
+> [!TIP]
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我们维护这个开源项目的动力 <3
 
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=soulter/astrbot&type=Date)](https://star-history.com/#soulter/astrbot&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.com/#astrbotdevs/astrbot&Date)
 
 </div>
 

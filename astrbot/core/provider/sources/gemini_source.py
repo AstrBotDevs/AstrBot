@@ -3,7 +3,6 @@ import base64
 import json
 import logging
 import random
-from typing import Optional, List
 from collections.abc import AsyncGenerator
 
 from google import genai
@@ -32,7 +31,8 @@ logging.getLogger("google_genai.types").addFilter(SuppressNonTextPartsWarning())
 
 
 @register_provider_adapter(
-    "googlegenai_chat_completion", "Google Gemini Chat Completion 提供商适配器"
+    "googlegenai_chat_completion",
+    "Google Gemini Chat Completion 提供商适配器",
 )
 class ProviderGoogleGenAI(Provider):
     CATEGORY_MAPPING = {
@@ -53,18 +53,16 @@ class ProviderGoogleGenAI(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
-        self.api_keys: List = super().get_keys()
+        self.api_keys: list = super().get_keys()
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.timeout: int = int(provider_config.get("timeout", 180))
 
-        self.api_base: Optional[str] = provider_config.get("api_base", None)
+        self.api_base: str | None = provider_config.get("api_base", None)
         if self.api_base and self.api_base.endswith("/"):
             self.api_base = self.api_base[:-1]
 
@@ -87,7 +85,8 @@ class ProviderGoogleGenAI(Provider):
         user_safety_config = self.provider_config.get("gm_safety_settings", {})
         self.safety_settings = [
             types.SafetySetting(
-                category=harm_category, threshold=self.THRESHOLD_MAPPING[threshold_str]
+                category=harm_category,
+                threshold=self.THRESHOLD_MAPPING[threshold_str],
             )
             for config_key, harm_category in self.CATEGORY_MAPPING.items()
             if (threshold_str := user_safety_config.get(config_key))
@@ -104,27 +103,25 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}..."
+                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}...",
                 )
                 await asyncio.sleep(1)
                 return True
-            else:
-                logger.error(
-                    f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}..."
-                )
-                raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
-        else:
             logger.error(
-                f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}"
+                f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}...",
             )
-            raise e
+            raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
+        logger.error(
+            f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}",
+        )
+        raise e
 
     async def _prepare_query_config(
         self,
         payloads: dict,
-        tools: Optional[ToolSet] = None,
-        system_instruction: Optional[str] = None,
-        modalities: Optional[list[str]] = None,
+        tools: ToolSet | None = None,
+        system_instruction: str | None = None,
+        modalities: list[str] | None = None,
         temperature: float = 0.7,
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
@@ -152,7 +149,7 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
                 if url_context:
                     logger.warning(
-                        "代码执行工具与URL上下文工具互斥，已忽略URL上下文工具"
+                        "代码执行工具与URL上下文工具互斥，已忽略URL上下文工具",
                     )
             else:
                 if native_search:
@@ -163,13 +160,13 @@ class ProviderGoogleGenAI(Provider):
                         tool_list.append(types.Tool(url_context=types.UrlContext()))
                     else:
                         logger.warning(
-                            "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                            "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
                         )
 
         elif "gemini-2.0-lite" in model_name:
             if native_coderunner or native_search or url_context:
                 logger.warning(
-                    "gemini-2.0-lite 不支持代码执行、搜索工具和URL上下文，将忽略这些设置"
+                    "gemini-2.0-lite 不支持代码执行、搜索工具和URL上下文，将忽略这些设置",
                 )
             tool_list = None
 
@@ -186,7 +183,7 @@ class ProviderGoogleGenAI(Provider):
                     tool_list.append(types.Tool(url_context=types.UrlContext()))
                 else:
                     logger.warning(
-                        "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包"
+                        "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
                     )
 
         if not tool_list:
@@ -196,7 +193,7 @@ class ProviderGoogleGenAI(Provider):
             logger.warning("已启用原生工具，函数工具将被忽略")
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
-                types.Tool(function_declarations=func_desc["function_declarations"])
+                types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
 
         return types.GenerateContentConfig(
@@ -223,8 +220,9 @@ class ProviderGoogleGenAI(Provider):
                     thinking_budget=min(
                         int(
                             self.provider_config.get("gm_thinking_config", {}).get(
-                                "budget", 0
-                            )
+                                "budget",
+                                0,
+                            ),
                         ),
                         24576,
                     ),
@@ -234,7 +232,7 @@ class ProviderGoogleGenAI(Provider):
                 else None
             ),
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=True
+                disable=True,
             ),
         )
 
@@ -268,7 +266,7 @@ class ProviderGoogleGenAI(Provider):
             [
                 self.provider_config.get("gm_native_coderunner", False),
                 self.provider_config.get("gm_native_search", False),
-            ]
+            ],
         )
         for message in payloads["messages"]:
             role, content = message["role"], message.get("content")
@@ -292,19 +290,30 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 elif not native_tool_enabled and "tool_calls" in message:
-                    parts = [
-                        types.Part.from_function_call(
+                    parts = []
+                    for tool in message["tool_calls"]:
+                        part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
                         )
-                        for tool in message["tool_calls"]
-                    ]
+                        # we should set thought_signature back to part if exists
+                        # for more info about thought_signature, see:
+                        # https://ai.google.dev/gemini-api/docs/thought-signatures
+                        if "extra_content" in tool and tool["extra_content"]:
+                            ts_bs64 = (
+                                tool["extra_content"]
+                                .get("google", {})
+                                .get("thought_signature")
+                            )
+                            if ts_bs64:
+                                part.thought_signature = base64.b64decode(ts_bs64)
+                        parts.append(part)
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
                     if native_tool_enabled and "tool_calls" in message:
                         logger.warning(
-                            "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文"
+                            "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文",
                         )
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
@@ -317,7 +326,7 @@ class ProviderGoogleGenAI(Provider):
                             "name": message["tool_call_id"],
                             "content": message["content"],
                         },
-                    )
+                    ),
                 ]
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
@@ -326,9 +335,20 @@ class ProviderGoogleGenAI(Provider):
 
         return gemini_contents
 
-    @staticmethod
+    def _extract_reasoning_content(self, candidate: types.Candidate) -> str:
+        """Extract reasoning content from candidate parts"""
+        if not candidate.content or not candidate.content.parts:
+            return ""
+
+        thought_buf: list[str] = [
+            (p.text or "") for p in candidate.content.parts if p.thought
+        ]
+        return "".join(thought_buf).strip()
+
     def _process_content_parts(
-        candidate: types.Candidate, llm_response: LLMResponse
+        self,
+        candidate: types.Candidate,
+        llm_response: LLMResponse,
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         if not candidate.content:
@@ -357,6 +377,11 @@ class ProviderGoogleGenAI(Provider):
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
             raise Exception("API 返回的 candidate.content.parts 为空。")
 
+        # 提取 reasoning content
+        reasoning = self._extract_reasoning_content(candidate)
+        if reasoning:
+            llm_response.reasoning_content = reasoning
+
         chain = []
         part: types.Part
 
@@ -379,10 +404,15 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                # gemini 返回的 function_call.id 可能为 None
-                llm_response.tools_call_ids.append(
-                    part.function_call.id or part.function_call.name
-                )
+                # function_call.id might be None, use name as fallback
+                tool_call_id = part.function_call.id or part.function_call.name
+                llm_response.tools_call_ids.append(tool_call_id)
+                # extra_content
+                if part.thought_signature:
+                    ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
+                    llm_response.tools_call_extra_content[tool_call_id] = {
+                        "google": {"thought_signature": ts_bs64}
+                    }
             elif (
                 part.inline_data
                 and part.inline_data.mime_type
@@ -406,17 +436,22 @@ class ProviderGoogleGenAI(Provider):
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
 
-        result: Optional[types.GenerateContentResponse] = None
+        result: types.GenerateContentResponse | None = None
         while True:
             try:
                 config = await self._prepare_query_config(
-                    payloads, tools, system_instruction, modalities, temperature
+                    payloads,
+                    tools,
+                    system_instruction,
+                    modalities,
+                    temperature,
                 )
                 result = await self.client.models.generate_content(
                     model=self.get_model(),
                     contents=conversation,
                     config=config,
                 )
+                logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
                     logger.error(f"请求失败, 返回的 candidates 为空: {result}")
@@ -427,7 +462,7 @@ class ProviderGoogleGenAI(Provider):
                         raise Exception("温度参数已超过最大值2，仍然发生recitation")
                     temperature += 0.2
                     logger.warning(
-                        f"发生了recitation，正在提高温度至{temperature:.1f}重试..."
+                        f"发生了recitation，正在提高温度至{temperature:.1f}重试...",
                     )
                     continue
 
@@ -438,7 +473,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
+                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
@@ -451,7 +486,7 @@ class ProviderGoogleGenAI(Provider):
                     or "only supports text output" in e.message
                 ):
                     logger.warning(
-                        f"{self.get_model()} 不支持多模态输出，降级为文本模态"
+                        f"{self.get_model()} 不支持多模态输出，降级为文本模态",
                     )
                     modalities = ["Text"]
                 else:
@@ -461,12 +496,15 @@ class ProviderGoogleGenAI(Provider):
         llm_response = LLMResponse("assistant")
         llm_response.raw_completion = result
         llm_response.result_chain = self._process_content_parts(
-            result.candidates[0], llm_response
+            result.candidates[0],
+            llm_response,
         )
         return llm_response
 
     async def _query_stream(
-        self, payloads: dict, tools: ToolSet | None
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -480,7 +518,9 @@ class ProviderGoogleGenAI(Provider):
         while True:
             try:
                 config = await self._prepare_query_config(
-                    payloads, tools, system_instruction
+                    payloads,
+                    tools,
+                    system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
                     model=self.get_model(),
@@ -493,7 +533,7 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)"
+                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
@@ -505,6 +545,7 @@ class ProviderGoogleGenAI(Provider):
 
         # Accumulate the complete response text for the final response
         accumulated_text = ""
+        accumulated_reasoning = ""
         final_response = None
 
         async for chunk in result:
@@ -523,14 +564,25 @@ class ProviderGoogleGenAI(Provider):
                 llm_response = LLMResponse("assistant", is_chunk=False)
                 llm_response.raw_completion = chunk
                 llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0], llm_response
+                    chunk.candidates[0],
+                    llm_response,
                 )
                 yield llm_response
                 return
 
+            _f = False
+
+            # 提取 reasoning content
+            reasoning = self._extract_reasoning_content(chunk.candidates[0])
+            if reasoning:
+                _f = True
+                accumulated_reasoning += reasoning
+                llm_response.reasoning_content = reasoning
             if chunk.text:
+                _f = True
                 accumulated_text += chunk.text
                 llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            if _f:
                 yield llm_response
 
             if chunk.candidates[0].finish_reason:
@@ -539,7 +591,8 @@ class ProviderGoogleGenAI(Provider):
                     final_response = LLMResponse("assistant", is_chunk=False)
                     final_response.raw_completion = chunk
                     final_response.result_chain = self._process_content_parts(
-                        chunk.candidates[0], final_response
+                        chunk.candidates[0],
+                        final_response,
                     )
                 break
 
@@ -547,10 +600,14 @@ class ProviderGoogleGenAI(Provider):
         if not final_response:
             final_response = LLMResponse("assistant", is_chunk=False)
 
+        # Set the complete accumulated reasoning in the final response
+        if accumulated_reasoning:
+            final_response.reasoning_content = accumulated_reasoning
+
         # Set the complete accumulated text in the final response
         if accumulated_text:
             final_response.result_chain = MessageChain(
-                chain=[Comp.Plain(accumulated_text)]
+                chain=[Comp.Plain(accumulated_text)],
             )
         elif not final_response.result_chain:
             # If no text was accumulated and no final response was set, provide empty space
@@ -560,7 +617,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat(
         self,
-        prompt: str,
+        prompt=None,
         session_id=None,
         image_urls=None,
         func_tool=None,
@@ -572,8 +629,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -609,7 +670,7 @@ class ProviderGoogleGenAI(Provider):
 
     async def text_chat_stream(
         self,
-        prompt,
+        prompt=None,
         session_id=None,
         image_urls=None,
         func_tool=None,
@@ -621,8 +682,12 @@ class ProviderGoogleGenAI(Provider):
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
             contexts = []
-        new_record = await self.assemble_context(prompt, image_urls)
-        context_query = [*contexts, new_record]
+        new_record = None
+        if prompt is not None:
+            new_record = await self.assemble_context(prompt, image_urls)
+        context_query = self._ensure_message_to_dicts(contexts)
+        if new_record:
+            context_query.append(new_record)
         if system_prompt:
             context_query.insert(0, {"role": "system", "content": system_prompt})
 
@@ -680,9 +745,7 @@ class ProviderGoogleGenAI(Provider):
         self._init_client()
 
     async def assemble_context(self, text: str, image_urls: list[str] | None = None):
-        """
-        组装上下文。
-        """
+        """组装上下文。"""
         if image_urls:
             user_content = {
                 "role": "user",
@@ -704,22 +767,18 @@ class ProviderGoogleGenAI(Provider):
                     {
                         "type": "image_url",
                         "image_url": {"url": image_data},
-                    }
+                    },
                 )
             return user_content
-        else:
-            return {"role": "user", "content": text}
+        return {"role": "user", "content": text}
 
     async def encode_image_bs64(self, image_url: str) -> str:
-        """
-        将图片转换为 base64
-        """
+        """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
-        return ""
 
     async def terminate(self):
         logger.info("Google GenAI 适配器已终止。")

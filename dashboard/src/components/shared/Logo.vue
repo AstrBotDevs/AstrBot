@@ -70,10 +70,6 @@ const formatTitle = (title: string) => {
   transition: transform 0.3s ease;
 }
 
-.logo-image img:hover {
-  transform: scale(1.05);
-}
-
 .logo-text {
   display: flex;
   flex-direction: column;

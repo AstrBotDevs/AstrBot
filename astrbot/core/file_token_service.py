@@ -1,9 +1,9 @@
 import asyncio
 import os
-import uuid
-import time
-from urllib.parse import urlparse, unquote
 import platform
+import time
+import uuid
+from urllib.parse import unquote, urlparse
 
 
 class FileTokenService:
@@ -23,7 +23,12 @@ class FileTokenService:
         for token in expired_tokens:
             self.staged_files.pop(token, None)
 
-    async def register_file(self, file_path: str, timeout: float = None) -> str:
+    async def check_token_expired(self, file_token: str) -> bool:
+        async with self.lock:
+            await self._cleanup_expired_tokens()
+            return file_token not in self.staged_files
+
+    async def register_file(self, file_path: str, timeout: float | None = None) -> str:
         """向令牌服务注册一个文件。
 
         Args:
@@ -35,8 +40,8 @@ class FileTokenService:
 
         Raises:
             FileNotFoundError: 当路径不存在时抛出
-        """
 
+        """
         # 处理 file:///
         try:
             parsed_uri = urlparse(file_path)
@@ -56,7 +61,7 @@ class FileTokenService:
 
             if not os.path.exists(local_path):
                 raise FileNotFoundError(
-                    f"文件不存在: {local_path} (原始输入: {file_path})"
+                    f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
             file_token = str(uuid.uuid4())
@@ -79,6 +84,7 @@ class FileTokenService:
         Raises:
             KeyError: 当令牌不存在或已过期时抛出
             FileNotFoundError: 当文件本身已被删除时抛出
+
         """
         async with self.lock:
             await self._cleanup_expired_tokens()

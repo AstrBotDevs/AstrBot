@@ -142,6 +142,14 @@
               </v-checkbox>
             </template>
 
+            <!-- 知识库配置 -->
+            <template v-slot:item.knowledge_base="{ item }">
+              <v-btn size="x-small" variant="tonal" color="info" @click="openKBManager(item)"
+                :loading="item.loadingKB" :disabled="!item.session_enabled">
+                {{ tm('knowledgeBase.configure') }}
+              </v-btn>
+            </template>
+
             <!-- 插件管理 -->
             <template v-slot:item.plugins="{ item }">
               <v-btn size="x-small" variant="tonal" color="primary" @click="openPluginManager(item)"
@@ -335,6 +343,125 @@
         </v-card>
       </v-dialog>
 
+      <!-- 知识库配置对话框 -->
+      <v-dialog v-model="kbDialog" max-width="800" min-height="60%" @update:model-value="(val) => { if (!val) closeKBDialog(); }">
+        <v-card v-if="selectedSessionForKB">
+          <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
+            <span>{{ tm('knowledgeBase.title') }} - {{ selectedSessionForKB.session_name }}</span>
+            <v-spacer></v-spacer>
+            <v-btn icon variant="text" color="white" @click="closeKBDialog()">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+
+          <v-card-text v-if="!loadingKBConfig">
+            <div style="padding: 16px;">
+              <v-alert type="info" variant="tonal" class="mb-4">
+                {{ tm('knowledgeBase.description') }}
+              </v-alert>
+
+              <!-- 知识库选择区域 -->
+              <div class="mb-4">
+                <div class="text-subtitle-2 mb-2">{{ tm('knowledgeBase.selectKB') }}</div>
+                <v-card variant="outlined" class="pa-3">
+                  <div v-if="availableKBs.length === 0" class="text-body-2 text-medium-emphasis">
+                    {{ tm('knowledgeBase.noKBAvailable') || '暂无可用知识库' }}
+                  </div>
+                  <div v-else class="kb-selector-list">
+                    <v-checkbox
+                      v-for="kb in availableKBs"
+                      :key="kb.kb_id"
+                      :value="kb.kb_id"
+                      v-model="sessionKBConfig.kb_ids"
+                      hide-details
+                      density="compact"
+                      class="mb-1"
+                    >
+                      <template v-slot:label>
+                        <div class="d-flex align-center">
+                          <span style="font-size: 18px; margin-right: 8px;">{{ kb.emoji }}</span>
+                          <div>
+                            <div class="text-body-2">{{ kb.kb_name }}</div>
+                            <div class="text-caption text-medium-emphasis">
+                              {{ kb.description || tm('knowledgeBase.noKBDesc') }} - {{ kb.doc_count }} {{ tm('list.documents', { count: kb.doc_count }) }}
+                            </div>
+                          </div>
+                        </div>
+                      </template>
+                    </v-checkbox>
+                  </div>
+                </v-card>
+                <div class="text-caption text-medium-emphasis mt-2">
+                  {{ tm('knowledgeBase.selectMultiple') }}
+                </div>
+              </div>
+
+              <!-- 高级配置 -->
+              <v-expansion-panels class="mb-4">
+                <v-expansion-panel>
+                  <v-expansion-panel-title>
+                    <v-icon class="mr-2">mdi-cog</v-icon>
+                    {{ tm('knowledgeBase.advancedSettings') }}
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <v-row>
+                      <v-col cols="12" md="6">
+                        <v-text-field
+                          v-model.number="sessionKBConfig.top_k"
+                          :label="tm('knowledgeBase.topK')"
+                          type="number"
+                          variant="outlined"
+                          density="comfortable"
+                          :hint="tm('knowledgeBase.topKHint')"
+                          persistent-hint
+                        />
+                      </v-col>
+                      <v-col cols="12" md="6">
+                        <v-checkbox
+                          v-model="sessionKBConfig.enable_rerank"
+                          :label="tm('knowledgeBase.enableRerank')"
+                          color="primary"
+                          :hint="tm('knowledgeBase.enableRerankHint')"
+                          persistent-hint
+                        />
+                      </v-col>
+                    </v-row>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+
+              <div v-if="availableKBs.length === 0" class="text-center py-8">
+                <v-icon size="64" color="grey-lighten-2">mdi-database-off</v-icon>
+                <p class="mt-4 text-medium-emphasis">{{ tm('knowledgeBase.noKBAvailable') }}</p>
+                <v-btn color="primary" variant="tonal" class="mt-2" @click="goToKBPage">
+                  {{ tm('knowledgeBase.createKB') }}
+                </v-btn>
+              </div>
+            </div>
+          </v-card-text>
+
+          <v-card-text v-else class="text-center py-8">
+            <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
+            <div class="text-body-1 mt-4">{{ tm('knowledgeBase.loading') }}</div>
+          </v-card-text>
+
+          <v-divider />
+
+          <v-card-actions class="pa-4">
+            <v-btn variant="text" @click="clearKBConfig" :disabled="savingKBConfig || loadingKBConfig">
+              {{ tm('knowledgeBase.clearConfig') }}
+            </v-btn>
+            <v-spacer />
+            <v-btn variant="text" @click="closeKBDialog()" :disabled="savingKBConfig">
+              {{ tm('knowledgeBase.cancel') }}
+            </v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveKBConfig" :loading="savingKBConfig">
+              {{ tm('knowledgeBase.save') }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
       <!-- 提示信息 -->
       <v-snackbar v-model="snackbar" :timeout="3000" elevation="24" :color="snackbarColor" location="top">
         {{ snackbarText }}
@@ -399,6 +526,18 @@ export default {
       newSessionName: '',
       nameEditLoading: false,
 
+      // 知识库管理
+      kbDialog: false,
+      selectedSessionForKB: null,
+      sessionKBConfig: {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true
+      },
+      availableKBs: [],
+      loadingKBConfig: false,
+      savingKBConfig: false,
+
       // 提示信息
       snackbar: false,
       snackbarText: '',
@@ -432,6 +571,7 @@ export default {
         { title: this.tm('table.headers.ttsProvider'), key: 'tts_provider', sortable: false, minWidth: '200px' },
         { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, minWidth: '120px' },
+        { title: this.tm('table.headers.knowledgeBase'), key: 'knowledge_base', sortable: false, minWidth: '150px' },
         { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, minWidth: '120px' },
         { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '100px' },
       ]
@@ -503,7 +643,8 @@ export default {
             ...session,
             updating: false, // 添加更新状态标志
             loadingPlugins: false, // 添加插件加载状态标志
-            deleting: false // 添加删除状态标志
+            deleting: false, // 添加删除状态标志
+            loadingKB: false // 添加知识库加载状态标志
           }));
           this.availablePersonas = data.available_personas;
           this.availableChatProviders = data.available_chat_providers;
@@ -964,15 +1105,193 @@ export default {
       this.currentPage = 1; // 重置到第一页
       this.loadSessions();
     },
+
+    // 知识库配置相关方法
+    async openKBManager(session) {
+      this.selectedSessionForKB = session;
+      
+      // ✅ 先重置配置为默认值，避免数据残留
+      this.sessionKBConfig = {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true
+      };
+      
+      this.kbDialog = true;
+      this.loadingKBConfig = true;
+
+      try {
+        // 加载可用的知识库列表
+        const kbListResponse = await axios.get('/api/kb/list');
+        if (kbListResponse.data.status === 'ok') {
+          this.availableKBs = kbListResponse.data.data.items;
+        }
+
+        // 加载当前会话的知识库配置
+        const configResponse = await axios.get('/api/kb/session/config/get', {
+          params: { session_id: session.session_id }
+        });
+
+        if (configResponse.data.status === 'ok') {
+          const config = configResponse.data.data;
+          
+          // 初始化配置
+          this.sessionKBConfig = {
+            kb_ids: [],
+            top_k: config.top_k || 5,
+            enable_rerank: config.enable_rerank !== false
+          };
+
+          // 如果有配置的 kb_ids，进行清理后赋值
+          if (config.kb_ids && Array.isArray(config.kb_ids)) {
+            this.sessionKBConfig.kb_ids = config.kb_ids.filter(id => id != null && id !== '');
+          }
+        } else {
+          // 保持默认值（已在开头设置）
+          this.sessionKBConfig = {
+            kb_ids: [],
+            top_k: 5,
+            enable_rerank: true
+          };
+        }
+      } catch (error) {
+        console.error('加载知识库配置失败:', error);
+        this.showError(this.tm('knowledgeBase.loadFailed'));
+      } finally {
+        this.loadingKBConfig = false;
+      }
+    },
+
+    async saveKBConfig() {
+      if (!this.selectedSessionForKB) return;
+
+      // 确保 kb_ids 是一个干净的数组
+      const cleanKbIds = Array.isArray(this.sessionKBConfig.kb_ids)
+        ? this.sessionKBConfig.kb_ids.filter(id => id != null && id !== '')
+        : [];
+
+      this.savingKBConfig = true;
+      try {
+        const payload = {
+          scope: 'session',
+          scope_id: this.selectedSessionForKB.session_id,
+          kb_ids: cleanKbIds,  // 使用清理后的数组
+          top_k: this.sessionKBConfig.top_k,
+          enable_rerank: this.sessionKBConfig.enable_rerank
+        };
+        
+        const response = await axios.post('/api/kb/session/config/set', payload);
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(this.tm('knowledgeBase.saveSuccess'));
+          this.kbDialog = false;
+          // ✅ 保存成功后清理数据
+          this.sessionKBConfig = {
+            kb_ids: [],
+            top_k: 5,
+            enable_rerank: true
+          };
+          this.selectedSessionForKB = null;
+        } else {
+          this.showError(response.data.message || this.tm('knowledgeBase.saveFailed'));
+        }
+      } catch (error) {
+        console.error('保存知识库配置失败:', error);
+        this.showError(error.response?.data?.message || this.tm('knowledgeBase.saveFailed'));
+      } finally {
+        this.savingKBConfig = false;
+      }
+    },
+
+    // 关闭知识库配置对话框并清理数据
+    closeKBDialog() {
+      this.kbDialog = false;
+      // 清理数据，避免下次打开时出现旧数据
+      this.sessionKBConfig = {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true
+      };
+      this.selectedSessionForKB = null;
+      this.availableKBs = [];
+    },
+
+    async clearKBConfig() {
+      if (!this.selectedSessionForKB) return;
+
+      if (!confirm(this.tm('knowledgeBase.clearConfirm'))) {
+        return;
+      }
+
+      this.savingKBConfig = true;
+      try {
+        const response = await axios.post('/api/kb/session/config/delete', {
+          scope: 'session',
+          scope_id: this.selectedSessionForKB.session_id
+        });
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(this.tm('knowledgeBase.clearSuccess'));
+          this.sessionKBConfig = {
+            kb_ids: [],
+            top_k: 5,
+            enable_rerank: true
+          };
+        } else {
+          this.showError(response.data.message || this.tm('knowledgeBase.clearFailed'));
+        }
+      } catch (error) {
+        console.error('清除知识库配置失败:', error);
+        this.showError(error.response?.data?.message || this.tm('knowledgeBase.clearFailed'));
+      } finally {
+        this.savingKBConfig = false;
+      }
+    },
+
+    goToKBPage() {
+      this.$router.push('/knowledge-base');
+    },
   },
 }
 </script>
 
 <style scoped>
 
-.v-data-table>>>.v-data-table__td {
+.v-data-table :deep(.v-data-table__td) {
   padding: 8px 16px !important;
   vertical-align: middle !important;
+}
+
+/* 知识库选择列表滚动条样式 */
+.kb-selector-list {
+  max-height: 150px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* 自定义滚动条样式 - Webkit浏览器 */
+.kb-selector-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.kb-selector-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.kb-selector-list::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.kb-selector-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Firefox滚动条样式 */
+.kb-selector-list {
+  scrollbar-width: thin;
+  scrollbar-color: #888 #f1f1f1;
 }
 
 </style>

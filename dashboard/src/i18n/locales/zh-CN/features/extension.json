@@ -79,6 +79,14 @@
     "devDocs": "插件开发文档",
     "submitRepo": "提交插件仓库"
   },
+  "sort": {
+    "default": "默认排序",
+    "stars": "Star数",
+    "author": "作者名",
+    "updated": "更新时间",
+    "ascending": "升序",
+    "descending": "降序"
+  },
   "tags": {
     "danger": "危险"
   },
@@ -97,7 +105,11 @@
     },
     "uninstall": {
       "title": "删除确认",
-      "message": "你确定要删除当前插件吗？"
+      "message": "你确定要删除当前插件吗？",
+      "deleteConfig": "同时删除插件配置文件",
+      "deleteData": "同时删除插件持久化数据",
+      "configHint": "配置文件位于 data/config 目录",
+      "dataHint": "删除 data/plugin_data 和 data/plugins_data 目录下的数据"
     },
     "install": {
       "title": "安装插件",

@@ -1,31 +1,29 @@
 import re
+import shutil
 from pathlib import Path
 
 import click
-import shutil
-
 
 from ..utils import (
-    get_git_repo,
-    build_plug_list,
-    manage_plugin,
     PluginStatus,
+    build_plug_list,
     check_astrbot_root,
     get_astrbot_root,
+    get_git_repo,
+    manage_plugin,
 )
 
 
 @click.group()
 def plug():
     """插件管理"""
-    pass
 
 
 def _get_data_path() -> Path:
     base = get_astrbot_root()
     if not check_astrbot_root(base):
         raise click.ClickException(
-            f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+            f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
         )
     return (base / "data").resolve()
 
@@ -41,7 +39,7 @@ def display_plugins(plugins, title=None, color=None):
         desc = p["desc"][:30] + ("..." if len(p["desc"]) > 30 else "")
         click.echo(
             f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
-            f"{p['author']:<15} {desc:<30}"
+            f"{p['author']:<15} {desc:<30}",
         )
 
 
@@ -78,7 +76,7 @@ def new(name: str):
             f"desc: {desc}\n"
             f"version: {version}\n"
             f"author: {author}\n"
-            f"repo: {repo}\n"
+            f"repo: {repo}\n",
         )
 
     # 重写 README.md
@@ -86,7 +84,7 @@ def new(name: str):
         f.write(f"# {name}\n\n{desc}\n\n# 支持\n\n[帮助文档](https://astrbot.app)\n")
 
     # 重写 main.py
-    with open(plug_path / "main.py", "r", encoding="utf-8") as f:
+    with open(plug_path / "main.py", encoding="utf-8") as f:
         content = f.read()
 
     new_content = content.replace(

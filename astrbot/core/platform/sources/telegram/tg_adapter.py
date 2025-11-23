@@ -37,7 +37,10 @@ else:
 @register_platform_adapter("telegram", "telegram 适配器")
 class TelegramPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
@@ -45,13 +48,15 @@ class TelegramPlatformAdapter(Platform):
         self.client_self_id = uuid.uuid4().hex[:8]
 
         base_url = self.config.get(
-            "telegram_api_base_url", "https://api.telegram.org/bot"
+            "telegram_api_base_url",
+            "https://api.telegram.org/bot",
         )
         if not base_url:
             base_url = "https://api.telegram.org/bot"
 
         file_base_url = self.config.get(
-            "telegram_file_base_url", "https://api.telegram.org/file/bot"
+            "telegram_file_base_url",
+            "https://api.telegram.org/file/bot",
         )
         if not file_base_url:
             file_base_url = "https://api.telegram.org/file/bot"
@@ -59,10 +64,12 @@ class TelegramPlatformAdapter(Platform):
         self.base_url = base_url
 
         self.enable_command_register = self.config.get(
-            "telegram_command_register", True
+            "telegram_command_register",
+            True,
         )
         self.enable_command_refresh = self.config.get(
-            "telegram_command_auto_refresh", True
+            "telegram_command_auto_refresh",
+            True,
         )
         self.last_command_hash = None
 
@@ -85,11 +92,15 @@ class TelegramPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         from_username = session.session_id
         await TelegramPlatformEvent.send_with_client(
-            self.client, message_chain, from_username
+            self.client,
+            message_chain,
+            from_username,
         )
         await super().send_by_session(session, message_chain)
 
@@ -131,7 +142,7 @@ class TelegramPlatformAdapter(Platform):
 
             if commands:
                 current_hash = hash(
-                    tuple((cmd.command, cmd.description) for cmd in commands)
+                    tuple((cmd.command, cmd.description) for cmd in commands),
                 )
                 if current_hash == self.last_command_hash:
                     return
@@ -153,7 +164,9 @@ class TelegramPlatformAdapter(Platform):
                 continue
             for event_filter in handler_metadata.event_filters:
                 cmd_info = self._extract_command_info(
-                    event_filter, handler_metadata, skip_commands
+                    event_filter,
+                    handler_metadata,
+                    skip_commands,
                 )
                 if cmd_info:
                     cmd_name, description = cmd_info
@@ -164,7 +177,9 @@ class TelegramPlatformAdapter(Platform):
 
     @staticmethod
     def _extract_command_info(
-        event_filter, handler_metadata, skip_commands: set
+        event_filter,
+        handler_metadata,
+        skip_commands: set,
     ) -> tuple[str, str] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
@@ -199,11 +214,12 @@ class TelegramPlatformAdapter(Platform):
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_chat:
             logger.warning(
-                "Received a start command without an effective chat, skipping /start reply."
+                "Received a start command without an effective chat, skipping /start reply.",
             )
             return
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=self.config["start_message"]
+            chat_id=update.effective_chat.id,
+            text=self.config["start_message"],
         )
 
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -213,7 +229,10 @@ class TelegramPlatformAdapter(Platform):
             await self.handle_msg(abm)
 
     async def convert_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, get_reply=True
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        get_reply=True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象。
 
@@ -244,7 +263,8 @@ class TelegramPlatformAdapter(Platform):
             logger.warning("[Telegram] Received a message without a from_user.")
             return None
         message.sender = MessageMember(
-            str(_from_user.id), _from_user.username or "Unknown"
+            str(_from_user.id),
+            _from_user.username or "Unknown",
         )
         message.self_id = str(context.bot.username)
         message.raw_message = update
@@ -274,7 +294,7 @@ class TelegramPlatformAdapter(Platform):
                         message_str=reply_abm.message_str,
                         text=reply_abm.message_str,
                         qq=reply_abm.sender.user_id,
-                    )
+                    ),
                 )
 
         if update.message.text:
@@ -320,7 +340,7 @@ class TelegramPlatformAdapter(Platform):
 
             if message.message_str.strip() == "/start":
                 await self.start(update, context)
-                return
+                return None
 
         elif update.message.voice:
             file = await update.message.voice.get_file()
@@ -358,7 +378,7 @@ class TelegramPlatformAdapter(Platform):
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
-                    f"Telegram document file_path is None, cannot save the file {file_name}."
+                    f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
                 message.message.append(Comp.File(file=file_path, name=file_name))
@@ -369,7 +389,7 @@ class TelegramPlatformAdapter(Platform):
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
-                    f"Telegram video file_path is None, cannot save the file {file_name}."
+                    f"Telegram video file_path is None, cannot save the file {file_name}.",
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))

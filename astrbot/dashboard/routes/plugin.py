@@ -1,24 +1,23 @@
-import traceback
-import aiohttp
-import os
 import json
+import os
+import ssl
+import traceback
 from datetime import datetime
 
-import ssl
+import aiohttp
 import certifi
-
-from .route import Route, Response, RouteContext
-from astrbot.core import logger
 from quart import request
-from astrbot.core.star.star_manager import PluginManager
+
+from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star.star_handler import EventType
-from astrbot.core import DEMO_MODE
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star_manager import PluginManager
+
+from .route import Response, Route, RouteContext
 
 
 class PluginRoute(Route):
@@ -53,6 +52,8 @@ class PluginRoute(Route):
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
         }
+
+        self._logo_cache = {}
 
     async def reload_plugins(self):
         if DEMO_MODE:
@@ -104,29 +105,33 @@ class PluginRoute(Route):
 
         for url in urls:
             try:
-                async with aiohttp.ClientSession(
-                    trust_env=True, connector=connector
-                ) as session:
-                    async with session.get(url) as response:
-                        if response.status == 200:
-                            remote_data = await response.json()
+                async with (
+                    aiohttp.ClientSession(
+                        trust_env=True,
+                        connector=connector,
+                    ) as session,
+                    session.get(url) as response,
+                ):
+                    if response.status == 200:
+                        remote_data = await response.json()
 
-                            # 检查远程数据是否为空
-                            if not remote_data or (
-                                isinstance(remote_data, dict) and len(remote_data) == 0
-                            ):
-                                logger.warning(f"远程插件市场数据为空: {url}")
-                                continue  # 继续尝试其他URL或使用缓存
+                        # 检查远程数据是否为空
+                        if not remote_data or (
+                            isinstance(remote_data, dict) and len(remote_data) == 0
+                        ):
+                            logger.warning(f"远程插件市场数据为空: {url}")
+                            continue  # 继续尝试其他URL或使用缓存
 
-                            logger.info("成功获取远程插件市场数据")
-                            # 获取最新的MD5并保存到缓存
-                            current_md5 = await self._get_remote_md5()
-                            self._save_plugin_cache(
-                                cache_file, remote_data, current_md5
-                            )
-                            return Response().ok(remote_data).__dict__
-                        else:
-                            logger.error(f"请求 {url} 失败，状态码：{response.status}")
+                        logger.info("成功获取远程插件市场数据")
+                        # 获取最新的MD5并保存到缓存
+                        current_md5 = await self._get_remote_md5()
+                        self._save_plugin_cache(
+                            cache_file,
+                            remote_data,
+                            current_md5,
+                        )
+                        return Response().ok(remote_data).__dict__
+                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
 
@@ -147,7 +152,7 @@ class PluginRoute(Route):
                 return False
 
             # 加载缓存文件
-            with open(cache_file, "r", encoding="utf-8") as f:
+            with open(cache_file, encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             cached_md5 = cache_data.get("md5")
@@ -163,7 +168,7 @@ class PluginRoute(Route):
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
-                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}"
+                f"插件数据MD5: 本地={cached_md5}, 远程={remote_md5}, 有效={is_valid}",
             )
             return is_valid
 
@@ -177,18 +182,20 @@ class PluginRoute(Route):
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=connector
-            ) as session:
-                async with session.get(
-                    "https://api.soulter.top/astrbot/plugins-md5"
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return data.get("md5", "")
-                    else:
-                        logger.error(f"获取MD5失败，状态码：{response.status}")
-                        return ""
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(
+                    "https://api.soulter.top/astrbot/plugins-md5",
+                ) as response,
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("md5", "")
+                logger.error(f"获取MD5失败，状态码：{response.status}")
+                return ""
         except Exception as e:
             logger.error(f"获取远程MD5失败: {e}")
             return ""
@@ -197,19 +204,19 @@ class PluginRoute(Route):
         """加载本地缓存的插件市场数据"""
         try:
             if os.path.exists(cache_file):
-                with open(cache_file, "r", encoding="utf-8") as f:
+                with open(cache_file, encoding="utf-8") as f:
                     cache_data = json.load(f)
                     # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
-                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}"
+                            f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}",
                         )
                         return cache_data["data"]
         except Exception as e:
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str = None):
+    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -227,12 +234,27 @@ class PluginRoute(Route):
         except Exception as e:
             logger.warning(f"保存插件市场缓存失败: {e}")
 
+    async def get_plugin_logo_token(self, logo_path: str):
+        try:
+            if token := self._logo_cache.get(logo_path):
+                if not await file_token_service.check_token_expired(token):
+                    return self._logo_cache[logo_path]
+            token = await file_token_service.register_file(logo_path, timeout=300)
+            self._logo_cache[logo_path] = token
+            return token
+        except Exception as e:
+            logger.warning(f"获取插件 Logo 失败: {e}")
+            return None
+
     async def get_plugins(self):
         _plugin_resp = []
         plugin_name = request.args.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
             if plugin_name and plugin.name != plugin_name:
                 continue
+            logo_url = None
+            if plugin.logo_path:
+                logo_url = await self.get_plugin_logo_token(plugin.logo_path)
             _t = {
                 "name": plugin.name,
                 "repo": "" if plugin.repo is None else plugin.repo,
@@ -243,8 +265,10 @@ class PluginRoute(Route):
                 "activated": plugin.activated,
                 "online_vesion": "",
                 "handlers": await self.get_plugin_handlers_info(
-                    plugin.star_handler_full_names
+                    plugin.star_handler_full_names,
                 ),
+                "display_name": plugin.display_name,
+                "logo": f"/api/file/{logo_url}" if logo_url else None,
             }
             _plugin_resp.append(_t)
         return (
@@ -260,13 +284,15 @@ class PluginRoute(Route):
         for handler_full_name in handler_full_names:
             info = {}
             handler = star_handlers_registry.star_handlers_map.get(
-                handler_full_name, None
+                handler_full_name,
+                None,
             )
             if handler is None:
                 continue
             info["event_type"] = handler.event_type.name
             info["event_type_h"] = self.translated_event_type.get(
-                handler.event_type, handler.event_type.name
+                handler.event_type,
+                handler.event_type.name,
             )
             info["handler_full_name"] = handler.handler_full_name
             info["desc"] = handler.desc
@@ -289,7 +315,7 @@ class PluginRoute(Route):
                         info["cmd"] = filter.get_complete_command_names()[0]
                         info["cmd"] = info["cmd"].strip()
                         info["sub_command"] = filter.print_cmd_tree(
-                            filter.sub_command_filters
+                            filter.sub_command_filters,
                         )
                     elif isinstance(filter, RegexFilter):
                         info["type"] = "正则匹配"
@@ -369,9 +395,15 @@ class PluginRoute(Route):
 
         post_data = await request.json
         plugin_name = post_data["name"]
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
         try:
             logger.info(f"正在卸载插件 {plugin_name}")
-            await self.plugin_manager.uninstall_plugin(plugin_name)
+            await self.plugin_manager.uninstall_plugin(
+                plugin_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
             logger.info(f"卸载插件 {plugin_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
@@ -455,7 +487,8 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
         plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path, plugin_obj.root_dir_name
+            self.plugin_manager.plugin_store_path,
+            plugin_obj.root_dir_name,
         )
 
         if not os.path.isdir(plugin_dir):
@@ -469,7 +502,7 @@ class PluginRoute(Route):
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, "r", encoding="utf-8") as f:
+            with open(readme_path, encoding="utf-8") as f:
                 readme_content = f.read()
 
             return (
@@ -479,4 +512,4 @@ class PluginRoute(Route):
             )
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
-            return Response().error(f"读取README文件失败: {str(e)}").__dict__
+            return Response().error(f"读取README文件失败: {e!s}").__dict__

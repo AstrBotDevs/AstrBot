@@ -1,19 +1,20 @@
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import (
-    Plain,
-    Image,
     At,
     File,
-    Record,
-    Video,
-    Reply,
     Forward,
+    Image,
     Node,
     Nodes,
+    Plain,
+    Record,
+    Reply,
+    Video,
 )
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
@@ -53,14 +54,17 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
     @classmethod
     async def send_with_adapter(
-        cls, adapter: "SatoriPlatformAdapter", message: MessageChain, session_id: str
+        cls,
+        adapter: "SatoriPlatformAdapter",
+        message: MessageChain,
+        session_id: str,
     ):
         try:
             content_parts = []
 
             for component in message.chain:
                 component_content = await cls._convert_component_to_satori_static(
-                    component
+                    component,
                 )
                 if component_content:
                     content_parts.append(component_content)
@@ -92,12 +96,15 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 user_id = user.get("id", "") if user else ""
 
             result = await adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id
+                "POST",
+                "/message.create",
+                data,
+                platform,
+                user_id,
             )
             if result:
                 return result
-            else:
-                return None
+            return None
 
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
@@ -140,7 +147,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
             data = {"channel_id": channel_id, "content": content}
 
             result = await self.adapter.send_http_request(
-                "POST", "/message.create", data, platform, user_id
+                "POST",
+                "/message.create",
+                data,
+                platform,
+                user_id,
             )
             if not result:
                 logger.error("Satori 消息发送失败")
@@ -178,9 +189,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                     img_chain = MessageChain(
                                         [
                                             Plain(
-                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>'
-                                            )
-                                        ]
+                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>',
+                                            ),
+                                        ],
                                     )
                                     await self.send(img_chain)
                             except Exception as e:
@@ -209,10 +220,10 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
-            elif isinstance(component, At):
+            if isinstance(component, At):
                 if component.qq:
                     return f'<at id="{component.qq}"/>'
-                elif component.name:
+                if component.name:
                     return f'<at name="{component.name}"/>'
 
             elif isinstance(component, Image):
@@ -264,7 +275,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if node.content:
                 for content_component in node.content:
                     component_content = await self._convert_component_to_satori(
-                        content_component
+                        content_component,
                     )
                     if component_content:
                         content_parts.append(component_content)
@@ -302,10 +313,10 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 )
                 return text
 
-            elif isinstance(component, At):
+            if isinstance(component, At):
                 if component.qq:
                     return f'<at id="{component.qq}"/>'
-                elif component.name:
+                if component.name:
                     return f'<at name="{component.name}"/>'
 
             elif isinstance(component, Image):
@@ -358,7 +369,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             if node.content:
                 for content_component in node.content:
                     component_content = await cls._convert_component_to_satori_static(
-                        content_component
+                        content_component,
                     )
                     if component_content:
                         content_parts.append(component_content)
@@ -395,8 +406,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             if node_parts:
                 return f"<message forward>{''.join(node_parts)}</message>"
-            else:
-                return ""
+            return ""
 
         except Exception as e:
             logger.error(f"转换合并转发消息失败: {e}")
@@ -415,8 +425,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             if node_parts:
                 return f"<message forward>{''.join(node_parts)}</message>"
-            else:
-                return ""
+            return ""
 
         except Exception as e:
             logger.error(f"转换合并转发消息失败: {e}")

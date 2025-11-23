@@ -25,6 +25,9 @@ import zhCNDashboard from './locales/zh-CN/features/dashboard.json';
 import zhCNAlkaidIndex from './locales/zh-CN/features/alkaid/index.json';
 import zhCNAlkaidKnowledgeBase from './locales/zh-CN/features/alkaid/knowledge-base.json';
 import zhCNAlkaidMemory from './locales/zh-CN/features/alkaid/memory.json';
+import zhCNKnowledgeBaseIndex from './locales/zh-CN/features/knowledge-base/index.json';
+import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/detail.json';
+import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/document.json';
 import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNMigration from './locales/zh-CN/features/migration.json';
 
@@ -56,6 +59,9 @@ import enUSDashboard from './locales/en-US/features/dashboard.json';
 import enUSAlkaidIndex from './locales/en-US/features/alkaid/index.json';
 import enUSAlkaidKnowledgeBase from './locales/en-US/features/alkaid/knowledge-base.json';
 import enUSAlkaidMemory from './locales/en-US/features/alkaid/memory.json';
+import enUSKnowledgeBaseIndex from './locales/en-US/features/knowledge-base/index.json';
+import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/detail.json';
+import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/document.json';
 import enUSPersona from './locales/en-US/features/persona.json';
 import enUSMigration from './locales/en-US/features/migration.json';
 
@@ -93,6 +99,11 @@ export const translations = {
         'knowledge-base': zhCNAlkaidKnowledgeBase,
         memory: zhCNAlkaidMemory
       },
+      'knowledge-base': {
+        index: zhCNKnowledgeBaseIndex,
+        detail: zhCNKnowledgeBaseDetail,
+        document: zhCNKnowledgeBaseDocument
+      },
       persona: zhCNPersona,
       migration: zhCNMigration
     },
@@ -129,6 +140,11 @@ export const translations = {
         index: enUSAlkaidIndex,
         'knowledge-base': enUSAlkaidKnowledgeBase,
         memory: enUSAlkaidMemory
+      },
+      'knowledge-base': {
+        index: enUSKnowledgeBaseIndex,
+        detail: enUSKnowledgeBaseDetail,
+        document: enUSKnowledgeBaseDocument
       },
       persona: enUSPersona,
       migration: enUSMigration

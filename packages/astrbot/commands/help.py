@@ -1,5 +1,6 @@
 import aiohttp
-import astrbot.api.star as star
+
+from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import get_dashboard_version
@@ -13,7 +14,8 @@ class HelpCommand:
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(
-                    "https://astrbot.app/notice.json", timeout=2
+                    "https://astrbot.app/notice.json",
+                    timeout=2,
                 ) as resp:
                     return (await resp.json())["notice"]
         except BaseException:

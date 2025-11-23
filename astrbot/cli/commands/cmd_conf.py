@@ -1,9 +1,12 @@
-import json
-import click
 import hashlib
+import json
 import zoneinfo
-from typing import Any, Callable
-from ..utils import get_astrbot_root, check_astrbot_root
+from collections.abc import Callable
+from typing import Any
+
+import click
+
+from ..utils import check_astrbot_root, get_astrbot_root
 
 
 def _validate_log_level(value: str) -> str:
@@ -11,7 +14,7 @@ def _validate_log_level(value: str) -> str:
     value = value.upper()
     if value not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
         raise click.ClickException(
-            "日志级别必须是 DEBUG/INFO/WARNING/ERROR/CRITICAL 之一"
+            "日志级别必须是 DEBUG/INFO/WARNING/ERROR/CRITICAL 之一",
         )
     return value
 
@@ -73,7 +76,7 @@ def _load_config() -> dict[str, Any]:
     root = get_astrbot_root()
     if not check_astrbot_root(root):
         raise click.ClickException(
-            f"{root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init"
+            f"{root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
         )
 
     config_path = root / "data" / "cmd_config.json"
@@ -88,7 +91,7 @@ def _load_config() -> dict[str, Any]:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"配置文件解析失败: {str(e)}")
+        raise click.ClickException(f"配置文件解析失败: {e!s}")
 
 
 def _save_config(config: dict[str, Any]) -> None:
@@ -96,7 +99,8 @@ def _save_config(config: dict[str, Any]) -> None:
     config_path = get_astrbot_root() / "data" / "cmd_config.json"
 
     config_path.write_text(
-        json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8-sig"
+        json.dumps(config, ensure_ascii=False, indent=2),
+        encoding="utf-8-sig",
     )
 
 
@@ -108,7 +112,7 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
             obj[part] = {}
         elif not isinstance(obj[part], dict):
             raise click.ClickException(
-                f"配置路径冲突: {'.'.join(parts[: parts.index(part) + 1])} 不是字典"
+                f"配置路径冲突: {'.'.join(parts[: parts.index(part) + 1])} 不是字典",
             )
         obj = obj[part]
     obj[parts[-1]] = value
@@ -140,7 +144,6 @@ def conf():
 
     - callback_api_base: 回调接口基址
     """
-    pass
 
 
 @conf.command(name="set")
@@ -148,7 +151,7 @@ def conf():
 @click.argument("value")
 def set_config(key: str, value: str):
     """设置配置项的值"""
-    if key not in CONFIG_VALIDATORS.keys():
+    if key not in CONFIG_VALIDATORS:
         raise click.ClickException(f"不支持的配置项: {key}")
 
     config = _load_config()
@@ -170,17 +173,17 @@ def set_config(key: str, value: str):
     except KeyError:
         raise click.ClickException(f"未知的配置项: {key}")
     except Exception as e:
-        raise click.UsageError(f"设置配置失败: {str(e)}")
+        raise click.UsageError(f"设置配置失败: {e!s}")
 
 
 @conf.command(name="get")
 @click.argument("key", required=False)
-def get_config(key: str = None):
+def get_config(key: str | None = None):
     """获取配置项的值，不提供key则显示所有可配置项"""
     config = _load_config()
 
     if key:
-        if key not in CONFIG_VALIDATORS.keys():
+        if key not in CONFIG_VALIDATORS:
             raise click.ClickException(f"不支持的配置项: {key}")
 
         try:
@@ -191,10 +194,10 @@ def get_config(key: str = None):
         except KeyError:
             raise click.ClickException(f"未知的配置项: {key}")
         except Exception as e:
-            raise click.UsageError(f"获取配置失败: {str(e)}")
+            raise click.UsageError(f"获取配置失败: {e!s}")
     else:
         click.echo("当前配置:")
-        for key in CONFIG_VALIDATORS.keys():
+        for key in CONFIG_VALIDATORS:
             try:
                 value = (
                     "********"

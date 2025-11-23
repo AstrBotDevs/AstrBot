@@ -1,12 +1,14 @@
-from typing import List, Union, AsyncGenerator
-from ..stage import Stage, register_stage
+from collections.abc import AsyncGenerator
+
+from astrbot.core import logger
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.star.star_handler import StarHandlerMetadata
+
 from ..context import PipelineContext
+from ..stage import Stage, register_stage
 from .method.llm_request import LLMRequestSubStage
 from .method.star_request import StarRequestSubStage
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.star_handler import StarHandlerMetadata
-from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core import logger
 
 
 @register_stage
@@ -22,11 +24,12 @@ class ProcessStage(Stage):
         await self.star_request_sub_stage.initialize(ctx)
 
     async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
-        activated_handlers: List[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers"
+        activated_handlers: list[StarHandlerMetadata] = event.get_extra(
+            "activated_handlers",
         )
         # 有插件 Handler 被激活
         if activated_handlers:

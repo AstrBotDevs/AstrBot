@@ -1,15 +1,15 @@
-import astrbot.core.message.components as Comp
 import os
-from typing import List
-from .. import Provider
-from ..entities import LLMResponse
-from ..func_tool_manager import FuncCall
-from ..register import register_provider_adapter
-from astrbot.core.utils.dify_api_client import DifyAPIClient
-from astrbot.core.utils.io import download_image_by_url, download_file
+
+import astrbot.core.message.components as Comp
 from astrbot.core import logger, sp
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.dify_api_client import DifyAPIClient
+from astrbot.core.utils.io import download_file, download_image_by_url
+
+from .. import Provider
+from ..entities import LLMResponse
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter("dify", "Dify APP 适配器。")
@@ -18,12 +18,10 @@ class ProviderDify(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_key = provider_config.get("dify_api_key", "")
         if not self.api_key:
@@ -34,10 +32,12 @@ class ProviderDify(Provider):
             raise Exception("Dify API 类型不能为空。")
         self.model_name = "dify"
         self.workflow_output_key = provider_config.get(
-            "dify_workflow_output_key", "astrbot_wf_output"
+            "dify_workflow_output_key",
+            "astrbot_wf_output",
         )
         self.dify_query_input_key = provider_config.get(
-            "dify_query_input_key", "astrbot_text_query"
+            "dify_query_input_key",
+            "astrbot_text_query",
         )
         if not self.dify_query_input_key:
             self.dify_query_input_key = "astrbot_text_query"
@@ -55,11 +55,11 @@ class ProviderDify(Provider):
     async def text_chat(
         self,
         prompt: str,
-        session_id: str = None,
-        image_urls: List[str] = None,
-        func_tool: FuncCall = None,
-        contexts: List = None,
-        system_prompt: str = None,
+        session_id=None,
+        image_urls=None,
+        func_tool=None,
+        contexts=None,
+        system_prompt=None,
         tool_calls_result=None,
         model=None,
         **kwargs,
@@ -78,12 +78,13 @@ class ProviderDify(Provider):
                 else image_url
             )
             file_response = await self.api_client.file_upload(
-                image_path, user=session_id
+                image_path,
+                user=session_id,
             )
             logger.debug(f"Dify 上传图片响应：{file_response}")
             if "id" not in file_response:
                 logger.warning(
-                    f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。"
+                    f"上传图片后得到未知的 Dify 响应：{file_response}，图片将忽略。",
                 )
                 continue
             files_payload.append(
@@ -91,7 +92,7 @@ class ProviderDify(Provider):
                     "type": "image",
                     "transfer_method": "local_file",
                     "upload_file_id": file_response["id"],
-                }
+                },
             )
 
         # 获得会话变量
@@ -134,7 +135,7 @@ class ProviderDify(Provider):
                         elif chunk["event"] == "error":
                             logger.error(f"Dify 出现错误：{chunk}")
                             raise Exception(
-                                f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']}"
+                                f"Dify 出现错误 status: {chunk['status']} message: {chunk['message']}",
                             )
 
                 case "workflow":
@@ -151,37 +152,37 @@ class ProviderDify(Provider):
                         match chunk["event"]:
                             case "workflow_started":
                                 logger.info(
-                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。"
+                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})开始运行。",
                                 )
                             case "node_finished":
                                 logger.debug(
-                                    f"Dify 工作流节点(ID: {chunk['data']['node_id']} Title: {chunk['data'].get('title', '')})运行结束。"
+                                    f"Dify 工作流节点(ID: {chunk['data']['node_id']} Title: {chunk['data'].get('title', '')})运行结束。",
                                 )
                             case "workflow_finished":
                                 logger.info(
-                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
+                                    f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束",
                                 )
                                 logger.debug(f"Dify 工作流结果：{chunk}")
                                 if chunk["data"]["error"]:
                                     logger.error(
-                                        f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                        f"Dify 工作流出现错误：{chunk['data']['error']}",
                                     )
                                     raise Exception(
-                                        f"Dify 工作流出现错误：{chunk['data']['error']}"
+                                        f"Dify 工作流出现错误：{chunk['data']['error']}",
                                     )
                                 if (
                                     self.workflow_output_key
                                     not in chunk["data"]["outputs"]
                                 ):
                                     raise Exception(
-                                        f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}"
+                                        f"Dify 工作流的输出不包含指定的键名：{self.workflow_output_key}",
                                     )
                                 result = chunk
                 case _:
                     raise Exception(f"未知的 Dify API 类型：{self.api_type}")
         except Exception as e:
-            logger.error(f"Dify 请求失败：{str(e)}")
-            return LLMResponse(role="err", completion_text=f"Dify 请求失败：{str(e)}")
+            logger.error(f"Dify 请求失败：{e!s}")
+            return LLMResponse(role="err", completion_text=f"Dify 请求失败：{e!s}")
 
         if not result:
             logger.warning("Dify 请求结果为空，请查看 Debug 日志。")
@@ -223,7 +224,7 @@ class ProviderDify(Provider):
             # Chat
             return MessageChain(chain=[Comp.Plain(chunk)])
 
-        async def parse_file(item: dict) -> Comp:
+        async def parse_file(item: dict):
             match item["type"]:
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])

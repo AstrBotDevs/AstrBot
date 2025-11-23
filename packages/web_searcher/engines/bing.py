@@ -1,6 +1,4 @@
-from typing import List
-from . import SearchEngine, SearchResult
-from . import USER_AGENT_BING
+from . import USER_AGENT_BING, SearchEngine, SearchResult
 
 
 class Bing(SearchEngine):
@@ -31,7 +29,7 @@ class Bing(SearchEngine):
                 continue
         raise Exception("Bing search failed")
 
-    async def search(self, query: str, num_results: int) -> List[SearchResult]:
+    async def search(self, query: str, num_results: int) -> list[SearchResult]:
         results = await super().search(query, num_results)
         for result in results:
             if not isinstance(result.url, str):

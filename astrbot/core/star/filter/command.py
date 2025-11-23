@@ -1,19 +1,19 @@
-import re
 import inspect
+import re
 import types
 import typing
-from typing import List, Any, Type, Dict
-from . import HandlerFilter
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from typing import Any
+
 from astrbot.core.config import AstrBotConfig
-from .custom_filter import CustomFilter
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 from ..star_handler import StarHandlerMetadata
+from . import HandlerFilter
+from .custom_filter import CustomFilter
 
 
 class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
-
-    pass
 
 
 def unwrap_optional(annotation) -> tuple:
@@ -22,10 +22,9 @@ def unwrap_optional(annotation) -> tuple:
     non_none_args = [a for a in args if a is not type(None)]
     if len(non_none_args) == 1:
         return (non_none_args[0],)
-    elif len(non_none_args) > 1:
+    if len(non_none_args) > 1:
         return tuple(non_none_args)
-    else:
-        return ()
+    return ()
 
 
 # 标准指令受到 wake_prefix 的制约。
@@ -37,28 +36,30 @@ class CommandFilter(HandlerFilter):
         command_name: str,
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
-        parent_command_names: List[str] = [""],
+        parent_command_names: list[str] | None = None,
     ):
         self.command_name = command_name
         self.alias = alias if alias else set()
-        self.parent_command_names = parent_command_names
+        self.parent_command_names = (
+            parent_command_names if parent_command_names is not None else [""]
+        )
         if handler_md:
             self.init_handler_md(handler_md)
-        self.custom_filter_list: List[CustomFilter] = []
+        self.custom_filter_list: list[CustomFilter] = []
 
         # Cache for complete command names list
         self._cmpl_cmd_names: list | None = None
 
     def print_types(self):
-        result = ""
+        parts = []
         for k, v in self.handler_params.items():
             if isinstance(v, type):
-                result += f"{k}({v.__name__}),"
+                parts.append(f"{k}({v.__name__}),")
             elif isinstance(v, types.UnionType) or typing.get_origin(v) is typing.Union:
-                result += f"{k}({v}),"
+                parts.append(f"{k}({v}),")
             else:
-                result += f"{k}({type(v).__name__})={v},"
-        result = result.rstrip(",")
+                parts.append(f"{k}({type(v).__name__})={v},")
+        result = "".join(parts).rstrip(",")
         return result
 
     def init_handler_md(self, handle_md: StarHandlerMetadata):
@@ -89,8 +90,10 @@ class CommandFilter(HandlerFilter):
         return True
 
     def validate_and_convert_params(
-        self, params: List[Any], param_type: Dict[str, Type]
-    ) -> Dict[str, Any]:
+        self,
+        params: list[Any],
+        param_type: dict[str, type],
+    ) -> dict[str, Any]:
         """将参数列表 params 根据 param_type 转换为参数字典。"""
         result = {}
         param_items = list(param_type.items())
@@ -101,7 +104,7 @@ class CommandFilter(HandlerFilter):
                 # GreedyStr 必须是最后一个参数
                 if i != len(param_items) - 1:
                     raise ValueError(
-                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。"
+                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。",
                     )
 
                 # 将剩余的所有部分合并成一个字符串
@@ -111,17 +114,16 @@ class CommandFilter(HandlerFilter):
             # 没有 GreedyStr 的情况
             if i >= len(params):
                 if (
-                    isinstance(param_type_or_default_val, (Type, types.UnionType))
+                    isinstance(param_type_or_default_val, (type, types.UnionType))
                     or typing.get_origin(param_type_or_default_val) is typing.Union
                     or param_type_or_default_val is inspect.Parameter.empty
                 ):
                     # 是类型
                     raise ValueError(
-                        f"必要参数缺失。该指令完整参数: {self.print_types()}"
+                        f"必要参数缺失。该指令完整参数: {self.print_types()}",
                     )
-                else:
-                    # 是默认值
-                    result[param_name] = param_type_or_default_val
+                # 是默认值
+                result[param_name] = param_type_or_default_val
             else:
                 # 尝试强制转换
                 try:
@@ -142,7 +144,7 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = False
                         else:
                             raise ValueError(
-                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。"
+                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
                             )
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
@@ -165,7 +167,7 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(
-                        f"参数 {param_name} 类型错误。完整参数: {self.print_types()}"
+                        f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
                     )
         return result
 

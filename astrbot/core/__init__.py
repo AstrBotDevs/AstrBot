@@ -1,12 +1,14 @@
 import os
-from .log import LogManager, LogBroker  # noqa
-from astrbot.core.utils.t2i.renderer import HtmlRenderer
-from astrbot.core.utils.shared_preferences import SharedPreferences
-from astrbot.core.utils.pip_installer import PipInstaller
-from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.config.default import DB_PATH
+
 from astrbot.core.config import AstrBotConfig
+from astrbot.core.config.default import DB_PATH
+from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.file_token_service import FileTokenService
+from astrbot.core.utils.pip_installer import PipInstaller
+from astrbot.core.utils.shared_preferences import SharedPreferences
+from astrbot.core.utils.t2i.renderer import HtmlRenderer
+
+from .log import LogBroker, LogManager  # noqa
 from .utils.astrbot_path import get_astrbot_data_path
 
 # 初始化数据存储文件夹

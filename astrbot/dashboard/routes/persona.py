@@ -1,9 +1,12 @@
 import traceback
-from .route import Route, Response, RouteContext
-from astrbot.core import logger
+
 from quart import request
-from astrbot.core.db import BaseDatabase
+
+from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.db import BaseDatabase
+
+from .route import Response, Route, RouteContext
 
 
 class PersonaRoute(Route):
@@ -46,13 +49,13 @@ class PersonaRoute(Route):
                             else None,
                         }
                         for persona in personas
-                    ]
+                    ],
                 )
                 .__dict__
             )
         except Exception as e:
-            logger.error(f"获取人格列表失败: {str(e)}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格列表失败: {str(e)}").__dict__
+            logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取人格列表失败: {e!s}").__dict__
 
     async def get_persona_detail(self):
         """获取指定人格的详细信息"""
@@ -81,13 +84,13 @@ class PersonaRoute(Route):
                         "updated_at": persona.updated_at.isoformat()
                         if persona.updated_at
                         else None,
-                    }
+                    },
                 )
                 .__dict__
             )
         except Exception as e:
-            logger.error(f"获取人格详情失败: {str(e)}\n{traceback.format_exc()}")
-            return Response().error(f"获取人格详情失败: {str(e)}").__dict__
+            logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取人格详情失败: {e!s}").__dict__
 
     async def create_persona(self):
         """创建新人格"""
@@ -136,15 +139,15 @@ class PersonaRoute(Route):
                             if persona.updated_at
                             else None,
                         },
-                    }
+                    },
                 )
                 .__dict__
             )
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(f"创建人格失败: {str(e)}\n{traceback.format_exc()}")
-            return Response().error(f"创建人格失败: {str(e)}").__dict__
+            logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"创建人格失败: {e!s}").__dict__
 
     async def update_persona(self):
         """更新人格信息"""
@@ -177,8 +180,8 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(f"更新人格失败: {str(e)}\n{traceback.format_exc()}")
-            return Response().error(f"更新人格失败: {str(e)}").__dict__
+            logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新人格失败: {e!s}").__dict__
 
     async def delete_persona(self):
         """删除人格"""
@@ -195,5 +198,5 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(f"删除人格失败: {str(e)}\n{traceback.format_exc()}")
-            return Response().error(f"删除人格失败: {str(e)}").__dict__
+            logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"删除人格失败: {e!s}").__dict__

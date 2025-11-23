@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import enum
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Callable, Awaitable, Any, List, Dict, TypeVar, Generic
+from typing import Any, Generic, TypeVar
+
 from .filter import HandlerFilter
 from .star import star_map
 
@@ -10,8 +13,8 @@ T = TypeVar("T", bound="StarHandlerMetadata")
 
 class StarHandlerRegistry(Generic[T]):
     def __init__(self):
-        self.star_handlers_map: Dict[str, StarHandlerMetadata] = {}
-        self._handlers: List[StarHandlerMetadata] = []
+        self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
+        self._handlers: list[StarHandlerMetadata] = []
 
     def append(self, handler: StarHandlerMetadata):
         """添加一个 Handler，并保持按优先级有序"""
@@ -31,7 +34,7 @@ class StarHandlerRegistry(Generic[T]):
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,
-    ) -> List[StarHandlerMetadata]:
+    ) -> list[StarHandlerMetadata]:
         handlers = []
         for handler in self._handlers:
             # 过滤事件类型
@@ -64,8 +67,9 @@ class StarHandlerRegistry(Generic[T]):
         return self.star_handlers_map.get(full_name, None)
 
     def get_handlers_by_module_name(
-        self, module_name: str
-    ) -> List[StarHandlerMetadata]:
+        self,
+        module_name: str,
+    ) -> list[StarHandlerMetadata]:
         return [
             handler
             for handler in self._handlers
@@ -126,7 +130,7 @@ class StarHandlerMetadata:
     handler: Callable[..., Awaitable[Any]]
     """Handler 的函数对象，应当是一个异步函数"""
 
-    event_filters: List[HandlerFilter]
+    event_filters: list[HandlerFilter]
     """一个适配器消息事件过滤器，用于描述这个 Handler 能够处理、应该处理的适配器消息事件"""
 
     desc: str = ""
@@ -138,5 +142,6 @@ class StarHandlerMetadata:
     def __lt__(self, other: StarHandlerMetadata):
         """定义小于运算符以支持优先队列"""
         return self.extras_configs.get("priority", 0) < other.extras_configs.get(
-            "priority", 0
+            "priority",
+            0,
         )

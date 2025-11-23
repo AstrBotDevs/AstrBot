@@ -3,7 +3,7 @@ import base64
 import logging
 import os
 import uuid
-from typing import Optional, Tuple
+
 import aiohttp
 import dashscope
 from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
@@ -15,14 +15,17 @@ except (
 ):  # pragma: no cover - older dashscope versions without Qwen TTS support
     MultiModalConversation = None
 
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 @register_provider_adapter(
-    "dashscope_tts", "Dashscope TTS API", provider_type=ProviderType.TEXT_TO_SPEECH
+    "dashscope_tts",
+    "Dashscope TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderDashscopeTTSAPI(TTSProvider):
     def __init__(
@@ -33,7 +36,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key: str = provider_config.get("api_key", "")
         self.voice: str = provider_config.get("dashscope_tts_voice", "loongstella")
-        self.set_model(provider_config.get("model", None))
+        self.set_model(provider_config.get("model"))
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
         dashscope.api_key = self.chosen_api_key
 
@@ -52,7 +55,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
         if not audio_bytes:
             raise RuntimeError(
-                "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable."
+                "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable.",
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
@@ -63,7 +66,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     def _call_qwen_tts(self, model: str, text: str):
         if MultiModalConversation is None:
             raise RuntimeError(
-                "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models."
+                "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
             )
 
         kwargs = {
@@ -74,24 +77,26 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         }
         if not self.voice:
             logging.warning(
-                "No voice specified for Qwen TTS model, using default 'Cherry'."
+                "No voice specified for Qwen TTS model, using default 'Cherry'.",
             )
         return MultiModalConversation.call(**kwargs)
 
     async def _synthesize_with_qwen_tts(
-        self, model: str, text: str
-    ) -> Tuple[Optional[bytes], str]:
+        self,
+        model: str,
+        text: str,
+    ) -> tuple[bytes | None, str]:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, self._call_qwen_tts, model, text)
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
             raise RuntimeError(
-                f"Audio synthesis failed for model '{model}'. {response}"
+                f"Audio synthesis failed for model '{model}'. {response}",
             )
         ext = ".wav"
         return audio_bytes, ext
 
-    async def _extract_audio_from_response(self, response) -> Optional[bytes]:
+    async def _extract_audio_from_response(self, response) -> bytes | None:
         output = getattr(response, "output", None)
         audio_obj = getattr(output, "audio", None) if output is not None else None
         if not audio_obj:
@@ -102,7 +107,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             try:
                 return base64.b64decode(data_b64)
             except (ValueError, TypeError):
-                logging.error("Failed to decode base64 audio data.")
+                logging.exception("Failed to decode base64 audio data.")
                 return None
 
         url = getattr(audio_obj, "url", None)
@@ -110,23 +115,28 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             return await self._download_audio_from_url(url)
         return None
 
-    async def _download_audio_from_url(self, url: str) -> Optional[bytes]:
+    async def _download_audio_from_url(self, url: str) -> bytes | None:
         if not url:
             return None
         timeout = max(self.timeout_ms / 1000, 1) if self.timeout_ms else 20
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=timeout)
-                ) as response:
-                    return await response.read()
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response,
+            ):
+                return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-            logging.error(f"Failed to download audio from URL {url}: {e}")
+            logging.exception(f"Failed to download audio from URL {url}: {e}")
             return None
 
     async def _synthesize_with_cosyvoice(
-        self, model: str, text: str
-    ) -> Tuple[Optional[bytes], str]:
+        self,
+        model: str,
+        text: str,
+    ) -> tuple[bytes | None, str]:
         synthesizer = SpeechSynthesizer(
             model=model,
             voice=self.voice,
@@ -134,13 +144,16 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         )
         loop = asyncio.get_event_loop()
         audio_bytes = await loop.run_in_executor(
-            None, synthesizer.call, text, self.timeout_ms
+            None,
+            synthesizer.call,
+            text,
+            self.timeout_ms,
         )
         if not audio_bytes:
             resp = synthesizer.get_response()
             if resp and isinstance(resp, dict):
                 raise RuntimeError(
-                    f"Audio synthesis failed for model '{model}'. {resp}".strip()
+                    f"Audio synthesis failed for model '{model}'. {resp}".strip(),
                 )
         return audio_bytes, ".wav"
 

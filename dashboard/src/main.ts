@@ -18,24 +18,38 @@ setupI18n().then(() => {
   
   const app = createApp(App);
   app.use(router);
-  app.use(createPinia());
+  const pinia = createPinia();
+  app.use(pinia);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
   app.mount('#app');
+  
+  // 挂载后同步 Vuetify 主题
+  import('./stores/customizer').then(({ useCustomizerStore }) => {
+    const customizer = useCustomizerStore(pinia);
+    vuetify.theme.global.name.value = customizer.uiTheme;
+  });
 }).catch(error => {
   console.error('❌ 新i18n系统初始化失败:', error);
   
   // 即使i18n初始化失败，也要挂载应用（使用回退机制）
   const app = createApp(App);
   app.use(router);
-  app.use(createPinia());
+  const pinia = createPinia();
+  app.use(pinia);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
   app.mount('#app');
+  
+  // 挂载后同步 Vuetify 主题
+  import('./stores/customizer').then(({ useCustomizerStore }) => {
+    const customizer = useCustomizerStore(pinia);
+    vuetify.theme.global.name.value = customizer.uiTheme;
+  });
 });
 
 

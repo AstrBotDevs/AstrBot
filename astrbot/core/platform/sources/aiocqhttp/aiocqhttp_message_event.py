@@ -1,24 +1,31 @@
 import asyncio
 import re
-from typing import AsyncGenerator, Dict, List
+from collections.abc import AsyncGenerator
+
 from aiocqhttp import CQHttp, Event
+
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    BaseMessageComponent,
+    File,
     Image,
     Node,
     Nodes,
     Plain,
     Record,
     Video,
-    File,
-    BaseMessageComponent,
 )
 from astrbot.api.platform import Group, MessageMember
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
     def __init__(
-        self, message_str, message_obj, platform_meta, session_id, bot: CQHttp
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: CQHttp,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
@@ -35,16 +42,15 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     "file": f"base64://{bs64}",
                 },
             }
-        elif isinstance(segment, File):
+        if isinstance(segment, File):
             # For File segments, we need to handle the file differently
             d = await segment.to_dict()
             return d
-        elif isinstance(segment, Video):
+        if isinstance(segment, Video):
             d = await segment.to_dict()
             return d
-        else:
-            # For other segments, we simply convert them to a dict by calling toDict
-            return segment.toDict()
+        # For other segments, we simply convert them to a dict by calling toDict
+        return segment.toDict()
 
     @staticmethod
     async def _parse_onebot_json(message_chain: MessageChain):
@@ -78,7 +84,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await bot.send(event=event, message=messages)
         else:
             raise ValueError(
-                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})"
+                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
             )
 
     @classmethod
@@ -88,7 +94,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         message_chain: MessageChain,
         event: Event | None = None,
         is_group: bool = False,
-        session_id: str = None,
+        session_id: str | None = None,
     ):
         """发送消息至 QQ 协议端（aiocqhttp）。
 
@@ -98,8 +104,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event (Event | None, optional): aiocqhttp 事件对象.
             is_group (bool, optional): 是否为群消息.
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
-        """
 
+        """
         # 转发消息、文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
             isinstance(seg, (Node, Nodes, File)) for seg in message_chain.chain
@@ -152,7 +158,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(
-        self, generator: AsyncGenerator, use_fallback: bool = False
+        self,
+        generator: AsyncGenerator,
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None
@@ -162,7 +170,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 else:
                     buffer.chain.extend(chain.chain)
             if not buffer:
-                return
+                return None
             buffer.squash_plain()
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
@@ -198,7 +206,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             group_id=group_id,
         )
 
-        members: List[Dict] = await self.bot.call_action(
+        members: list[dict] = await self.bot.call_action(
             "get_group_member_list",
             group_id=group_id,
         )

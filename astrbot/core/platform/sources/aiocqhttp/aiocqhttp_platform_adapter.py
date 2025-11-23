@@ -1,33 +1,42 @@
-import time
 import asyncio
-import logging
-import uuid
 import itertools
-from typing import Awaitable, Any
+import logging
+import time
+import uuid
+from collections.abc import Awaitable
+from typing import Any
+
 from aiocqhttp import CQHttp, Event
+from aiocqhttp.exceptions import ActionFailed
+
+from astrbot.api import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import *
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
-from .aiocqhttp_message_event import *  # noqa: F403
-from astrbot.api.message_components import *  # noqa: F403
-from astrbot.api import logger
-from .aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.platform.astr_message_event import MessageSesion
+
 from ...register import register_platform_adapter
-from aiocqhttp.exceptions import ActionFailed
+from .aiocqhttp_message_event import *
+from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
 @register_platform_adapter(
-    "aiocqhttp", "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。"
+    "aiocqhttp",
+    "适用于 OneBot V11 标准的消息平台适配器，支持反向 WebSockets。",
+    support_streaming_message=False,
 )
 class AiocqhttpAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
 
@@ -41,6 +50,7 @@ class AiocqhttpAdapter(Platform):
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
             id=self.config.get("id"),
+            support_streaming_message=False,
         )
 
         self.bot = CQHttp(
@@ -48,7 +58,7 @@ class AiocqhttpAdapter(Platform):
             import_name="aiocqhttp",
             api_timeout_sec=180,
             access_token=platform_config.get(
-                "ws_reverse_token"
+                "ws_reverse_token",
             ),  # 以防旧版本配置不存在
         )
 
@@ -81,7 +91,9 @@ class AiocqhttpAdapter(Platform):
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
@@ -97,14 +109,14 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage:
+    async def convert_message(self, event: Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
             if abm.sender.user_id == "2854196310":
                 # 屏蔽 QQ 管家的消息
-                return
+                return None
         elif event["post_type"] == "notice":
             abm = await self._convert_handle_notice_event(event)
         elif event["post_type"] == "request":
@@ -118,7 +130,7 @@ class AiocqhttpAdapter(Platform):
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
         abm.type = MessageType.OTHER_MESSAGE
-        if "group_id" in event and event["group_id"]:
+        if event.get("group_id"):
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
         else:
@@ -144,7 +156,7 @@ class AiocqhttpAdapter(Platform):
         abm.self_id = str(event.self_id)
         abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
         abm.type = MessageType.OTHER_MESSAGE
-        if "group_id" in event and event["group_id"]:
+        if event.get("group_id"):
             abm.group_id = str(event.group_id)
             abm.type = MessageType.GROUP_MESSAGE
         else:
@@ -167,12 +179,14 @@ class AiocqhttpAdapter(Platform):
 
         if "sub_type" in event:
             if event["sub_type"] == "poke" and "target_id" in event:
-                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))  # noqa: F405
+                abm.message.append(Poke(qq=str(event["target_id"]), type="poke"))
 
         return abm
 
     async def _convert_handle_message_event(
-        self, event: Event, get_reply=True
+        self,
+        event: Event,
+        get_reply=True,
     ) -> AstrBotMessage:
         """OneBot V11 消息类事件
 
@@ -207,13 +221,13 @@ class AiocqhttpAdapter(Platform):
 
         message_str = ""
         if not isinstance(event.message, list):
-            err = f"aiocqhttp: 无法识别的消息类型: {str(event.message)}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
+            err = f"aiocqhttp: 无法识别的消息类型: {event.message!s}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
             logger.critical(err)
             try:
-                self.bot.send(event, err)
+                await self.bot.send(event, err)
             except BaseException as e:
                 logger.error(f"回复消息失败: {e}")
-            return
+            return None
 
         # 按消息段类型类型适配
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
@@ -224,7 +238,7 @@ class AiocqhttpAdapter(Platform):
                     # 如果文本段为空，则跳过
                     continue
                 message_str += current_text
-                a = ComponentTypes[t](text=current_text)  # noqa: F405
+                a = ComponentTypes[t](text=current_text)
                 abm.message.append(a)
 
             elif t == "file":
@@ -264,7 +278,7 @@ class AiocqhttpAdapter(Platform):
             elif t == "reply":
                 for m in m_group:
                     if not get_reply:
-                        a = ComponentTypes[t](**m["data"])  # noqa: F405
+                        a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     else:
                         try:
@@ -277,11 +291,12 @@ class AiocqhttpAdapter(Platform):
                             new_event = Event.from_payload(reply_event_data)
                             if not new_event:
                                 logger.error(
-                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}"
+                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
                                 )
                                 continue
                             abm_reply = await self._convert_handle_message_event(
-                                new_event, get_reply=False
+                                new_event,
+                                get_reply=False,
                             )
 
                             reply_seg = Reply(
@@ -298,10 +313,12 @@ class AiocqhttpAdapter(Platform):
                             abm.message.append(reply_seg)
                         except BaseException as e:
                             logger.error(f"获取引用消息失败: {e}。")
-                            a = ComponentTypes[t](**m["data"])  # noqa: F405
+                            a = ComponentTypes[t](**m["data"])
                             abm.message.append(a)
             elif t == "at":
                 first_at_self_processed = False
+                # Accumulate @ mention text for efficient concatenation
+                at_parts = []
 
                 for m in m_group:
                     try:
@@ -324,7 +341,8 @@ class AiocqhttpAdapter(Platform):
                                     no_cache=False,
                                 )
                                 nickname = at_info.get("nick", "") or at_info.get(
-                                    "nickname", ""
+                                    "nickname",
+                                    "",
                                 )
                             is_at_self = str(m["data"]["qq"]) in {abm.self_id, "all"}
 
@@ -332,7 +350,7 @@ class AiocqhttpAdapter(Platform):
                                 At(
                                     qq=m["data"]["qq"],
                                     name=nickname,
-                                )
+                                ),
                             )
 
                             if is_at_self and not first_at_self_processed:
@@ -340,16 +358,18 @@ class AiocqhttpAdapter(Platform):
                                 first_at_self_processed = True
                             else:
                                 # 非第一个@机器人或@其他用户，添加到message_str
-                                message_str += f" @{nickname}({m['data']['qq']}) "
+                                at_parts.append(f" @{nickname}({m['data']['qq']}) ")
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
                     except BaseException as e:
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+
+                message_str += "".join(at_parts)
             else:
                 for m in m_group:
-                    a = ComponentTypes[t](**m["data"])  # noqa: F405
+                    a = ComponentTypes[t](**m["data"])
                     abm.message.append(a)
 
         abm.timestamp = int(time.time())
@@ -361,7 +381,7 @@ class AiocqhttpAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
             logger.warning(
-                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199"
+                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
             )
             self.host = "0.0.0.0"
             self.port = 6199

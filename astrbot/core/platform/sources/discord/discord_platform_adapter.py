@@ -1,29 +1,31 @@
 import asyncio
-import discord
-import sys
 import re
+import sys
+from typing import Any
+
+import discord
 from discord.abc import Messageable
 from discord.channel import DMChannel
+
+from astrbot import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import File, Image, Plain
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
-    PlatformMetadata,
     MessageType,
+    Platform,
+    PlatformMetadata,
+    register_platform_adapter,
 )
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Plain, Image, File
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.api.platform import register_platform_adapter
-from astrbot import logger
-from .client import DiscordBotClient
-from .discord_platform_event import DiscordPlatformEvent
-
-from typing import Any, Tuple
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+
+from .client import DiscordBotClient
+from .discord_platform_event import DiscordPlatformEvent
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -32,10 +34,15 @@ else:
 
 
 # 注册平台适配器
-@register_platform_adapter("discord", "Discord 适配器 (基于 Pycord)")
+@register_platform_adapter(
+    "discord", "Discord 适配器 (基于 Pycord)", support_streaming_message=False
+)
 class DiscordPlatformAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
         super().__init__(event_queue)
         self.config = platform_config
@@ -51,7 +58,9 @@ class DiscordPlatformAdapter(Platform):
 
     @override
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
         """通过会话发送消息"""
         # 创建一个 message_obj 以便在 event 中使用
@@ -71,18 +80,19 @@ class DiscordPlatformAdapter(Platform):
             message_obj.group_id = self._get_channel_id(channel)
         else:
             logger.warning(
-                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type."
+                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
             )
             message_obj.type = MessageType.GROUP_MESSAGE
             message_obj.group_id = session.session_id
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
-            user_id=str(self.client_self_id), nickname=self.client.user.display_name
+            user_id=str(self.client_self_id),
+            nickname=self.client.user.display_name,
         )
         message_obj.self_id = self.client_self_id
         message_obj.session_id = session.session_id
-        message_obj.message = message_chain
+        message_obj.message = message_chain.chain
 
         # 创建临时事件对象来发送消息
         temp_event = DiscordPlatformEvent(
@@ -103,6 +113,7 @@ class DiscordPlatformAdapter(Platform):
             "Discord 适配器",
             id=self.config.get("id"),
             default_config_tmpl=self.config,
+            support_streaming_message=False,
         )
 
     @override
@@ -149,7 +160,9 @@ class DiscordPlatformAdapter(Platform):
             logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
 
     def _get_message_type(
-        self, channel: Messageable, guild_id: int | None = None
+        self,
+        channel: Messageable,
+        guild_id: int | None = None,
     ) -> MessageType:
         """根据 channel 对象和 guild_id 判断消息类型"""
         if guild_id is not None:
@@ -201,7 +214,8 @@ class DiscordPlatformAdapter(Platform):
         abm.group_id = self._get_channel_id(message.channel)
         abm.message_str = content
         abm.sender = MessageMember(
-            user_id=str(message.author.id), nickname=message.author.display_name
+            user_id=str(message.author.id),
+            nickname=message.author.display_name,
         )
         message_chain = []
         if abm.message_str:
@@ -209,14 +223,14 @@ class DiscordPlatformAdapter(Platform):
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.content_type and attachment.content_type.startswith(
-                    "image/"
+                    "image/",
                 ):
                     message_chain.append(
-                        Image(file=attachment.url, filename=attachment.filename)
+                        Image(file=attachment.url, filename=attachment.filename),
                     )
                 else:
                     message_chain.append(
-                        File(name=attachment.filename, url=attachment.url)
+                        File(name=attachment.filename, url=attachment.url),
                     )
         abm.message = message_chain
         abm.raw_message = message
@@ -260,7 +274,7 @@ class DiscordPlatformAdapter(Platform):
             if hasattr(message.raw_message, "guild") and message.raw_message.guild:
                 try:
                     bot_member = message.raw_message.guild.get_member(
-                        self.client.user.id
+                        self.client.user.id,
                     )
                 except Exception:
                     bot_member = None
@@ -346,7 +360,7 @@ class DiscordPlatformAdapter(Platform):
                         description="指令的所有参数",
                         type=discord.SlashCommandOptionType.string,
                         required=False,
-                    )
+                    ),
                 ]
 
                 # 创建SlashCommand
@@ -362,7 +376,7 @@ class DiscordPlatformAdapter(Platform):
 
         if registered_commands:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}"
+                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
             )
         else:
             logger.info("[Discord] 没有发现可注册的指令。")
@@ -375,7 +389,9 @@ class DiscordPlatformAdapter(Platform):
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
 
-        async def dynamic_callback(ctx: discord.ApplicationContext, params: str = None):
+        async def dynamic_callback(
+            ctx: discord.ApplicationContext, params: str | None = None
+        ):
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
@@ -387,7 +403,7 @@ class DiscordPlatformAdapter(Platform):
             logger.debug(
                 f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
                 f"原始参数: '{params}'. "
-                f"构建的指令字符串: '{message_str_for_filter}'"
+                f"构建的指令字符串: '{message_str_for_filter}'",
             )
 
             # 尝试立即响应，防止超时
@@ -404,7 +420,8 @@ class DiscordPlatformAdapter(Platform):
             abm.group_id = self._get_channel_id(ctx.channel)
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
-                user_id=str(ctx.author.id), nickname=ctx.author.display_name
+                user_id=str(ctx.author.id),
+                nickname=ctx.author.display_name,
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
@@ -419,8 +436,9 @@ class DiscordPlatformAdapter(Platform):
 
     @staticmethod
     def _extract_command_info(
-        event_filter: Any, handler_metadata: StarHandlerMetadata
-    ) -> Tuple[str, str, CommandFilter] | None:
+        event_filter: Any,
+        handler_metadata: StarHandlerMetadata,
+    ) -> tuple[str, str, CommandFilter] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
         # is_group = False
