@@ -2217,6 +2217,7 @@ CONFIG_METADATA_3 = {
                         "_special": "select_agent_runner_provider",
                         "condition": {
                             "provider_settings.agent_runner_type": "coze",
+                            "provider_settings.enable": True,
                         },
                     },
                     "provider_settings.dify_agent_runner_provider_id": {
@@ -2225,6 +2226,7 @@ CONFIG_METADATA_3 = {
                         "_special": "select_agent_runner_provider",
                         "condition": {
                             "provider_settings.agent_runner_type": "dify",
+                            "provider_settings.enable": True,
                         },
                     },
                     "provider_settings.dashscope_agent_runner_provider_id": {
@@ -2233,6 +2235,7 @@ CONFIG_METADATA_3 = {
                         "_special": "select_agent_runner_provider",
                         "condition": {
                             "provider_settings.agent_runner_type": "dashscope",
+                            "provider_settings.enable": True,
                         },
                     },
                 },
