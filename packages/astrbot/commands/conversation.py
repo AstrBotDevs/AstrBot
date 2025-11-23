@@ -38,9 +38,8 @@ class ConversationCommands:
 
     async def reset(self, message: AstrMessageEvent):
         """重置 LLM 会话"""
-        is_unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
         is_group = bool(message.get_group_id())
 
         scene = RstScene.get_scene(is_group, is_unique_session)
@@ -227,9 +226,8 @@ class ConversationCommands:
         else:
             ret += "\n当前对话: 无"
 
-        unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        unique_session = cfg["platform_settings"]["unique_session"]
         if unique_session:
             ret += "\n会话隔离粒度: 个人"
         else:
@@ -399,9 +397,8 @@ class ConversationCommands:
 
     async def del_conv(self, message: AstrMessageEvent):
         """删除当前对话"""
-        is_unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
         if message.get_group_id() and not is_unique_session and message.role != "admin":
             # 群聊，没开独立会话，发送人不是管理员
             message.set_result(
