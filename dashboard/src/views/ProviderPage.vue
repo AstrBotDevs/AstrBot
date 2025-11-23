@@ -63,12 +63,12 @@
             <div v-for="group in groupedProviders" :key="group.typeKey" class="mb-8">
               <h1 class="text-h3 font-weight-bold mb-4">{{ group.label }}</h1>
               <v-row>
-                <v-col v-for="(provider, index) in group.items" :key="`${group.typeKey}-${index}`" cols="12" md="6" lg="4"
-                  xl="3">
+                <v-col v-for="(provider, index) in group.items" :key="`${group.typeKey}-${index}`" cols="12" md="6"
+                  lg="4" xl="3">
                   <item-card :item="provider" title-field="id" enabled-field="enable"
                     :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
-                    :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider"
-                    @edit="configExistingProvider" @copy="copyProvider" :show-copy-button="true">
+                    :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+                    @copy="copyProvider" :show-copy-button="true">
                     <template #actions="{ item }">
                       <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
                         :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
@@ -774,6 +774,9 @@ export default {
       try {
         if (!provider.enable) {
           throw new Error('该提供商未被用户启用');
+        }
+        if (provider.provider_type === 'agent_runner') {
+          throw new Error('暂时无法测试 Agent Runner 类型的提供商');
         }
 
         const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
