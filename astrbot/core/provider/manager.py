@@ -227,6 +227,8 @@ class ProviderManager:
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
             return
+        if provider_config["provider_type"] == "agent_runner":
+            return
 
         logger.info(
             f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
@@ -246,14 +248,6 @@ class ProviderManager:
                 case "anthropic_chat_completion":
                     from .sources.anthropic_source import (
                         ProviderAnthropic as ProviderAnthropic,
-                    )
-                case "dify":
-                    from .sources.dify_source import ProviderDify as ProviderDify
-                case "coze":
-                    from .sources.coze_source import ProviderCoze as ProviderCoze
-                case "dashscope":
-                    from .sources.dashscope_source import (
-                        ProviderDashscope as ProviderDashscope,
                     )
                 case "googlegenai_chat_completion":
                     from .sources.gemini_source import (

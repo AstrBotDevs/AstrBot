@@ -69,8 +69,9 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "agent_runner_type": "local",
-        "dify_runner_provider_id": "",
-        "coze_runner_provider_id": "",
+        "dify_agent_runner_provider_id": "",
+        "coze_agent_runner_provider_id": "",
+        "dashscope_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "max_agent_step": 30,
         "tool_call_timeout": 60,
@@ -1041,7 +1042,7 @@ CONFIG_METADATA_2 = {
                         "id": "dashscope",
                         "provider": "dashscope",
                         "type": "dashscope",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "enable": True,
                         "dashscope_app_type": "agent",
                         "dashscope_api_key": "",
@@ -2042,10 +2043,13 @@ CONFIG_METADATA_2 = {
                     "agent_runner_type": {
                         "type": "string",
                     },
-                    "dify_runner_provider_id": {
+                    "dify_agent_runner_provider_id": {
                         "type": "string",
                     },
-                    "coze_runner_provider_id": {
+                    "coze_agent_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "dashscope_agent_runner_provider_id": {
                         "type": "string",
                     },
                     "max_agent_step": {
@@ -2201,42 +2205,36 @@ CONFIG_METADATA_3 = {
                     "provider_settings.agent_runner_type": {
                         "description": "执行器",
                         "type": "string",
-                        "options": ["local", "dify", "coze"],
-                        "labels": ["内置 Agent", "Dify", "Coze"],
+                        "options": ["local", "dify", "coze", "dashscope"],
+                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
                         "condition": {
                             "provider_settings.enable": True,
                         },
                     },
-                },
-            },
-            "dify_runner": {
-                "description": "Dify",
-                "type": "object",
-                "items": {
-                    "provider_settings.dify_runner_provider_id": {
-                        "description": "Dify 执行器提供商 ID",
+                    "provider_settings.coze_agent_runner_provider_id": {
+                        "description": "Coze Agent 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_provider_dify_runner",
+                        "_special": "select_agent_runner_provider",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "coze",
+                        },
                     },
-                },
-                "condition": {
-                    "provider_settings.agent_runner_type": "dify",
-                    "provider_settings.enable": True,
-                },
-            },
-            "coze_runner": {
-                "description": "Coze",
-                "type": "object",
-                "items": {
-                    "provider_settings.coze_runner_provider_id": {
-                        "description": "Coze 执行器提供商 ID",
+                    "provider_settings.dify_agent_runner_provider_id": {
+                        "description": "Dify Agent 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_provider_coze_runner",
+                        "_special": "select_agent_runner_provider",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "dify",
+                        },
                     },
-                },
-                "condition": {
-                    "provider_settings.agent_runner_type": "coze",
-                    "provider_settings.enable": True,
+                    "provider_settings.dashscope_agent_runner_provider_id": {
+                        "description": "阿里云百炼应用 Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "dashscope",
+                        },
+                    },
                 },
             },
             "ai": {
@@ -2248,9 +2246,6 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时使用第一个模型",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",

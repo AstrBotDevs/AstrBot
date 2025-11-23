@@ -230,11 +230,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <div v-else-if="itemMeta?._special === 'select_provider_tts'">
                 <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'text_to_speech'" />
               </div>
-              <div v-else-if="itemMeta?._special === 'select_provider_dify_runner'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'dify_runner'" />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_provider_coze_runner'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'coze_runner'" />
+              <div v-else-if="itemMeta?._special === 'select_agent_runner_provider'">
+                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'agent_runner'" />
               </div>
               <div v-else-if="itemMeta?._special === 'provider_pool'">
                 <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'"

@@ -1,22 +1,23 @@
-import sys
+import base64
 import os
+import sys
 import typing as T
-from .base import BaseAgentRunner, AgentResponse, AgentState
-from ..hooks import BaseAgentRunHooks
-from ..tool_executor import BaseFunctionToolExecutor
-from ..run_context import ContextWrapper, TContext
-from ..response import AgentResponseData
-from astrbot.core.provider.provider import Provider
+
+import astrbot.core.message.components as Comp
+from astrbot.core import logger, sp
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import (
-    ProviderRequest,
     LLMResponse,
+    ProviderRequest,
 )
-from astrbot.core.utils.dify_api_client import DifyAPIClient
-from astrbot.core.utils.io import download_image_by_url, download_file
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core import logger, sp
-import astrbot.core.message.components as Comp
+from astrbot.core.utils.dify_api_client import DifyAPIClient
+from astrbot.core.utils.io import download_file
+
+from ..hooks import BaseAgentRunHooks
+from ..response import AgentResponseData
+from ..run_context import ContextWrapper, TContext
+from .base import AgentResponse, AgentState, BaseAgentRunner
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -30,53 +31,36 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
         self,
-        provider: Provider,
         request: ProviderRequest,
         run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
+        provider_config: dict,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
         self.streaming = kwargs.get("streaming", False)
-        self.provider = provider
         self.final_llm_resp = None
         self._state = AgentState.IDLE
-        self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
-        # Dify 特定配置 - 从 provider 或 kwargs 中获取
-        self.api_key = kwargs.get("dify_api_key", "")
-        api_base = kwargs.get("dify_api_base", "https://api.dify.ai/v1")
-        self.api_type = kwargs.get("dify_api_type", "")
-
-        self.workflow_output_key = kwargs.get(
-            "dify_workflow_output_key", "astrbot_wf_output"
+        self.api_key = provider_config.get("dify_api_key", "")
+        self.api_base = provider_config.get("dify_api_base", "https://api.dify.ai/v1")
+        self.api_type = provider_config.get("dify_api_type", "chat")
+        self.workflow_output_key = provider_config.get(
+            "dify_workflow_output_key",
+            "astrbot_wf_output",
         )
-        self.dify_query_input_key = kwargs.get(
-            "dify_query_input_key", "astrbot_text_query"
+        self.dify_query_input_key = provider_config.get(
+            "dify_query_input_key",
+            "astrbot_text_query",
         )
-        if not self.dify_query_input_key:
-            self.dify_query_input_key = "astrbot_text_query"
-        if not self.workflow_output_key:
-            self.workflow_output_key = "astrbot_wf_output"
-
-        self.variables: dict = kwargs.get("variables", {})
-        self.timeout = kwargs.get("timeout", 120)
+        self.variables: dict = provider_config.get("variables", {}) or {}
+        self.timeout = provider_config.get("timeout", 60)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-        self.conversation_ids = {}
-        """记录当前 session id 的对话 ID"""
-
-        self.api_client = DifyAPIClient(self.api_key, api_base)
-
-    def _transition_state(self, new_state: AgentState) -> None:
-        """转换 Agent 状态"""
-        if self._state != new_state:
-            logger.debug(f"Dify Agent state transition: {self._state} -> {new_state}")
-            self._state = new_state
+        self.api_client = DifyAPIClient(self.api_key, self.api_base)
 
     @override
     async def step(self):
@@ -111,6 +95,16 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     chain=MessageChain().message(f"Dify 请求失败：{str(e)}")
                 ),
             )
+        finally:
+            await self.api_client.close()
+
+    @override
+    async def step_until_done(
+        self, max_step: int = 30
+    ) -> T.AsyncGenerator[AgentResponse, None]:
+        while not self.done():
+            async for resp in self.step():
+                yield resp
 
     async def _execute_dify_request(self):
         """执行 Dify 请求的核心逻辑"""
@@ -119,20 +113,22 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         image_urls = self.req.image_urls or []
         system_prompt = self.req.system_prompt
 
-        conversation_id = self.conversation_ids.get(session_id, "")
+        conversation_id = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="dify_conversation_id",
+            default="",
+        )
         result = ""
 
         # 处理图片上传
         files_payload = []
         for image_url in image_urls:
+            # image_url is a base64 string
             try:
-                image_path = (
-                    await download_image_by_url(image_url)
-                    if image_url.startswith("http")
-                    else image_url
-                )
+                image_data = base64.b64decode(image_url)
                 file_response = await self.api_client.file_upload(
-                    image_path, user=session_id
+                    file_data=image_data, user=session_id
                 )
                 logger.debug(f"Dify 上传图片响应：{file_response}")
                 if "id" not in file_response:
@@ -154,7 +150,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         # 获得会话变量
         payload_vars = self.variables.copy()
         # 动态变量
-        session_var = await sp.session_get(session_id, "session_variables", default={})
+        session_var = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_variables",
+            default={},
+        )
         payload_vars.update(session_var)
         payload_vars["system_prompt"] = system_prompt
 
@@ -178,7 +179,12 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     if chunk["event"] == "message" or chunk["event"] == "agent_message":
                         result += chunk["answer"]
                         if not conversation_id:
-                            self.conversation_ids[session_id] = chunk["conversation_id"]
+                            await sp.put_async(
+                                scope="umo",
+                                scope_id=session_id,
+                                key="dify_conversation_id",
+                                value=chunk["conversation_id"],
+                            )
                             conversation_id = chunk["conversation_id"]
 
                         # 如果是流式响应，发送增量数据
@@ -314,13 +320,3 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
     @override
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
-
-    async def forget(self, session_id):
-        """忘记会话上下文"""
-        self.conversation_ids[session_id] = ""
-        return True
-
-    async def terminate(self):
-        """终止并清理资源"""
-        if hasattr(self, "api_client"):
-            await self.api_client.close()

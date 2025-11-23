@@ -101,14 +101,16 @@ class DifyAPIClient:
 
     async def file_upload(
         self,
-        file_path: str,
         user: str,
+        file_path: str | None = None,
+        file_data: bytes | None = None,
     ) -> dict[str, Any]:
         url = f"{self.api_base}/files/upload"
-        with open(file_path, "rb") as f:
+
+        if file_data is not None:
             payload = {
                 "user": user,
-                "file": f,
+                "file": file_data,
             }
             async with self.session.post(
                 url,
@@ -116,6 +118,20 @@ class DifyAPIClient:
                 headers=self.headers,
             ) as resp:
                 return await resp.json()  # {"id": "xxx", ...}
+        elif file_path is not None:
+            with open(file_path, "rb") as f:
+                payload = {
+                    "user": user,
+                    "file": f,
+                }
+                async with self.session.post(
+                    url,
+                    data=payload,
+                    headers=self.headers,
+                ) as resp:
+                    return await resp.json()  # {"id": "xxx", ...}
+        else:
+            raise ValueError("file_path 和 file_data 不能同时为 None")
 
     async def close(self):
         await self.session.close()
