@@ -2214,7 +2214,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.coze_agent_runner_provider_id": {
                         "description": "Coze Agent 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_agent_runner_provider",
+                        "_special": "select_agent_runner_provider:coze",
                         "condition": {
                             "provider_settings.agent_runner_type": "coze",
                             "provider_settings.enable": True,
@@ -2223,7 +2223,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.dify_agent_runner_provider_id": {
                         "description": "Dify Agent 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_agent_runner_provider",
+                        "_special": "select_agent_runner_provider:dify",
                         "condition": {
                             "provider_settings.agent_runner_type": "dify",
                             "provider_settings.enable": True,
@@ -2232,7 +2232,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.dashscope_agent_runner_provider_id": {
                         "description": "阿里云百炼应用 Agent 执行器提供商 ID",
                         "type": "string",
-                        "_special": "select_agent_runner_provider",
+                        "_special": "select_agent_runner_provider:dashscope",
                         "condition": {
                             "provider_settings.agent_runner_type": "dashscope",
                             "provider_settings.enable": True,

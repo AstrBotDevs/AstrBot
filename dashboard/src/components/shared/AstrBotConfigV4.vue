@@ -130,6 +130,25 @@ function hasVisibleItemsAfter(items, currentIndex) {
   return false
 }
 
+function parseSpecialValue(value) {
+  if (!value || typeof value !== 'string') {
+    return { name: '', subtype: '' }
+  }
+  const [name, ...rest] = value.split(':')
+  return {
+    name,
+    subtype: rest.join(':') || ''
+  }
+}
+
+function getSpecialName(value) {
+  return parseSpecialValue(value).name
+}
+
+function getSpecialSubtype(value) {
+  return parseSpecialValue(value).subtype
+}
+
 </script>
 
 <template>
@@ -230,8 +249,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <div v-else-if="itemMeta?._special === 'select_provider_tts'">
                 <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'text_to_speech'" />
               </div>
-              <div v-else-if="itemMeta?._special === 'select_agent_runner_provider'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'agent_runner'" />
+              <div v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
+                <ProviderSelector
+                  v-model="createSelectorModel(itemKey).value"
+                  :provider-type="'agent_runner'"
+                  :provider-subtype="getSpecialSubtype(itemMeta?._special)"
+                />
               </div>
               <div v-else-if="itemMeta?._special === 'provider_pool'">
                 <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'"
