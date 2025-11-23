@@ -2242,6 +2242,7 @@ CONFIG_METADATA_3 = {
             },
             "ai": {
                 "description": "模型",
+                "hint": "当使用非内置 Agent 执行器时，默认聊天模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
                 "type": "object",
                 "items": {
                     "provider_settings.default_provider_id": {
