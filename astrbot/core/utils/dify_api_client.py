@@ -1,4 +1,5 @@
 import codecs
+import io
 import json
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -108,9 +109,10 @@ class DifyAPIClient:
         url = f"{self.api_base}/files/upload"
 
         if file_data is not None:
+            io_data = io.BytesIO(file_data)
             payload = {
                 "user": user,
-                "file": file_data,
+                "file": io_data,
             }
             async with self.session.post(
                 url,

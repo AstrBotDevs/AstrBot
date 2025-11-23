@@ -61,5 +61,5 @@ class BaseAgentRunner(T.Generic[TContext]):
     def _transition_state(self, new_state: AgentState) -> None:
         """Transition the agent state."""
         if self._state != new_state:
-            logger.debug(f"Dify Agent state transition: {self._state} -> {new_state}")
+            logger.debug(f"Agent state transition: {self._state} -> {new_state}")
             self._state = new_state
