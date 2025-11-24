@@ -128,7 +128,10 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             try:
                 image_data = base64.b64decode(image_url)
                 file_response = await self.api_client.file_upload(
-                    file_data=image_data, user=session_id
+                    file_data=image_data,
+                    user=session_id,
+                    mime_type="image/png",
+                    file_name="image.png",
                 )
                 logger.debug(f"Dify 上传图片响应：{file_response}")
                 if "id" not in file_response:
