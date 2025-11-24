@@ -172,7 +172,9 @@ class ResultDecorateStage(Stage):
                                     f"分段回复正则表达式错误，使用默认换行符分段: {traceback.format_exc()}",
                                 )
                                 split_response = re.split(
-                                    r".*?[。？！~…]+|.+$", comp.text
+                                    r".*?[。？！~…]+|.+$",
+                                    comp.text,
+                                    re.DOTALL | re.MULTILINE,
                                 )
                             if not split_response:
                                 new_chain.append(comp)
