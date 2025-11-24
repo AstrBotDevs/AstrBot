@@ -98,7 +98,16 @@ class AstrBotCoreLifecycle:
         )
 
         # apply migration
-        await migra(self.db, self.astrbot_config_mgr, self.umop_config_router)
+        try:
+            await migra(
+                self.db,
+                self.astrbot_config_mgr,
+                self.umop_config_router,
+                self.astrbot_config_mgr,
+            )
+        except Exception as e:
+            logger.error(f"AstrBot migration failed: {e!s}")
+            logger.error(traceback.format_exc())
 
         # 初始化事件队列
         self.event_queue = Queue()
