@@ -11,12 +11,12 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.provider.sources.coze_api_client import CozeAPIClient
 
-from ..hooks import BaseAgentRunHooks
-from ..response import AgentResponseData
-from ..run_context import ContextWrapper, TContext
-from .base import AgentResponse, AgentState, BaseAgentRunner
+from ...hooks import BaseAgentRunHooks
+from ...response import AgentResponseData
+from ...run_context import ContextWrapper, TContext
+from ..base import AgentResponse, AgentState, BaseAgentRunner
+from .coze_api_client import CozeAPIClient
 
 if sys.version_info >= (3, 12):
     from typing import override

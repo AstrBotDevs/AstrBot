@@ -3,9 +3,11 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from astrbot.core import logger
-from astrbot.core.agent.runners.coze_agent_runner import CozeAgentRunner
-from astrbot.core.agent.runners.dashscope_agent_runner import DashscopeAgentRunner
-from astrbot.core.agent.runners.dify_agent_runner import DifyAgentRunner
+from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
+from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
+    DashscopeAgentRunner,
+)
+from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,

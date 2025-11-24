@@ -11,13 +11,13 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.dify_api_client import DifyAPIClient
 from astrbot.core.utils.io import download_file
 
-from ..hooks import BaseAgentRunHooks
-from ..response import AgentResponseData
-from ..run_context import ContextWrapper, TContext
-from .base import AgentResponse, AgentState, BaseAgentRunner
+from ...hooks import BaseAgentRunHooks
+from ...response import AgentResponseData
+from ...run_context import ContextWrapper, TContext
+from ..base import AgentResponse, AgentState, BaseAgentRunner
+from .dify_api_client import DifyAPIClient
 
 if sys.version_info >= (3, 12):
     from typing import override
