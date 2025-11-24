@@ -68,6 +68,7 @@ import ChatInput from '@/components/chat/ChatInput.vue';
 import { useMessages } from '@/composables/useMessages';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
+import { useToast } from '@/utils/toast';
 
 interface Props {
     configId?: string | null;
@@ -78,6 +79,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const { t } = useI18n();
+const { error: showError } = useToast();
 
 // UI 状态
 const imagePreviewDialog = ref(false);
@@ -166,40 +168,52 @@ async function handleSendMessage() {
         return;
     }
 
-    if (!currSessionId.value) {
-        await newSession();
+    try {
+        if (!currSessionId.value) {
+            await newSession();
+        }
+
+        const promptToSend = prompt.value.trim();
+        const imageNamesToSend = [...stagedImagesName.value];
+        const audioNameToSend = stagedAudioUrl.value;
+
+        // 清空输入和附件
+        prompt.value = '';
+        clearStaged();
+
+        // 获取选择的提供商和模型
+        const selection = chatInputRef.value?.getCurrentSelection();
+        const selectedProviderId = selection?.providerId || '';
+        const selectedModelName = selection?.modelName || '';
+
+        await sendMsg(
+            promptToSend,
+            imageNamesToSend,
+            audioNameToSend,
+            selectedProviderId,
+            selectedModelName
+        );
+
+        // 滚动到底部
+        nextTick(() => {
+            messageList.value?.scrollToBottom();
+        });
+    } catch (err) {
+        console.error('Failed to send message:', err);
+        showError(t('features.chat.errors.sendMessageFailed'));
+        // 恢复输入内容，让用户可以重试
+        // 注意：附件已经上传到服务器，所以不恢复附件
     }
-
-    const promptToSend = prompt.value.trim();
-    const imageNamesToSend = [...stagedImagesName.value];
-    const audioNameToSend = stagedAudioUrl.value;
-
-    // 清空输入和附件
-    prompt.value = '';
-    clearStaged();
-
-    // 获取选择的提供商和模型
-    const selection = chatInputRef.value?.getCurrentSelection();
-    const selectedProviderId = selection?.providerId || '';
-    const selectedModelName = selection?.modelName || '';
-
-    await sendMsg(
-        promptToSend,
-        imageNamesToSend,
-        audioNameToSend,
-        selectedProviderId,
-        selectedModelName
-    );
-
-    // 滚动到底部
-    nextTick(() => {
-        messageList.value?.scrollToBottom();
-    });
 }
 
-onMounted(() => {
+onMounted(async () => {
     // 独立模式在挂载时创建新会话
-    newSession();
+    try {
+        await newSession();
+    } catch (err) {
+        console.error('Failed to create initial session:', err);
+        showError(t('features.chat.errors.createSessionFailed'));
+    }
 });
 
 onBeforeUnmount(() => {
