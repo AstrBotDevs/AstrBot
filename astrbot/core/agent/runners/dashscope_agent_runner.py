@@ -123,29 +123,6 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
-    async def _remove_image_from_context(self, contexts: list) -> list:
-        """移除上下文中的图片内容"""
-        result = []
-        for ctx in contexts:
-            if isinstance(ctx, dict):
-                content = ctx.get("content", "")
-                if isinstance(content, list):
-                    # 只保留文本内容
-                    text_parts = [
-                        item.get("text", "")
-                        for item in content
-                        if isinstance(item, dict) and item.get("type") == "text"
-                    ]
-                    if text_parts:
-                        new_ctx = ctx.copy()
-                        new_ctx["content"] = " ".join(text_parts)
-                        result.append(new_ctx)
-                else:
-                    result.append(ctx)
-            else:
-                result.append(ctx)
-        return result
-
     def _consume_sync_generator(
         self, response: T.Any, response_queue: queue.Queue
     ) -> None:
@@ -254,6 +231,12 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             请求payload字典
 
         """
+        conversation_id = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="dashscope_conversation_id",
+            default="",
+        )
         # 获得会话变量
         payload_vars = self.variables.copy()
         session_var = await sp.get_async(
@@ -269,23 +252,17 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             and not self.has_rag_options()
         ):
             # 支持多轮对话的
-            new_record = {"role": "user", "content": prompt}
-            contexts_no_img = await self._remove_image_from_context(contexts)
-            context_query = [*contexts_no_img, new_record]
-            if system_prompt:
-                context_query.insert(0, {"role": "system", "content": system_prompt})
-            for part in context_query:
-                if "_no_save" in part:
-                    del part["_no_save"]
-
-            return {
+            p = {
                 "app_id": self.app_id,
                 "api_key": self.api_key,
-                "messages": context_query,
+                "prompt": prompt,
                 "biz_params": payload_vars or None,
                 "stream": self.streaming,
                 "incremental_output": True,
             }
+            if conversation_id:
+                p["session_id"] = conversation_id
+            return p
         else:
             # 不支持多轮对话的
             payload = {
@@ -300,7 +277,9 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 payload["rag_options"] = self.rag_options
             return payload
 
-    async def _handle_streaming_response(self, response: T.Any):
+    async def _handle_streaming_response(
+        self, response: T.Any, session_id: str
+    ) -> T.AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
         Args:
@@ -351,6 +330,14 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
 
                 if chunk_doc_refs:
                     doc_references = chunk_doc_refs
+
+                if chunk.output.session_id:
+                    await sp.put_async(
+                        scope="umo",
+                        scope_id=session_id,
+                        key="dashscope_conversation_id",
+                        value=chunk.output.session_id,
+                    )
 
         # 添加 RAG 引用
         if self.output_reference and doc_references:
@@ -403,7 +390,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         partial = functools.partial(Application.call, **payload)
         response = await asyncio.get_event_loop().run_in_executor(None, partial)
 
-        async for resp in self._handle_streaming_response(response):
+        async for resp in self._handle_streaming_response(response, session_id):
             yield resp
 
     @override
