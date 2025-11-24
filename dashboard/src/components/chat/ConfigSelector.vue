@@ -90,10 +90,12 @@ const props = withDefaults(defineProps<{
     sessionId?: string | null;
     platformId?: string;
     isGroup?: boolean;
+    initialConfigId?: string | null;
 }>(), {
     sessionId: null,
     platformId: 'webchat',
-    isGroup: false
+    isGroup: false,
+    initialConfigId: null
 });
 
 const emit = defineEmits<{ 'config-changed': [ConfigChangedPayload] }>();
@@ -291,7 +293,7 @@ watch(
 
 onMounted(async () => {
     await fetchConfigList();
-    const stored = localStorage.getItem(STORAGE_KEY) || 'default';
+    const stored = props.initialConfigId || localStorage.getItem(STORAGE_KEY) || 'default';
     selectedConfigId.value = stored;
     await setSelection(stored);
     await syncSelectionForSession();
