@@ -171,7 +171,7 @@ class ResultDecorateStage(Stage):
                                 logger.error(
                                     f"分段回复正则表达式错误，使用默认换行符分段: {traceback.format_exc()}",
                                 )
-                                split_response = re.split(
+                                split_response = re.findall(
                                     r".*?[。？！~…]+|.+$",
                                     comp.text,
                                     re.DOTALL | re.MULTILINE,
