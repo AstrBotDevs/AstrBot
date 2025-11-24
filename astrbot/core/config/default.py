@@ -1036,7 +1036,7 @@ CONFIG_METADATA_2 = {
                         "bot_id": "",
                         "coze_api_base": "https://api.coze.cn",
                         "timeout": 60,
-                        "auto_save_history": True,
+                        # "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
