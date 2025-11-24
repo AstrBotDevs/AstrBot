@@ -106,6 +106,15 @@ class DifyAPIClient:
         file_path: str | None = None,
         file_data: bytes | None = None,
     ) -> dict[str, Any]:
+        """Upload a file to Dify. Must provide either file_path or file_data.
+
+        Args:
+            user: The user ID.
+            file_path: The path to the file to upload.
+            file_data: The file data in bytes.
+        Returns:
+            A dictionary containing the uploaded file information.
+        """
         url = f"{self.api_base}/files/upload"
 
         if file_data is not None:
