@@ -2388,6 +2388,9 @@ CONFIG_METADATA_3 = {
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.identifier": {
                         "description": "用户识别",
