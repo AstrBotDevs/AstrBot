@@ -215,6 +215,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                     files=files_payload,
                     timeout=self.timeout,
                 ):
+                    logger.debug(f"dify workflow resp chunk: {chunk}")
                     match chunk["event"]:
                         case "workflow_started":
                             logger.info(
@@ -224,6 +225,16 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                             logger.debug(
                                 f"Dify 工作流节点(ID: {chunk['data']['node_id']} Title: {chunk['data'].get('title', '')})运行结束。"
                             )
+                        case "text_chunk":
+                            if self.streaming and chunk["data"]["text"]:
+                                yield AgentResponse(
+                                    type="streaming_delta",
+                                    data=AgentResponseData(
+                                        chain=MessageChain().message(
+                                            chunk["data"]["text"]
+                                        )
+                                    ),
+                                )
                         case "workflow_finished":
                             logger.info(
                                 f"Dify 工作流(ID: {chunk['workflow_run_id']})运行结束"
