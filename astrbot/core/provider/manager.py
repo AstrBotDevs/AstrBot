@@ -227,7 +227,7 @@ class ProviderManager:
     async def load_provider(self, provider_config: dict):
         if not provider_config["enable"]:
             return
-        if provider_config["provider_type"] == "agent_runner":
+        if provider_config.get("provider_type", "") == "agent_runner":
             return
 
         logger.info(
