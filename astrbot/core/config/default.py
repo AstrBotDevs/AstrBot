@@ -2195,7 +2195,7 @@ CONFIG_METADATA_3 = {
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
-                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器。",
+                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。",
                 "type": "object",
                 "items": {
                     "provider_settings.enable": {
