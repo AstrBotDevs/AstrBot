@@ -87,6 +87,8 @@
                         :disabled="isStreaming || isConvRunning"
                         :enableStreaming="enableStreaming"
                         :isRecording="isRecording"
+                        :session-id="currSessionId || null"
+                        :current-session="getCurrentSession"
                         @send="handleSendMessage"
                         @toggleStreaming="toggleStreaming"
                         @removeImage="removeImage"

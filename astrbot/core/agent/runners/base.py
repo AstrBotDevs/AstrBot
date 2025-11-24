@@ -2,13 +2,12 @@ import abc
 import typing as T
 from enum import Enum, auto
 
-from astrbot.core.provider import Provider
+from astrbot import logger
 from astrbot.core.provider.entities import LLMResponse
 
 from ..hooks import BaseAgentRunHooks
 from ..response import AgentResponse
 from ..run_context import ContextWrapper, TContext
-from ..tool_executor import BaseFunctionToolExecutor
 
 
 class AgentState(Enum):
@@ -24,9 +23,7 @@ class BaseAgentRunner(T.Generic[TContext]):
     @abc.abstractmethod
     async def reset(
         self,
-        provider: Provider,
         run_context: ContextWrapper[TContext],
-        tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         **kwargs: T.Any,
     ) -> None:
@@ -60,3 +57,9 @@ class BaseAgentRunner(T.Generic[TContext]):
         This method should be called after the agent is done.
         """
         ...
+
+    def _transition_state(self, new_state: AgentState) -> None:
+        """Transition the agent state."""
+        if self._state != new_state:
+            logger.debug(f"Agent state transition: {self._state} -> {new_state}")
+            self._state = new_state

@@ -56,6 +56,7 @@ class ChatRoute(Route):
         self.conv_mgr = core_lifecycle.conversation_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
         self.db = db
+        self.umop_config_router = core_lifecycle.umop_config_router
 
         self.running_convs: dict[str, bool] = {}
 
@@ -266,7 +267,8 @@ class ChatRoute(Route):
             return Response().error("Permission denied").__dict__
 
         # 删除该会话下的所有对话
-        unified_msg_origin = f"{session.platform_id}:FriendMessage:{session.platform_id}!{username}!{session_id}"
+        message_type = "GroupMessage" if session.is_group else "FriendMessage"
+        unified_msg_origin = f"{session.platform_id}:{message_type}:{session.platform_id}!{username}!{session_id}"
         await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
 
         # 删除消息历史
@@ -275,6 +277,16 @@ class ChatRoute(Route):
             user_id=session_id,
             offset_sec=99999999,
         )
+
+        # 删除与会话关联的配置路由
+        try:
+            await self.umop_config_router.delete_route(unified_msg_origin)
+        except ValueError as exc:
+            logger.warning(
+                "Failed to delete UMO route %s during session cleanup: %s",
+                unified_msg_origin,
+                exc,
+            )
 
         # 清理队列（仅对 webchat）
         if session.platform_id == "webchat":

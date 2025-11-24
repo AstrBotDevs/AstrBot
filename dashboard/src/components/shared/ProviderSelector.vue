@@ -94,6 +94,10 @@ const props = defineProps({
     type: String,
     default: 'chat_completion'
   },
+  providerSubtype: {
+    type: String,
+    default: ''
+  },
   buttonText: {
     type: String,
     default: '选择提供商...'
@@ -127,7 +131,10 @@ async function loadProviders() {
       }
     })
     if (response.data.status === 'ok') {
-      providerList.value = response.data.data || []
+      const providers = response.data.data || []
+      providerList.value = props.providerSubtype
+        ? providers.filter((provider) => matchesProviderSubtype(provider, props.providerSubtype))
+        : providers
     }
   } catch (error) {
     console.error('加载提供商列表失败:', error)
@@ -135,6 +142,17 @@ async function loadProviders() {
   } finally {
     loading.value = false
   }
+}
+
+function matchesProviderSubtype(provider, subtype) {
+  if (!subtype) {
+    return true
+  }
+  const normalized = String(subtype).toLowerCase()
+  const candidates = [provider.type, provider.provider, provider.id]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase())
+  return candidates.includes(normalized)
 }
 
 function selectProvider(provider) {

@@ -4,8 +4,12 @@ import { useRouter } from 'vue-router';
 
 export interface Session {
     session_id: string;
-    display_name: string;
+    display_name: string | null;
     updated_at: string;
+    platform_id: string;
+    creator: string;
+    is_group: number;
+    created_at: string;
 }
 
 export function useSessions(chatboxMode: boolean = false) {

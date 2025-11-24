@@ -3,7 +3,7 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from aiohttp import ClientResponse, ClientSession
+from aiohttp import ClientResponse, ClientSession, FormData
 
 from astrbot.core import logger
 
@@ -101,21 +101,59 @@ class DifyAPIClient:
 
     async def file_upload(
         self,
-        file_path: str,
         user: str,
+        file_path: str | None = None,
+        file_data: bytes | None = None,
+        file_name: str | None = None,
+        mime_type: str | None = None,
     ) -> dict[str, Any]:
+        """Upload a file to Dify. Must provide either file_path or file_data.
+
+        Args:
+            user: The user ID.
+            file_path: The path to the file to upload.
+            file_data: The file data in bytes.
+            file_name: Optional file name when using file_data.
+        Returns:
+            A dictionary containing the uploaded file information.
+        """
         url = f"{self.api_base}/files/upload"
-        with open(file_path, "rb") as f:
-            payload = {
-                "user": user,
-                "file": f,
-            }
-            async with self.session.post(
-                url,
-                data=payload,
-                headers=self.headers,
-            ) as resp:
-                return await resp.json()  # {"id": "xxx", ...}
+
+        form = FormData()
+        form.add_field("user", user)
+
+        if file_data is not None:
+            # 使用 bytes 数据
+            form.add_field(
+                "file",
+                file_data,
+                filename=file_name or "uploaded_file",
+                content_type=mime_type or "application/octet-stream",
+            )
+        elif file_path is not None:
+            # 使用文件路径
+            import os
+
+            with open(file_path, "rb") as f:
+                file_content = f.read()
+                form.add_field(
+                    "file",
+                    file_content,
+                    filename=os.path.basename(file_path),
+                    content_type=mime_type or "application/octet-stream",
+                )
+        else:
+            raise ValueError("file_path 和 file_data 不能同时为 None")
+
+        async with self.session.post(
+            url,
+            data=form,
+            headers=self.headers,  # 不包含 Content-Type，让 aiohttp 自动设置
+        ) as resp:
+            if resp.status != 200 and resp.status != 201:
+                text = await resp.text()
+                raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
+            return await resp.json()  # {"id": "xxx", ...}
 
     async def close(self):
         await self.session.close()
