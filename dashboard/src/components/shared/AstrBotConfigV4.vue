@@ -8,7 +8,7 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 
 const props = defineProps({
@@ -27,6 +27,34 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const { tm } = useModuleI18n('features/config-metadata')
+
+// 翻译器函数 - 如果是国际化键则翻译，否则原样返回
+const translateIfKey = (value) => {
+  if (!value || typeof value !== 'string') return value
+  return tm(value)
+}
+
+// 处理labels翻译 - labels可以是数组或国际化键
+const getTranslatedLabels = (itemMeta) => {
+  if (!itemMeta?.labels) return null
+  
+  // 如果labels是字符串（国际化键）
+  if (typeof itemMeta.labels === 'string') {
+    const translatedLabels = tm(itemMeta.labels)
+    // 如果翻译成功且是数组，返回翻译结果
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels
+    }
+  }
+  
+  // 如果labels是数组，直接返回
+  if (Array.isArray(itemMeta.labels)) {
+    return itemMeta.labels
+  }
+  
+  return null
+}
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -158,11 +186,11 @@ function getSpecialSubtype(value) {
     rounded="md" variant="outlined">
     <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'" style="padding-bottom: 8px;">
       <v-list-item-title class="config-title">
-        {{ metadata[metadataKey]?.description }}
+        {{ translateIfKey(metadata[metadataKey]?.description) }}
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
         <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-        {{ metadata[metadataKey]?.hint }}
+        {{ translateIfKey(metadata[metadataKey]?.hint) }}
       </v-list-item-subtitle>
     </v-card-text>
 
@@ -176,13 +204,13 @@ function getSpecialSubtype(value) {
             <v-col cols="12" sm="6" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
-                  {{ itemMeta?.description || itemKey }}
+                  {{ translateIfKey(itemMeta?.description) || itemKey }}
                   <span class="property-key">({{ itemKey }})</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
                   <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                  {{ itemMeta?.hint }}
+                  {{ translateIfKey(itemMeta?.hint) }}
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
@@ -190,7 +218,12 @@ function getSpecialSubtype(value) {
               <div class="w-100" v-if="!itemMeta?._special">
                 <!-- Select input for JSON selector -->
                 <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
-                  :items="itemMeta?.labels ? itemMeta.options.map((value, index) => ({ title: itemMeta.labels[index] || value, value: value })) : itemMeta.options" 
+                  :items="(() => {
+                    const labels = getTranslatedLabels(itemMeta);
+                    return labels 
+                      ? itemMeta.options.map((value, index) => ({ title: labels[index] || value, value: value }))
+                      : itemMeta.options;
+                  })()" 
                   :disabled="itemMeta?.readonly" density="compact" variant="outlined"
                   class="config-field" hide-details></v-select>
 

@@ -1091,7 +1091,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "whisper-1",
                     },
-                    "Whisper(本地加载)": {
+                    "Whisper(Local)": {
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1100,7 +1100,7 @@ CONFIG_METADATA_2 = {
                         "id": "whisper_selfhost",
                         "model": "tiny",
                     },
-                    "SenseVoice(本地加载)": {
+                    "SenseVoice(Local)": {
                         "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "type": "sensevoice_stt_selfhost",
                         "provider": "sensevoice",
@@ -1135,7 +1135,7 @@ CONFIG_METADATA_2 = {
                         "pitch": "+0Hz",
                         "timeout": 20,
                     },
-                    "GSV TTS(本地加载)": {
+                    "GSV TTS(Local)": {
                         "id": "gsv_tts",
                         "enable": False,
                         "provider": "gpt_sovits",
