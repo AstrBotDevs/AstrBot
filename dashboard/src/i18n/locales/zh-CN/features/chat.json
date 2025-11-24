@@ -85,5 +85,9 @@
       "reconnected": "聊天连接已重新建立",
       "failed": "连接失败，请刷新页面重试"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "发送消息失败，请重试",
+    "createSessionFailed": "创建会话失败，请刷新页面重试"
   }
 } 

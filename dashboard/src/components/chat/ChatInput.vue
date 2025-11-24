@@ -15,6 +15,7 @@
                         :session-id="sessionId || null"
                         :platform-id="sessionPlatformId"
                         :is-group="sessionIsGroup"
+                        :initial-config-id="props.configId"
                         @config-changed="handleConfigChange"
                     />
                     <ProviderModelSelector v-if="showProviderSelector" ref="providerModelSelectorRef" />
@@ -79,11 +80,13 @@ interface Props {
     isRecording: boolean;
     sessionId?: string | null;
     currentSession?: Session | null;
+    configId?: string | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     sessionId: null,
-    currentSession: null
+    currentSession: null,
+    configId: null
 });
 
 const emit = defineEmits<{

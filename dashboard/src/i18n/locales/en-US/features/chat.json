@@ -85,5 +85,9 @@
       "reconnected": "Chat connection re-established",
       "failed": "Connection failed, please refresh the page"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "Failed to send message, please try again",
+    "createSessionFailed": "Failed to create session, please refresh the page"
   }
 } 
