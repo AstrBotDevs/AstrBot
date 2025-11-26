@@ -1,6 +1,6 @@
 import builtins
 
-from astrbot.api import star
+from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
@@ -17,6 +17,13 @@ class PersonaCommands:
         default_persona = await self.context.persona_manager.get_default_persona_v3(
             umo=umo,
         )
+
+        force_applied_persona_id = (
+            await sp.get_async(
+                scope="umo", scope_id=umo, key="session_service_config", default={}
+            )
+        ).get("persona_id")
+
         curr_cid_title = "无"
         if cid:
             conv = await self.context.conversation_manager.get_conversation(
@@ -35,6 +42,9 @@ class PersonaCommands:
                 curr_persona_name = default_persona["name"]
             else:
                 curr_persona_name = conv.persona_id
+
+            if force_applied_persona_id:
+                curr_persona_name = f"{curr_persona_name} (自定义规则)"
 
             curr_cid_title = conv.title if conv.title else "新对话"
             curr_cid_title += f"({cid[:4]})"
@@ -113,9 +123,15 @@ class PersonaCommands:
                     message.unified_msg_origin,
                     ps,
                 )
+                force_warn_msg = ""
+                if force_applied_persona_id:
+                    force_warn_msg = (
+                        "提醒：由于自定义规则，您现在切换的人格将不会生效。"
+                    )
+
                 message.set_result(
                     MessageEventResult().message(
-                        "设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。",
+                        f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。{force_warn_msg}",
                     ),
                 )
             else:
