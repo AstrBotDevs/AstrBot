@@ -145,7 +145,16 @@ DEFAULT_CONFIG = {
 }
 
 
-# 配置项的中文描述、值类型
+"""
+AstrBot v3 时代的配置元数据，目前仅承担以下功能：
+
+1. 保存配置时，配置项的类型验证
+2. WebUI 展示提供商和平台适配器模版
+
+WebUI 的配置文件在 `CONFIG_METADATA_3` 中。
+
+未来将会逐步淘汰此配置元数据。
+"""
 CONFIG_METADATA_2 = {
     "platform_group": {
         "metadata": {
@@ -2189,6 +2198,14 @@ CONFIG_METADATA_2 = {
 }
 
 
+"""
+v4.7.0 之后，name, description, hint 等字段已经实现 i18n 国际化。国际化资源文件位于：
+
+- dashboard/src/i18n/locales/en-US/features/config-metadata.json
+- dashboard/src/i18n/locales/zh-CN/features/config-metadata.json
+
+如果在此文件中添加了新的配置字段，请务必同步更新上述两个国际化资源文件。
+"""
 CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
