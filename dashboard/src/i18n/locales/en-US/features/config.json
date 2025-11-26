@@ -62,5 +62,33 @@
     "allowedHosts": "Allowed Hosts",
     "rateLimit": "Rate Limit",
     "encryption": "Encryption Settings"
+  },
+  "configSelection": {
+    "selectConfig": "Select Configuration",
+    "normalConfig": "Basic",
+    "systemConfig": "System"
+  },
+  "configManagement": {
+    "title": "Configuration Management",
+    "description": "AstrBot supports separate configuration files for different bots. The `default` configuration is used by default.",
+    "newConfig": "New Configuration",
+    "editConfig": "Edit Configuration",
+    "manageConfigs": "Manage Configurations...",
+    "configName": "Name",
+    "fillConfigName": "Enter configuration name",
+    "confirmDelete": "Are you sure you want to delete the configuration \"{name}\"? This action cannot be undone.",
+    "pleaseEnterName": "Please enter a configuration name",
+    "createFailed": "Failed to create new configuration",
+    "deleteFailed": "Failed to delete configuration",
+    "updateFailed": "Failed to update configuration"
+  },
+  "buttons": {
+    "cancel": "Cancel",
+    "create": "Create",
+    "update": "Update"
+  },
+  "codeEditor": {
+    "title": "Edit Configuration File"
   }
 }
+

@@ -33,6 +33,7 @@ export class I18nLoader {
       { name: 'core/status', path: 'core/status.json' },
       { name: 'core/navigation', path: 'core/navigation.json' },
       { name: 'core/header', path: 'core/header.json' },
+      { name: 'core/shared', path: 'core/shared.json' },
       
       // 功能模块
       { name: 'features/chat', path: 'features/chat.json' },
@@ -43,6 +44,7 @@ export class I18nLoader {
       { name: 'features/provider', path: 'features/provider.json' },
       { name: 'features/platform', path: 'features/platform.json' },
       { name: 'features/config', path: 'features/config.json' },
+      { name: 'features/config-metadata', path: 'features/config-metadata.json' },
       { name: 'features/console', path: 'features/console.json' },
       { name: 'features/about', path: 'features/about.json' },
       { name: 'features/settings', path: 'features/settings.json' },

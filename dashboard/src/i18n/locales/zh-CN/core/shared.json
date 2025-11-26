@@ -1,0 +1,45 @@
+{
+  "knowledgeBaseSelector": {
+    "notSelected": "未选择",
+    "buttonText": "选择知识库...",
+    "dialogTitle": "选择知识库",
+    "loading": "加载中...",
+    "noKnowledgeBases": "暂无知识库",
+    "createKnowledgeBase": "创建知识库",
+    "selectedCount": "已选择 {count} 个知识库",
+    "confirmSelection": "确认选择",
+    "cancelSelection": "取消",
+    "noDescription": "无描述",
+    "documentCount": "{count} 个文档",
+    "chunkCount": "{count} 个块"
+  },
+  "pluginSetSelector": {
+    "notSelected": "未启用任何插件",
+    "allPlugins": "启用所有插件 (*)",
+    "selectedCount": "已选择 {count} 个插件",
+    "buttonText": "选择插件集合...",
+    "dialogTitle": "选择插件集合",
+    "loading": "加载中...",
+    "enableAll": "启用所有插件",
+    "enableNone": "不启用任何插件",
+    "customSelect": "自定义选择",
+    "noPlugins": "暂无可用的插件",
+    "confirmSelection": "确认选择",
+    "cancelSelection": "取消",
+    "noDescription": "无描述",
+    "notActivated": "未激活",
+    "note": "*不显示系统插件和已经在插件页禁用的插件。"
+  },
+  "providerSelector": {
+    "notSelected": "未选择",
+    "buttonText": "选择提供商...",
+    "dialogTitle": "选择提供商",
+    "loading": "加载中...",
+    "noProviders": "暂无可用的提供商",
+    "confirmSelection": "确认选择",
+    "cancelSelection": "取消",
+    "clearSelection": "不选择",
+    "clearSelectionSubtitle": "清除当前选择",
+    "unknownType": "未知类型"
+  }
+}

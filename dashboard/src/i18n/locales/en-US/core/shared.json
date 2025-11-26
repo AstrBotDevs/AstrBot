@@ -1,0 +1,45 @@
+{
+  "knowledgeBaseSelector": {
+    "notSelected": "Not selected",
+    "buttonText": "Select Knowledge Base...",
+    "dialogTitle": "Select Knowledge Base",
+    "loading": "Loading...",
+    "noKnowledgeBases": "No knowledge bases available",
+    "createKnowledgeBase": "Create Knowledge Base",
+    "selectedCount": "{count} knowledge base(s) selected",
+    "confirmSelection": "Confirm Selection",
+    "cancelSelection": "Cancel",
+    "noDescription": "No description",
+    "documentCount": "{count} document(s)",
+    "chunkCount": "{count} chunk(s)"
+  },
+  "pluginSetSelector": {
+    "notSelected": "No plugins enabled",
+    "allPlugins": "All plugins enabled (*)",
+    "selectedCount": "{count} plugin(s) selected",
+    "buttonText": "Select Plugin Set...",
+    "dialogTitle": "Select Plugin Set",
+    "loading": "Loading...",
+    "enableAll": "Enable all plugins",
+    "enableNone": "Disable all plugins",
+    "customSelect": "Custom selection",
+    "noPlugins": "No plugins available",
+    "confirmSelection": "Confirm Selection",
+    "cancelSelection": "Cancel",
+    "noDescription": "No description",
+    "notActivated": "Not activated",
+    "note": "*System plugins and disabled plugins are not shown."
+  },
+  "providerSelector": {
+    "notSelected": "Not selected",
+    "buttonText": "Select Provider...",
+    "dialogTitle": "Select Provider",
+    "loading": "Loading...",
+    "noProviders": "No providers available",
+    "confirmSelection": "Confirm Selection",
+    "cancelSelection": "Cancel",
+    "clearSelection": "None",
+    "clearSelectionSubtitle": "Clear current selection",
+    "unknownType": "Unknown type"
+  }
+}

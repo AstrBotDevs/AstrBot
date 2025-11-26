@@ -7,6 +7,7 @@ import zhCNActions from './locales/zh-CN/core/actions.json';
 import zhCNStatus from './locales/zh-CN/core/status.json';
 import zhCNNavigation from './locales/zh-CN/core/navigation.json';
 import zhCNHeader from './locales/zh-CN/core/header.json';
+import zhCNShared from './locales/zh-CN/core/shared.json';
 
 import zhCNChat from './locales/zh-CN/features/chat.json';
 import zhCNExtension from './locales/zh-CN/features/extension.json';
@@ -16,6 +17,7 @@ import zhCNToolUse from './locales/zh-CN/features/tool-use.json';
 import zhCNProvider from './locales/zh-CN/features/provider.json';
 import zhCNPlatform from './locales/zh-CN/features/platform.json';
 import zhCNConfig from './locales/zh-CN/features/config.json';
+import zhCNConfigMetadata from './locales/zh-CN/features/config-metadata.json';
 import zhCNConsole from './locales/zh-CN/features/console.json';
 import zhCNAbout from './locales/zh-CN/features/about.json';
 import zhCNSettings from './locales/zh-CN/features/settings.json';
@@ -41,6 +43,7 @@ import enUSActions from './locales/en-US/core/actions.json';
 import enUSStatus from './locales/en-US/core/status.json';
 import enUSNavigation from './locales/en-US/core/navigation.json';
 import enUSHeader from './locales/en-US/core/header.json';
+import enUSShared from './locales/en-US/core/shared.json';
 
 import enUSChat from './locales/en-US/features/chat.json';
 import enUSExtension from './locales/en-US/features/extension.json';
@@ -50,6 +53,7 @@ import enUSToolUse from './locales/en-US/features/tool-use.json';
 import enUSProvider from './locales/en-US/features/provider.json';
 import enUSPlatform from './locales/en-US/features/platform.json';
 import enUSConfig from './locales/en-US/features/config.json';
+import enUSConfigMetadata from './locales/en-US/features/config-metadata.json';
 import enUSConsole from './locales/en-US/features/console.json';
 import enUSAbout from './locales/en-US/features/about.json';
 import enUSSettings from './locales/en-US/features/settings.json';
@@ -77,7 +81,8 @@ export const translations = {
       actions: zhCNActions,
       status: zhCNStatus,
       navigation: zhCNNavigation,
-      header: zhCNHeader
+      header: zhCNHeader,
+      shared: zhCNShared
     },
     features: {
       chat: zhCNChat,
@@ -88,6 +93,7 @@ export const translations = {
       provider: zhCNProvider,
       platform: zhCNPlatform,
       config: zhCNConfig,
+      'config-metadata': zhCNConfigMetadata,
       console: zhCNConsole,
       about: zhCNAbout,
       settings: zhCNSettings,
@@ -119,7 +125,8 @@ export const translations = {
       actions: enUSActions,
       status: enUSStatus,
       navigation: enUSNavigation,
-      header: enUSHeader
+      header: enUSHeader,
+      shared: enUSShared
     },
     features: {
       chat: enUSChat,
@@ -130,6 +137,7 @@ export const translations = {
       provider: enUSProvider,
       platform: enUSPlatform,
       config: enUSConfig,
+      'config-metadata': enUSConfigMetadata,
       console: enUSConsole,
       about: enUSAbout,
       settings: enUSSettings,

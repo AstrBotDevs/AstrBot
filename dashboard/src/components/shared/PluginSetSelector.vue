@@ -4,13 +4,13 @@
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
         <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
-          未启用任何插件
+          {{ tm('pluginSetSelector.notSelected') }}
         </span>
         <span v-else-if="isAllPlugins" style="color: rgb(var(--v-theme-primaryText));">
-          启用所有插件 (*)
+          {{ tm('pluginSetSelector.allPlugins') }}
         </span>
         <span v-else style="color: rgb(var(--v-theme-primaryText));">
-          已选择 {{ modelValue.length }} 个插件
+          {{ tm('pluginSetSelector.selectedCount', { count: modelValue.length }) }}
         </span>
       </div>
       <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
@@ -23,7 +23,7 @@
   <v-dialog v-model="dialog" max-width="700px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        选择插件集合
+        {{ tm('pluginSetSelector.dialogTitle') }}
       </v-card-title>
       
       <v-card-text class="pa-4">
@@ -34,17 +34,17 @@
           <v-radio-group v-model="selectionMode" class="mb-4" hide-details>
             <v-radio 
               value="all" 
-              label="启用所有插件" 
+              :label="tm('pluginSetSelector.enableAll')" 
               color="primary"
             ></v-radio>
             <v-radio 
               value="none" 
-              label="不启用任何插件" 
+              :label="tm('pluginSetSelector.enableNone')" 
               color="primary"
             ></v-radio>
             <v-radio 
               value="custom" 
-              label="自定义选择" 
+              :label="tm('pluginSetSelector.customSelect')" 
               color="primary"
             ></v-radio>
           </v-radio-group>
@@ -68,21 +68,21 @@
                 
                 <v-list-item-title>{{ plugin.name }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ plugin.desc || '无描述' }}
+                  {{ plugin.desc || tm('pluginSetSelector.noDescription') }}
                   <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
-                    未激活
+                    {{ tm('pluginSetSelector.notActivated') }}
                   </v-chip>
                 </v-list-item-subtitle>
               </v-list-item>
 
               <div class="pl-8 pt-2">
-                <small>*不显示系统插件和已经在插件页禁用的插件。</small>
+                <small>{{ tm('pluginSetSelector.note') }}</small>
               </div>
             </v-list>
 
             <div v-else class="text-center py-8">
               <v-icon size="64" color="grey-lighten-1">mdi-puzzle-outline</v-icon>
-              <p class="text-grey mt-4">暂无可用的插件</p>
+              <p class="text-grey mt-4">{{ tm('pluginSetSelector.noPlugins') }}</p>
             </div>
           </div>
         </div>
@@ -90,11 +90,11 @@
             
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">取消</v-btn>
+        <v-btn variant="text" @click="cancelSelection">{{ tm('pluginSetSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
           @click="confirmSelection">
-          确认选择
+          {{ tm('pluginSetSelector.confirmSelection') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -104,6 +104,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
+import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -121,6 +122,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { tm } = useModuleI18n('core.shared')
 
 const dialog = ref(false)
 const pluginList = ref([])

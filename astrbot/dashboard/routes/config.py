@@ -14,6 +14,7 @@ from astrbot.core.config.default import (
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
 )
+from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
@@ -133,7 +134,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
                 is_core,
             )
         else:
-            errors, post_config = validate_config(post_config, config.schema, is_core)
+            errors, post_config = validate_config(
+                post_config, getattr(config, "schema", {}), is_core
+            )
     except BaseException as e:
         logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
@@ -247,11 +250,8 @@ class ConfigRoute(Route):
 
     async def get_default_config(self):
         """获取默认配置文件"""
-        return (
-            Response()
-            .ok({"config": DEFAULT_CONFIG, "metadata": CONFIG_METADATA_3})
-            .__dict__
-        )
+        metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+        return Response().ok({"config": DEFAULT_CONFIG, "metadata": metadata}).__dict__
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
@@ -282,17 +282,15 @@ class ConfigRoute(Route):
         try:
             if system_config:
                 abconf = self.acm.confs["default"]
-                return (
-                    Response()
-                    .ok({"config": abconf, "metadata": CONFIG_METADATA_3_SYSTEM})
-                    .__dict__
+                metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+                    CONFIG_METADATA_3_SYSTEM
                 )
+                return Response().ok({"config": abconf, "metadata": metadata}).__dict__
+            if abconf_id is None:
+                raise ValueError("abconf_id cannot be None")
             abconf = self.acm.confs[abconf_id]
-            return (
-                Response()
-                .ok({"config": abconf, "metadata": CONFIG_METADATA_3})
-                .__dict__
-            )
+            metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+            return Response().ok({"config": abconf, "metadata": metadata}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
@@ -598,9 +596,15 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_id").__dict__
 
         prov_mgr = self.core_lifecycle.provider_manager
-        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        provider = prov_mgr.inst_map.get(provider_id, None)
         if not provider:
             return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+        if not isinstance(provider, Provider):
+            return (
+                Response()
+                .error(f"提供商 {provider_id} 类型不支持获取模型列表")
+                .__dict__
+            )
 
         try:
             models = await provider.get_models()

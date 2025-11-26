@@ -58,7 +58,7 @@
                             </v-col>
                             <v-col v-if="Object.keys(getTemplatesByType(tabType)).length === 0" cols="12">
                                 <v-alert type="info" variant="tonal">
-                                    {{ t('dialogs.addProvider.noTemplates') }}
+                                    {{ tm('dialogs.addProvider.noTemplates') }}
                                 </v-alert>
                             </v-col>
                         </v-row>
