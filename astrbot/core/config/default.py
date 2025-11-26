@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.5.8"
+VERSION = "4.6.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -68,6 +68,10 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "agent_runner_type": "local",
+        "dify_agent_runner_provider_id": "",
+        "coze_agent_runner_provider_id": "",
+        "dashscope_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "max_agent_step": 30,
         "tool_call_timeout": 60,
@@ -137,6 +141,7 @@ DEFAULT_CONFIG = {
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
+    "kb_agentic_mode": False,
 }
 
 
@@ -1010,7 +1015,7 @@ CONFIG_METADATA_2 = {
                         "id": "dify_app_default",
                         "provider": "dify",
                         "type": "dify",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "enable": True,
                         "dify_api_type": "chat",
                         "dify_api_key": "",
@@ -1024,20 +1029,20 @@ CONFIG_METADATA_2 = {
                     "Coze": {
                         "id": "coze",
                         "provider": "coze",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "type": "coze",
                         "enable": True,
                         "coze_api_key": "",
                         "bot_id": "",
                         "coze_api_base": "https://api.coze.cn",
                         "timeout": 60,
-                        "auto_save_history": True,
+                        # "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
                         "id": "dashscope",
                         "provider": "dashscope",
                         "type": "dashscope",
-                        "provider_type": "chat_completion",
+                        "provider_type": "agent_runner",
                         "enable": True,
                         "dashscope_app_type": "agent",
                         "dashscope_api_key": "",
@@ -1307,6 +1312,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "launch_model_if_not_running": False,
                     },
+                    "阿里云百炼重排序": {
+                        "id": "bailian_rerank",
+                        "type": "bailian_rerank",
+                        "provider": "bailian",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank",
+                        "rerank_model": "qwen3-rerank",
+                        "timeout": 30,
+                        "return_documents": False,
+                        "instruct": "",
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -1340,6 +1358,16 @@ CONFIG_METADATA_2 = {
                     "rerank_model": {
                         "description": "重排序模型名称",
                         "type": "string",
+                    },
+                    "return_documents": {
+                        "description": "是否在排序结果中返回文档原文",
+                        "type": "bool",
+                        "hint": "默认值false，以减少网络传输开销。",
+                    },
+                    "instruct": {
+                        "description": "自定义排序任务类型说明",
+                        "type": "string",
+                        "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。",
                     },
                     "launch_model_if_not_running": {
                         "description": "模型未运行时自动启动",
@@ -1883,7 +1911,6 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用",
                         "type": "bool",
-                        "hint": "是否启用。",
                     },
                     "key": {
                         "description": "API Key",
@@ -2013,12 +2040,22 @@ CONFIG_METADATA_2 = {
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
+                    "agent_runner_type": {
+                        "type": "string",
+                    },
+                    "dify_agent_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "coze_agent_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "dashscope_agent_runner_provider_id": {
+                        "type": "string",
+                    },
                     "max_agent_step": {
-                        "description": "工具调用轮数上限",
                         "type": "int",
                     },
                     "tool_call_timeout": {
-                        "description": "工具调用超时时间（秒）",
                         "type": "int",
                     },
                 },
@@ -2146,6 +2183,7 @@ CONFIG_METADATA_2 = {
             "kb_names": {"type": "list", "items": {"type": "string"}},
             "kb_fusion_top_k": {"type": "int", "default": 20},
             "kb_final_top_k": {"type": "int", "default": 5},
+            "kb_agentic_mode": {"type": "bool"},
         },
     },
 }
@@ -2155,30 +2193,75 @@ CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
         "metadata": {
-            "ai": {
-                "description": "模型",
+            "agent_runner": {
+                "description": "Agent 执行方式",
+                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器，不需要修改此节。",
                 "type": "object",
                 "items": {
                     "provider_settings.enable": {
-                        "description": "启用大语言模型聊天",
+                        "description": "启用",
                         "type": "bool",
+                        "hint": "AI 对话总开关",
                     },
+                    "provider_settings.agent_runner_type": {
+                        "description": "执行器",
+                        "type": "string",
+                        "options": ["local", "dify", "coze", "dashscope"],
+                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
+                        "condition": {
+                            "provider_settings.enable": True,
+                        },
+                    },
+                    "provider_settings.coze_agent_runner_provider_id": {
+                        "description": "Coze Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider:coze",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "coze",
+                            "provider_settings.enable": True,
+                        },
+                    },
+                    "provider_settings.dify_agent_runner_provider_id": {
+                        "description": "Dify Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider:dify",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "dify",
+                            "provider_settings.enable": True,
+                        },
+                    },
+                    "provider_settings.dashscope_agent_runner_provider_id": {
+                        "description": "阿里云百炼应用 Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider:dashscope",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "dashscope",
+                            "provider_settings.enable": True,
+                        },
+                    },
+                },
+            },
+            "ai": {
+                "description": "模型",
+                "hint": "当使用非内置 Agent 执行器时，默认聊天模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
+                "type": "object",
+                "items": {
                     "provider_settings.default_provider_id": {
                         "description": "默认聊天模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时使用第一个模型。",
+                        "hint": "留空时使用第一个模型",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空代表不使用。可用于不支持视觉模态的聊天模型。",
+                        "hint": "留空代表不使用，可用于非多模态模型",
                     },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",
                         "type": "bool",
-                        "hint": "STT 总开关。",
+                        "hint": "STT 总开关",
                     },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
@@ -2192,12 +2275,11 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.enable": {
                         "description": "启用文本转语音",
                         "type": "bool",
-                        "hint": "TTS 总开关。当关闭时，会话启用 TTS 也不会生效。",
+                        "hint": "TTS 总开关",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
                         "type": "string",
-                        "hint": "用户也可使用 /provider 单独选择会话的 TTS 模型。",
                         "_special": "select_provider_tts",
                         "condition": {
                             "provider_tts_settings.enable": True,
@@ -2207,6 +2289,9 @@ CONFIG_METADATA_3 = {
                         "description": "图片转述提示词",
                         "type": "text",
                     },
+                },
+                "condition": {
+                    "provider_settings.enable": True,
                 },
             },
             "persona": {
@@ -2218,6 +2303,10 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_persona",
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "knowledgebase": {
@@ -2241,6 +2330,15 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "hint": "从知识库中检索到的结果数量，越大可能获得越多相关信息，但也可能引入噪音。建议根据实际需求调整",
                     },
+                    "kb_agentic_mode": {
+                        "description": "Agentic 知识库检索",
+                        "type": "bool",
+                        "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "websearch": {
@@ -2278,6 +2376,10 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                     },
                 },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
             },
             "others": {
                 "description": "其他配置",
@@ -2286,34 +2388,51 @@ CONFIG_METADATA_3 = {
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
+                        "hint": "启用后，会在提示词前包含用户 ID 信息。",
                     },
                     "provider_settings.group_name_display": {
                         "description": "显示群名称",
                         "type": "bool",
-                        "hint": "启用后，在支持的平台(aiocqhttp)上会在 prompt 中包含群名称信息。",
+                        "hint": "启用后，在支持的平台(OneBot v11)上会在提示词前包含群名称信息。",
                     },
                     "provider_settings.datetime_system_prompt": {
                         "description": "现实世界时间感知",
                         "type": "bool",
+                        "hint": "启用后，会在系统提示词中附带当前时间信息。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.streaming_response": {
-                        "description": "流式回复",
+                        "description": "流式输出",
                         "type": "bool",
                     },
                     "provider_settings.unsupported_streaming_strategy": {
@@ -2329,17 +2448,23 @@ CONFIG_METADATA_3 = {
                     "provider_settings.max_context_length": {
                         "description": "最多携带对话轮数",
                         "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条。-1 为不限制。",
+                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.dequeue_context_length": {
                         "description": "丢弃对话轮数",
                         "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数。",
+                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
                         "type": "string",
-                        "hint": "如果唤醒前缀为 `/`, 额外聊天唤醒前缀为 `chat`，则需要 `/chat` 才会触发 LLM 请求。默认为空。",
+                        "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat，则需要 /chat 才会触发 LLM 请求",
                     },
                     "provider_settings.prompt_prefix": {
                         "description": "用户提示词",
@@ -2350,6 +2475,9 @@ CONFIG_METADATA_3 = {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
                     },
+                },
+                "condition": {
+                    "provider_settings.enable": True,
                 },
             },
         },

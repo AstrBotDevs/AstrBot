@@ -69,12 +69,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         self.run_context.messages = messages
 
-    def _transition_state(self, new_state: AgentState) -> None:
-        """转换 Agent 状态"""
-        if self._state != new_state:
-            logger.debug(f"Agent state transition: {self._state} -> {new_state}")
-            self._state = new_state
-
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         if self.streaming:

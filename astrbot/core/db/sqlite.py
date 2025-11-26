@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import typing as T
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
@@ -12,6 +12,7 @@ from astrbot.core.db.po import (
     ConversationV2,
     Persona,
     PlatformMessageHistory,
+    PlatformSession,
     PlatformStat,
     Preference,
     SQLModel,
@@ -412,7 +413,7 @@ class SQLiteDatabase(BaseDatabase):
         user_id,
         offset_sec=86400,
     ):
-        """Delete platform message history records older than the specified offset."""
+        """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -422,7 +423,7 @@ class SQLiteDatabase(BaseDatabase):
                     delete(PlatformMessageHistory).where(
                         col(PlatformMessageHistory.platform_id) == platform_id,
                         col(PlatformMessageHistory.user_id) == user_id,
-                        col(PlatformMessageHistory.created_at) < cutoff_time,
+                        col(PlatformMessageHistory.created_at) >= cutoff_time,
                     ),
                 )
 
@@ -709,3 +710,101 @@ class SQLiteDatabase(BaseDatabase):
         t.start()
         t.join()
         return result
+
+    # ====
+    # Platform Session Management
+    # ====
+
+    async def create_platform_session(
+        self,
+        creator: str,
+        platform_id: str = "webchat",
+        session_id: str | None = None,
+        display_name: str | None = None,
+        is_group: int = 0,
+    ) -> PlatformSession:
+        """Create a new Platform session."""
+        kwargs = {}
+        if session_id:
+            kwargs["session_id"] = session_id
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                new_session = PlatformSession(
+                    creator=creator,
+                    platform_id=platform_id,
+                    display_name=display_name,
+                    is_group=is_group,
+                    **kwargs,
+                )
+                session.add(new_session)
+                await session.flush()
+                await session.refresh(new_session)
+                return new_session
+
+    async def get_platform_session_by_id(
+        self, session_id: str
+    ) -> PlatformSession | None:
+        """Get a Platform session by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(PlatformSession).where(
+                PlatformSession.session_id == session_id,
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def get_platform_sessions_by_creator(
+        self,
+        creator: str,
+        platform_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[PlatformSession]:
+        """Get all Platform sessions for a specific creator (username) and optionally platform."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            offset = (page - 1) * page_size
+            query = select(PlatformSession).where(PlatformSession.creator == creator)
+
+            if platform_id:
+                query = query.where(PlatformSession.platform_id == platform_id)
+
+            query = (
+                query.order_by(desc(PlatformSession.updated_at))
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def update_platform_session(
+        self,
+        session_id: str,
+        display_name: str | None = None,
+    ) -> None:
+        """Update a Platform session's updated_at timestamp and optionally display_name."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                values: dict[str, T.Any] = {"updated_at": datetime.now(timezone.utc)}
+                if display_name is not None:
+                    values["display_name"] = display_name
+
+                await session.execute(
+                    update(PlatformSession)
+                    .where(col(PlatformSession.session_id) == session_id)
+                    .values(**values),
+                )
+
+    async def delete_platform_session(self, session_id: str) -> None:
+        """Delete a Platform session by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(PlatformSession).where(
+                        col(PlatformSession.session_id) == session_id,
+                    ),
+                )

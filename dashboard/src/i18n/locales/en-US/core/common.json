@@ -72,7 +72,9 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "delete": "Delete",
+    "copy": "Copy",
     "edit": "Edit",
+    "copy": "Copy",
     "noData": "No data available"
   }
-} 
+}

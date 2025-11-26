@@ -3,13 +3,17 @@ from typing import cast
 
 from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.provider.sources.coze_source import ProviderCoze
-from astrbot.core.provider.sources.dify_source import ProviderDify
 
 from ..long_term_memory import LongTermMemory
 from .utils.rst_scene import RstScene
+
+THIRD_PARTY_AGENT_RUNNER_KEY = {
+    "dify": "dify_conversation_id",
+    "coze": "coze_conversation_id",
+}
+THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 
 
 class ConversationCommands:
@@ -40,9 +44,9 @@ class ConversationCommands:
 
     async def reset(self, message: AstrMessageEvent):
         """重置 LLM 会话"""
-        is_unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
         is_group = bool(message.get_group_id())
 
         scene = RstScene.get_scene(is_group, is_unique_session)
@@ -65,28 +69,23 @@ class ConversationCommands:
             )
             return
 
-        if not self.context.get_using_provider(message.unified_msg_origin):
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            await sp.remove_async(
+                scope="umo",
+                scope_id=umo,
+                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
+            )
+            message.set_result(MessageEventResult().message("重置对话成功。"))
+            return
+
+        if not self.context.get_using_provider(umo):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
             return
 
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type in ["dify", "coze"]:
-            assert isinstance(provider, (ProviderDify, ProviderCoze)), (
-                "provider type is not dify or coze"
-            )
-            await provider.forget(message.unified_msg_origin)
-            message.set_result(
-                MessageEventResult().message(
-                    "已重置当前 Dify / Coze 会话，新聊天将更换到新的会话。",
-                ),
-            )
-            return
-
-        cid = await self.context.conversation_manager.get_curr_conversation_id(
-            message.unified_msg_origin,
-        )
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
 
         if not cid:
             message.set_result(
@@ -97,7 +96,7 @@ class ConversationCommands:
             return
 
         await self.context.conversation_manager.update_conversation(
-            message.unified_msg_origin,
+            umo,
             cid,
             [],
         )
@@ -154,29 +153,14 @@ class ConversationCommands:
 
     async def convs(self, message: AstrMessageEvent, page: int = 1):
         """查看对话列表"""
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            """原有的Dify处理逻辑保持不变"""
-            parts = ["Dify 对话列表:\n"]
-            assert isinstance(provider, ProviderDify)
-            data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
-            idx = 1
-            for conv in data["data"]:
-                ts_h = datetime.datetime.fromtimestamp(conv["updated_at"]).strftime(
-                    "%m-%d %H:%M",
-                )
-                parts.append(
-                    f"{idx}. {conv['name']}({conv['id'][:4]})\n  上次更新:{ts_h}\n"
-                )
-                idx += 1
-            if idx == 1:
-                parts.append("没有找到任何对话。")
-            dify_cid = provider.conversation_ids.get(message.unified_msg_origin, None)
-            parts.append(
-                f"\n\n用户: {message.unified_msg_origin}\n当前对话: {dify_cid}\n使用 /switch <序号> 切换对话。"
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            message.set_result(
+                MessageEventResult().message(
+                    f"{THIRD_PARTY_AGENT_RUNNER_STR} 对话列表功能暂不支持。",
+                ),
             )
-            ret = "".join(parts)
-            message.set_result(MessageEventResult().message(ret))
             return
 
         size_per_page = 6
@@ -229,9 +213,8 @@ class ConversationCommands:
         else:
             ret += "\n当前对话: 无"
 
-        unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        unique_session = cfg["platform_settings"]["unique_session"]
         if unique_session:
             ret += "\n会话隔离粒度: 个人"
         else:
@@ -245,15 +228,15 @@ class ConversationCommands:
 
     async def new_conv(self, message: AstrMessageEvent):
         """创建新对话"""
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type in ["dify", "coze"]:
-            assert isinstance(provider, (ProviderDify, ProviderCoze)), (
-                "provider type is not dify or coze"
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            await sp.remove_async(
+                scope="umo",
+                scope_id=message.unified_msg_origin,
+                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            await provider.forget(message.unified_msg_origin)
-            message.set_result(
-                MessageEventResult().message("成功，下次聊天将是新对话。"),
-            )
+            message.set_result(MessageEventResult().message("已创建新对话。"))
             return
 
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
@@ -276,19 +259,9 @@ class ConversationCommands:
 
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str = ""):
         """创建新群聊对话"""
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type in ["dify", "coze"]:
-            assert isinstance(provider, (ProviderDify, ProviderCoze)), (
-                "provider type is not dify or coze"
-            )
-            await provider.forget(message.unified_msg_origin)
-            message.set_result(
-                MessageEventResult().message("成功，下次聊天将是新对话。"),
-            )
-            return
         if sid:
             session = str(
-                MessageSesion(
+                MessageSession(
                     platform_name=cast(str, message.platform_meta.id),
                     message_type=MessageType("GroupMessage"),
                     session_id=sid,
@@ -323,31 +296,6 @@ class ConversationCommands:
             )
             return
 
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify), "provider type is not dify"
-            data = await provider.api_client.get_chat_convs(message.unified_msg_origin)
-            if not data["data"]:
-                message.set_result(MessageEventResult().message("未找到任何对话。"))
-                return
-            selected_conv = None
-            if index is not None:
-                try:
-                    selected_conv = data["data"][index - 1]
-                except IndexError:
-                    message.set_result(
-                        MessageEventResult().message("对话序号错误，请使用 /ls 查看"),
-                    )
-                    return
-            else:
-                selected_conv = data["data"][0]
-            ret = (
-                f"Dify 切换到对话: {selected_conv['name']}({selected_conv['id'][:4]})。"
-            )
-            provider.conversation_ids[message.unified_msg_origin] = selected_conv["id"]
-            message.set_result(MessageEventResult().message(ret))
-            return
-
         if index is None:
             message.set_result(
                 MessageEventResult().message(
@@ -380,19 +328,6 @@ class ConversationCommands:
         if not new_name:
             message.set_result(MessageEventResult().message("请输入新的对话名称。"))
             return
-
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
-            cid = provider.conversation_ids.get(message.unified_msg_origin, None)
-            if not cid:
-                message.set_result(MessageEventResult().message("未找到当前对话。"))
-                return
-            await provider.api_client.rename(cid, new_name, message.unified_msg_origin)
-            message.set_result(MessageEventResult().message("重命名对话成功。"))
-            return
-
         await self.context.conversation_manager.update_conversation_title(
             message.unified_msg_origin,
             new_name,
@@ -401,9 +336,8 @@ class ConversationCommands:
 
     async def del_conv(self, message: AstrMessageEvent):
         """删除当前对话"""
-        is_unique_session = self.context.get_config()["platform_settings"][
-            "unique_session"
-        ]
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        is_unique_session = cfg["platform_settings"]["unique_session"]
         if message.get_group_id() and not is_unique_session and message.role != "admin":
             # 群聊，没开独立会话，发送人不是管理员
             message.set_result(
@@ -413,20 +347,14 @@ class ConversationCommands:
             )
             return
 
-        provider = self.context.get_using_provider(message.unified_msg_origin)
-        if provider and provider.meta().type == "dify":
-            assert isinstance(provider, ProviderDify)
-            dify_cid = provider.conversation_ids.pop(message.unified_msg_origin, None)
-            if dify_cid:
-                await provider.api_client.delete_chat_conv(
-                    message.unified_msg_origin,
-                    dify_cid,
-                )
-            message.set_result(
-                MessageEventResult().message(
-                    "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。",
-                ),
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            await sp.remove_async(
+                scope="umo",
+                scope_id=message.unified_msg_origin,
+                key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
+            message.set_result(MessageEventResult().message("重置对话成功。"))
             return
 
         session_curr_cid = (

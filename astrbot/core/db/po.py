@@ -3,13 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
-from sqlmodel import (
-    JSON,
-    Field,
-    SQLModel,
-    Text,
-    UniqueConstraint,
-)
+from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
 class PlatformStat(SQLModel, table=True):
@@ -159,6 +153,48 @@ class PlatformMessageHistory(SQLModel, table=True):
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+
+
+class PlatformSession(SQLModel, table=True):
+    """Platform session table for managing user sessions across different platforms.
+
+    A session represents a chat window for a specific user on a specific platform.
+    Each session can have multiple conversations (对话) associated with it.
+    """
+
+    __tablename__: str = "platform_sessions"
+
+    inner_id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    session_id: str = Field(
+        max_length=100,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    platform_id: str = Field(default="webchat", nullable=False)
+    """Platform identifier (e.g., 'webchat', 'qq', 'discord')"""
+    creator: str = Field(nullable=False)
+    """Username of the session creator"""
+    display_name: str | None = Field(default=None, max_length=255)
+    """Display name for the session"""
+    is_group: int = Field(default=0, nullable=False)
+    """0 for private chat, 1 for group chat (not implemented yet)"""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            name="uix_platform_session_id",
+        ),
     )
 
 

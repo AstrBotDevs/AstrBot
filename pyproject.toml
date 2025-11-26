@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.5.8"
+version = "4.6.1"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,7 +26,7 @@ dependencies = [
   "docstring-parser>=0.16",
   "faiss-cpu==1.10.0",
   "filelock>=3.18.0",
-  "google-genai>=1.14.0",
+  "google-genai>=1.14.0, <1.51.0",
   "lark-oapi>=1.4.15",
   "lxml-html-clean>=0.4.2",
   "mcp>=1.8.0",
@@ -59,6 +59,7 @@ dependencies = [
   "jieba>=0.42.1",
   "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
   "xinference-client",
+  "tenacity>=9.1.2",
 ]
 
 [dependency-groups]

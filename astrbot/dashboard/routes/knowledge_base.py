@@ -48,6 +48,7 @@ class KnowledgeBaseRoute(Route):
             # 文档管理
             "/kb/document/list": ("GET", self.list_documents),
             "/kb/document/upload": ("POST", self.upload_document),
+            "/kb/document/upload/url": ("POST", self.upload_document_from_url),
             "/kb/document/upload/progress": ("GET", self.get_upload_progress),
             "/kb/document/get": ("GET", self.get_document),
             "/kb/document/delete": ("POST", self.delete_document),
@@ -1070,3 +1071,174 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"删除会话知识库配置失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"删除会话知识库配置失败: {e!s}").__dict__
+
+    async def upload_document_from_url(self):
+        """从 URL 上传文档
+
+        Body:
+        - kb_id: 知识库 ID (必填)
+        - url: 要提取内容的网页 URL (必填)
+        - chunk_size: 分块大小 (可选, 默认512)
+        - chunk_overlap: 块重叠大小 (可选, 默认50)
+        - batch_size: 批处理大小 (可选, 默认32)
+        - tasks_limit: 并发任务限制 (可选, 默认3)
+        - max_retries: 最大重试次数 (可选, 默认3)
+
+        返回:
+        - task_id: 任务ID，用于查询上传进度和结果
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            url = data.get("url")
+            if not url:
+                return Response().error("缺少参数 url").__dict__
+
+            chunk_size = data.get("chunk_size", 512)
+            chunk_overlap = data.get("chunk_overlap", 50)
+            batch_size = data.get("batch_size", 32)
+            tasks_limit = data.get("tasks_limit", 3)
+            max_retries = data.get("max_retries", 3)
+            enable_cleaning = data.get("enable_cleaning", False)
+            cleaning_provider_id = data.get("cleaning_provider_id")
+
+            # 获取知识库
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            # 生成任务ID
+            task_id = str(uuid.uuid4())
+
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "pending",
+                "result": None,
+                "error": None,
+            }
+
+            # 启动后台任务
+            asyncio.create_task(
+                self._background_upload_from_url_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    url=url,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    enable_cleaning=enable_cleaning,
+                    cleaning_provider_id=cleaning_provider_id,
+                ),
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "url": url,
+                        "message": "URL upload task created, processing in background",
+                    },
+                )
+                .__dict__
+            )
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"从URL上传文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"从URL上传文档失败: {e!s}").__dict__
+
+    async def _background_upload_from_url_task(
+        self,
+        task_id: str,
+        kb_helper,
+        url: str,
+        chunk_size: int,
+        chunk_overlap: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+        enable_cleaning: bool,
+        cleaning_provider_id: str | None,
+    ):
+        """后台上传URL任务"""
+        try:
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "processing",
+                "result": None,
+                "error": None,
+            }
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": 1,
+                "file_name": f"URL: {url}",
+                "stage": "extracting",
+                "current": 0,
+                "total": 100,
+            }
+
+            # 创建进度回调函数
+            async def progress_callback(stage, current, total):
+                if task_id in self.upload_progress:
+                    self.upload_progress[task_id].update(
+                        {
+                            "status": "processing",
+                            "file_index": 0,
+                            "file_name": f"URL: {url}",
+                            "stage": stage,
+                            "current": current,
+                            "total": total,
+                        },
+                    )
+
+            # 上传文档
+            doc = await kb_helper.upload_from_url(
+                url=url,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+                enable_cleaning=enable_cleaning,
+                cleaning_provider_id=cleaning_provider_id,
+            )
+
+            # 更新任务完成状态
+            result = {
+                "task_id": task_id,
+                "uploaded": [doc.model_dump()],
+                "failed": [],
+                "total": 1,
+                "success_count": 1,
+                "failed_count": 0,
+            }
+
+            self.upload_tasks[task_id] = {
+                "status": "completed",
+                "result": result,
+                "error": None,
+            }
+            self.upload_progress[task_id]["status"] = "completed"
+
+        except Exception as e:
+            logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self.upload_tasks[task_id] = {
+                "status": "failed",
+                "result": None,
+                "error": str(e),
+            }
+            if task_id in self.upload_progress:
+                self.upload_progress[task_id]["status"] = "failed"

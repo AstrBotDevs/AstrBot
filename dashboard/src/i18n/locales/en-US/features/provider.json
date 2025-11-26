@@ -9,6 +9,7 @@
     "tabs": {
       "all": "All",
       "chatCompletion": "Chat Completion",
+      "agentRunner": "Agent Runner",
       "speechToText": "Speech to Text",
       "textToSpeech": "Text to Speech",
       "embedding": "Embedding",
@@ -44,12 +45,13 @@
       "title": "Service Provider",
       "tabs": {
         "basic": "Basic",
+        "agentRunner": "Agent Runner",
         "speechToText": "Speech to Text",
         "textToSpeech": "Text to Speech",
         "embedding": "Embedding",
         "rerank": "Rerank"
       },
-      "noTemplates": "No {type} type provider templates available"
+      "noTemplates": "No this type provider templates available"
     },
     "config": {
       "addTitle": "Add",

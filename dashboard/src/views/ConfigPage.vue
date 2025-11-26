@@ -45,6 +45,15 @@
             @click="configToString(); codeEditorDialog = true">
           </v-btn>
 
+          <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
+            <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large" 
+                style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+                @click="openTestChat">
+              </v-btn>
+            </template>
+          </v-tooltip>
+
         </div>
       </v-slide-y-transition>
 
@@ -135,6 +144,34 @@
   </v-snackbar>
 
   <WaitingForRestart ref="wfr"></WaitingForRestart>
+
+  <!-- 测试聊天抽屉 -->
+  <v-overlay
+    v-model="testChatDrawer"
+    class="test-chat-overlay"
+    location="right"
+    transition="slide-x-reverse-transition"
+    :scrim="true"
+    @click:outside="closeTestChat"
+  >
+    <v-card class="test-chat-card" elevation="12">
+      <div class="test-chat-header">
+        <div>
+          <span class="text-h6">测试配置</span>
+          <div v-if="selectedConfigInfo.name" class="text-caption text-grey">
+            {{ selectedConfigInfo.name }} ({{ testConfigId }})
+          </div>
+        </div>
+        <v-btn icon variant="text" @click="closeTestChat">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </div>
+      <v-divider></v-divider>
+      <div class="test-chat-content">
+        <StandaloneChat v-if="testChatDrawer" :configId="testConfigId" />
+      </div>
+    </v-card>
+  </v-overlay>
 </template>
 
 
@@ -142,6 +179,7 @@
 import axios from 'axios';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
+import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 
@@ -150,7 +188,8 @@ export default {
   components: {
     AstrBotCoreConfigWrapper,
     VueMonacoEditor,
-    WaitingForRestart
+    WaitingForRestart,
+    StandaloneChat
   },
   props: {
     initialConfigId: {
@@ -238,6 +277,10 @@ export default {
         name: '',
       },
       editingConfigId: null,
+
+      // 测试聊天
+      testChatDrawer: false,
+      testConfigId: null,
     }
   },
   mounted() {
@@ -506,6 +549,20 @@ export default {
           this.getConfigInfoList("default");
         }
       }
+    },
+    openTestChat() {
+      if (!this.selectedConfigID) {
+        this.save_message = "请先选择一个配置文件";
+        this.save_message_snack = true;
+        this.save_message_success = "warning";
+        return;
+      }
+      this.testConfigId = this.selectedConfigID;
+      this.testChatDrawer = true;
+    },
+    closeTestChat() {
+      this.testChatDrawer = false;
+      this.testConfigId = null;
     }
   },
 }
@@ -564,5 +621,33 @@ export default {
   .config-panel {
     width: 100%;
   }
+}
+
+/* 测试聊天抽屉样式 */
+.test-chat-overlay {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.test-chat-card {
+  width: clamp(320px, 50vw, 720px);
+  height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  margin: 16px;
+}
+
+.test-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px 20px;
+}
+
+.test-chat-content {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 0 0 16px 16px;
 }
 </style>

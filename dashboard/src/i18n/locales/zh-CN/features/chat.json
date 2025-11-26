@@ -43,11 +43,16 @@
     "exitFullscreen": "退出全屏"
   },
   "conversation": {
-    "newConversation": "新对话",
+    "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
     "systemStatus": "系统状态",
     "llmService": "LLM 服务",
-    "speechToText": "语音转文本"
+    "speechToText": "语音转文本",
+    "editDisplayName": "编辑会话名称",
+    "displayName": "会话名称",
+    "displayNameUpdated": "会话名称已更新",
+    "displayNameUpdateFailed": "更新会话名称失败",
+    "confirmDelete": "确定要删除“{name}”吗？此操作无法撤销。"
   },
   "modes": {
     "darkMode": "切换到夜间模式",
@@ -80,5 +85,9 @@
       "reconnected": "聊天连接已重新建立",
       "failed": "连接失败，请刷新页面重试"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "发送消息失败，请重试",
+    "createSessionFailed": "创建会话失败，请刷新页面重试"
   }
 } 

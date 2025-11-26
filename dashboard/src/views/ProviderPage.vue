@@ -30,6 +30,10 @@
             <v-icon start>mdi-message-text</v-icon>
             {{ tm('providers.tabs.chatCompletion') }}
           </v-tab>
+          <v-tab value="agent_runner" class="font-weight-medium px-3">
+            <v-icon start>mdi-message-text</v-icon>
+            {{ tm('providers.tabs.agentRunner') }}
+          </v-tab>
           <v-tab value="speech_to_text" class="font-weight-medium px-3">
             <v-icon start>mdi-microphone-message</v-icon>
             {{ tm('providers.tabs.speechToText') }}
@@ -48,30 +52,62 @@
           </v-tab>
         </v-tabs>
 
-        <v-row v-if="filteredProviders.length === 0">
-          <v-col cols="12" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-            <p class="text-grey mt-4">{{ getEmptyText() }}</p>
-          </v-col>
-        </v-row>
-
-        <v-row v-else>
-          <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="provider" title-field="id" enabled-field="enable"
-              :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
-              :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
-              @copy="copyProvider" :show-copy-button="true">
-              <template #actions="{ item }">
-                <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
-                  :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
-                  {{ tm('availability.test') }}
-                </v-btn>
-              </template>
-              <template v-slot:details="{ item }">
-              </template>
-            </item-card>
-          </v-col>
-        </v-row>
+        <template v-if="activeProviderTypeTab === 'all'">
+          <v-row v-if="groupedProviders.length === 0">
+            <v-col cols="12" class="text-center pa-8">
+              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+            </v-col>
+          </v-row>
+          <div v-else>
+            <div v-for="group in groupedProviders" :key="group.typeKey" class="mb-8">
+              <h1 class="text-h3 font-weight-bold mb-4">{{ group.label }}</h1>
+              <v-row>
+                <v-col v-for="(provider, index) in group.items" :key="`${group.typeKey}-${index}`" cols="12" md="6"
+                  lg="4" xl="3">
+                  <item-card :item="provider" title-field="id" enabled-field="enable"
+                    :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+                    :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+                    @copy="copyProvider" :show-copy-button="true">
+                    <template #actions="{ item }">
+                      <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                        :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                        {{ tm('availability.test') }}
+                      </v-btn>
+                    </template>
+                    <template v-slot:details="{ item }">
+                    </template>
+                  </item-card>
+                </v-col>
+              </v-row>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <v-row v-if="filteredProviders.length === 0">
+            <v-col cols="12" class="text-center pa-8">
+              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+            </v-col>
+          </v-row>
+          <v-row v-else>
+            <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
+              <item-card :item="provider" title-field="id" enabled-field="enable"
+                :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+                :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+                @copy="copyProvider" :show-copy-button="true">
+                <template #actions="{ item }">
+                  <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                    :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                    {{ tm('availability.test') }}
+                  </v-btn>
+                </template>
+                <template v-slot:details="{ item }">
+                </template>
+              </item-card>
+            </v-col>
+          </v-row>
+        </template>
       </div>
 
       <!-- 供应商状态部分 -->
@@ -289,8 +325,8 @@ export default {
         "anthropic_chat_completion": "chat_completion",
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
-        "dify": "chat_completion",
-        "coze": "chat_completion",
+        "dify": "agent_runner",
+        "coze": "agent_runner",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",
@@ -334,6 +370,7 @@ export default {
         },
         tabTypes: {
           'chat_completion': this.tm('providers.tabs.chatCompletion'),
+          'agent_runner': this.tm('providers.tabs.agentRunner'),
           'speech_to_text': this.tm('providers.tabs.speechToText'),
           'text_to_speech': this.tm('providers.tabs.textToSpeech'),
           'embedding': this.tm('providers.tabs.embedding'),
@@ -363,6 +400,52 @@ export default {
       };
     },
 
+    groupedProviders() {
+      if (!this.config_data.provider) {
+        return [];
+      }
+
+      const typeOrder = [
+        'chat_completion',
+        'agent_runner',
+        'speech_to_text',
+        'text_to_speech',
+        'embedding',
+        'rerank',
+      ];
+
+      const assigned = new Set();
+      const groups = typeOrder
+        .map((typeKey) => {
+          const items = this.config_data.provider.filter((provider) => {
+            const resolved = this.getProviderType(provider);
+            if (resolved === typeKey) {
+              assigned.add(provider.id);
+              return true;
+            }
+            return false;
+          });
+          return {
+            typeKey,
+            label: this.messages.tabTypes[typeKey] || typeKey,
+            items,
+          };
+        })
+        .filter((group) => group.items.length > 0);
+
+      const remaining = this.config_data.provider.filter(
+        (provider) => !assigned.has(provider.id),
+      );
+      if (remaining.length > 0) {
+        groups.push({
+          typeKey: 'others',
+          label: this.tm('providers.tabs.all'),
+          items: remaining,
+        });
+      }
+      return groups;
+    },
+
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
       if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
@@ -371,13 +454,7 @@ export default {
 
       return this.config_data.provider.filter(provider => {
         // 如果provider.provider_type已经存在，直接使用它
-        if (provider.provider_type) {
-          return provider.provider_type === this.activeProviderTypeTab;
-        }
-
-        // 否则使用映射关系
-        const mappedType = this.oldVersionProviderTypeMapping[provider.type];
-        return mappedType === this.activeProviderTypeTab;
+        return this.getProviderType(provider) === this.activeProviderTypeTab;
       });
     }
   },
@@ -387,6 +464,14 @@ export default {
   },
 
   methods: {
+    getProviderType(provider) {
+      if (!provider) return undefined;
+      if (provider.provider_type) {
+        return provider.provider_type;
+      }
+      return this.oldVersionProviderTypeMapping[provider.type];
+    },
+
     getConfig() {
       axios.get('/api/config/get').then((res) => {
         this.config_data = res.data.data.config;
@@ -689,6 +774,9 @@ export default {
       try {
         if (!provider.enable) {
           throw new Error('该提供商未被用户启用');
+        }
+        if (provider.provider_type === 'agent_runner') {
+          throw new Error('暂时无法测试 Agent Runner 类型的提供商');
         }
 
         const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);

@@ -21,27 +21,24 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
-from ....astr_agent_context import AgentContextWrapper
-from ....astr_agent_hooks import MAIN_AGENT_HOOKS
-from ....astr_agent_run_util import AgentRunner, run_agent
-from ....astr_agent_tool_exec import FunctionToolExecutor
-from ...context import PipelineContext, call_event_hook
-from ..stage import Stage
-from ..utils import inject_kb_context
+from .....astr_agent_context import AgentContextWrapper
+from .....astr_agent_hooks import MAIN_AGENT_HOOKS
+from .....astr_agent_run_util import AgentRunner, run_agent
+from .....astr_agent_tool_exec import FunctionToolExecutor
+from ....context import PipelineContext, call_event_hook
+from ...stage import Stage
+from ...utils import KNOWLEDGE_BASE_QUERY_TOOL, retrieve_knowledge_base
 
 
-class LLMRequestSubStage(Stage):
+class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
-        self.bot_wake_prefixs: list[str] = conf["wake_prefix"]  # list
-        self.provider_wake_prefix: str = settings["wake_prefix"]  # str
         self.max_context_length = settings["max_context_length"]  # int
         self.dequeue_context_length: int = min(
             max(1, settings["dequeue_context_length"]),
@@ -57,13 +54,7 @@ class LLMRequestSubStage(Stage):
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_reasoning = settings.get("display_reasoning_text", False)
-
-        for bwp in self.bot_wake_prefixs:
-            if self.provider_wake_prefix.startswith(bwp):
-                logger.info(
-                    f"识别 LLM 聊天额外唤醒前缀 {self.provider_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。",
-                )
-                self.provider_wake_prefix = self.provider_wake_prefix[len(bwp) :]
+        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -95,20 +86,33 @@ class LLMRequestSubStage(Stage):
             raise RuntimeError("无法创建新的对话。")
         return conversation
 
-    async def _apply_kb_context(
+    async def _apply_kb(
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
     ):
-        """应用知识库上下文到请求中"""
-        try:
-            await inject_kb_context(
-                umo=event.unified_msg_origin,
-                p_ctx=self.ctx,
-                req=req,
-            )
-        except Exception as e:
-            logger.error(f"调用知识库时遇到问题: {e}")
+        """Apply knowledge base context to the provider request"""
+        if not self.kb_agentic_mode:
+            if req.prompt is None:
+                return
+            try:
+                kb_result = await retrieve_knowledge_base(
+                    query=req.prompt,
+                    umo=event.unified_msg_origin,
+                    context=self.ctx.plugin_manager.context,
+                )
+                if not kb_result:
+                    return
+                if req.system_prompt is not None:
+                    req.system_prompt += (
+                        f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
+                    )
+            except Exception as e:
+                logger.error(f"Error occurred while retrieving knowledge base: {e}")
+        else:
+            if req.func_tool is None:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
 
     def _truncate_contexts(
         self,
@@ -290,20 +294,9 @@ class LLMRequestSubStage(Stage):
         return fixed_messages
 
     async def process(
-        self,
-        event: AstrMessageEvent,
-        _nested: bool = False,
+        self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
-
-        if not self.ctx.astrbot_config["provider_settings"]["enable"]:
-            logger.debug("未启用 LLM 能力，跳过处理。")
-            return
-
-        # 检查会话级别的LLM启停状态
-        if not SessionServiceManager.should_process_llm_request(event):
-            logger.debug(f"会话 {event.unified_msg_origin} 禁用了 LLM，跳过处理。")
-            return
 
         provider = self._select_provider(event)
         if provider is None:
@@ -334,12 +327,12 @@ class LLMRequestSubStage(Stage):
                 req.image_urls = []
                 if sel_model := event.get_extra("selected_model"):
                     req.model = sel_model
-                if self.provider_wake_prefix and not event.message_str.startswith(
-                    self.provider_wake_prefix
+                if provider_wake_prefix and not event.message_str.startswith(
+                    provider_wake_prefix
                 ):
                     return
 
-                req.prompt = event.message_str[len(self.provider_wake_prefix) :]
+                req.prompt = event.message_str[len(provider_wake_prefix) :]
                 # func_tool selection 现在已经转移到 packages/astrbot 插件中进行选择。
                 # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
                 for comp in event.message_obj.message:
@@ -356,12 +349,12 @@ class LLMRequestSubStage(Stage):
             if not req.prompt and not req.image_urls:
                 return
 
-            # apply knowledge base context
-            await self._apply_kb_context(event, req)
-
             # call event hook
             if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                 return
+
+            # apply knowledge base feature
+            await self._apply_kb(event, req)
 
             # fix contexts json str
             if isinstance(req.contexts, str):

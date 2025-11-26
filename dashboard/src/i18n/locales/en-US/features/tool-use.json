@@ -96,6 +96,42 @@
     },
     "confirmDelete": "Are you sure you want to delete server {name}?"
   },
+  "syncProvider": {
+    "title": "Sync MCP Servers",
+    "subtitle": "Sync MCP server configurations from providers to local",
+    "steps": {
+      "selectProvider": "Step 1: Select Provider",
+      "configureAuth": "Step 2: Configure Authentication",
+      "syncServers": "Step 3: Sync Servers"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "description": "ModelScope is an open model community providing MCP servers for various machine learning and AI services"
+    },
+    "fields": {
+      "provider": "Select Provider",
+      "accessToken": "Access Token",
+      "tokenRequired": "Access token is required",
+      "tokenHint": "Please enter your ModelScope access token"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "previous": "Previous",
+      "next": "Next",
+      "sync": "Start Sync",
+      "getToken": "Get Token"
+    },
+    "status": {
+      "selectProvider": "Please select an MCP server provider",
+      "enterToken": "Please enter the access token to continue",
+      "readyToSync": "Ready to sync server configurations"
+    },
+    "messages": {
+      "syncSuccess": "MCP servers synced successfully!",
+      "syncError": "Sync failed: {error}",
+      "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
+    }
+  },
   "messages": {
     "getServersError": "Failed to get MCP server list: {error}",
     "getToolsError": "Failed to get function tools list: {error}",
@@ -117,4 +153,4 @@
     "toggleToolError": "Failed to toggle tool status: {error}",
     "testError": "Test connection failed: {error}"
   }
-} 
+}

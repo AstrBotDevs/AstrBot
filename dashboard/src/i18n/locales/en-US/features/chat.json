@@ -47,7 +47,12 @@
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
     "llmService": "LLM Service",
-    "speechToText": "Speech to Text"
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session Name",
+    "displayName": "Session Name",
+    "displayNameUpdated": "Session name updated",
+    "displayNameUpdateFailed": "Failed to update session name",
+    "confirmDelete": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
   },
   "modes": {
     "darkMode": "Switch to Dark Mode",
@@ -80,5 +85,9 @@
       "reconnected": "Chat connection re-established",
       "failed": "Connection failed, please refresh the page"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "Failed to send message, please try again",
+    "createSessionFailed": "Failed to create session, please refresh the page"
   }
 } 

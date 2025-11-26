@@ -85,3 +85,22 @@ class UmopConfigRouter:
 
         self.umop_to_conf_id[umo] = conf_id
         await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
+
+    async def delete_route(self, umo: str):
+        """删除一条路由
+
+        Args:
+            umo (str): 需要删除的 UMO 字符串
+
+        Raises:
+            ValueError: 当 umo 格式不正确时抛出
+        """
+
+        if not isinstance(umo, str) or len(umo.split(":")) != 3:
+            raise ValueError(
+                "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
+            )
+
+        if umo in self.umop_to_conf_id:
+            del self.umop_to_conf_id[umo]
+            await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)

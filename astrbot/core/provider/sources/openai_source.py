@@ -8,7 +8,7 @@ import re
 from collections.abc import AsyncGenerator
 
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai._exceptions import NotFoundError, UnprocessableEntityError
+from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
@@ -279,6 +279,7 @@ class ProviderOpenAIOfficial(Provider):
             args_ls = []
             func_name_ls = []
             tool_call_ids = []
+            tool_call_extra_content_dict = {}
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
@@ -300,11 +301,16 @@ class ProviderOpenAIOfficial(Provider):
                         args_ls.append(args)
                         func_name_ls.append(tool_call.function.name)
                         tool_call_ids.append(tool_call.id)
+
+                        # gemini-2.5 / gemini-3 series extra_content handling
+                        extra_content = getattr(tool_call, "extra_content", None)
+                        if extra_content is not None:
+                            tool_call_extra_content_dict[tool_call.id] = extra_content
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls
             llm_response.tools_call_name = func_name_ls
             llm_response.tools_call_ids = tool_call_ids
-
+            llm_response.tools_call_extra_content = tool_call_extra_content_dict
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(
@@ -357,7 +363,7 @@ class ProviderOpenAIOfficial(Provider):
 
         payloads = {"messages": context_query, **model_config}
 
-        # xAI 原生搜索参数（最小侵入地在此处注入）
+        # xAI origin search tool inject
         self._maybe_inject_xai_search(payloads, **kwargs)
 
         return payloads, context_query
@@ -479,12 +485,6 @@ class ProviderOpenAIOfficial(Provider):
                 self.client.api_key = chosen_key
                 llm_response = await self._query(payloads, func_tool)
                 break
-            except UnprocessableEntityError as e:
-                logger.warning(f"不可处理的实体错误：{e}，尝试删除图片。")
-                # 尝试删除所有 image
-                new_contexts = await self._remove_image_from_context(context_query)
-                payloads["messages"] = new_contexts
-                context_query = new_contexts
             except Exception as e:
                 last_exception = e
                 (
@@ -549,12 +549,6 @@ class ProviderOpenAIOfficial(Provider):
                 async for response in self._query_stream(payloads, func_tool):
                     yield response
                 break
-            except UnprocessableEntityError as e:
-                logger.warning(f"不可处理的实体错误：{e}，尝试删除图片。")
-                # 尝试删除所有 image
-                new_contexts = await self._remove_image_from_context(context_query)
-                payloads["messages"] = new_contexts
-                context_query = new_contexts
             except Exception as e:
                 last_exception = e
                 (
@@ -650,4 +644,3 @@ class ProviderOpenAIOfficial(Provider):
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
-        return ""
