@@ -638,7 +638,7 @@ CONFIG_METADATA_2 = {
                             },
                             "words_count_threshold": {
                                 "type": "int",
-                                "hint": "超过这个字数的消息不会被分段回复。默认为 150",
+                                "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                             },
                             "regex": {
                                 "type": "string",
