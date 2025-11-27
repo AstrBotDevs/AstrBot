@@ -169,31 +169,15 @@ class ProcessLLMRequest:
                         provider_id = current_provider.meta().id
                         logger.debug(f"[IMG Caption] Provider ID: {provider_id}")
 
-                        # 从配置中查找当前 provider 的配置
-                        full_cfg = self.ctx.get_config(umo=event.unified_msg_origin)
-                        providers_list = full_cfg.get("provider", [])
+                        # 直接从当前 provider 的配置获取 modalities
+                        modalities = current_provider.provider_config.get("modalities", [])
                         logger.debug(
-                            f"[IMG Caption] 配置中的 provider 数量: {len(providers_list)}"
+                            f"[IMG Caption] 当前 provider 配置 modalities: {modalities}"
                         )
-                        logger.debug(
-                            f"[IMG Caption] 所有 provider IDs: {[p.get('id') for p in providers_list]}"
-                        )
-
-                        for provider_cfg in providers_list:
-                            if provider_cfg.get("id") == provider_id:
-                                modalities = provider_cfg.get("modalities", [])
-                                logger.debug(
-                                    f"[IMG Caption] 找到 provider 配置，modalities: {modalities}"
-                                )
-                                if "image" in modalities:
-                                    provider_supports_image = True
-                                    logger.debug(
-                                        "[IMG Caption] Provider 支持图像能力，跳过图像转述"
-                                    )
-                                break
-                        else:
+                        if "image" in modalities:
+                            provider_supports_image = True
                             logger.debug(
-                                f"[IMG Caption] 未找到 provider_id={provider_id} 的配置"
+                                "[IMG Caption] Provider 支持图像能力，跳过图像转述"
                             )
                     except Exception as e:
                         logger.warning(f"[IMG Caption] 获取 provider 信息失败: {e}")
