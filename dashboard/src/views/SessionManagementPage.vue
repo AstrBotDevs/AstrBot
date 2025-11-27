@@ -4,7 +4,8 @@
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
           <span class="text-h4">{{ tm('customRules.title') }}</span>
-          <v-chip size="small" class="ml-2">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
+          <v-btn icon="mdi-information-outline" size="small" variant="text" href="https://astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
+          <v-chip size="small" class="ml-1">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
             <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
               hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
@@ -28,8 +29,8 @@
         <v-card-text class="pa-0">
           <v-data-table-server :headers="headers" :items="filteredRulesList" :loading="loading"
             :items-length="totalItems" v-model:items-per-page="itemsPerPage" v-model:page="currentPage"
-            @update:options="onTableOptionsUpdate" class="elevation-0" style="font-size: 12px;"
-            v-model="selectedItems" show-select item-value="umo" return-object>
+            @update:options="onTableOptionsUpdate" class="elevation-0" style="font-size: 12px;" v-model="selectedItems"
+            show-select item-value="umo" return-object>
 
             <!-- UMO 信息 -->
             <template v-slot:item.umo_info="{ item }">
@@ -40,7 +41,8 @@
                   </v-chip>
                   <span class="text-truncate" style="max-width: 300px;">{{ item.umo }}</span>
                   <div class="d-flex align-center" v-if="item.rules?.session_service_config?.custom_name || true">
-                    <span class="ml-2" style="color: gray; font-size: 10px;" v-if="item.rules?.session_service_config?.custom_name">
+                    <span class="ml-2" style="color: gray; font-size: 10px;"
+                      v-if="item.rules?.session_service_config?.custom_name">
                       ({{ item.rules?.session_service_config?.custom_name }})
                     </span>
                     <v-btn icon size="x-small" variant="text" class="ml-1" @click.stop="openQuickEditName(item)">
@@ -257,7 +259,7 @@
             <v-spacer></v-spacer>
             <v-btn variant="text" @click="deleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
             <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete')
-              }}</v-btn>
+            }}</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
