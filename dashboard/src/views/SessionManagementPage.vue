@@ -179,9 +179,6 @@
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn variant="text" color="error" size="small" @click="clearServiceConfig" class="mr-2">
-                  {{ tm('buttons.clear') }}
-                </v-btn>
                 <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
                   prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
@@ -197,24 +194,21 @@
                 <v-col cols="12">
                   <v-select v-model="providerConfig.chat_completion" :items="chatProviderOptions" item-title="label"
                     item-value="value" :label="tm('ruleEditor.providerConfig.chatProvider')" variant="outlined"
-                    hide-details clearable class="mb-2" />
+                    hide-details class="mb-2" />
                 </v-col>
                 <v-col cols="12">
                   <v-select v-model="providerConfig.speech_to_text" :items="sttProviderOptions" item-title="label"
                     item-value="value" :label="tm('ruleEditor.providerConfig.sttProvider')" variant="outlined"
-                    hide-details clearable :disabled="sttProviderOptions.length === 0" class="mb-2" />
+                    hide-details :disabled="availableSttProviders.length === 0" class="mb-2" />
                 </v-col>
                 <v-col cols="12">
                   <v-select v-model="providerConfig.text_to_speech" :items="ttsProviderOptions" item-title="label"
                     item-value="value" :label="tm('ruleEditor.providerConfig.ttsProvider')" variant="outlined"
-                    hide-details clearable :disabled="ttsProviderOptions.length === 0" />
+                    hide-details :disabled="availableTtsProviders.length === 0" />
                 </v-col>
               </v-row>
 
               <div class="d-flex justify-end mt-4">
-                <v-btn variant="text" color="error" size="small" @click="clearProviderConfig" class="mr-2">
-                  {{ tm('buttons.clear') }}
-                </v-btn>
                 <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving"
                   prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
@@ -423,24 +417,33 @@ export default {
     },
 
     chatProviderOptions() {
-      return this.availableChatProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }))
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableChatProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
 
     sttProviderOptions() {
-      return this.availableSttProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }))
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableSttProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
 
     ttsProviderOptions() {
-      return this.availableTtsProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }))
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableTtsProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
   },
 
@@ -636,68 +639,40 @@ export default {
       this.saving = false
     },
 
-    async clearServiceConfig() {
-      if (!this.selectedUmo) return
-
-      this.saving = true
-      try {
-        const response = await axios.post('/api/session/delete-rule', {
-          umo: this.selectedUmo.umo,
-          rule_key: 'session_service_config'
-        })
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.clearSuccess'))
-          delete this.editingRules.session_service_config
-          this.serviceConfig = {
-            session_enabled: true,
-            llm_enabled: true,
-            tts_enabled: true,
-            custom_name: '',
-            persona_id: null,
-          }
-          // 更新列表中的数据
-          const item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
-          if (item) {
-            delete item.rules.session_service_config
-            // 如果没有任何规则了，从列表中移除
-            if (Object.keys(item.rules).length === 0) {
-              const index = this.rulesList.findIndex(u => u.umo === this.selectedUmo.umo)
-              if (index > -1) this.rulesList.splice(index, 1)
-            }
-          }
-        } else {
-          this.showError(response.data.message || this.tm('messages.clearError'))
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.clearError'))
-      }
-      this.saving = false
-    },
-
     async saveProviderConfig() {
       if (!this.selectedUmo) return
 
       this.saving = true
       try {
-        const tasks = []
+        const updateTasks = []
+        const deleteTasks = []
         const providerTypes = ['chat_completion', 'speech_to_text', 'text_to_speech']
 
         for (const type of providerTypes) {
           const value = this.providerConfig[type]
           if (value) {
-            tasks.push(
+            // 有值时更新
+            updateTasks.push(
               axios.post('/api/session/update-rule', {
                 umo: this.selectedUmo.umo,
                 rule_key: `provider_perf_${type}`,
                 rule_value: value
               })
             )
+          } else if (this.editingRules[`provider_perf_${type}`]) {
+            // 选择了"跟随配置文件"（null）且之前有配置，则删除
+            deleteTasks.push(
+              axios.post('/api/session/delete-rule', {
+                umo: this.selectedUmo.umo,
+                rule_key: `provider_perf_${type}`
+              })
+            )
           }
         }
 
-        if (tasks.length > 0) {
-          await Promise.all(tasks)
+        const allTasks = [...updateTasks, ...deleteTasks]
+        if (allTasks.length > 0) {
+          await Promise.all(allTasks)
           this.showSuccess(this.tm('messages.saveSuccess'))
 
           // 更新或添加到列表
@@ -716,6 +691,10 @@ export default {
             if (this.providerConfig[type]) {
               item.rules[`provider_perf_${type}`] = this.providerConfig[type]
               this.editingRules[`provider_perf_${type}`] = this.providerConfig[type]
+            } else {
+              // 删除本地数据
+              delete item.rules[`provider_perf_${type}`]
+              delete this.editingRules[`provider_perf_${type}`]
             }
           }
         } else {
@@ -723,46 +702,6 @@ export default {
         }
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.saveError'))
-      }
-      this.saving = false
-    },
-
-    async clearProviderConfig() {
-      if (!this.selectedUmo) return
-
-      this.saving = true
-      try {
-        const providerTypes = ['chat_completion', 'speech_to_text', 'text_to_speech']
-        const tasks = providerTypes.map(type =>
-          axios.post('/api/session/delete-rule', {
-            umo: this.selectedUmo.umo,
-            rule_key: `provider_perf_${type}`
-          })
-        )
-
-        await Promise.all(tasks)
-        this.showSuccess(this.tm('messages.clearSuccess'))
-
-        // 更新本地数据
-        this.providerConfig = {
-          chat_completion: null,
-          speech_to_text: null,
-          text_to_speech: null,
-        }
-        const item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
-        if (item) {
-          for (const type of providerTypes) {
-            delete item.rules[`provider_perf_${type}`]
-            delete this.editingRules[`provider_perf_${type}`]
-          }
-          // 如果没有任何规则了，从列表中移除
-          if (Object.keys(item.rules).length === 0) {
-            const index = this.rulesList.findIndex(u => u.umo === this.selectedUmo.umo)
-            if (index > -1) this.rulesList.splice(index, 1)
-          }
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.clearError'))
       }
       this.saving = false
     },

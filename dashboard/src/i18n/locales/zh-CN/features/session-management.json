@@ -42,7 +42,10 @@
     }
   },
   "persona": {
-    "none": "无人格"
+    "none": "跟随配置文件"
+  },
+  "provider": {
+    "followConfig": "跟随配置文件"
   },
   "addRule": {
     "title": "添加自定义规则",
@@ -69,7 +72,7 @@
     "personaConfig": {
       "title": "人格配置",
       "selectPersona": "选择人格",
-      "hint": "人格配置会影响 LLM 的对话风格和行为"
+      "hint": "应用人格配置后，将会强制该来源的所有对话使用该人格。"
     }
   },
   "deleteConfirm": {

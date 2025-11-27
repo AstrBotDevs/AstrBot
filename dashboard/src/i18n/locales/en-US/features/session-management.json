@@ -36,13 +36,16 @@
   },
   "table": {
     "headers": {
-      "umoInfo": "Session Info",
+      "umoInfo": "Unified Message Origin",
       "rulesOverview": "Rules Overview",
       "actions": "Actions"
     }
   },
   "persona": {
-    "none": "No Persona"
+    "none": "Follow Config"
+  },
+  "provider": {
+    "followConfig": "Follow Config"
   },
   "addRule": {
     "title": "Add Custom Rule",
