@@ -27,7 +27,7 @@ class TestContext(Context):
     def __init__(self, conversation_manager: ConversationManager):
         super().__init__()
         self.conversation_manager = conversation_manager
-        self.register_component(self.conversation_manager)
+        self._register_component(self.conversation_manager)
 
 
 async def amain():

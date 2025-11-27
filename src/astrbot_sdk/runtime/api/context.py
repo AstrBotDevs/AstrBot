@@ -9,7 +9,7 @@ class Context(BaseContext):
         super().__init__()
         self.conversation_manager = conversation_manager
         # Auto-register the conversation manager
-        self.register_component(self.conversation_manager)
+        self._register_component(self.conversation_manager)
 
     @classmethod
     def default_context(cls, runner: StarRunner) -> Context:
