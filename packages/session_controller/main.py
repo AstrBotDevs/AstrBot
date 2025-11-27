@@ -1,4 +1,3 @@
-import copy
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
@@ -96,11 +95,10 @@ class Waiter(Star):
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
                         )
-                        new_event = copy.copy(event)
-                        # 重新推入事件队列
-                        self.context.get_event_queue().put_nowait(new_event)
-                        event.stop_event()
-                        controller.stop()
+                        controller.fallback_to_llm(
+                            self.context.get_event_queue(),
+                            event,
+                        )
 
                     try:
                         await empty_mention_waiter(event)

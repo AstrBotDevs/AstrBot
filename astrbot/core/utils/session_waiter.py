@@ -29,6 +29,27 @@ class SessionController:
 
         self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
+    def fallback_to_llm(
+        self,
+        event_queue: asyncio.Queue,
+        event: AstrMessageEvent,
+        *,
+        stop_session: bool = True,
+    ) -> AstrMessageEvent:
+        """将当前事件重新入队，由默认 LLM 流程处理，适用于非预期输入的兜底。
+
+        Args:
+            event_queue: 事件队列
+            event: 当前事件
+            stop_session: 是否结束当前 SessionWaiter。False 时仅兜底当前输入，继续等待后续输入。
+        """
+        new_event = _clone_event_for_llm(event)
+        event_queue.put_nowait(new_event)
+        event.stop_event()
+        if stop_session:
+            self.stop()
+        return new_event
+
     def stop(self, error: Exception = None):
         """立即结束这个会话"""
         if not self.future.done():
@@ -83,6 +104,19 @@ class SessionController:
     def get_history_chains(self) -> list[list[Comp.BaseMessageComponent]]:
         """获取历史消息链"""
         return self.history_chains
+
+
+def _clone_event_for_llm(event: AstrMessageEvent) -> AstrMessageEvent:
+    """复制并重置事件状态，确保能够重新进入默认 LLM 流程。"""
+    new_event = copy.copy(event)
+    new_event.clear_result()
+    new_event._extras = {}
+    new_event._has_send_oper = False
+    new_event.call_llm = False
+    new_event.is_wake = False
+    new_event.is_at_or_wake_command = False
+    new_event.plugins_name = None
+    return new_event
 
 
 class SessionFilter:
