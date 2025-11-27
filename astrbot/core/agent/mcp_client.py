@@ -345,9 +345,6 @@ class MCPClient:
 
     async def cleanup(self):
         """Clean up resources including old exit stacks from reconnections"""
-        # Set running_event first to unblock any waiting tasks
-        self.running_event.set()
-
         # Close current exit stack
         try:
             await self.exit_stack.aclose()
@@ -358,6 +355,9 @@ class MCPClient:
         # They will be garbage collected naturally
         # Just clear the list to release references
         self._old_exit_stacks.clear()
+
+        # Set running_event first to unblock any waiting tasks
+        self.running_event.set()
 
 
 class MCPTool(FunctionTool, Generic[TContext]):
