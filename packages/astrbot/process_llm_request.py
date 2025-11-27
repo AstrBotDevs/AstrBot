@@ -170,7 +170,9 @@ class ProcessLLMRequest:
                         logger.debug(f"[IMG Caption] Provider ID: {provider_id}")
 
                         # 直接从当前 provider 的配置获取 modalities
-                        modalities = current_provider.provider_config.get("modalities", [])
+                        modalities = current_provider.provider_config.get(
+                            "modalities", []
+                        )
                         logger.debug(
                             f"[IMG Caption] 当前 provider 配置 modalities: {modalities}"
                         )
