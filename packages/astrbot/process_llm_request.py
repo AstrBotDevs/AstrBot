@@ -41,7 +41,6 @@ class ProcessLLMRequest:
                 if default_persona:
                     persona_id = default_persona["name"]
 
-
         persona = next(
             builtins.filter(
                 lambda persona: persona["name"] == persona_id,
