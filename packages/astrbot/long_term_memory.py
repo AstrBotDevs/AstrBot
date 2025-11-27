@@ -6,7 +6,7 @@ from collections import defaultdict
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Plain, At
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -142,6 +142,8 @@ class LongTermMemory:
                             logger.error(f"获取图片描述失败: {e}")
                     else:
                         parts.append(" [Image]")
+                elif isinstance(comp, At):
+                    parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
