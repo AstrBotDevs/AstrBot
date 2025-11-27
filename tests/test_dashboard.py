@@ -21,7 +21,17 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
-    return core_lifecycle
+    try:
+        yield core_lifecycle
+    finally:
+        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
+        try:
+            _stop_res = core_lifecycle.stop()
+            if asyncio.iscoroutine(_stop_res):
+                await _stop_res
+        except Exception:
+            # 停止过程中如有异常，不影响后续清理
+            pass
 
 
 @pytest.fixture(scope="module")

@@ -14,7 +14,7 @@ from astrbot.core.utils.session_waiter import (
 )
 
 
-class Waiter(Star):
+class Main(Star):
     """会话控制"""
 
     def __init__(self, context: Context):
