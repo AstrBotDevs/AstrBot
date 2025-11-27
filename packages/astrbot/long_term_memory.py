@@ -6,7 +6,7 @@ from collections import defaultdict
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Image, Plain, At
+from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
