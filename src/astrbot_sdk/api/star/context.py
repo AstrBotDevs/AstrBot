@@ -122,7 +122,7 @@ class Context(ABC):
     async def put_kv_data(
         self,
         key: str,
-        value: str,
+        value: dict,
     ) -> None:
         """Insert a key-value pair data. The data will permanently stored in AstrBot unless user explicitly deleted.
 
@@ -132,7 +132,7 @@ class Context(ABC):
         """
         ...
 
-    async def get_kv_data(self, key: str) -> str | None:
+    async def get_kv_data(self, key: str) -> dict | None:
         """Get a value by key from the key-value store.
 
         Args:
