@@ -69,7 +69,7 @@ const sidebarItem: menu[] = [
       },
       {
         title: 'core.navigation.sessionManagement',
-        icon: 'mdi-account-group',
+        icon: 'mdi-pencil-ruler',
         to: '/session-management'
       },
       {
