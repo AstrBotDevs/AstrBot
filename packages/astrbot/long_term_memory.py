@@ -31,10 +31,9 @@ class LongTermMemory:
             logger.error(e)
             max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = (
-            cfg["provider_ltm_settings"].get("image_caption_provider_id")
-            or cfg["provider_settings"].get("default_image_caption_provider_id")
-        )
+        image_caption_provider_id = cfg["provider_ltm_settings"].get(
+            "image_caption_provider_id"
+        ) or cfg["provider_settings"].get("default_image_caption_provider_id")
         image_caption = (
             cfg["provider_ltm_settings"]["image_caption"] and image_caption_provider_id
         )
