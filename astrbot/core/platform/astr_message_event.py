@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import copy
 import hashlib
 import re
 import uuid
@@ -277,6 +278,20 @@ class AstrMessageEvent(abc.ABC):
     def clear_result(self):
         """清除消息事件的结果。"""
         self._result = None
+
+    def clone_for_llm(self) -> "AstrMessageEvent":
+        """浅拷贝并重置状态，以便重新走默认 LLM 流程。"""
+        new_event: AstrMessageEvent = copy.copy(self)
+        new_event.clear_result()
+        new_event._extras = {}
+        new_event._has_send_oper = False
+        new_event.call_llm = False
+        new_event.is_wake = False
+        new_event.is_at_or_wake_command = False
+        new_event.plugins_name = None
+        # 可选的绕过标记，避免被 SessionWaiter 再次截获
+        new_event._bypass_session_waiter = False
+        return new_event
 
     """消息链相关"""
 

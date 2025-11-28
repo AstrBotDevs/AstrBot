@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import astrbot.core.message.components as Comp
+from astrbot import logger
 from astrbot.core.platform import AstrMessageEvent
 
 USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
@@ -43,7 +44,13 @@ class SessionController:
             event: 当前事件
             stop_session: 是否结束当前 SessionWaiter。False 时仅兜底当前输入，继续等待后续输入。
         """
-        new_event = _clone_event_for_llm(event)
+        if not stop_session:
+            logger.warning(
+                "fallback_to_llm(stop_session=False) 会保留当前会话，默认会话拦截可能导致兜底无效，"
+                "建议谨慎使用或在后续输入中自行终止会话。",
+            )
+        new_event = event.clone_for_llm()
+        new_event._bypass_session_waiter = not stop_session
         event_queue.put_nowait(new_event)
         event.stop_event()
         if stop_session:
@@ -104,19 +111,6 @@ class SessionController:
     def get_history_chains(self) -> list[list[Comp.BaseMessageComponent]]:
         """获取历史消息链"""
         return self.history_chains
-
-
-def _clone_event_for_llm(event: AstrMessageEvent) -> AstrMessageEvent:
-    """复制并重置事件状态，确保能够重新进入默认 LLM 流程。"""
-    new_event = copy.copy(event)
-    new_event.clear_result()
-    new_event._extras = {}
-    new_event._has_send_oper = False
-    new_event.call_llm = False
-    new_event.is_wake = False
-    new_event.is_at_or_wake_command = False
-    new_event.plugins_name = None
-    return new_event
 
 
 class SessionFilter:

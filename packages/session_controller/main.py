@@ -21,6 +21,8 @@ class Waiter(Star):
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent):
         """会话控制代理"""
+        if getattr(event, "_bypass_session_waiter", False):
+            return
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
             handled = await SessionWaiter.trigger(session_id, event)
