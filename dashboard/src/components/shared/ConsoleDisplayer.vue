@@ -7,8 +7,8 @@ import { useCommonStore } from '@/stores/common';
     <!-- 添加筛选级别控件 -->
     <div class="filter-controls mb-2" v-if="showLevelBtns">
       <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter
-          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'">
+        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
+          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
           {{ level }}
         </v-chip>
       </v-chip-group>
@@ -168,6 +168,7 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+  margin-left: 20px;
 }
 
 .fade-in {
