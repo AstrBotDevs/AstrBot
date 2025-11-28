@@ -181,11 +181,15 @@ class SessionWaiter:
         self.session_controller.stop(error)
 
     @classmethod
-    async def trigger(cls, session_id: str, event: AstrMessageEvent):
-        """外部输入触发会话处理"""
+    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> bool:
+        """外部输入触发会话处理
+
+        Returns:
+            bool: 是否成功触发处理。False 表示会话不存在或已结束。
+        """
         session = USER_SESSIONS.get(session_id)
         if not session or session.session_controller.future.done():
-            return
+            return False
 
         async with session._lock:
             if not session.session_controller.future.done():
@@ -198,6 +202,8 @@ class SessionWaiter:
                     await session.handler(session.session_controller, event)
                 except Exception as e:
                     session.session_controller.stop(e)
+                return True
+        return False
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):

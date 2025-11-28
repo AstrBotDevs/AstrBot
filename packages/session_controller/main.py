@@ -24,8 +24,8 @@ class Waiter(Star):
         """会话控制代理"""
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
-            if session_id in USER_SESSIONS:
-                await SessionWaiter.trigger(session_id, event)
+            handled = await SessionWaiter.trigger(session_id, event)
+            if handled:
                 event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
