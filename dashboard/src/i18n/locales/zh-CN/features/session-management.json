@@ -73,6 +73,17 @@
       "title": "人格配置",
       "selectPersona": "选择人格",
       "hint": "应用人格配置后，将会强制该来源的所有对话使用该人格。"
+    },
+    "pluginConfig": {
+      "title": "插件配置",
+      "disabledPlugins": "禁用的插件",
+      "hint": "选择要在此会话中禁用的插件。未选择的插件将保持启用状态。"
+    },
+    "kbConfig": {
+      "title": "知识库配置",
+      "selectKbs": "选择知识库",
+      "topK": "返回结果数量 (Top K)",
+      "enableRerank": "启用重排序"
     }
   },
   "deleteConfirm": {

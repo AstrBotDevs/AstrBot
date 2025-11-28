@@ -73,6 +73,17 @@
       "title": "Persona Configuration",
       "selectPersona": "Select Persona",
       "hint": "Persona settings affect the conversation style and behavior of the LLM"
+    },
+    "pluginConfig": {
+      "title": "Plugin Configuration",
+      "disabledPlugins": "Disabled Plugins",
+      "hint": "Select plugins to disable for this session. Unselected plugins will remain enabled."
+    },
+    "kbConfig": {
+      "title": "Knowledge Base Configuration",
+      "selectKbs": "Select Knowledge Bases",
+      "topK": "Top K Results",
+      "enableRerank": "Enable Reranking"
     }
   },
   "deleteConfirm": {
