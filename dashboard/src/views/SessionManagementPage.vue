@@ -143,11 +143,11 @@
       </v-dialog>
 
       <!-- 规则编辑对话框 -->
-      <v-dialog v-model="ruleDialog" max-width="700" scrollable>
+      <v-dialog v-model="ruleDialog" max-width="550" scrollable>
         <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
           <v-card-title class="py-3 px-6 d-flex align-center border-b">
             <span>{{ tm('ruleEditor.title') }}</span>
-            <v-chip size="small" class="ml-4 font-weight-regular" variant="outlined">
+            <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
               {{ selectedUmo.umo }}
             </v-chip>
             <v-spacer></v-spacer>
@@ -237,6 +237,59 @@
 
               <div class="d-flex justify-end mt-4">
                 <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- Plugin Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.pluginConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="pluginConfig.disabled_plugins" :items="pluginOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.pluginConfig.disabledPlugins')" variant="outlined"
+                    hide-details multiple chips closable-chips clearable />
+                </v-col>
+                <v-col cols="12">
+                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
+                    {{ tm('ruleEditor.pluginConfig.hint') }}
+                  </v-alert>
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- KB Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.kbConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value" :disabled="availableKbs.length === 0"
+                    :label="tm('ruleEditor.kbConfig.selectKbs')" variant="outlined" hide-details multiple chips
+                    closable-chips clearable />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')"
+                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3"/>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')"
+                    color="primary" hide-details class="mt-3"/>
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving"
                   prepend-icon="mdi-content-save">
                   {{ tm('buttons.save') }}
                 </v-btn>
@@ -347,6 +400,8 @@ export default {
       availableChatProviders: [],
       availableSttProviders: [],
       availableTtsProviders: [],
+      availablePlugins: [],
+      availableKbs: [],
 
       // 添加规则
       addRuleDialog: false,
@@ -372,6 +427,19 @@ export default {
         chat_completion: null,
         speech_to_text: null,
         text_to_speech: null,
+      },
+
+      // 插件配置
+      pluginConfig: {
+        enabled_plugins: [],
+        disabled_plugins: [],
+      },
+
+      // 知识库配置
+      kbConfig: {
+        kb_ids: [],
+        top_k: 5,
+        enable_rerank: true,
       },
 
       // 删除确认
@@ -447,6 +515,20 @@ export default {
         }))
       ]
     },
+
+    pluginOptions() {
+      return this.availablePlugins.map(p => ({
+        label: p.display_name || p.name,
+        value: p.name
+      }))
+    },
+
+    kbOptions() {
+      return this.availableKbs.map(kb => ({
+        label: `${kb.emoji || '📚'} ${kb.kb_name}`,
+        value: kb.kb_id
+      }))
+    },
   },
 
   watch: {
@@ -492,6 +574,8 @@ export default {
           this.availableChatProviders = data.available_chat_providers
           this.availableSttProviders = data.available_stt_providers
           this.availableTtsProviders = data.available_tts_providers
+          this.availablePlugins = data.available_plugins || []
+          this.availableKbs = data.available_kbs || []
         } else {
           this.showError(response.data.message || this.tm('messages.loadError'))
         }
@@ -587,6 +671,21 @@ export default {
         chat_completion: this.editingRules['provider_perf_chat_completion'] || null,
         speech_to_text: this.editingRules['provider_perf_speech_to_text'] || null,
         text_to_speech: this.editingRules['provider_perf_text_to_speech'] || null,
+      }
+
+      // 初始化插件配置
+      const pluginCfg = this.editingRules.session_plugin_config || {}
+      this.pluginConfig = {
+        enabled_plugins: pluginCfg.enabled_plugins || [],
+        disabled_plugins: pluginCfg.disabled_plugins || [],
+      }
+
+      // 初始化知识库配置
+      const kbCfg = this.editingRules.kb_config || {}
+      this.kbConfig = {
+        kb_ids: kbCfg.kb_ids || [],
+        top_k: kbCfg.top_k ?? 5,
+        enable_rerank: kbCfg.enable_rerank !== false,
       }
 
       this.ruleDialog = true
@@ -701,6 +800,117 @@ export default {
           }
         } else {
           this.showSuccess(this.tm('messages.noChanges'))
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      }
+      this.saving = false
+    },
+
+    async savePluginConfig() {
+      if (!this.selectedUmo) return
+
+      this.saving = true
+      try {
+        const config = {
+          enabled_plugins: this.pluginConfig.enabled_plugins,
+          disabled_plugins: this.pluginConfig.disabled_plugins,
+        }
+
+        // 如果两个列表都为空，删除配置
+        if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
+          if (this.editingRules.session_plugin_config) {
+            await axios.post('/api/session/delete-rule', {
+              umo: this.selectedUmo.umo,
+              rule_key: 'session_plugin_config'
+            })
+            delete this.editingRules.session_plugin_config
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) delete item.rules.session_plugin_config
+          }
+          this.showSuccess(this.tm('messages.saveSuccess'))
+        } else {
+          const response = await axios.post('/api/session/update-rule', {
+            umo: this.selectedUmo.umo,
+            rule_key: 'session_plugin_config',
+            rule_value: config
+          })
+
+          if (response.data.status === 'ok') {
+            this.showSuccess(this.tm('messages.saveSuccess'))
+            this.editingRules.session_plugin_config = config
+
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) {
+              item.rules.session_plugin_config = config
+            } else {
+              this.rulesList.push({
+                umo: this.selectedUmo.umo,
+                platform: this.selectedUmo.platform,
+                message_type: this.selectedUmo.message_type,
+                session_id: this.selectedUmo.session_id,
+                rules: { session_plugin_config: config }
+              })
+            }
+          } else {
+            this.showError(response.data.message || this.tm('messages.saveError'))
+          }
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      }
+      this.saving = false
+    },
+
+    async saveKbConfig() {
+      if (!this.selectedUmo) return
+
+      this.saving = true
+      try {
+        const config = {
+          kb_ids: this.kbConfig.kb_ids,
+          top_k: this.kbConfig.top_k,
+          enable_rerank: this.kbConfig.enable_rerank,
+        }
+
+        // 如果 kb_ids 为空，删除配置
+        if (config.kb_ids.length === 0) {
+          if (this.editingRules.kb_config) {
+            await axios.post('/api/session/delete-rule', {
+              umo: this.selectedUmo.umo,
+              rule_key: 'kb_config'
+            })
+            delete this.editingRules.kb_config
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) delete item.rules.kb_config
+          }
+          this.showSuccess(this.tm('messages.saveSuccess'))
+        } else {
+          const response = await axios.post('/api/session/update-rule', {
+            umo: this.selectedUmo.umo,
+            rule_key: 'kb_config',
+            rule_value: config
+          })
+
+          if (response.data.status === 'ok') {
+            this.showSuccess(this.tm('messages.saveSuccess'))
+            this.editingRules.kb_config = config
+
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) {
+              item.rules.kb_config = config
+            } else {
+              this.rulesList.push({
+                umo: this.selectedUmo.umo,
+                platform: this.selectedUmo.platform,
+                message_type: this.selectedUmo.message_type,
+                session_id: this.selectedUmo.session_id,
+                rules: { kb_config: config }
+              })
+            }
+          } else {
+            this.showError(response.data.message || this.tm('messages.saveError'))
+          }
         }
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.saveError'))

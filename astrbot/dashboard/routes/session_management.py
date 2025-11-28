@@ -74,7 +74,10 @@ class SessionManagementRoute(Route):
                 umo_id = pref.scope_id
                 if umo_id not in umo_rules:
                     umo_rules[umo_id] = {}
-                umo_rules[umo_id][pref.key] = pref.value["val"]
+                if pref.key == "session_plugin_config" and umo_id in pref.value["val"]:
+                    umo_rules[umo_id][pref.key] = pref.value["val"][umo_id]
+                else:
+                    umo_rules[umo_id][pref.key] = pref.value["val"]
 
         # 搜索过滤
         if search:
@@ -185,6 +188,35 @@ class SessionManagementRoute(Route):
                 for p in provider_manager.tts_provider_insts
             ]
 
+            # 获取可用的插件列表（排除 reserved 的系统插件）
+            plugin_manager = self.core_lifecycle.plugin_manager
+            available_plugins = [
+                {
+                    "name": p.name,
+                    "display_name": p.display_name or p.name,
+                    "desc": p.desc,
+                }
+                for p in plugin_manager.context.get_all_stars()
+                if not p.reserved and p.name
+            ]
+
+            # 获取可用的知识库列表
+            available_kbs = []
+            kb_manager = self.core_lifecycle.kb_manager
+            if kb_manager:
+                try:
+                    kbs = await kb_manager.list_kbs()
+                    available_kbs = [
+                        {
+                            "kb_id": kb.kb_id,
+                            "kb_name": kb.kb_name,
+                            "emoji": kb.emoji,
+                        }
+                        for kb in kbs
+                    ]
+                except Exception as e:
+                    logger.warning(f"获取知识库列表失败: {e!s}")
+
             return (
                 Response()
                 .ok(
@@ -197,6 +229,8 @@ class SessionManagementRoute(Route):
                         "available_chat_providers": available_chat_providers,
                         "available_stt_providers": available_stt_providers,
                         "available_tts_providers": available_tts_providers,
+                        "available_plugins": available_plugins,
+                        "available_kbs": available_kbs,
                         "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
                     }
                 )
@@ -228,6 +262,11 @@ class SessionManagementRoute(Route):
                 return Response().error("缺少必要参数: rule_key").__dict__
             if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
                 return Response().error(f"不支持的规则键: {rule_key}").__dict__
+
+            if rule_key == "session_plugin_config":
+                rule_value = {
+                    umo: rule_value,
+                }
 
             # 使用 shared preferences 更新规则
             await sp.session_put(umo, rule_key, rule_value)
