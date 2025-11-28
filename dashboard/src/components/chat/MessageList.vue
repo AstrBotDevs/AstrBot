@@ -549,17 +549,13 @@ export default {
 }
 
 .bot-embedded-image {
-    max-width: 80%;
+    max-width: 40%;
     width: auto;
     height: auto;
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     transition: transform 0.2s ease;
-}
-
-.bot-embedded-image:hover {
-    transform: scale(1.02);
 }
 
 .embedded-audio {
