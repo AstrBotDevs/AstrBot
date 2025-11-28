@@ -6,7 +6,6 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.utils.session_waiter import (
     FILTERS,
-    USER_SESSIONS,
     SessionController,
     SessionWaiter,
     session_waiter,
