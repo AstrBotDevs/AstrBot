@@ -379,7 +379,11 @@
         },
         "image_caption": {
           "description": "自动理解图片",
-          "hint": "需要设置默认图片转述模型。"
+          "hint": "需要设置群聊图片转述模型。"
+        },
+        "image_caption_provider_id": {
+          "description": "群聊图片转述模型",
+          "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。"
         },
         "active_reply": {
           "enable": {
