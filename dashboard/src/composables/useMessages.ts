@@ -2,9 +2,16 @@ import { ref, reactive, type Ref } from 'vue';
 import axios from 'axios';
 import { useToast } from '@/utils/toast';
 
+// 新格式消息部分的类型定义
+export interface MessagePart {
+    type: 'plain' | 'image' | 'record' | 'file' | 'video';
+    text?: string;           // for plain
+    attachment_id?: string;  // for image, record, file, video
+}
+
 export interface MessageContent {
     type: string;
-    message: string;
+    message: string | MessagePart[];  // 支持旧格式(string)和新格式(MessagePart[])
     reasoning?: string;
     image_url?: string[];
     audio_url?: string;
@@ -29,6 +36,7 @@ export function useMessages(
     const isToastedRunningInfo = ref(false);
     const activeSSECount = ref(0);
     const enableStreaming = ref(true);
+    const attachmentCache = new Map<string, string>();  // attachment_id -> blob URL
 
     // 从 localStorage 读取流式响应开关状态
     const savedStreamingState = localStorage.getItem('enableStreaming');
@@ -39,6 +47,59 @@ export function useMessages(
     function toggleStreaming() {
         enableStreaming.value = !enableStreaming.value;
         localStorage.setItem('enableStreaming', JSON.stringify(enableStreaming.value));
+    }
+
+    // 获取 attachment 文件并返回 blob URL
+    async function getAttachment(attachmentId: string): Promise<string> {
+        if (attachmentCache.has(attachmentId)) {
+            return attachmentCache.get(attachmentId)!;
+        }
+        try {
+            const response = await axios.get(`/api/chat/get_attachment?attachment_id=${attachmentId}`, {
+                responseType: 'blob'
+            });
+            const blobUrl = URL.createObjectURL(response.data);
+            attachmentCache.set(attachmentId, blobUrl);
+            return blobUrl;
+        } catch (err) {
+            console.error('Failed to get attachment:', attachmentId, err);
+            return '';
+        }
+    }
+
+    // 解析新格式消息为旧格式兼容的结构 (用于显示)
+    async function parseMessageContent(content: any): Promise<void> {
+        const message = content.message;
+        
+        // 如果 message 是数组 (新格式)
+        if (Array.isArray(message)) {
+            let textParts: string[] = [];
+            let imageUrls: string[] = [];
+            let audioUrl: string | undefined;
+            
+            for (const part of message as MessagePart[]) {
+                if (part.type === 'plain' && part.text) {
+                    textParts.push(part.text);
+                } else if (part.type === 'image' && part.attachment_id) {
+                    const url = await getAttachment(part.attachment_id);
+                    if (url) imageUrls.push(url);
+                } else if (part.type === 'record' && part.attachment_id) {
+                    audioUrl = await getAttachment(part.attachment_id);
+                }
+                // file 和 video 类型可以后续扩展
+            }
+            
+            // 转换为旧格式兼容的结构
+            content.message = textParts.join('\n');
+            if (content.type === 'user') {
+                content.image_url = imageUrls.length > 0 ? imageUrls : undefined;
+                content.audio_url = audioUrl;
+            } else {
+                content.embedded_images = imageUrls.length > 0 ? imageUrls : undefined;
+                content.embedded_audio = audioUrl;
+            }
+        }
+        // 如果 message 是字符串 (旧格式)，保持原有处理逻辑
     }
 
     async function getSessionMessages(sessionId: string, router: any) {
@@ -65,30 +126,40 @@ export function useMessages(
             for (let i = 0; i < history.length; i++) {
                 let content = history[i].content;
                 
-                if (content.message?.startsWith('[IMAGE]')) {
-                    let img = content.message.replace('[IMAGE]', '');
-                    const imageUrl = await getMediaFile(img);
-                    if (!content.embedded_images) {
-                        content.embedded_images = [];
+                // 首先尝试解析新格式消息
+                await parseMessageContent(content);
+                
+                // 以下是旧格式的兼容处理 (message 是字符串的情况)
+                if (typeof content.message === 'string') {
+                    if (content.message?.startsWith('[IMAGE]')) {
+                        let img = content.message.replace('[IMAGE]', '');
+                        const imageUrl = await getMediaFile(img);
+                        if (!content.embedded_images) {
+                            content.embedded_images = [];
+                        }
+                        content.embedded_images.push(imageUrl);
+                        content.message = '';
                     }
-                    content.embedded_images.push(imageUrl);
-                    content.message = '';
+
+                    if (content.message?.startsWith('[RECORD]')) {
+                        let audio = content.message.replace('[RECORD]', '');
+                        const audioUrl = await getMediaFile(audio);
+                        content.embedded_audio = audioUrl;
+                        content.message = '';
+                    }
                 }
 
-                if (content.message?.startsWith('[RECORD]')) {
-                    let audio = content.message.replace('[RECORD]', '');
-                    const audioUrl = await getMediaFile(audio);
-                    content.embedded_audio = audioUrl;
-                    content.message = '';
-                }
-
+                // 旧格式中的 image_url 和 audio_url 字段处理
                 if (content.image_url && content.image_url.length > 0) {
                     for (let j = 0; j < content.image_url.length; j++) {
-                        content.image_url[j] = await getMediaFile(content.image_url[j]);
+                        // 检查是否已经是 blob URL (新格式解析后的结果)
+                        if (!content.image_url[j].startsWith('blob:')) {
+                            content.image_url[j] = await getMediaFile(content.image_url[j]);
+                        }
                     }
                 }
 
-                if (content.audio_url) {
+                if (content.audio_url && !content.audio_url.startsWith('blob:')) {
                     content.audio_url = await getMediaFile(content.audio_url);
                 }
             }

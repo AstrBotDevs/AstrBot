@@ -44,6 +44,7 @@ class ChatRoute(Route):
                 self.update_session_display_name,
             ),
             "/chat/get_file": ("GET", self.get_file),
+            "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
         }
@@ -85,6 +86,26 @@ class ChatRoute(Route):
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
 
+    async def get_attachment(self):
+        """Get attachment file by attachment_id."""
+        attachment_id = request.args.get("attachment_id")
+        if not attachment_id:
+            return Response().error("Missing key: attachment_id").__dict__
+
+        try:
+            attachment = await self.db.get_attachment_by_id(attachment_id)
+            if not attachment:
+                return Response().error("Attachment not found").__dict__
+
+            file_path = attachment.path
+            real_file_path = os.path.realpath(file_path)
+
+            with open(real_file_path, "rb") as f:
+                return QuartResponse(f.read(), mimetype=attachment.mime_type)
+
+        except (FileNotFoundError, OSError):
+            return Response().error("File access error").__dict__
+
     async def post_image(self):
         post_data = await request.files
         if "file" not in post_data:
@@ -113,6 +134,93 @@ class ChatRoute(Route):
 
         return Response().ok(data={"filename": filename}).__dict__
 
+    def _get_image_mime_type(self, filename: str) -> str:
+        """根据文件扩展名获取图片 MIME 类型"""
+        ext = os.path.splitext(filename)[1].lower()
+        mime_types = {
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }
+        return mime_types.get(ext, "image/jpeg")
+
+    async def _create_image_attachment(self, filename: str) -> dict | None:
+        """创建图片 attachment 并返回消息部分"""
+        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+        if not os.path.exists(file_path):
+            return None
+
+        attachment = await self.db.insert_attachment(
+            path=file_path,
+            type="image",
+            mime_type=self._get_image_mime_type(filename),
+        )
+        if attachment:
+            return {"type": "image", "attachment_id": attachment.attachment_id}
+        return None
+
+    async def _create_audio_attachment(self, filename: str) -> dict | None:
+        """创建音频 attachment 并返回消息部分"""
+        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+        if not os.path.exists(file_path):
+            return None
+
+        attachment = await self.db.insert_attachment(
+            path=file_path,
+            type="record",
+            mime_type="audio/wav",
+        )
+        if attachment:
+            return {"type": "record", "attachment_id": attachment.attachment_id}
+        return None
+
+    async def _build_user_message_parts(
+        self, message: str, image_urls: list | None, audio_url: str | None
+    ) -> list:
+        """构建用户消息的部分列表"""
+        parts = []
+
+        if message:
+            parts.append({"type": "plain", "text": message})
+
+        if image_urls:
+            for img_filename in image_urls:
+                part = await self._create_image_attachment(img_filename)
+                if part:
+                    parts.append(part)
+
+        if audio_url:
+            part = await self._create_audio_attachment(audio_url)
+            if part:
+                parts.append(part)
+
+        return parts
+
+    async def _save_bot_message(
+        self,
+        webchat_conv_id: str,
+        text: str,
+        media_parts: list,
+        reasoning: str,
+    ):
+        """保存 bot 消息到历史记录"""
+        bot_message_parts = []
+        if text:
+            bot_message_parts.append({"type": "plain", "text": text})
+        bot_message_parts.extend(media_parts)
+
+        new_his = {"type": "bot", "message": bot_message_parts}
+        if reasoning:
+            new_his["reasoning"] = reasoning
+
+        await self.platform_history_mgr.insert(
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            content=new_his,
+            sender_id="bot",
+            sender_name="bot",
+        )
+
     async def chat(self):
         username = g.get("username", "guest")
 
@@ -126,13 +234,12 @@ class ChatRoute(Route):
             )
 
         message = post_data["message"]
-        # conversation_id = post_data["conversation_id"]
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         image_url = post_data.get("image_url")
         audio_url = post_data.get("audio_url")
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
-        enable_streaming = post_data.get("enable_streaming", True)  # 默认为 True
+        enable_streaming = post_data.get("enable_streaming", True)
 
         if not message and not image_url and not audio_url:
             return (
@@ -143,27 +250,26 @@ class ChatRoute(Route):
         if not session_id:
             return Response().error("session_id is empty").__dict__
 
-        # 追加用户消息
         webchat_conv_id = session_id
-
-        # 获取会话特定的队列
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
-        new_his = {"type": "user", "message": message}
-        if image_url:
-            new_his["image_url"] = image_url
-        if audio_url:
-            new_his["audio_url"] = audio_url
+        # 构建并保存用户消息
+        message_parts = await self._build_user_message_parts(
+            message, image_url, audio_url
+        )
         await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
-            content=new_his,
+            content={"type": "user", "message": message_parts},
             sender_id=username,
             sender_name=username,
         )
 
         async def stream():
             client_disconnected = False
+            accumulated_parts = []
+            accumulated_text = ""
+            accumulated_reasoning = ""
 
             try:
                 async with track_conversation(self.running_convs, webchat_conv_id):
@@ -182,16 +288,17 @@ class ChatRoute(Route):
                             continue
 
                         result_text = result["data"]
-                        type = result.get("type")
+                        msg_type = result.get("type")
                         streaming = result.get("streaming", False)
 
+                        # 发送 SSE 数据
                         try:
                             if not client_disconnected:
                                 yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}",
+                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
                                 )
                             client_disconnected = True
 
@@ -202,24 +309,43 @@ class ChatRoute(Route):
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
 
-                        if type == "end":
+                        # 累积消息部分
+                        if msg_type == "plain":
+                            chain_type = result.get("chain_type", "normal")
+                            if chain_type == "reasoning":
+                                accumulated_reasoning += result_text
+                            else:
+                                accumulated_text += result_text
+                        elif msg_type == "image":
+                            filename = result_text.replace("[IMAGE]", "")
+                            part = await self._create_image_attachment(filename)
+                            if part:
+                                accumulated_parts.append(part)
+                        elif msg_type == "record":
+                            filename = result_text.replace("[RECORD]", "")
+                            part = await self._create_audio_attachment(filename)
+                            if part:
+                                accumulated_parts.append(part)
+
+                        # 消息结束处理
+                        if msg_type == "end":
                             break
                         elif (
-                            (streaming and type == "complete")
+                            (streaming and msg_type == "complete")
                             or not streaming
-                            or type == "break"
+                            or msg_type == "break"
                         ):
-                            # 追加机器人消息
-                            new_his = {"type": "bot", "message": result_text}
-                            if "reasoning" in result:
-                                new_his["reasoning"] = result["reasoning"]
-                            await self.platform_history_mgr.insert(
-                                platform_id="webchat",
-                                user_id=webchat_conv_id,
-                                content=new_his,
-                                sender_id="bot",
-                                sender_name="bot",
+                            await self._save_bot_message(
+                                webchat_conv_id,
+                                accumulated_text,
+                                accumulated_parts,
+                                accumulated_reasoning,
                             )
+                            # 重置累积变量 (对于 break 后的下一段消息)
+                            if msg_type == "break":
+                                accumulated_parts = []
+                                accumulated_text = ""
+                                accumulated_reasoning = ""
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
 
@@ -231,7 +357,7 @@ class ChatRoute(Route):
                 webchat_conv_id,
                 {
                     "message": message,
-                    "image_url": image_url,  # list
+                    "image_url": image_url,
                     "audio_url": audio_url,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
@@ -249,7 +375,7 @@ class ChatRoute(Route):
                 "Connection": "keep-alive",
             },
         )
-        response.timeout = None  # fix SSE auto disconnect issue
+        response.timeout = None  # fix SSE auto disconnect issue  # pyright: ignore[reportAttributeAccessIssue]
         return response
 
     async def delete_webchat_session(self):
