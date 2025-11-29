@@ -71,6 +71,10 @@
   "reasoning": {
     "thinking": "Thinking Process"
   },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",

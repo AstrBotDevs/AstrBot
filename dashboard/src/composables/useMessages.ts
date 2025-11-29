@@ -31,6 +31,7 @@ export interface MessageContent {
 
 export interface Message {
     content: MessageContent;
+    created_at?: string;
 }
 
 export function useMessages(

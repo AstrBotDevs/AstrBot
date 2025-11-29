@@ -102,7 +102,8 @@
                             </template>
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading">
-                            <v-btn :icon="getCopyIcon(index)" size="small" variant="text" class="copy-message-btn"
+                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at) }}</span>
+                            <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
                         </div>
@@ -397,6 +398,37 @@ export default {
                 clearTimeout(this.scrollTimer);
                 this.scrollTimer = null;
             }
+        },
+
+        // 格式化消息时间，支持别名显示
+        formatMessageTime(dateStr) {
+            if (!dateStr) return '';
+            
+            const date = new Date(dateStr);
+            const now = new Date();
+            
+            // 获取本地时间的日期部分
+            const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterdayDay = new Date(todayDay);
+            yesterdayDay.setDate(yesterdayDay.getDate() - 1);
+            
+            // 格式化时间 HH:MM
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const timeStr = `${hours}:${minutes}`;
+            
+            // 判断是今天、昨天还是更早
+            if (dateDay.getTime() === todayDay.getTime()) {
+                return `${this.tm('time.today')} ${timeStr}`;
+            } else if (dateDay.getTime() === yesterdayDay.getTime()) {
+                return `${this.tm('time.yesterday')} ${timeStr}`;
+            } else {
+                // 更早的日期显示完整格式
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                return `${month}-${day} ${timeStr}`;
+            }
         }
     }
 }
@@ -435,7 +467,7 @@ export default {
 }
 
 .message-item {
-    margin-bottom: 24px;
+    margin-bottom: 12px;
     animation: fadeIn 0.3s ease-out;
 }
 
@@ -463,10 +495,18 @@ export default {
 
 .message-actions {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     opacity: 0;
     transition: opacity 0.2s ease;
-    margin-left: 8px;
+    margin-left: 16px;
+}
+
+.message-time {
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    white-space: nowrap;
 }
 
 .bot-message:hover .message-actions {
@@ -575,7 +615,6 @@ export default {
     width: auto;
     height: auto;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     transition: transform 0.2s ease;
 }
