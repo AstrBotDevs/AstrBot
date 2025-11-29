@@ -91,9 +91,12 @@ class ThirdPartyAgentSubStage(Stage):
             (p for p in self.conf["provider"] if p["id"] == self.prov_id),
             {},
         )
-        if not self.prov_id or not self.prov_cfg:
+        if not self.prov_id:
+            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
+            return
+        if not self.prov_cfg:
             logger.error(
-                "Third Party Agent Runner provider ID is not configured properly."
+                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
             )
             return
 
