@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
@@ -88,7 +88,7 @@ class ThirdPartyAgentSubStage(Stage):
             return
 
         self.prov_cfg: dict = next(
-            (p for p in self.conf["provider"] if p["id"] == self.prov_id),
+            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
             {},
         )
         if not self.prov_id:
