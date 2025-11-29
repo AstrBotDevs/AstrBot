@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from quart import Response as QuartResponse
-from quart import g, make_response, request
+from quart import g, make_response, request, send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -74,14 +74,12 @@ class ChatRoute(Route):
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
 
-            with open(real_file_path, "rb") as f:
-                filename_ext = os.path.splitext(filename)[1].lower()
-
-                if filename_ext == ".wav":
-                    return QuartResponse(f.read(), mimetype="audio/wav")
-                if filename_ext[1:] in self.supported_imgs:
-                    return QuartResponse(f.read(), mimetype="image/jpeg")
-                return QuartResponse(f.read())
+            filename_ext = os.path.splitext(filename)[1].lower()
+            if filename_ext == ".wav":
+                return await send_file(real_file_path, mimetype="audio/wav")
+            if filename_ext[1:] in self.supported_imgs:
+                return await send_file(real_file_path, mimetype="image/jpeg")
+            return await send_file(real_file_path)
 
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
@@ -100,8 +98,7 @@ class ChatRoute(Route):
             file_path = attachment.path
             real_file_path = os.path.realpath(file_path)
 
-            with open(real_file_path, "rb") as f:
-                return QuartResponse(f.read(), mimetype=attachment.mime_type)
+            return await send_file(real_file_path, mimetype=attachment.mime_type)
 
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
