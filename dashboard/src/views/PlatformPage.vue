@@ -35,7 +35,7 @@
       </div>
 
       <!-- 日志部分 -->
-      <v-card elevation="0" class="mt-4">
+      <v-card elevation="0" class="mt-4 mb-10">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon class="me-2">mdi-console-line</v-icon>
           <span class="text-h4">{{ tm('logs.title') }}</span>
@@ -233,5 +233,6 @@ export default {
 .platform-page {
   padding: 20px;
   padding-top: 8px;
+  padding-bottom: 40px;
 }
 </style>
