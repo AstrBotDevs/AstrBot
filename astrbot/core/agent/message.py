@@ -153,6 +153,7 @@ class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
     role: Literal["assistant"] = "assistant"
+    content: str | list[ContentPart] | None = None
     tool_calls: list[ToolCall] | list[dict] | None = None
 
 
