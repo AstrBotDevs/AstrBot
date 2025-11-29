@@ -214,6 +214,27 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_attachments(self, attachment_ids: list[str]) -> list[Attachment]:
+        """Get multiple attachments by their IDs."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_attachment(self, attachment_id: str) -> bool:
+        """Delete an attachment by its ID.
+
+        Returns True if the attachment was deleted, False if it was not found.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def delete_attachments(self, attachment_ids: list[str]) -> int:
+        """Delete multiple attachments by their IDs.
+
+        Returns the number of attachments deleted.
+        """
+        ...
+
+    @abc.abstractmethod
     async def insert_persona(
         self,
         persona_id: str,

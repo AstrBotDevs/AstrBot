@@ -470,6 +470,48 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
+    async def get_attachments(self, attachment_ids: list[str]) -> list:
+        """Get multiple attachments by their IDs."""
+        if not attachment_ids:
+            return []
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(Attachment).where(
+                Attachment.attachment_id.in_(attachment_ids)
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def delete_attachment(self, attachment_id: str) -> bool:
+        """Delete an attachment by its ID.
+
+        Returns True if the attachment was deleted, False if it was not found.
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = delete(Attachment).where(
+                    Attachment.attachment_id == attachment_id
+                )
+                result = await session.execute(query)
+                return result.rowcount > 0
+
+    async def delete_attachments(self, attachment_ids: list[str]) -> int:
+        """Delete multiple attachments by their IDs.
+
+        Returns the number of attachments deleted.
+        """
+        if not attachment_ids:
+            return 0
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = delete(Attachment).where(
+                    Attachment.attachment_id.in_(attachment_ids)
+                )
+                result = await session.execute(query)
+                return result.rowcount
+
     async def insert_persona(
         self,
         persona_id,

@@ -82,14 +82,11 @@ class WebChatMessageEvent(AstrMessageEvent):
             elif isinstance(comp, File):
                 # save file to local
                 file_path = await comp.get_file()
-                # 获取原始文件名或使用 UUID
                 original_name = comp.name or os.path.basename(file_path)
-                # 生成唯一文件名，保留原始扩展名
                 ext = os.path.splitext(original_name)[1] or ""
                 filename = f"{uuid.uuid4()!s}{ext}"
                 dest_path = os.path.join(imgs_dir, filename)
                 shutil.copy2(file_path, dest_path)
-                # 格式: [FILE]filename|original_name
                 data = f"[FILE]{filename}|{original_name}"
                 await web_chat_back_queue.put(
                     {

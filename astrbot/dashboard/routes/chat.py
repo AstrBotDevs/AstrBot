@@ -421,6 +421,17 @@ class ChatRoute(Route):
         unified_msg_origin = f"{session.platform_id}:{message_type}:{session.platform_id}!{username}!{session_id}"
         await self.conv_mgr.delete_conversations_by_user_id(unified_msg_origin)
 
+        # 获取消息历史中的所有附件 ID 并删除附件
+        history_list = await self.platform_history_mgr.get(
+            platform_id=session.platform_id,
+            user_id=session_id,
+            page=1,
+            page_size=100000,  # 获取足够多的记录
+        )
+        attachment_ids = self._extract_attachment_ids(history_list)
+        if attachment_ids:
+            await self._delete_attachments(attachment_ids)
+
         # 删除消息历史
         await self.platform_history_mgr.delete(
             platform_id=session.platform_id,
@@ -446,6 +457,41 @@ class ChatRoute(Route):
         await self.db.delete_platform_session(session_id)
 
         return Response().ok().__dict__
+
+    def _extract_attachment_ids(self, history_list) -> list[str]:
+        """从消息历史中提取所有 attachment_id"""
+        attachment_ids = []
+        for history in history_list:
+            content = history.content
+            if not content or "message" not in content:
+                continue
+            message_parts = content.get("message", [])
+            for part in message_parts:
+                if isinstance(part, dict) and "attachment_id" in part:
+                    attachment_ids.append(part["attachment_id"])
+        return attachment_ids
+
+    async def _delete_attachments(self, attachment_ids: list[str]):
+        """删除附件（包括数据库记录和磁盘文件）"""
+        try:
+            attachments = await self.db.get_attachments(attachment_ids)
+            for attachment in attachments:
+                if not os.path.exists(attachment.path):
+                    continue
+                try:
+                    os.remove(attachment.path)
+                except OSError as e:
+                    logger.warning(
+                        f"Failed to delete attachment file {attachment.path}: {e}"
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to get attachments: {e}")
+
+        # 批量删除数据库记录
+        try:
+            await self.db.delete_attachments(attachment_ids)
+        except Exception as e:
+            logger.warning(f"Failed to delete attachments: {e}")
 
     async def new_session(self):
         """Create a new Platform session (default: webchat)."""
