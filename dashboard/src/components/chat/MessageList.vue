@@ -24,6 +24,16 @@
                                 {{ t('messages.errors.browser.audioNotSupported') }}
                             </audio>
                         </div>
+
+                        <!-- 文件附件 -->
+                        <div class="file-attachments" v-if="msg.content.file_url && msg.content.file_url.length > 0">
+                            <div v-for="(file, index) in msg.content.file_url" :key="index" class="file-attachment">
+                                <a :href="file.url" :download="file.name" class="file-link">
+                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                    <span class="file-name">{{ file.name }}</span>
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -76,6 +86,18 @@
                                         <source :src="msg.content.embedded_audio" type="audio/wav">
                                         {{ t('messages.errors.browser.audioNotSupported') }}
                                     </audio>
+                                </div>
+
+                                <!-- Files -->
+                                <div class="embedded-files"
+                                    v-if="msg.content.embedded_files && msg.content.embedded_files.length > 0">
+                                    <div v-for="(file, fileIndex) in msg.content.embedded_files" :key="fileIndex"
+                                        class="embedded-file">
+                                        <a :href="file.url" :download="file.name" class="file-link">
+                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                            <span class="file-name">{{ file.name }}</span>
+                                        </a>
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -566,6 +588,69 @@ export default {
 .embedded-audio .audio-player {
     width: 100%;
     max-width: 300px;
+}
+
+/* 文件附件样式 */
+.file-attachments,
+.embedded-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.file-attachment,
+.embedded-file {
+    display: flex;
+    align-items: center;
+}
+
+.file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: rgba(var(--v-theme-primary), 0.08);
+    border: 1px solid rgba(var(--v-theme-primary), 0.2);
+    border-radius: 8px;
+    color: rgb(var(--v-theme-primary));
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    max-width: 300px;
+}
+
+.file-link:hover {
+    background-color: rgba(var(--v-theme-primary), 0.15);
+    border-color: rgba(var(--v-theme-primary), 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-icon {
+    flex-shrink: 0;
+    color: rgb(var(--v-theme-primary));
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v-theme--dark .file-link {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--v-theme-secondary);
+}
+
+.v-theme--dark .file-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.v-theme--dark .file-icon {
+    color: var(--v-theme-secondary);
 }
 
 /* 动画类 */

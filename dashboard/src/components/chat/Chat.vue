@@ -84,6 +84,7 @@
                         v-model:prompt="prompt"
                         :stagedImagesUrl="stagedImagesUrl"
                         :stagedAudioUrl="stagedAudioUrl"
+                        :stagedFiles="stagedFiles"
                         :disabled="isStreaming"
                         :enableStreaming="enableStreaming"
                         :isRecording="isRecording"
@@ -93,6 +94,7 @@
                         @toggleStreaming="toggleStreaming"
                         @removeImage="removeImage"
                         @removeAudio="removeAudio"
+                        @removeFile="removeFile"
                         @startRecording="handleStartRecording"
                         @stopRecording="handleStopRecording"
                         @pasteImage="handlePaste"
@@ -192,11 +194,14 @@ const {
     stagedImagesName,
     stagedImagesUrl,
     stagedAudioUrl,
+    stagedFiles,
     getMediaFile,
     processAndUploadImage,
+    processAndUploadFile,
     handlePaste,
     removeImage,
     removeAudio,
+    removeFile,
     clearStaged,
     cleanupMediaCache
 } = useMediaHandling();
@@ -295,13 +300,18 @@ async function handleStopRecording() {
 }
 
 async function handleFileSelect(files: FileList) {
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     for (const file of files) {
-        await processAndUploadImage(file);
+        if (imageTypes.includes(file.type)) {
+            await processAndUploadImage(file);
+        } else {
+            await processAndUploadFile(file);
+        }
     }
 }
 
 async function handleSendMessage() {
-    if (!prompt.value.trim() && stagedImagesName.value.length === 0 && !stagedAudioUrl.value) {
+    if (!prompt.value.trim() && stagedImagesName.value.length === 0 && !stagedAudioUrl.value && stagedFiles.value.length === 0) {
         return;
     }
 
@@ -312,6 +322,10 @@ async function handleSendMessage() {
     const promptToSend = prompt.value.trim();
     const imageNamesToSend = [...stagedImagesName.value];
     const audioNameToSend = stagedAudioUrl.value;
+    const filesToSend = stagedFiles.value.map(f => ({
+        filename: f.filename,
+        original_name: f.original_name
+    }));
 
     // 清空输入和附件
     prompt.value = '';
@@ -327,7 +341,8 @@ async function handleSendMessage() {
         imageNamesToSend,
         audioNameToSend,
         selectedProviderId,
-        selectedModelName
+        selectedModelName,
+        filesToSend
     );
 }
 

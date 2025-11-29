@@ -1,10 +1,17 @@
 import { ref } from 'vue';
 import axios from 'axios';
 
+export interface StagedFileInfo {
+    filename: string;
+    original_name: string;
+    url: string;  // blob URL for preview
+}
+
 export function useMediaHandling() {
     const stagedImagesName = ref<string[]>([]);
     const stagedImagesUrl = ref<string[]>([]);
     const stagedAudioUrl = ref<string>('');
+    const stagedFiles = ref<StagedFileInfo[]>([]);
     const mediaCache = ref<Record<string, string>>({});
 
     async function getMediaFile(filename: string): Promise<string> {
@@ -32,7 +39,7 @@ export function useMediaHandling() {
         formData.append('file', file);
 
         try {
-            const response = await axios.post('/api/chat/post_image', formData, {
+            const response = await axios.post('/api/chat/post_file', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }
@@ -43,6 +50,28 @@ export function useMediaHandling() {
             stagedImagesUrl.value.push(URL.createObjectURL(file));
         } catch (err) {
             console.error('Error uploading image:', err);
+        }
+    }
+
+    async function processAndUploadFile(file: File) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await axios.post('/api/chat/post_file', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+
+            const serverFilename = response.data.data.filename;
+            stagedFiles.value.push({
+                filename: serverFilename,
+                original_name: file.name,
+                url: URL.createObjectURL(file)
+            });
+        } catch (err) {
+            console.error('Error uploading file:', err);
         }
     }
 
@@ -74,10 +103,25 @@ export function useMediaHandling() {
         stagedAudioUrl.value = '';
     }
 
+    function removeFile(index: number) {
+        const fileToRemove = stagedFiles.value[index];
+        if (fileToRemove && fileToRemove.url.startsWith('blob:')) {
+            URL.revokeObjectURL(fileToRemove.url);
+        }
+        stagedFiles.value.splice(index, 1);
+    }
+
     function clearStaged() {
         stagedImagesName.value = [];
         stagedImagesUrl.value = [];
         stagedAudioUrl.value = '';
+        // 清理文件的 blob URLs
+        stagedFiles.value.forEach(file => {
+            if (file.url.startsWith('blob:')) {
+                URL.revokeObjectURL(file.url);
+            }
+        });
+        stagedFiles.value = [];
     }
 
     function cleanupMediaCache() {
@@ -93,11 +137,14 @@ export function useMediaHandling() {
         stagedImagesName,
         stagedImagesUrl,
         stagedAudioUrl,
+        stagedFiles,
         getMediaFile,
         processAndUploadImage,
+        processAndUploadFile,
         handlePaste,
         removeImage,
         removeAudio,
+        removeFile,
         clearStaged,
         cleanupMediaCache
     };

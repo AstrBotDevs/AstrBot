@@ -1,5 +1,6 @@
 import asyncio
 import json
+import mimetypes
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -45,7 +46,6 @@ class ChatRoute(Route):
             ),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
-            "/chat/post_image": ("POST", self.post_image),
             "/chat/post_file": ("POST", self.post_file),
         }
         self.core_lifecycle = core_lifecycle
@@ -106,18 +106,6 @@ class ChatRoute(Route):
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
 
-    async def post_image(self):
-        post_data = await request.files
-        if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
-
-        file = post_data["file"]
-        filename = str(uuid.uuid4()) + ".jpg"
-        path = os.path.join(self.imgs_dir, filename)
-        await file.save(path)
-
-        return Response().ok(data={"filename": filename}).__dict__
-
     async def post_file(self):
         post_data = await request.files
         if "file" not in post_data:
@@ -125,8 +113,16 @@ class ChatRoute(Route):
 
         file = post_data["file"]
         filename = f"{uuid.uuid4()!s}"
-        # 通过文件格式判断文件类型
-        if file.content_type.startswith("audio"):
+        content_type = file.content_type or ""
+
+        # 根据 content_type 判断文件类型并添加扩展名
+        if content_type.startswith("image"):
+            ext = content_type.split("/")[-1]
+            if ext in ("jpeg", "jpg", "png", "gif", "webp"):
+                filename += f".{ext}"
+            else:
+                filename += ".jpg"  # 默认使用 jpg
+        elif content_type.startswith("audio"):
             filename += ".wav"
 
         path = os.path.join(self.imgs_dir, filename)
@@ -134,48 +130,48 @@ class ChatRoute(Route):
 
         return Response().ok(data={"filename": filename}).__dict__
 
-    def _get_image_mime_type(self, filename: str) -> str:
-        """根据文件扩展名获取图片 MIME 类型"""
-        ext = os.path.splitext(filename)[1].lower()
-        mime_types = {
-            ".png": "image/png",
-            ".gif": "image/gif",
-            ".webp": "image/webp",
-        }
-        return mime_types.get(ext, "image/jpeg")
+    async def _create_attachment(
+        self, filename: str, attach_type: str, original_name: str = ""
+    ) -> dict | None:
+        """创建 attachment 并返回消息部分
 
-    async def _create_image_attachment(self, filename: str) -> dict | None:
-        """创建图片 attachment 并返回消息部分"""
+        Args:
+            filename: 存储的文件名
+            attach_type: 附件类型 (image, record, file)
+            original_name: 原始文件名（仅对 file 类型有效）
+        """
         file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
         if not os.path.exists(file_path):
             return None
 
+        # for file type, use original name for mime type
+        name_for_mime = original_name or filename if attach_type == "file" else filename
+
+        # guess mime type
+        mime_type, _ = mimetypes.guess_type(name_for_mime)
+        if not mime_type:
+            mime_type = "application/octet-stream"
+
+        # insert attachment
         attachment = await self.db.insert_attachment(
             path=file_path,
-            type="image",
-            mime_type=self._get_image_mime_type(filename),
+            type=attach_type,
+            mime_type=mime_type,
         )
-        if attachment:
-            return {"type": "image", "attachment_id": attachment.attachment_id}
-        return None
-
-    async def _create_audio_attachment(self, filename: str) -> dict | None:
-        """创建音频 attachment 并返回消息部分"""
-        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
-        if not os.path.exists(file_path):
+        if not attachment:
             return None
 
-        attachment = await self.db.insert_attachment(
-            path=file_path,
-            type="record",
-            mime_type="audio/wav",
-        )
-        if attachment:
-            return {"type": "record", "attachment_id": attachment.attachment_id}
-        return None
+        result = {"type": attach_type, "attachment_id": attachment.attachment_id}
+        if attach_type == "file":
+            result["name"] = original_name or filename
+        return result
 
     async def _build_user_message_parts(
-        self, message: str, image_urls: list | None, audio_url: str | None
+        self,
+        message: str,
+        image_urls: list | None,
+        audio_url: str | None,
+        file_urls: list | None = None,
     ) -> list:
         """构建用户消息的部分列表"""
         parts = []
@@ -185,14 +181,27 @@ class ChatRoute(Route):
 
         if image_urls:
             for img_filename in image_urls:
-                part = await self._create_image_attachment(img_filename)
+                part = await self._create_attachment(img_filename, "image")
                 if part:
                     parts.append(part)
 
         if audio_url:
-            part = await self._create_audio_attachment(audio_url)
+            part = await self._create_attachment(audio_url, "record")
             if part:
                 parts.append(part)
+
+        if file_urls:
+            for file_info in file_urls:
+                if isinstance(file_info, dict):
+                    part = await self._create_attachment(
+                        file_info["filename"],
+                        "file",
+                        file_info.get("original_name", ""),
+                    )
+                else:
+                    part = await self._create_attachment(file_info, "file")
+                if part:
+                    parts.append(part)
 
         return parts
 
@@ -237,14 +246,15 @@ class ChatRoute(Route):
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         image_url = post_data.get("image_url")
         audio_url = post_data.get("audio_url")
+        file_url = post_data.get("file_url")
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-        if not message and not image_url and not audio_url:
+        if not message and not image_url and not audio_url and not file_url:
             return (
                 Response()
-                .error("Message and image_url and audio_url are empty")
+                .error("Message, image_url, audio_url and file_url are all empty")
                 .__dict__
             )
         if not session_id:
@@ -255,7 +265,7 @@ class ChatRoute(Route):
 
         # 构建并保存用户消息
         message_parts = await self._build_user_message_parts(
-            message, image_url, audio_url
+            message, image_url, audio_url, file_url
         )
         await self.platform_history_mgr.insert(
             platform_id="webchat",
@@ -318,12 +328,25 @@ class ChatRoute(Route):
                                 accumulated_text += result_text
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
-                            part = await self._create_image_attachment(filename)
+                            part = await self._create_attachment(filename, "image")
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
-                            part = await self._create_audio_attachment(filename)
+                            part = await self._create_attachment(filename, "record")
+                            if part:
+                                accumulated_parts.append(part)
+                        elif msg_type == "file":
+                            # 格式: [FILE]filename|original_name
+                            file_data = result_text.replace("[FILE]", "")
+                            if "|" in file_data:
+                                filename, original_name = file_data.split("|", 1)
+                            else:
+                                filename = file_data
+                                original_name = ""
+                            part = await self._create_attachment(
+                                filename, "file", original_name
+                            )
                             if part:
                                 accumulated_parts.append(part)
 
@@ -359,6 +382,7 @@ class ChatRoute(Route):
                     "message": message,
                     "image_url": image_url,
                     "audio_url": audio_url,
+                    "file_url": file_url,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,

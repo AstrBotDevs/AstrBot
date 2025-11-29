@@ -30,7 +30,7 @@
                     </v-tooltip>
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
-                    <input type="file" ref="imageInputRef" @change="handleFileSelect" accept="image/*"
+                    <input type="file" ref="imageInputRef" @change="handleFileSelect"
                         style="display: none" multiple />
                     <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
                     <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
@@ -45,8 +45,8 @@
         </div>
 
         <!-- 附件预览区 -->
-        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
-            <div v-for="(img, index) in stagedImagesUrl" :key="index" class="image-preview">
+        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl || (stagedFiles && stagedFiles.length > 0)">
+            <div v-for="(img, index) in stagedImagesUrl" :key="'img-' + index" class="image-preview">
                 <img :src="img" class="preview-image" />
                 <v-btn @click="$emit('removeImage', index)" class="remove-attachment-btn" icon="mdi-close"
                     size="small" color="error" variant="text" />
@@ -60,6 +60,15 @@
                 <v-btn @click="$emit('removeAudio')" class="remove-attachment-btn" icon="mdi-close" size="small"
                     color="error" variant="text" />
             </div>
+
+            <div v-for="(file, index) in stagedFiles" :key="'file-' + index" class="file-preview">
+                <v-chip color="blue-grey-lighten-4" class="file-chip">
+                    <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
+                    <span class="file-name-preview">{{ file.original_name }}</span>
+                </v-chip>
+                <v-btn @click="$emit('removeFile', index)" class="remove-attachment-btn" icon="mdi-close" size="small"
+                    color="error" variant="text" />
+            </div>
         </div>
     </div>
 </template>
@@ -71,10 +80,17 @@ import ProviderModelSelector from './ProviderModelSelector.vue';
 import ConfigSelector from './ConfigSelector.vue';
 import type { Session } from '@/composables/useSessions';
 
+interface StagedFileInfo {
+    filename: string;
+    original_name: string;
+    url: string;
+}
+
 interface Props {
     prompt: string;
     stagedImagesUrl: string[];
     stagedAudioUrl: string;
+    stagedFiles?: StagedFileInfo[];
     disabled: boolean;
     enableStreaming: boolean;
     isRecording: boolean;
@@ -86,7 +102,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
     sessionId: null,
     currentSession: null,
-    configId: null
+    configId: null,
+    stagedFiles: () => []
 });
 
 const emit = defineEmits<{
@@ -95,6 +112,7 @@ const emit = defineEmits<{
     toggleStreaming: [];
     removeImage: [index: number];
     removeAudio: [];
+    removeFile: [index: number];
     startRecording: [];
     stopRecording: [];
     pasteImage: [event: ClipboardEvent];
@@ -117,7 +135,7 @@ const sessionPlatformId = computed(() => props.currentSession?.platform_id || 'w
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
-    return (props.prompt && props.prompt.trim()) || props.stagedImagesUrl.length > 0 || props.stagedAudioUrl;
+    return (props.prompt && props.prompt.trim()) || props.stagedImagesUrl.length > 0 || props.stagedAudioUrl || (props.stagedFiles && props.stagedFiles.length > 0);
 });
 
 // Ctrl+B 长按录音相关
@@ -239,7 +257,8 @@ defineExpose({
 }
 
 .image-preview,
-.audio-preview {
+.audio-preview,
+.file-preview {
     position: relative;
     display: inline-flex;
 }
@@ -252,9 +271,17 @@ defineExpose({
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.audio-chip {
+.audio-chip,
+.file-chip {
     height: 36px;
     border-radius: 18px;
+}
+
+.file-name-preview {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .remove-attachment-btn {

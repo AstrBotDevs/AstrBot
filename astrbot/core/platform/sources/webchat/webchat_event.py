@@ -1,10 +1,11 @@
 import base64
 import os
+import shutil
 import uuid
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .webchat_queue_mgr import webchat_queue_mgr
@@ -73,6 +74,26 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(
                     {
                         "type": "record",
+                        "cid": cid,
+                        "data": data,
+                        "streaming": streaming,
+                    },
+                )
+            elif isinstance(comp, File):
+                # save file to local
+                file_path = await comp.get_file()
+                # 获取原始文件名或使用 UUID
+                original_name = comp.name or os.path.basename(file_path)
+                # 生成唯一文件名，保留原始扩展名
+                ext = os.path.splitext(original_name)[1] or ""
+                filename = f"{uuid.uuid4()!s}{ext}"
+                dest_path = os.path.join(imgs_dir, filename)
+                shutil.copy2(file_path, dest_path)
+                # 格式: [FILE]filename|original_name
+                data = f"[FILE]{filename}|{original_name}"
+                await web_chat_back_queue.put(
+                    {
+                        "type": "file",
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,

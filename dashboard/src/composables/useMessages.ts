@@ -7,6 +7,13 @@ export interface MessagePart {
     type: 'plain' | 'image' | 'record' | 'file' | 'video';
     text?: string;           // for plain
     attachment_id?: string;  // for image, record, file, video
+    name?: string;           // for file (original filename)
+}
+
+// 文件信息结构
+export interface FileInfo {
+    url: string;
+    name: string;
 }
 
 export interface MessageContent {
@@ -15,8 +22,10 @@ export interface MessageContent {
     reasoning?: string;
     image_url?: string[];
     audio_url?: string;
+    file_url?: FileInfo[];
     embedded_images?: string[];
     embedded_audio?: string;
+    embedded_files?: FileInfo[];
     isLoading?: boolean;
 }
 
@@ -76,6 +85,7 @@ export function useMessages(
             let textParts: string[] = [];
             let imageUrls: string[] = [];
             let audioUrl: string | undefined;
+            let fileInfos: FileInfo[] = [];
 
             for (const part of message as MessagePart[]) {
                 if (part.type === 'plain' && part.text) {
@@ -85,8 +95,16 @@ export function useMessages(
                     if (url) imageUrls.push(url);
                 } else if (part.type === 'record' && part.attachment_id) {
                     audioUrl = await getAttachment(part.attachment_id);
+                } else if (part.type === 'file' && part.attachment_id) {
+                    const url = await getAttachment(part.attachment_id);
+                    if (url) {
+                        fileInfos.push({
+                            url: url,
+                            name: part.name || 'file'
+                        });
+                    }
                 }
-                // file 和 video 类型可以后续扩展
+                // video 类型可以后续扩展
             }
 
             // 转换为旧格式兼容的结构
@@ -94,9 +112,11 @@ export function useMessages(
             if (content.type === 'user') {
                 content.image_url = imageUrls.length > 0 ? imageUrls : undefined;
                 content.audio_url = audioUrl;
+                content.file_url = fileInfos.length > 0 ? fileInfos : undefined;
             } else {
                 content.embedded_images = imageUrls.length > 0 ? imageUrls : undefined;
                 content.embedded_audio = audioUrl;
+                content.embedded_files = fileInfos.length > 0 ? fileInfos : undefined;
             }
         }
         // 如果 message 是字符串 (旧格式)，保持原有处理逻辑
@@ -175,14 +195,16 @@ export function useMessages(
         imageNames: string[],
         audioName: string,
         selectedProviderId: string,
-        selectedModelName: string
+        selectedModelName: string,
+        fileInfos: { filename: string; original_name: string }[] = []
     ) {
         // Create user message
         const userMessage: MessageContent = {
             type: 'user',
             message: prompt,
             image_url: [],
-            audio_url: undefined
+            audio_url: undefined,
+            file_url: []
         };
 
         // Convert image filenames to blob URLs
@@ -203,6 +225,18 @@ export function useMessages(
             } else {
                 userMessage.audio_url = audioName;
             }
+        }
+
+        // Convert file filenames to blob URLs
+        if (fileInfos.length > 0) {
+            const filePromises = fileInfos.map(async (info) => {
+                const url = await getMediaFile(info.filename);
+                return {
+                    url: url,
+                    name: info.original_name || info.filename
+                };
+            });
+            userMessage.file_url = await Promise.all(filePromises);
         }
 
         messages.value.push({ content: userMessage });
@@ -233,6 +267,7 @@ export function useMessages(
                     session_id: currSessionId.value,
                     image_url: imageNames,
                     audio_url: audioName ? [audioName] : [],
+                    file_url: fileInfos,
                     selected_provider: selectedProviderId,
                     selected_model: selectedModelName,
                     enable_streaming: enableStreaming.value
@@ -304,6 +339,22 @@ export function useMessages(
                                 type: 'bot',
                                 message: '',
                                 embedded_audio: audioUrl
+                            };
+                            messages.value.push({ content: bot_resp });
+                        } else if (chunk_json.type === 'file') {
+                            // 格式: [FILE]filename|original_name
+                            let fileData = chunk_json.data.replace('[FILE]', '');
+                            let [filename, originalName] = fileData.includes('|') 
+                                ? fileData.split('|', 2) 
+                                : [fileData, fileData];
+                            const fileUrl = await getMediaFile(filename);
+                            let bot_resp: MessageContent = {
+                                type: 'bot',
+                                message: '',
+                                embedded_files: [{
+                                    url: fileUrl,
+                                    name: originalName
+                                }]
                             };
                             messages.value.push({ content: bot_resp });
                         } else if (chunk_json.type === 'plain') {

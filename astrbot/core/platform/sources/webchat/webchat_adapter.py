@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.message.components import File, Image, Plain, Record
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -132,6 +132,17 @@ class WebChatAdapter(Platform):
             else:
                 path = os.path.join(self.imgs_dir, payload["audio_url"])
                 abm.message.append(Record(file=path, path=path))
+        if payload.get("file_url"):
+            file_list = payload["file_url"]
+            if isinstance(file_list, str):
+                file_list = [file_list]
+            for file_info in file_list:
+                # file_info 格式: {"filename": "xxx", "original_name": "xxx"}
+                if isinstance(file_info, dict):
+                    path = os.path.join(self.imgs_dir, file_info["filename"])
+                    abm.message.append(
+                        File(name=file_info.get("original_name", ""), file=path)
+                    )
 
         logger.debug(f"WebChatAdapter: {abm.message}")
 
