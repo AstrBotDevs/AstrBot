@@ -70,13 +70,13 @@ export function useMessages(
     // 解析新格式消息为旧格式兼容的结构 (用于显示)
     async function parseMessageContent(content: any): Promise<void> {
         const message = content.message;
-        
+
         // 如果 message 是数组 (新格式)
         if (Array.isArray(message)) {
             let textParts: string[] = [];
             let imageUrls: string[] = [];
             let audioUrl: string | undefined;
-            
+
             for (const part of message as MessagePart[]) {
                 if (part.type === 'plain' && part.text) {
                     textParts.push(part.text);
@@ -88,7 +88,7 @@ export function useMessages(
                 }
                 // file 和 video 类型可以后续扩展
             }
-            
+
             // 转换为旧格式兼容的结构
             content.message = textParts.join('\n');
             if (content.type === 'user') {
@@ -125,10 +125,10 @@ export function useMessages(
             // 处理历史消息中的媒体文件
             for (let i = 0; i < history.length; i++) {
                 let content = history[i].content;
-                
+
                 // 首先尝试解析新格式消息
                 await parseMessageContent(content);
-                
+
                 // 以下是旧格式的兼容处理 (message 是字符串的情况)
                 if (typeof content.message === 'string') {
                     if (content.message?.startsWith('[IMAGE]')) {
@@ -163,7 +163,7 @@ export function useMessages(
                     content.audio_url = await getMediaFile(content.audio_url);
                 }
             }
-            
+
             messages.value = history;
         } catch (err) {
             console.error(err);
@@ -278,6 +278,11 @@ export function useMessages(
                             continue;
                         }
 
+                        const lastMsg = messages.value[messages.value.length - 1];
+                        if (lastMsg?.content?.isLoading) {
+                            messages.value.pop();
+                        }
+
                         if (chunk_json.type === 'error') {
                             console.error('Error received:', chunk_json.data);
                             continue;
@@ -303,14 +308,8 @@ export function useMessages(
                             messages.value.push({ content: bot_resp });
                         } else if (chunk_json.type === 'plain') {
                             const chain_type = chunk_json.chain_type || 'normal';
-                            
+
                             if (!in_streaming) {
-                                // 移除加载占位符
-                                const lastMsg = messages.value[messages.value.length - 1];
-                                if (lastMsg?.content?.isLoading) {
-                                    messages.value.pop();
-                                }
-                                
                                 message_obj = reactive({
                                     type: 'bot',
                                     message: chain_type === 'reasoning' ? '' : chunk_json.data,
