@@ -35,7 +35,7 @@ class LongTermMemory:
             "image_caption_provider_id"
         ) or cfg["provider_settings"].get("default_image_caption_provider_id")
         image_caption = (
-            cfg["provider_ltm_settings"]["image_caption"] and image_caption_provider_id
+            cfg["provider_ltm_settings"]["image_caption"] and bool(image_caption_provider_id)
         )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
