@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
         "image_caption": False,
+        "image_caption_provider_id": "",
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -2109,6 +2110,9 @@ CONFIG_METADATA_2 = {
                     "image_caption": {
                         "type": "bool",
                     },
+                    "image_caption_provider_id": {
+                        "type": "string",
+                    },
                     "image_caption_prompt": {
                         "type": "string",
                     },
@@ -2785,7 +2789,16 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
                         "type": "bool",
-                        "hint": "需要设置默认图片转述模型。",
+                        "hint": "需要设置群聊图片转述模型。",
+                    },
+                    "provider_ltm_settings.image_caption_provider_id": {
+                        "description": "群聊图片转述模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",

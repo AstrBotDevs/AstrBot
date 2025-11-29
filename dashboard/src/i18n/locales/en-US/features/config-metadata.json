@@ -379,7 +379,11 @@
         },
         "image_caption": {
           "description": "Auto-understand Images",
-          "hint": "Requires setting a default image caption model."
+          "hint": "Requires setting a group chat image caption model."
+        },
+        "image_caption_provider_id": {
+          "description": "Group Chat Image Caption Model",
+          "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
         },
         "active_reply": {
           "enable": {
