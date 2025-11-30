@@ -85,7 +85,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
 
         source = self.message_obj.raw_message
-        assert isinstance(
+
+        # 1. 替换 assert isinstance(...) 为 if 检查
+        if not isinstance(
             source,
             (
                 botpy.message.Message,
@@ -93,7 +95,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 botpy.message.DirectMessage,
                 botpy.message.C2CMessage,
             ),
-        )
+        ):
+            logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
+            return None
 
         (
             plain_text,
@@ -120,10 +124,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         ret = None
 
-        match type(source):
-            case botpy.message.GroupMessage:
-                assert isinstance(source, botpy.message.GroupMessage)
-                assert source.group_openid is not None
+        # 2. 修改 match type(source) 为 match source
+        match source:
+            case botpy.message.GroupMessage():
+                # 使用 if 检查替代 assert
+                if not source.group_openid:
+                    logger.error("[QQOfficial] GroupMessage 缺少 group_openid")
+                    return None
+
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
@@ -144,8 +152,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     group_openid=source.group_openid,
                     **payload,
                 )
-            case botpy.message.C2CMessage:
-                assert isinstance(source, botpy.message.C2CMessage)
+
+            case botpy.message.C2CMessage():
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
@@ -174,19 +182,23 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         **payload,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
-            case botpy.message.Message:
-                assert isinstance(source, botpy.message.Message)
+
+            case botpy.message.Message():
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.bot.api.post_message(
                     channel_id=source.channel_id,
                     **payload,
                 )
-            case botpy.message.DirectMessage:
-                assert isinstance(source, botpy.message.DirectMessage)
+
+            case botpy.message.DirectMessage():
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
+
+            case _:
+                # 理论上前面的 isinstance 检查已经拦截了其他类型，但保留默认分支是个好习惯
+                pass
 
         await super().send(self.send_buffer)
 
@@ -205,17 +217,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "file_type": file_type,
             "srv_send_msg": False,
         }
+
+        result = None
         if "openid" in kwargs:
             payload["openid"] = kwargs["openid"]
             route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
             result = await self.bot.api._http.request(route, json=payload)
-            assert isinstance(result, dict)
-            return Media(
-                file_uuid=result["file_uuid"],
-                file_info=result["file_info"],
-                ttl=result.get("ttl", 0),
-            )
-        if "group_openid" in kwargs:
+        elif "group_openid" in kwargs:
             payload["group_openid"] = kwargs["group_openid"]
             route = Route(
                 "POST",
@@ -223,13 +231,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 group_openid=kwargs["group_openid"],
             )
             result = await self.bot.api._http.request(route, json=payload)
-            assert isinstance(result, dict)
-            return Media(
-                file_uuid=result["file_uuid"],
-                file_info=result["file_info"],
-                ttl=result.get("ttl", 0),
+        else:
+            raise ValueError("Invalid upload parameters")
+
+        # 3. 替换 assert isinstance(result, dict)
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to upload image, response is not dict: {result}"
             )
-        raise ValueError("Invalid upload parameters")
+
+        return Media(
+            file_uuid=result["file_uuid"],
+            file_info=result["file_info"],
+            ttl=result.get("ttl", 0),
+        )
 
     async def upload_group_and_c2c_record(
         self,
@@ -272,7 +287,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             result = await self.bot.api._http.request(route, json=payload)
 
             if result:
-                assert isinstance(result, dict)
+                # 4. 替换 assert isinstance(result, dict)
+                if not isinstance(result, dict):
+                    logger.error(f"上传文件响应格式错误: {result}")
+                    return None
+
                 return Media(
                     file_uuid=result["file_uuid"],
                     file_info=result["file_info"],
@@ -303,7 +322,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload.pop("self", None)
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
         result = await self.bot.api._http.request(route, json=payload)
-        assert isinstance(result, dict)
+
+        # 5. 替换 assert isinstance(result, dict)
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to post c2c message, response is not dict: {result}"
+            )
+
         return message.Message(**result)
 
     @staticmethod
