@@ -73,7 +73,7 @@ DEFAULT_CONFIG = {
         "coze_agent_runner_provider_id": "",
         "dashscope_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
-        "reachability_check": True,
+        "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
