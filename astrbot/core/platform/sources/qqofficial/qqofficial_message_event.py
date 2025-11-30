@@ -86,7 +86,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         source = self.message_obj.raw_message
 
-        # 1. 替换 assert isinstance(...) 为 if 检查
         if not isinstance(
             source,
             (
@@ -124,10 +123,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         ret = None
 
-        # 2. 修改 match type(source) 为 match source
         match source:
             case botpy.message.GroupMessage():
-                # 使用 if 检查替代 assert
                 if not source.group_openid:
                     logger.error("[QQOfficial] GroupMessage 缺少 group_openid")
                     return None
@@ -197,7 +194,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 ret = await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
 
             case _:
-                # 理论上前面的 isinstance 检查已经拦截了其他类型，但保留默认分支是个好习惯
                 pass
 
         await super().send(self.send_buffer)
@@ -234,7 +230,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             raise ValueError("Invalid upload parameters")
 
-        # 3. 替换 assert isinstance(result, dict)
         if not isinstance(result, dict):
             raise RuntimeError(
                 f"Failed to upload image, response is not dict: {result}"
@@ -287,7 +282,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             result = await self.bot.api._http.request(route, json=payload)
 
             if result:
-                # 4. 替换 assert isinstance(result, dict)
                 if not isinstance(result, dict):
                     logger.error(f"上传文件响应格式错误: {result}")
                     return None
@@ -323,7 +317,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
         result = await self.bot.api._http.request(route, json=payload)
 
-        # 5. 替换 assert isinstance(result, dict)
         if not isinstance(result, dict):
             raise RuntimeError(
                 f"Failed to post c2c message, response is not dict: {result}"
