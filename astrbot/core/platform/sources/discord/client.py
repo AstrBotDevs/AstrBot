@@ -34,7 +34,10 @@ class DiscordBotClient(discord.Bot):
 
     async def on_ready(self):
         """当机器人成功连接并准备就绪时触发"""
-        assert self.user is not None
+        if self.user is None:
+            logger.error("[Discord] 客户端未正确加载用户信息 (self.user is None)")
+            return
+
         logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
         logger.info("[Discord] 客户端已准备就绪。")
 
@@ -50,7 +53,9 @@ class DiscordBotClient(discord.Bot):
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
-        assert self.user is not None
+        if self.user is None:
+            raise RuntimeError("Bot is not ready: self.user is None")
+
         is_mentioned = self.user in message.mentions
         return {
             "message": message,
@@ -68,8 +73,12 @@ class DiscordBotClient(discord.Bot):
 
     def _create_interaction_data(self, interaction: discord.Interaction) -> dict:
         """从 discord.Interaction 创建数据字典"""
-        assert self.user is not None
-        assert interaction.user is not None
+        if self.user is None:
+            raise RuntimeError("Bot is not ready: self.user is None")
+
+        if interaction.user is None:
+            raise ValueError("Interaction received without a valid user")
+
         return {
             "interaction": interaction,
             "bot_id": str(self.user.id),
