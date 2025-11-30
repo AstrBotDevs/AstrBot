@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from typing import cast
 
 from wechatpy import WeChatClient
 from wechatpy.replies import ImageReply, TextReply, VoiceReply
@@ -86,9 +85,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
-        active_send_mode = cast(dict, message_obj.raw_message).get(
-            "active_send_mode", False
-        )
+        active_send_mode = message_obj.raw_message.get("active_send_mode", False)
         for comp in message.chain:
             if isinstance(comp, Plain):
                 # Split long text messages if needed
@@ -99,12 +96,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = TextReply(
                             content=chunk,
-                            message=cast(dict, self.message_obj.raw_message)["message"],
+                            message=self.message_obj.raw_message["message"],
                         )
                         xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
-                        assert isinstance(future, asyncio.Future)
-                        future.set_result(xml)
+                        future = self.message_obj.raw_message["future"]
+                        if future:
+                            future.set_result(xml)
                     await asyncio.sleep(0.5)  # Avoid sending too fast
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
@@ -128,12 +125,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = ImageReply(
                             media_id=response["media_id"],
-                            message=cast(dict, self.message_obj.raw_message)["message"],
+                            message=self.message_obj.raw_message["message"],
                         )
                         xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
-                        assert isinstance(future, asyncio.Future)
-                        future.set_result(xml)
+                        future = self.message_obj.raw_message["future"]
+                        if future:
+                            future.set_result(xml)
 
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
@@ -163,12 +160,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = VoiceReply(
                             media_id=response["media_id"],
-                            message=cast(dict, self.message_obj.raw_message)["message"],
+                            message=self.message_obj.raw_message["message"],
                         )
                         xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
-                        assert isinstance(future, asyncio.Future)
-                        future.set_result(xml)
+                        future = self.message_obj.raw_message["future"]
+                        if future:
+                            future.set_result(xml)
 
             else:
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")

@@ -2,14 +2,13 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import cast
 
 import quart
 from requests import Response
 from wechatpy import WeChatClient, parse_message
 from wechatpy.crypto import WeChatCrypto
 from wechatpy.exceptions import InvalidSignatureException
-from wechatpy.messages import BaseMessage, ImageMessage, TextMessage, VoiceMessage
+from wechatpy.messages import BaseMessage, TextMessage
 from wechatpy.utils import check_signature
 
 from astrbot.api.event import MessageChain
@@ -36,7 +35,7 @@ else:
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
-        self.port = int(cast(int | str, config.get("port")))
+        self.port = int(config.get("port"))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -89,7 +88,7 @@ class WecomServer:
             logger.error("解密失败，签名异常，请检查配置。")
             raise
         else:
-            msg = cast(BaseMessage, parse_message(xml))
+            msg = parse_message(xml)
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -163,12 +162,13 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 if self.active_send_mode:
                     await self.convert_message(msg, None)
                 else:
+                    msg_id_str = str(msg.id)
                     if msg.id in self.wexin_event_workers:
-                        future = self.wexin_event_workers[str(cast(str | int, msg.id))]
+                        future = self.wexin_event_workers[msg_id_str]
                         logger.debug(f"duplicate message id checked: {msg.id}")
                     else:
                         future = asyncio.get_event_loop().create_future()
-                        self.wexin_event_workers[str(cast(str | int, msg.id))] = future
+                        self.wexin_event_workers[msg_id_str] = future
                         await self.convert_message(msg, future)
                     # I love shield so much!
                     result = await asyncio.wait_for(
@@ -176,7 +176,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         60,
                     )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
-                    self.wexin_event_workers.pop(str(cast(str | int, msg.id)), None)
+                    self.wexin_event_workers.pop(msg_id_str, None)
                     return result  # xml. see weixin_offacc_event.py
             except asyncio.TimeoutError:
                 pass
@@ -213,33 +213,30 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = cast(str, msg.content)
+            abm.message_str = msg.content
             abm.self_id = str(msg.target)
-            abm.message = [Plain(cast(str, msg.content))]
+            abm.message = [Plain(msg.content)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                msg.source,
+                msg.source,
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(msg.id)
+            abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
         elif msg.type == "image":
-            assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=cast(str, msg.image), url=cast(str, msg.image))]
+            abm.message = [Image(file=msg.image, url=msg.image)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                msg.source,
+                msg.source,
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(msg.id)
+            abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
         elif msg.type == "voice":
-            assert isinstance(msg, VoiceMessage)
-
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 self.client.media.download,
@@ -267,11 +264,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                msg.source,
+                msg.source,
             )
-            abm.message_id = str(cast(str | int, msg.id))
-            abm.timestamp = cast(int, msg.time)
+            abm.message_id = str(msg.id)
+            abm.timestamp = msg.time
             abm.session_id = abm.sender.user_id
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
