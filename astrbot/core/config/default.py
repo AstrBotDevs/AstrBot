@@ -2280,11 +2280,6 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
-                    "provider_settings.reachability_check": {
-                        "description": "提供商可达性检测",
-                        "type": "bool",
-                        "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
-                    },
                     "provider_stt_settings.enable": {
                         "description": "启用语音转文本",
                         "type": "bool",
@@ -2501,6 +2496,11 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                    },
+                    "provider_settings.reachability_check": {
+                        "description": "提供商可达性检测",
+                        "type": "bool",
+                        "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
                     },
                 },
                 "condition": {
