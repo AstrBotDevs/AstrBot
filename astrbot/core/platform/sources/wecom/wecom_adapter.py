@@ -238,8 +238,7 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
-        if msg.type == "text":
-            assert isinstance(msg, TextMessage)
+        if isinstance(msg, TextMessage):
             abm.message_str = msg.content
             abm.self_id = str(msg.agent)
             abm.message = [Plain(msg.content)]
@@ -252,8 +251,7 @@ class WecomPlatformAdapter(Platform):
             abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
-        elif msg.type == "image":
-            assert isinstance(msg, ImageMessage)
+        elif isinstance(msg, ImageMessage):
             abm.message_str = "[图片]"
             abm.self_id = str(msg.agent)
             abm.message = [Image(file=msg.image, url=msg.image)]
@@ -266,9 +264,7 @@ class WecomPlatformAdapter(Platform):
             abm.timestamp = int(cast(int | str, msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
-        elif msg.type == "voice":
-            assert isinstance(msg, VoiceMessage)
-
+        elif isinstance(msg, VoiceMessage):
             resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 self.client.media.download,
