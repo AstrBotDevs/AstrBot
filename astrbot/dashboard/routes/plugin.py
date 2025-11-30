@@ -20,6 +20,8 @@ from astrbot.core.star.star_manager import PluginManager
 
 from .route import Response, Route, RouteContext
 
+PLUGIN_UPDATE_CONCURRENCY = 3  # limit concurrent updates to avoid overwhelming plugin sources
+
 
 class PluginRoute(Route):
     def __init__(
@@ -65,7 +67,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        data = await request.json
+        data = await request.get_json()
         plugin_name = data.get("name", None)
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
@@ -348,7 +350,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         repo_url = post_data["url"]
 
         proxy: str = post_data.get("proxy", None)
@@ -395,7 +397,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         delete_config = post_data.get("delete_config", False)
         delete_data = post_data.get("delete_data", False)
@@ -420,7 +422,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         proxy: str = post_data.get("proxy", None)
         try:
@@ -442,7 +444,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_names: list[str] = post_data.get("names") or []
         proxy: str = post_data.get("proxy", "")
 
@@ -450,7 +452,7 @@ class PluginRoute(Route):
             return Response().error("插件列表不能为空").__dict__
 
         results = []
-        sem = asyncio.Semaphore(3)  # 控制并发数量
+        sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
 
         async def _update_one(name: str):
             async with sem:
@@ -464,7 +466,19 @@ class PluginRoute(Route):
                     )
                     return {"name": name, "status": "error", "message": str(e)}
 
-        results = await asyncio.gather(*[_update_one(name) for name in plugin_names])
+        raw_results = await asyncio.gather(
+            *(_update_one(name) for name in plugin_names),
+            return_exceptions=True,
+        )
+        for name, result in zip(plugin_names, raw_results):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, BaseException):
+                results.append(
+                    {"name": name, "status": "error", "message": str(result)}
+                )
+            else:
+                results.append(result)
 
         failed = [r for r in results if r["status"] == "error"]
         message = (
@@ -483,7 +497,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
@@ -501,7 +515,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)
