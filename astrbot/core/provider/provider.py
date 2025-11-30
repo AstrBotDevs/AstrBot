@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import os
 from collections.abc import AsyncGenerator
 
 from astrbot.core.agent.message import Message
@@ -11,6 +12,7 @@ from astrbot.core.provider.entities import (
     ToolCallsResult,
 )
 from astrbot.core.provider.register import provider_cls_map
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 
 
 class AbstractProvider(abc.ABC):
@@ -42,6 +44,14 @@ class AbstractProvider(abc.ABC):
             provider_type=meta_data.provider_type,
         )
         return meta
+
+    async def test(self) -> bool:
+        """test the provider is a
+
+        Returns:
+            bool: the provider is available
+        """
+        return True
 
 
 class Provider(AbstractProvider):
@@ -165,6 +175,16 @@ class Provider(AbstractProvider):
 
         return dicts
 
+    async def test(self, timeout: float = 45.0) -> bool:
+        try:
+            response = await asyncio.wait_for(
+                self.text_chat(prompt="REPLY `PONG` ONLY"),
+                timeout=timeout,
+            )
+            return response is not None
+        except Exception:
+            return False
+
 
 class STTProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -177,6 +197,20 @@ class STTProvider(AbstractProvider):
         """获取音频的文本"""
         raise NotImplementedError
 
+    async def test(self) -> bool:
+        try:
+            sample_audio_path = os.path.join(
+                get_astrbot_path(),
+                "samples",
+                "stt_health_check.wav",
+            )
+            if not os.path.exists(sample_audio_path):
+                return False
+            text_result = await self.get_text(sample_audio_path)
+            return isinstance(text_result, str) and bool(text_result)
+        except Exception:
+            return False
+
 
 class TTSProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -188,6 +222,13 @@ class TTSProvider(AbstractProvider):
     async def get_audio(self, text: str) -> str:
         """获取文本的音频，返回音频文件路径"""
         raise NotImplementedError
+
+    async def test(self) -> bool:
+        try:
+            audio_result = await self.get_audio("hi")
+            return isinstance(audio_result, str) and bool(audio_result)
+        except Exception:
+            return False
 
 
 class EmbeddingProvider(AbstractProvider):
@@ -210,6 +251,15 @@ class EmbeddingProvider(AbstractProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         ...
+
+    async def test(self) -> bool:
+        try:
+            embedding_result = await self.get_embedding("health_check")
+            return isinstance(embedding_result, list) and (
+                not embedding_result or isinstance(embedding_result[0], float)
+            )
+        except Exception:
+            return False
 
     async def get_embeddings_batch(
         self,
@@ -294,3 +344,10 @@ class RerankProvider(AbstractProvider):
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...
+
+    async def test(self) -> bool:
+        try:
+            await self.rerank("Apple", documents=["apple", "banana"])
+            return True
+        except Exception:
+            return False
