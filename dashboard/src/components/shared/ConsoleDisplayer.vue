@@ -38,7 +38,6 @@ export default {
         '\u001b[32m': 'color: #00FF00;',  // green
         'default': 'color: #FFFFFF;'
       },
-      commonStore,
       logCache: log_cache,
       historyNum_: -1,
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
