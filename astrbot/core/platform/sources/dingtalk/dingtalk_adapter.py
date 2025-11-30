@@ -250,7 +250,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def terminate(self):
         def monkey_patch_close():
-            raise Exception("Graceful shutdown")
+            raise KeyboardInterrupt("Graceful shutdown")
 
         self.client_.open_connection = monkey_patch_close
         await self.client_.websocket.close(code=1000, reason="Graceful shutdown")
