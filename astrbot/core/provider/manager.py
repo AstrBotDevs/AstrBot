@@ -376,82 +376,103 @@ class ProviderManager:
 
             provider_metadata.id = provider_config["id"]
 
-            if provider_metadata.provider_type == ProviderType.SPEECH_TO_TEXT:
-                # STT 任务
-                assert issubclass(cls_type, STTProvider)
-                inst = cls_type(provider_config, self.provider_settings)
+            match provider_metadata.provider_type:
+                case ProviderType.SPEECH_TO_TEXT:
+                    # STT 任务
+                    if not issubclass(cls_type, STTProvider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of STTProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
 
-                if getattr(inst, "initialize", None):
-                    await cast(HasInitialize, inst).initialize()
+                    if getattr(inst, "initialize", None):
+                        await cast(HasInitialize, inst).initialize()
 
-                self.stt_provider_insts.append(inst)
-                if (
-                    self.provider_stt_settings.get("provider_id")
-                    == provider_config["id"]
-                ):
-                    self.curr_stt_provider_inst = inst
-                    logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                    self.stt_provider_insts.append(inst)
+                    if (
+                        self.provider_stt_settings.get("provider_id")
+                        == provider_config["id"]
+                    ):
+                        self.curr_stt_provider_inst = inst
+                        logger.info(
+                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                        )
+                    if not self.curr_stt_provider_inst:
+                        self.curr_stt_provider_inst = inst
+
+                case ProviderType.TEXT_TO_SPEECH:
+                    # TTS 任务
+                    if not issubclass(cls_type, TTSProvider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of TTSProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
+
+                    if getattr(inst, "initialize", None):
+                        await cast(HasInitialize, inst).initialize()
+
+                    self.tts_provider_insts.append(inst)
+                    if (
+                        self.provider_settings.get("provider_id")
+                        == provider_config["id"]
+                    ):
+                        self.curr_tts_provider_inst = inst
+                        logger.info(
+                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                        )
+                    if not self.curr_tts_provider_inst:
+                        self.curr_tts_provider_inst = inst
+
+                case ProviderType.CHAT_COMPLETION:
+                    # 文本生成任务
+                    if not issubclass(cls_type, Provider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of Provider"
+                        )
+                    inst = cls_type(
+                        provider_config,
+                        self.provider_settings,
                     )
-                if not self.curr_stt_provider_inst:
-                    self.curr_stt_provider_inst = inst
 
-            elif provider_metadata.provider_type == ProviderType.TEXT_TO_SPEECH:
-                # TTS 任务
-                assert issubclass(cls_type, TTSProvider)
-                inst = cls_type(provider_config, self.provider_settings)
+                    if getattr(inst, "initialize", None):
+                        await cast(HasInitialize, inst).initialize()
 
-                if getattr(inst, "initialize", None):
-                    await cast(HasInitialize, inst).initialize()
+                    self.provider_insts.append(inst)
+                    if (
+                        self.provider_settings.get("default_provider_id")
+                        == provider_config["id"]
+                    ):
+                        self.curr_provider_inst = inst
+                        logger.info(
+                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
+                        )
+                    if not self.curr_provider_inst:
+                        self.curr_provider_inst = inst
 
-                self.tts_provider_insts.append(inst)
-                if self.provider_settings.get("provider_id") == provider_config["id"]:
-                    self.curr_tts_provider_inst = inst
-                    logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                case ProviderType.EMBEDDING:
+                    if not issubclass(cls_type, EmbeddingProvider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
+                    if getattr(inst, "initialize", None):
+                        await cast(HasInitialize, inst).initialize()
+                    self.embedding_provider_insts.append(inst)
+                case ProviderType.RERANK:
+                    if not issubclass(cls_type, RerankProvider):
+                        raise TypeError(
+                            f"Provider class {cls_type} is not a subclass of RerankProvider"
+                        )
+                    inst = cls_type(provider_config, self.provider_settings)
+                    if getattr(inst, "initialize", None):
+                        await cast(HasInitialize, inst).initialize()
+                    self.rerank_provider_insts.append(inst)
+                case _:
+                    # 未知供应商抛出异常，确保inst初始化
+                    # Should be unreachable
+                    raise Exception(
+                        f"未知的提供商类型：{provider_metadata.provider_type}"
                     )
-                if not self.curr_tts_provider_inst:
-                    self.curr_tts_provider_inst = inst
-
-            elif provider_metadata.provider_type == ProviderType.CHAT_COMPLETION:
-                # 文本生成任务
-                assert issubclass(cls_type, Provider)
-                inst = cls_type(
-                    provider_config,
-                    self.provider_settings,
-                )
-
-                if getattr(inst, "initialize", None):
-                    await cast(HasInitialize, inst).initialize()
-
-                self.provider_insts.append(inst)
-                if (
-                    self.provider_settings.get("default_provider_id")
-                    == provider_config["id"]
-                ):
-                    self.curr_provider_inst = inst
-                    logger.info(
-                        f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
-                    )
-                if not self.curr_provider_inst:
-                    self.curr_provider_inst = inst
-
-            elif provider_metadata.provider_type == ProviderType.EMBEDDING:
-                assert issubclass(cls_type, EmbeddingProvider)
-                inst = cls_type(provider_config, self.provider_settings)
-                if getattr(inst, "initialize", None):
-                    await cast(HasInitialize, inst).initialize()
-                self.embedding_provider_insts.append(inst)
-            elif provider_metadata.provider_type == ProviderType.RERANK:
-                assert issubclass(cls_type, RerankProvider)
-                inst = cls_type(provider_config, self.provider_settings)
-                if getattr(inst, "initialize", None):
-                    await cast(HasInitialize, inst).initialize()
-                self.rerank_provider_insts.append(inst)
-            else:
-                # 未知供应商抛出异常，确保inst初始化
-                # Should be unreachable
-                raise Exception(f"未知的提供商类型：{provider_metadata.provider_type}")
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
