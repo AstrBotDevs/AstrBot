@@ -148,20 +148,23 @@ class Message(BaseModel):
     content: str | list[ContentPart]
     """The content of the message."""
 
+    tool_calls: list[ToolCall] | list[dict] | None = None
+    """The tool calls of the message."""
+
+    tool_call_id: str | None = None
+    """The ID of the tool call."""
+
 
 class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
     role: Literal["assistant"] = "assistant"
-    content: str | list[ContentPart] | None = None
-    tool_calls: list[ToolCall] | list[dict] | None = None
 
 
 class ToolCallMessageSegment(Message):
     """A message segment representing a tool call."""
 
     role: Literal["tool"] = "tool"
-    tool_call_id: str
 
 
 class UserMessageSegment(Message):
