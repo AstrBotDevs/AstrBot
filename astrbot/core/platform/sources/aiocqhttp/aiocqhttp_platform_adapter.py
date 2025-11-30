@@ -265,7 +265,8 @@ class AiocqhttpAdapter(Platform):
                                 )
                             if ret and "url" in ret:
                                 file_url = ret["url"]  # https
-                                a = File(name="", url=file_url)
+                                file_name = ret.get("file_name", "") or ret.get("name", "") or m["data"].get("file", "") or m["data"].get("file_name", "")
+                                a = File(name=file_name, url=file_url)
                                 abm.message.append(a)
                             else:
                                 logger.error(f"获取文件失败: {ret}")
