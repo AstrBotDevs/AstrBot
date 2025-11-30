@@ -11,7 +11,7 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 async def call_handler(
     event: AstrMessageEvent,
-    handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
+    handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any]],
     *args,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
