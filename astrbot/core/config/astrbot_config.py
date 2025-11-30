@@ -24,6 +24,10 @@ class AstrBotConfig(dict):
     - 如果传入了 schema，将会通过 schema 解析出 default_config，此时传入的 default_config 会被忽略。
     """
 
+    config_path: str
+    default_config: dict
+    schema: dict | None
+
     def __init__(
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,
@@ -147,7 +151,6 @@ class AstrBotConfig(dict):
 
         如果传入 replace_config，则将配置替换为 replace_config
         """
-        assert isinstance(self.config_path, str)
         if replace_config:
             self.update(replace_config)
         with open(self.config_path, "w", encoding="utf-8-sig") as f:
@@ -170,5 +173,4 @@ class AstrBotConfig(dict):
         self[key] = value
 
     def check_exist(self) -> bool:
-        assert isinstance(self.config_path, str)
         return os.path.exists(self.config_path)
