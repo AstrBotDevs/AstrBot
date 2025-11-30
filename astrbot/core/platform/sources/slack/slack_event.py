@@ -39,8 +39,7 @@ class SlackMessageEvent(AstrMessageEvent):
         if isinstance(segment, Image):
             # upload file
             url = segment.url or segment.file
-            assert url is not None
-            if url.startswith("http"):
+            if url and url.startswith("http"):
                 return {
                     "type": "image",
                     "image_url": url,

@@ -135,7 +135,9 @@ class SlackSocketClient:
     ):
         """处理 Socket Mode 事件"""
         try:
-            assert self.socket_client is not None
+            if self.socket_client is None:
+                raise RuntimeError("Socket client is not initialized")
+
             # 确认收到事件
             response = SocketModeResponse(envelope_id=req.envelope_id)
             await self.socket_client.send_socket_mode_response(response)
