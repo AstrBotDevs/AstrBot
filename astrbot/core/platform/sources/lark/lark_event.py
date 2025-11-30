@@ -52,7 +52,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = comp.file.replace("file:///", "")
                 elif comp.file and comp.file.startswith("http"):
                     image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path
+                    file_path = image_file_path if image_file_path else ""
                 elif comp.file and comp.file.startswith("base64://"):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
@@ -62,11 +62,17 @@ class LarkMessageEvent(AstrMessageEvent):
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
-                    file_path = comp.file
+                    file_path = comp.file if comp.file else ""
 
                 if image_file is None:
-                    assert file_path is not None
-                    image_file = open(file_path, "rb")
+                    if not file_path:
+                        logger.error("[Lark] 图片路径为空，无法上传")
+                        continue
+                    try:
+                        image_file = open(file_path, "rb")
+                    except Exception as e:
+                        logger.error(f"[Lark] 无法打开图片文件: {e}")
+                        continue
 
                 request = (
                     CreateImageRequest.builder()
@@ -78,11 +84,20 @@ class LarkMessageEvent(AstrMessageEvent):
                     )
                     .build()
                 )
-                assert lark_client.im is not None
+
+                if lark_client.im is None:
+                    logger.error("[Lark] API Client im 模块未初始化，无法上传图片")
+                    continue
+
                 response = await lark_client.im.v1.image.acreate(request)
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
-                assert response.data is not None
+                    continue
+
+                if response.data is None:
+                    logger.error("[Lark] 上传图片成功但未返回数据(data is None)")
+                    continue
+
                 image_key = response.data.image_key
                 logger.debug(image_key)
                 ret.append(_stage)
@@ -118,7 +133,10 @@ class LarkMessageEvent(AstrMessageEvent):
             .build()
         )
 
-        assert self.bot.im is not None
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法回复消息")
+            return
+
         response = await self.bot.im.v1.message.areply(request)
 
         if not response.success():
@@ -127,6 +145,10 @@ class LarkMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def react(self, emoji: str):
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
+            return
+
         request = (
             CreateMessageReactionRequest.builder()
             .message_id(self.message_obj.message_id)
@@ -137,7 +159,7 @@ class LarkMessageEvent(AstrMessageEvent):
             )
             .build()
         )
-        assert self.bot.im is not None
+
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")

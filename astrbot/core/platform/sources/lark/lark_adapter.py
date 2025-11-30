@@ -81,7 +81,10 @@ class LarkPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ):
-        assert self.lark_api.im is not None
+        if self.lark_api.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法发送消息")
+            return
+
         res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
         wrapped = {
             "zh_cn": {
@@ -127,9 +130,14 @@ class LarkPlatformAdapter(Platform):
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
-        assert event.event is not None
+        if event.event is None:
+            logger.debug("[Lark] 收到空事件(event.event is None)")
+            return
         message = event.event.message
-        assert message is not None
+        if message is None:
+            logger.debug("[Lark] 事件中没有消息体(message is None)")
+            return
+
         abm = AstrBotMessage()
         abm.timestamp = cast(int, message.create_time) // 1000
         abm.message = []
@@ -146,17 +154,28 @@ class LarkPlatformAdapter(Platform):
         at_list = {}
         if message.mentions:
             for m in message.mentions:
-                assert m.id is not None
-                at_list[m.key] = Comp.At(qq=m.id.open_id, name=m.name)
-                if m.name == self.bot_name:
-                    assert m.id.open_id is not None
-                    abm.self_id = m.id.open_id
+                if m.id is None:
+                    continue
+                # 飞书 open_id 可能是 None，这里做个防护
+                open_id = m.id.open_id if m.id.open_id else ""
+                at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
-        assert message.content is not None
-        content_json_b = json.loads(message.content)
+                if m.name == self.bot_name:
+                    if m.id.open_id is not None:
+                        abm.self_id = m.id.open_id
+
+        if message.content is None:
+            logger.warning("[Lark] 消息内容为空")
+            return
+
+        try:
+            content_json_b = json.loads(message.content)
+        except json.JSONDecodeError:
+            logger.error(f"[Lark] 解析消息内容失败: {message.content}")
+            return
 
         if message.message_type == "text":
-            message_str_raw = content_json_b["text"]  # 带有 @ 的消息
+            message_str_raw = content_json_b.get("text", "")  # 带有 @ 的消息
             at_pattern = r"(@_user_\d+)"  # 可以根据需求修改正则
             # at_users = re.findall(at_pattern, message_str_raw)
             # 拆分文本，去掉AT符号部分
@@ -181,17 +200,26 @@ class LarkPlatformAdapter(Platform):
             content_json_b = _ls
         elif message.message_type == "image":
             content_json_b = [
-                {"tag": "img", "image_key": content_json_b["image_key"], "style": []},
+                {
+                    "tag": "img",
+                    "image_key": content_json_b.get("image_key"),
+                    "style": [],
+                },
             ]
 
         if message.message_type in ("post", "image"):
             for comp in content_json_b:
-                if comp["tag"] == "at":
-                    abm.message.append(at_list[comp["user_id"]])
-                elif comp["tag"] == "text" and comp["text"].strip():
+                if comp.get("tag") == "at":
+                    user_id = comp.get("user_id")
+                    if user_id in at_list:
+                        abm.message.append(at_list[user_id])
+                elif comp.get("tag") == "text" and comp.get("text", "").strip():
                     abm.message.append(Comp.Plain(comp["text"].strip()))
-                elif comp["tag"] == "img":
-                    image_key = comp["image_key"]
+                elif comp.get("tag") == "img":
+                    image_key = comp.get("image_key")
+                    if not image_key:
+                        continue
+
                     request = (
                         GetMessageResourceRequest.builder()
                         .message_id(cast(str, message.message_id))
@@ -199,11 +227,20 @@ class LarkPlatformAdapter(Platform):
                         .type("image")
                         .build()
                     )
-                    assert self.lark_api.im is not None
+
+                    if self.lark_api.im is None:
+                        logger.error("[Lark] API Client im 模块未初始化")
+                        continue
+
                     response = await self.lark_api.im.v1.message_resource.aget(request)
                     if not response.success():
                         logger.error(f"无法下载飞书图片: {image_key}")
-                    assert response.file is not None
+                        continue
+
+                    if response.file is None:
+                        logger.error(f"飞书图片响应中不包含文件流: {image_key}")
+                        continue
+
                     image_bytes = response.file.read()
                     image_base64 = base64.b64encode(image_bytes).decode()
                     abm.message.append(Comp.Image.fromBase64(image_base64))
@@ -211,10 +248,19 @@ class LarkPlatformAdapter(Platform):
         for comp in abm.message:
             if isinstance(comp, Comp.Plain):
                 abm.message_str += comp.text
-        assert message.message_id is not None
-        assert event.event.sender is not None
-        assert event.event.sender.sender_id is not None
-        assert event.event.sender.sender_id.open_id is not None
+
+        if message.message_id is None:
+            logger.error("[Lark] 消息缺少 message_id")
+            return
+
+        if (
+            event.event.sender is None
+            or event.event.sender.sender_id is None
+            or event.event.sender.sender_id.open_id is None
+        ):
+            logger.error("[Lark] 消息发送者信息不完整")
+            return
+
         abm.message_id = message.message_id
         abm.raw_message = message
         abm.sender = MessageMember(
