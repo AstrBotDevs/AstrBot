@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 
-from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
@@ -63,12 +62,5 @@ class ProcessStage(Stage):
             if (
                 event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                # 事件没有终止传播
-                provider = self.ctx.plugin_manager.context.get_using_provider()
-
-                if not provider:
-                    logger.info("未找到可用的 LLM 提供商，请先前往配置服务提供商。")
-                    return
-
                 async for _ in self.agent_sub_stage.process(event):
                     yield

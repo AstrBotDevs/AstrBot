@@ -290,7 +290,7 @@ class ProviderAnthropic(Provider):
         try:
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
-            logger.error(f"发生了错误。Provider 配置如下: {model_config}")
+            # logger.error(f"发生了错误。Provider 配置如下: {model_config}")
             raise e
 
         return llm_response

@@ -6,7 +6,7 @@ from collections import defaultdict
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -30,16 +30,13 @@ class LongTermMemory:
         except BaseException as e:
             logger.error(e)
             max_cnt = 300
-        image_caption = (
-            True
-            if cfg["provider_settings"]["default_image_caption_provider_id"]
-            and cfg["provider_ltm_settings"]["image_caption"]
-            else False
-        )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = cfg["provider_settings"][
-            "default_image_caption_provider_id"
-        ]
+        image_caption_provider_id = cfg["provider_ltm_settings"].get(
+            "image_caption_provider_id"
+        )
+        image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
+            image_caption_provider_id
+        )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
@@ -142,6 +139,8 @@ class LongTermMemory:
                             logger.error(f"获取图片描述失败: {e}")
                     else:
                         parts.append(" [Image]")
+                elif isinstance(comp, At):
+                    parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")

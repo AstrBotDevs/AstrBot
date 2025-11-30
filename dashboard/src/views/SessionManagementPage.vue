@@ -3,16 +3,22 @@
     <v-container fluid class="pa-0">
       <v-card flat>
         <v-card-title class="d-flex align-center py-3 px-4">
-          <span class="text-h4">{{ tm('sessions.activeSessions') }}</span>
-          <v-chip size="small" class="ml-2">{{ totalItems }} {{ tm('sessions.sessionCount') }}</v-chip>
+          <span class="text-h4">{{ tm('customRules.title') }}</span>
+          <v-btn icon="mdi-information-outline" size="small" variant="text" href="https://astrbot.app/use/custom-rules.html" target="_blank"></v-btn>
+          <v-chip size="small" class="ml-1">{{ totalItems }} {{ tm('customRules.rulesCount') }}</v-chip>
           <v-row class="me-4 ms-4" dense>
             <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :label="tm('search.placeholder')"
-              hide-details clearable variant="solo-filled" flat class="me-4" density="compact" @update:model-value="handleSearchChange"></v-text-field>
-            <v-select v-model="filterPlatform" :items="platformOptions" :label="tm('search.platformFilter')"
-              hide-details clearable variant="solo-filled" flat class="me-4" style="max-width: 150px;"
-              density="compact" @update:model-value="handlePlatformChange"></v-select>
+              hide-details clearable variant="solo-filled" flat class="me-4" density="compact"></v-text-field>
           </v-row>
-          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshSessions" :loading="loading"
+          <v-btn v-if="selectedItems.length > 0" color="error" prepend-icon="mdi-delete" variant="tonal"
+            @click="confirmBatchDelete" class="mr-2" size="small">
+            {{ tm('buttons.batchDelete') }} ({{ selectedItems.length }})
+          </v-btn>
+          <v-btn color="success" prepend-icon="mdi-plus" variant="tonal" @click="openAddRuleDialog" class="mr-2"
+            size="small">
+            {{ tm('buttons.addRule') }}
+          </v-btn>
+          <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="refreshData" :loading="loading"
             size="small">
             {{ tm('buttons.refresh') }}
           </v-btn>
@@ -21,442 +27,313 @@
         <v-divider></v-divider>
 
         <v-card-text class="pa-0">
-          <!-- 会话列表 -->
-          <v-data-table-server
-            :headers="headers"
-            :items="sessions"
-            :loading="loading"
-            :items-per-page="itemsPerPage"
-            :page="currentPage"
-            :items-length="totalItems"
-            @update:options="handlePaginationUpdate"
-            density="compact"
-            class="elevation-0"
-            style="font-size: 11px;">
+          <v-data-table-server :headers="headers" :items="filteredRulesList" :loading="loading"
+            :items-length="totalItems" v-model:items-per-page="itemsPerPage" v-model:page="currentPage"
+            @update:options="onTableOptionsUpdate" class="elevation-0" style="font-size: 12px;" v-model="selectedItems"
+            show-select item-value="umo" return-object>
 
-            <!-- 会话启停 -->
-            <template v-slot:item.session_enabled="{ item }">
-              <v-checkbox :model-value="item.session_enabled"
-                @update:model-value="(value) => updateSessionStatus(item, value)" :loading="item.updating" hide-details
-                density="compact" color="success">
-              </v-checkbox>
-            </template>
-
-            <!-- 会话信息 -->
-            <template v-slot:item.session_info="{ item }">
+            <!-- UMO 信息 -->
+            <template v-slot:item.umo_info="{ item }">
               <div>
                 <div class="d-flex align-center">
+                  <v-chip size="x-small" :color="getPlatformColor(item.platform)" class="mr-2">
+                    {{ item.platform || 'unknown' }}
+                  </v-chip>
+                  <span class="text-truncate" style="max-width: 300px;">{{ item.umo }}</span>
+                  <div class="d-flex align-center" v-if="item.rules?.session_service_config?.custom_name || true">
+                    <span class="ml-2" style="color: gray; font-size: 10px;"
+                      v-if="item.rules?.session_service_config?.custom_name">
+                      ({{ item.rules?.session_service_config?.custom_name }})
+                    </span>
+                    <v-btn icon size="x-small" variant="text" class="ml-1" @click.stop="openQuickEditName(item)">
+                      <v-icon size="small" color="grey">mdi-pencil-outline</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('buttons.editCustomName') }}</v-tooltip>
+                    </v-btn>
+                  </div>
                   <v-tooltip location="top">
-                    <template v-slot:activator="{ props: tooltipProps }">
-                      <div v-if="item.session_name !== item.session_raw_name">
-                        <span>{{ item.session_name }}</span>
-                        <span style="color: grey;">({{ item.session_id }})</span>
-                      </div>
-                      <div v-else>
-                        <span v-bind="tooltipProps">{{ item.session_id }}</span>
-                      </div>
+                    <template v-slot:activator="{ props }">
+                      <v-icon v-bind="props" size="small" class="ml-1">mdi-information-outline</v-icon>
                     </template>
                     <div>
-                      <p>使用 /sid 指令可查看会话 ID。</p>
-                      <p>会话信息：</p>
-                      <ul>
-                        <li>机器人 ID: {{ item.platform }}</li>
-                        <li v-if="item.message_type">消息类型: {{ item.message_type }}</li>
-                        <li v-if="item.session_raw_name">会话 ID: {{ item.session_raw_name }}</li>
-                        <li v-if="item.user_name">用户: {{ item.user_name }}</li>
-                      </ul>
+                      <p>UMO: {{ item.umo }}</p>
+                      <p v-if="item.platform">平台: {{ item.platform }}</p>
+                      <p v-if="item.message_type">消息类型: {{ item.message_type }}</p>
+                      <p v-if="item.session_id">会话 ID: {{ item.session_id }}</p>
                     </div>
                   </v-tooltip>
-
-                  <v-btn icon size="x-small" variant="plain" @click="openNameEditor(item)" class="ml-2"
-                    :loading="item.updating">
-                    <v-icon>mdi-pencil</v-icon>
-                    <v-tooltip activator="parent" location="top">
-                      {{ tm('buttons.editName') }}
-                    </v-tooltip>
-                  </v-btn>
                 </div>
+
               </div>
             </template>
 
-            <!-- 人格 -->
-            <template v-slot:item.persona="{ item }">
-              <v-select :model-value="item.persona_id || ''" :items="personaOptions" item-title="label"
-                item-value="value" hide-details density="compact" variant="solo-filled" flat
-                @update:model-value="(value) => updatePersona(item, value)" :loading="item.updating"
-                :disabled="!item.session_enabled">
-                <template v-slot:selection="{ item: selection }">
-                  <span style="font-size: 12px;">{{ selection.raw.label }}</span>
-                </template>
-              </v-select>
-            </template>
-
-            <!-- Chat Provider -->
-            <template v-slot:item.chat_provider="{ item }">
-              <v-select :model-value="item.chat_provider_id || ''" :items="chatProviderOptions" item-title="label"
-                item-value="value" hide-details density="compact" variant="solo-filled" flat
-                @update:model-value="(value) => updateProvider(item, value, 'chat_completion')" :loading="item.updating"
-                :disabled="!item.session_enabled">
-                <template v-slot:selection="{ item: selection }">
-                  <span style="font-size: 12px;">{{ selection.raw.label }}</span>
-                </template>
-              </v-select>
-            </template>
-
-            <!-- STT Provider -->
-            <template v-slot:item.stt_provider="{ item }">
-              <v-select :model-value="item.stt_provider_id || ''" :items="sttProviderOptions" item-title="label"
-                item-value="value" hide-details density="compact" variant="solo-filled" flat
-                @update:model-value="(value) => updateProvider(item, value, 'speech_to_text')" :loading="item.updating"
-                :disabled="sttProviderOptions.length === 0 || !item.session_enabled">
-                <template v-slot:selection="{ item: selection }">
-                  <span style="font-size: 12px;">{{ selection.raw.label }}</span>
-                </template>
-              </v-select>
-            </template>
-
-            <!-- TTS Provider -->
-            <template v-slot:item.tts_provider="{ item }">
-              <v-select :model-value="item.tts_provider_id || ''" :items="ttsProviderOptions" item-title="label"
-                item-value="value" hide-details density="compact" variant="solo-filled" flat
-                @update:model-value="(value) => updateProvider(item, value, 'text_to_speech')" :loading="item.updating"
-                :disabled="ttsProviderOptions.length === 0 || !item.session_enabled">
-                <template v-slot:selection="{ item: selection }">
-                  <span style="font-size: 12px;">{{ selection.raw.label }}</span>
-                </template>
-              </v-select> </template>
-
-            <!-- LLM启停 -->
-            <template v-slot:item.llm_enabled="{ item }">
-              <v-checkbox :model-value="item.llm_enabled" @update:model-value="(value) => updateLLM(item, value)"
-                :loading="item.updating" :disabled="!item.session_enabled" hide-details density="compact"
-                color="primary">
-              </v-checkbox>
-            </template>
-
-            <!-- TTS启停 -->
-            <template v-slot:item.tts_enabled="{ item }">
-              <v-checkbox :model-value="item.tts_enabled" @update:model-value="(value) => updateTTS(item, value)"
-                :loading="item.updating" :disabled="!item.session_enabled" hide-details density="compact"
-                color="secondary">
-              </v-checkbox>
-            </template>
-
-            <!-- 知识库配置 -->
-            <template v-slot:item.knowledge_base="{ item }">
-              <v-btn size="x-small" variant="tonal" color="info" @click="openKBManager(item)"
-                :loading="item.loadingKB" :disabled="!item.session_enabled">
-                {{ tm('knowledgeBase.configure') }}
-              </v-btn>
-            </template>
-
-            <!-- 插件管理 -->
-            <template v-slot:item.plugins="{ item }">
-              <v-btn size="x-small" variant="tonal" color="primary" @click="openPluginManager(item)"
-                :loading="item.loadingPlugins" :disabled="!item.session_enabled">
-                {{ tm('buttons.edit') }}
-              </v-btn>
+            <!-- 规则概览 -->
+            <template v-slot:item.rules_overview="{ item }">
+              <div class="d-flex flex-wrap ga-1">
+                <v-chip v-if="item.rules.session_service_config" size="x-small" color="primary" variant="outlined">
+                  {{ tm('customRules.serviceConfig') }}
+                </v-chip>
+                <v-chip v-if="item.rules.session_plugin_config" size="x-small" color="secondary" variant="outlined">
+                  {{ tm('customRules.pluginConfig') }}
+                </v-chip>
+                <v-chip v-if="item.rules.kb_config" size="x-small" color="info" variant="outlined">
+                  {{ tm('customRules.kbConfig') }}
+                </v-chip>
+                <v-chip v-if="hasProviderConfig(item.rules)" size="x-small" color="warning" variant="outlined">
+                  {{ tm('customRules.providerConfig') }}
+                </v-chip>
+              </div>
             </template>
 
             <!-- 操作按钮 -->
             <template v-slot:item.actions="{ item }">
-              <v-btn size="x-small" variant="tonal" color="error" @click="deleteSession(item)"
-                :loading="item.deleting" icon>
+              <v-btn size="small" variant="tonal" color="primary" @click="openRuleEditor(item)" class="mr-1">
+                <v-icon>mdi-pencil</v-icon>
+                <v-tooltip activator="parent" location="top">{{ tm('buttons.editRule') }}</v-tooltip>
+              </v-btn>
+              <v-btn size="small" variant="tonal" color="error" @click="confirmDeleteRules(item)">
                 <v-icon>mdi-delete</v-icon>
-                <v-tooltip activator="parent" location="top">
-                  {{ tm('buttons.delete') }}
-                </v-tooltip>
+                <v-tooltip activator="parent" location="top">{{ tm('buttons.deleteAllRules') }}</v-tooltip>
               </v-btn>
             </template>
 
             <!-- 空状态 -->
             <template v-slot:no-data>
               <div class="text-center py-8">
-                <v-icon size="64" color="grey-400">mdi-account-group-outline</v-icon>
-                <div class="text-h6 mt-4 text-grey-600">{{ tm('sessions.noActiveSessions') }}</div>
-                <div class="text-body-2 text-grey-500">{{ tm('sessions.noActiveSessionsDesc') }}</div>
+                <v-icon size="64" color="grey-400">mdi-file-document-edit-outline</v-icon>
+                <div class="text-h6 mt-4 text-grey-600">{{ tm('customRules.noRules') }}</div>
+                <div class="text-body-2 text-grey-500">{{ tm('customRules.noRulesDesc') }}</div>
+                <v-btn color="primary" variant="tonal" class="mt-4" @click="openAddRuleDialog">
+                  <v-icon start>mdi-plus</v-icon>
+                  {{ tm('buttons.addRule') }}
+                </v-btn>
               </div>
             </template>
           </v-data-table-server>
         </v-card-text>
       </v-card>
 
-      <!-- 批量操作面板 -->
-      <v-card flat class="mt-4">
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <span class="text-h4">{{ tm('batchOperations.title') }}</span>
-        </v-card-title>
-
-        <v-card-text>
-          <div style="padding: 16px;">
-            <v-row>
-              <v-col cols="12" md="6" lg="3" v-if="availablePersonas.length > 0">
-                <v-select v-model="batchPersona" :items="personaOptions" item-title="label" item-value="value"
-                  :label="tm('batchOperations.setPersona')" hide-details clearable variant="solo-filled" flat
-                  density="comfortable" class="batch-select"></v-select>
-              </v-col>
-
-              <v-col cols="12" md="6" lg="3" v-if="availableChatProviders.length > 0">
-                <v-select v-model="batchChatProvider" :items="chatProviderOptions" item-title="label" item-value="value"
-                  :label="tm('batchOperations.setChatProvider')" hide-details clearable variant="solo-filled" flat
-                  density="comfortable" class="batch-select"></v-select>
-              </v-col>
-
-              <v-col cols="12" md="6" lg="3">
-                <v-select v-model="batchSttProvider" :items="sttProviderOptions" item-title="label" item-value="value"
-                  :label="tm('batchOperations.setSttProvider')" hide-details clearable variant="solo-filled" flat
-                  density="comfortable" class="batch-select" :disabled="availableSttProviders.length === 0"
-                  :placeholder="availableSttProviders.length === 0 ? tm('batchOperations.noSttProvider') : ''"></v-select>
-              </v-col>
-
-              <v-col cols="12" md="6" lg="3">
-                <v-select v-model="batchTtsProvider" :items="ttsProviderOptions" item-title="label" item-value="value"
-                  :label="tm('batchOperations.setTtsProvider')" hide-details clearable variant="solo-filled" flat
-                  density="comfortable" class="batch-select" :disabled="availableTtsProviders.length === 0"
-                  :placeholder="availableTtsProviders.length === 0 ? tm('batchOperations.noTtsProvider') : ''"></v-select>
-              </v-col>
-            </v-row>
-
-            <v-row>
-              <v-col cols="12" md="6" lg="3">
-                <v-select v-model="batchLlmStatus"
-                  :items="[{ label: tm('status.enabled'), value: true }, { label: tm('status.disabled'), value: false }]"
-                  item-title="label" item-value="value" :label="tm('batchOperations.setLlmStatus')" hide-details
-                  clearable variant="solo-filled" flat density="comfortable" class="batch-select"></v-select>
-              </v-col>
-
-              <v-col cols="12" md="6" lg="3">
-                <v-select v-model="batchTtsStatus"
-                  :items="[{ label: tm('status.enabled'), value: true }, { label: tm('status.disabled'), value: false }]"
-                  item-title="label" item-value="value" :label="tm('batchOperations.setTtsStatus')" hide-details
-                  clearable variant="solo-filled" flat density="comfortable" class="batch-select"></v-select>
-              </v-col>
-            </v-row>
-
-            <div class="d-flex justify-end align-center mt-8">
-              <v-btn color="primary" variant="tonal" size="large" rounded="lg" @click="applyBatchChanges"
-                :disabled="!batchPersona && !batchChatProvider && !batchSttProvider && !batchTtsProvider && batchLlmStatus === null && batchTtsStatus === null"
-                :loading="batchUpdating" class="me-3">
-                <v-icon start>mdi-check-all</v-icon>
-                {{ tm('buttons.apply') }}
-              </v-btn>
-
-            </div>
-          </div>
-
-        </v-card-text>
-      </v-card>
-
-      <!-- 插件管理对话框 -->
-      <v-dialog v-model="pluginDialog" max-width="800" min-height="80%">
-        <v-card v-if="selectedSessionForPlugin">
-          <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-            <span>{{ tm('pluginManagement.title') }} - {{ selectedSessionForPlugin.session_name }}</span>
+      <!-- 添加规则对话框 - 选择 UMO -->
+      <v-dialog v-model="addRuleDialog" max-width="600">
+        <v-card>
+          <v-card-title class="py-3 px-4" style="display: flex; align-items: center;">
+            <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="pluginDialog = false">
+            <v-btn icon variant="text" @click="addRuleDialog = false">
               <v-icon>mdi-close</v-icon>
             </v-btn>
           </v-card-title>
 
-          <v-card-text v-if="!loadingPlugins">
-            <div style="padding-left: 16px; padding-right: 16px;">
-              <div v-if="sessionPlugins.length === 0" class="text-center py-8">
-                <v-icon size="64" color="grey-400">mdi-puzzle-outline</v-icon>
-                <div class="text-h6 mt-4 text-grey-600">{{ tm('pluginManagement.noPlugins') }}</div>
-                <div class="text-body-2 text-grey-500">{{ tm('pluginManagement.noPluginsDesc') }}</div>
-              </div>
+          <v-card-text class="pa-4">
+            <v-alert type="info" variant="tonal" class="mb-4">
+              {{ tm('addRule.description') }}
+            </v-alert>
 
-              <v-list v-else>
-                <v-list-item v-for="plugin in sessionPlugins" :key="plugin.name" class="px-0">
-                  <template v-slot:prepend>
-                    <v-icon :color="plugin.enabled ? 'success' : 'grey'">
-                      {{ plugin.enabled ? 'mdi-check-circle' : 'mdi-circle-outline' }}
-                    </v-icon>
-                  </template>
-
-                  <v-list-item-title class="font-weight-medium">
-                    {{ plugin.name }}
-                  </v-list-item-title>
-
-                  <v-list-item-subtitle>
-                    {{ tm('pluginManagement.author') }}: {{ plugin.author }}
-                  </v-list-item-subtitle>
-
-                  <template v-slot:append>
-                    <v-checkbox :model-value="plugin.enabled" hide-details color="primary"
-                      @update:model-value="(value) => togglePlugin(plugin, value)"
-                      :loading="plugin.updating"></v-checkbox>
-                  </template>
-                </v-list-item>
-              </v-list>
-            </div>
-
-          </v-card-text>
-
-          <v-card-text v-else class="text-center py-8">
-            <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
-            <div class="text-body-1 mt-4">{{ tm('pluginManagement.loading') }}</div>
-          </v-card-text>
-        </v-card>
-      </v-dialog>
-
-      <!-- 会话命名编辑对话框 -->
-      <v-dialog v-model="nameEditDialog" max-width="500" min-height="60%">
-        <v-card v-if="selectedSessionForName">
-          <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-            <span>{{ tm('nameEditor.title') }}</span>
-            <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="nameEditDialog = false">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
-          </v-card-title>
-
-          <v-card-text>
-            <div style="padding-left: 16px; padding-right: 16px;">
-              <v-text-field v-model="newSessionName" :label="tm('nameEditor.customName')"
-                :placeholder="tm('nameEditor.placeholder')" variant="solo-filled" flat hide-details="auto" clearable
-                class="mb-4" @keyup.enter="saveSessionName"></v-text-field>
-
-              <div class="text-caption text-grey-600 mb-2">
-                {{ tm('nameEditor.originalName') }}: {{ selectedSessionForName.session_raw_name }}
-              </div>
-
-              <div class="text-caption text-grey-600 mb-2">
-                {{ tm('nameEditor.fullSessionId') }}: {{ selectedSessionForName.session_id }}
-              </div>
-
-              <v-alert variant="tonal" type="info" density="compact" class="mb-4">
-                {{ tm('nameEditor.hint') }}
-              </v-alert>
-            </div>
+            <v-autocomplete v-model="selectedNewUmo" :items="availableUmos" :loading="loadingUmos"
+              :label="tm('addRule.selectUmo')" variant="outlined" clearable :no-data-text="tm('addRule.noUmos')" />
           </v-card-text>
 
           <v-card-actions class="px-4 pb-4">
             <v-spacer></v-spacer>
-            <v-btn color="grey" variant="text" @click="nameEditDialog = false" :disabled="nameEditLoading">
-              {{ tm('buttons.cancel') }}
-            </v-btn>
-            <v-btn color="primary" variant="tonal" @click="saveSessionName" :loading="nameEditLoading">
-              {{ tm('buttons.save') }}
+            <v-btn variant="text" @click="addRuleDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="createNewRule" :disabled="!selectedNewUmo">
+              {{ tm('buttons.next') }}
             </v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
 
-      <!-- 知识库配置对话框 -->
-      <v-dialog v-model="kbDialog" max-width="800" min-height="60%" @update:model-value="(val) => { if (!val) closeKBDialog(); }">
-        <v-card v-if="selectedSessionForKB">
-          <v-card-title class="bg-primary text-white py-3 px-4" style="display: flex; align-items: center;">
-            <span>{{ tm('knowledgeBase.title') }} - {{ selectedSessionForKB.session_name }}</span>
+      <!-- 规则编辑对话框 -->
+      <v-dialog v-model="ruleDialog" max-width="550" scrollable>
+        <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
+          <v-card-title class="py-3 px-6 d-flex align-center border-b">
+            <span>{{ tm('ruleEditor.title') }}</span>
+            <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
+              {{ selectedUmo.umo }}
+            </v-chip>
             <v-spacer></v-spacer>
-            <v-btn icon variant="text" color="white" @click="closeKBDialog()">
-              <v-icon>mdi-close</v-icon>
-            </v-btn>
+            <v-btn icon="mdi-close" variant="text" @click="closeRuleEditor"></v-btn>
           </v-card-title>
 
-          <v-card-text v-if="!loadingKBConfig">
-            <div style="padding: 16px;">
-              <v-alert type="info" variant="tonal" class="mb-4">
-                {{ tm('knowledgeBase.description') }}
-              </v-alert>
-
-              <!-- 知识库选择区域 -->
-              <div class="mb-4">
-                <div class="text-subtitle-2 mb-2">{{ tm('knowledgeBase.selectKB') }}</div>
-                <v-card variant="outlined" class="pa-3">
-                  <div v-if="availableKBs.length === 0" class="text-body-2 text-medium-emphasis">
-                    {{ tm('knowledgeBase.noKBAvailable') || '暂无可用知识库' }}
-                  </div>
-                  <div v-else class="kb-selector-list">
-                    <v-checkbox
-                      v-for="kb in availableKBs"
-                      :key="kb.kb_id"
-                      :value="kb.kb_id"
-                      v-model="sessionKBConfig.kb_ids"
-                      hide-details
-                      density="compact"
-                      class="mb-1"
-                    >
-                      <template v-slot:label>
-                        <div class="d-flex align-center">
-                          <span style="font-size: 18px; margin-right: 8px;">{{ kb.emoji }}</span>
-                          <div>
-                            <div class="text-body-2">{{ kb.kb_name }}</div>
-                            <div class="text-caption text-medium-emphasis">
-                              {{ kb.description || tm('knowledgeBase.noKBDesc') }} - {{ kb.doc_count }} {{ tm('list.documents', { count: kb.doc_count }) }}
-                            </div>
-                          </div>
-                        </div>
-                      </template>
-                    </v-checkbox>
-                  </div>
-                </v-card>
-                <div class="text-caption text-medium-emphasis mt-2">
-                  {{ tm('knowledgeBase.selectMultiple') }}
-                </div>
+          <v-card-text class="pa-0 overflow-y-auto">
+            <div class="px-6 py-4">
+              <!-- Service Config Section -->
+              <div class="d-flex align-center mb-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.serviceConfig.title') }}</h3>
               </div>
 
-              <!-- 高级配置 -->
-              <v-expansion-panels class="mb-4">
-                <v-expansion-panel>
-                  <v-expansion-panel-title>
-                    <v-icon class="mr-2">mdi-cog</v-icon>
-                    {{ tm('knowledgeBase.advancedSettings') }}
-                  </v-expansion-panel-title>
-                  <v-expansion-panel-text>
-                    <v-row>
-                      <v-col cols="12" md="6">
-                        <v-text-field
-                          v-model.number="sessionKBConfig.top_k"
-                          :label="tm('knowledgeBase.topK')"
-                          type="number"
-                          variant="outlined"
-                          density="comfortable"
-                          :hint="tm('knowledgeBase.topKHint')"
-                          persistent-hint
-                        />
-                      </v-col>
-                      <v-col cols="12" md="6">
-                        <v-checkbox
-                          v-model="sessionKBConfig.enable_rerank"
-                          :label="tm('knowledgeBase.enableRerank')"
-                          color="primary"
-                          :hint="tm('knowledgeBase.enableRerankHint')"
-                          persistent-hint
-                        />
-                      </v-col>
-                    </v-row>
-                  </v-expansion-panel-text>
-                </v-expansion-panel>
-              </v-expansion-panels>
+              <v-row dense>
+                <v-col cols="12">
+                  <v-checkbox v-model="serviceConfig.session_enabled"
+                    :label="tm('ruleEditor.serviceConfig.sessionEnabled')" color="success" hide-details class="mb-2" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="serviceConfig.llm_enabled" :label="tm('ruleEditor.serviceConfig.llmEnabled')"
+                    color="primary" hide-details />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="serviceConfig.tts_enabled" :label="tm('ruleEditor.serviceConfig.ttsEnabled')"
+                    color="secondary" hide-details />
+                </v-col>
+                <v-col cols="12" class="mt-2">
+                  <v-text-field v-model="serviceConfig.custom_name" :label="tm('ruleEditor.serviceConfig.customName')"
+                    variant="outlined" hide-details clearable />
+                </v-col>
+              </v-row>
 
-              <div v-if="availableKBs.length === 0" class="text-center py-8">
-                <v-icon size="64" color="grey-lighten-2">mdi-database-off</v-icon>
-                <p class="mt-4 text-medium-emphasis">{{ tm('knowledgeBase.noKBAvailable') }}</p>
-                <v-btn color="primary" variant="tonal" class="mt-2" @click="goToKBPage">
-                  {{ tm('knowledgeBase.createKB') }}
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- Provider Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.providerConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="providerConfig.chat_completion" :items="chatProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.chatProvider')" variant="outlined"
+                    hide-details class="mb-2" />
+                </v-col>
+                <v-col cols="12">
+                  <v-select v-model="providerConfig.speech_to_text" :items="sttProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.sttProvider')" variant="outlined"
+                    hide-details :disabled="availableSttProviders.length === 0" class="mb-2" />
+                </v-col>
+                <v-col cols="12">
+                  <v-select v-model="providerConfig.text_to_speech" :items="ttsProviderOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.providerConfig.ttsProvider')" variant="outlined"
+                    hide-details :disabled="availableTtsProviders.length === 0" />
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- Persona Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.personaConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="serviceConfig.persona_id" :items="personaOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.personaConfig.selectPersona')" variant="outlined"
+                    hide-details clearable />
+                </v-col>
+                <v-col cols="12">
+                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
+                    {{ tm('ruleEditor.personaConfig.hint') }}
+                  </v-alert>
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- Plugin Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.pluginConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="pluginConfig.disabled_plugins" :items="pluginOptions" item-title="label"
+                    item-value="value" :label="tm('ruleEditor.pluginConfig.disabledPlugins')" variant="outlined"
+                    hide-details multiple chips closable-chips clearable />
+                </v-col>
+                <v-col cols="12">
+                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
+                    {{ tm('ruleEditor.pluginConfig.hint') }}
+                  </v-alert>
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
+                </v-btn>
+              </div>
+
+              <!-- KB Config Section -->
+              <div class="d-flex align-center mb-4 mt-4">
+                <h3 class="font-weight-bold mb-0">{{ tm('ruleEditor.kbConfig.title') }}</h3>
+              </div>
+
+              <v-row dense>
+                <v-col cols="12">
+                  <v-select v-model="kbConfig.kb_ids" :items="kbOptions" item-title="label" item-value="value" :disabled="availableKbs.length === 0"
+                    :label="tm('ruleEditor.kbConfig.selectKbs')" variant="outlined" hide-details multiple chips
+                    closable-chips clearable />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')"
+                    variant="outlined" hide-details type="number" min="1" max="20" class="mt-3"/>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')"
+                    color="primary" hide-details class="mt-3"/>
+                </v-col>
+              </v-row>
+
+              <div class="d-flex justify-end mt-4">
+                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving"
+                  prepend-icon="mdi-content-save">
+                  {{ tm('buttons.save') }}
                 </v-btn>
               </div>
             </div>
           </v-card-text>
+        </v-card>
+      </v-dialog>
 
-          <v-card-text v-else class="text-center py-8">
-            <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
-            <div class="text-body-1 mt-4">{{ tm('knowledgeBase.loading') }}</div>
+      <!-- 确认删除对话框 -->
+      <v-dialog v-model="deleteDialog" max-width="400">
+        <v-card>
+          <v-card-title class="text-h6">{{ tm('deleteConfirm.title') }}</v-card-title>
+          <v-card-text>
+            {{ tm('deleteConfirm.message') }}
+            <br><br>
+            <code>{{ deleteTarget?.umo }}</code>
           </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="deleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="error" variant="tonal" @click="deleteAllRules" :loading="deleting">{{ tm('buttons.delete')
+            }}</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
-          <v-divider />
-
-          <v-card-actions class="pa-4">
-            <v-btn variant="text" @click="clearKBConfig" :disabled="savingKBConfig || loadingKBConfig">
-              {{ tm('knowledgeBase.clearConfig') }}
-            </v-btn>
-            <v-spacer />
-            <v-btn variant="text" @click="closeKBDialog()" :disabled="savingKBConfig">
-              {{ tm('knowledgeBase.cancel') }}
-            </v-btn>
-            <v-btn color="primary" variant="tonal" @click="saveKBConfig" :loading="savingKBConfig">
-              {{ tm('knowledgeBase.save') }}
+      <!-- 批量删除确认对话框 -->
+      <v-dialog v-model="batchDeleteDialog" max-width="500">
+        <v-card>
+          <v-card-title class="text-h6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
+          <v-card-text>
+            {{ tm('batchDeleteConfirm.message', { count: selectedItems.length }) }}
+            <div class="mt-3" style="max-height: 200px; overflow-y: auto;">
+              <v-chip v-for="item in selectedItems" :key="item.umo" size="small" class="ma-1" variant="outlined">
+                {{ item.rules?.session_service_config?.custom_name || item.umo }}
+              </v-chip>
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="batchDeleteDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="error" variant="tonal" @click="batchDeleteRules" :loading="deleting">
+              {{ tm('buttons.delete') }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -466,13 +343,30 @@
       <v-snackbar v-model="snackbar" :timeout="3000" elevation="24" :color="snackbarColor" location="top">
         {{ snackbarText }}
       </v-snackbar>
+
+      <!-- 快速编辑备注名对话框 -->
+      <v-dialog v-model="quickEditNameDialog" max-width="400">
+        <v-card>
+          <v-card-title class="py-3 px-4">{{ tm('quickEditName.title') }}</v-card-title>
+          <v-card-text class="pa-4">
+            <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')"
+              variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
+          </v-card-text>
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="quickEditNameDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveQuickEditName" :loading="saving">
+              {{ tm('buttons.save') }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </v-container>
   </div>
 </template>
 
 <script>
 import axios from 'axios'
-import { debounce } from 'lodash'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 export default {
@@ -489,54 +383,77 @@ export default {
   data() {
     return {
       loading: false,
-      sessions: [],
+      saving: false,
+      deleting: false,
+      loadingUmos: false,
+      rulesList: [],
       searchQuery: '',
-      filterPlatform: null,
 
-      // 分页相关
+      // 分页
       currentPage: 1,
       itemsPerPage: 10,
       totalItems: 0,
-      totalPages: 0,
+      searchTimeout: null,
 
       // 可用选项
       availablePersonas: [],
       availableChatProviders: [],
       availableSttProviders: [],
       availableTtsProviders: [],
+      availablePlugins: [],
+      availableKbs: [],
 
-      // 批量操作
-      batchPersona: null,
-      batchChatProvider: null,
-      batchSttProvider: null,
-      batchTtsProvider: null,
-      batchLlmStatus: null,
-      batchTtsStatus: null,
-      batchUpdating: false,
+      // 添加规则
+      addRuleDialog: false,
+      availableUmos: [],
+      selectedNewUmo: null,
 
-      // 插件管理
-      pluginDialog: false,
-      selectedSessionForPlugin: null,
-      sessionPlugins: [],
-      loadingPlugins: false,
+      // 规则编辑
+      ruleDialog: false,
+      selectedUmo: null,
+      editingRules: {},
 
-      // 会话命名编辑器
-      nameEditDialog: false,
-      selectedSessionForName: null,
-      newSessionName: '',
-      nameEditLoading: false,
+      // 服务配置
+      serviceConfig: {
+        session_enabled: true,
+        llm_enabled: true,
+        tts_enabled: true,
+        custom_name: '',
+        persona_id: null,
+      },
 
-      // 知识库管理
-      kbDialog: false,
-      selectedSessionForKB: null,
-      sessionKBConfig: {
+      // Provider 配置
+      providerConfig: {
+        chat_completion: null,
+        speech_to_text: null,
+        text_to_speech: null,
+      },
+
+      // 插件配置
+      pluginConfig: {
+        enabled_plugins: [],
+        disabled_plugins: [],
+      },
+
+      // 知识库配置
+      kbConfig: {
         kb_ids: [],
         top_k: 5,
-        enable_rerank: true
+        enable_rerank: true,
       },
-      availableKBs: [],
-      loadingKBConfig: false,
-      savingKBConfig: false,
+
+      // 删除确认
+      deleteDialog: false,
+      deleteTarget: null,
+
+      // 批量选择和删除
+      selectedItems: [],
+      batchDeleteDialog: false,
+
+      // 快速编辑备注名
+      quickEditNameDialog: false,
+      quickEditNameTarget: null,
+      quickEditNameValue: '',
 
       // 提示信息
       snackbar: false,
@@ -546,489 +463,524 @@ export default {
   },
 
   computed: {
-    // 安全访问翻译的计算属性
-    messages() {
-      return {
-        updateSuccess: this.tm('messages.updateSuccess'),
-        addSuccess: this.tm('messages.addSuccess'),
-        deleteSuccess: this.tm('messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
-      };
-    },
-
-    subtitle() {
-      return this.tm('subtitle') || '管理所有活跃的会话，配置人格、LLM提供商和插件';
-    },
-
     headers() {
       return [
-        { title: this.tm('table.headers.sessionStatus'), key: 'session_enabled', sortable: false, minWidth: '120px' },
-        { title: this.tm('table.headers.sessionInfo'), key: 'session_info', sortable: false },
-        { title: this.tm('table.headers.persona'), key: 'persona', sortable: false, minWidth: '150px' },
-        { title: this.tm('table.headers.chatProvider'), key: 'chat_provider', sortable: false, minWidth: '200px' },
-        { title: this.tm('table.headers.sttProvider'), key: 'stt_provider', sortable: false, minWidth: '200px' },
-        { title: this.tm('table.headers.ttsProvider'), key: 'tts_provider', sortable: false, minWidth: '200px' },
-        { title: this.tm('table.headers.llmStatus'), key: 'llm_enabled', sortable: false, minWidth: '120px' },
-        { title: this.tm('table.headers.ttsStatus'), key: 'tts_enabled', sortable: false, minWidth: '120px' },
-        { title: this.tm('table.headers.knowledgeBase'), key: 'knowledge_base', sortable: false, minWidth: '150px' },
-        { title: this.tm('table.headers.pluginManagement'), key: 'plugins', sortable: false, minWidth: '120px' },
-        { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '100px' },
+        { title: this.tm('table.headers.umoInfo'), key: 'umo_info', sortable: false, minWidth: '300px' },
+        { title: this.tm('table.headers.rulesOverview'), key: 'rules_overview', sortable: false, minWidth: '250px' },
+        { title: this.tm('table.headers.actions'), key: 'actions', sortable: false, minWidth: '150px' },
       ]
     },
 
-    platformOptions() {
-      const platforms = [...new Set(this.sessions.map(s => s.platform))];
-      return platforms.map(p => ({ title: p, value: p }));
+    filteredRulesList() {
+      // 搜索已移至服务端，直接返回 rulesList
+      return this.rulesList
     },
 
     personaOptions() {
-      const options = [
-        { label: this.tm('persona.none'), value: '[%None]' },
+      return [
+        { label: this.tm('persona.none'), value: null },
         ...this.availablePersonas.map(p => ({
           label: p.name,
           value: p.name
         }))
-      ];
-      return options;
+      ]
     },
 
     chatProviderOptions() {
-      return this.availableChatProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }));
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableChatProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
 
     sttProviderOptions() {
-      return this.availableSttProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }));
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableSttProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
 
     ttsProviderOptions() {
-      return this.availableTtsProviders.map(p => ({
-        label: `${p.name} (${p.model})`,
-        value: p.id
-      }));
+      return [
+        { label: this.tm('provider.followConfig'), value: null },
+        ...this.availableTtsProviders.map(p => ({
+          label: `${p.name} (${p.model})`,
+          value: p.id
+        }))
+      ]
     },
+
+    pluginOptions() {
+      return this.availablePlugins.map(p => ({
+        label: p.display_name || p.name,
+        value: p.name
+      }))
+    },
+
+    kbOptions() {
+      return this.availableKbs.map(kb => ({
+        label: `${kb.emoji || '📚'} ${kb.kb_name}`,
+        value: kb.kb_id
+      }))
+    },
+  },
+
+  watch: {
+    searchQuery: {
+      handler() {
+        // 使用 debounce 延迟搜索
+        if (this.searchTimeout) {
+          clearTimeout(this.searchTimeout)
+        }
+        this.searchTimeout = setTimeout(() => {
+          this.onSearchChange()
+        }, 300)
+      }
+    }
   },
 
   mounted() {
-    this.loadSessions();
+    this.loadData()
+  },
+
+  beforeUnmount() {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout)
+    }
   },
 
   methods: {
-    async loadSessions() {
-      this.loading = true;
+    async loadData() {
+      this.loading = true
       try {
-        const params = {
-          page: this.currentPage,
-          page_size: this.itemsPerPage
-        };
-        
-        // 添加搜索和平台筛选参数
-        if (this.searchQuery) {
-          params.search = this.searchQuery;
-        }
-        if (this.filterPlatform) {
-          params.platform = this.filterPlatform;
-        }
-        
-        const response = await axios.get('/api/session/list', { params });
-        if (response.data.status === 'ok') {
-          const data = response.data.data;
-          this.sessions = data.sessions.map(session => ({
-            ...session,
-            updating: false, // 添加更新状态标志
-            loadingPlugins: false, // 添加插件加载状态标志
-            deleting: false, // 添加删除状态标志
-            loadingKB: false // 添加知识库加载状态标志
-          }));
-          this.availablePersonas = data.available_personas;
-          this.availableChatProviders = data.available_chat_providers;
-          this.availableSttProviders = data.available_stt_providers;
-          this.availableTtsProviders = data.available_tts_providers;
-          
-          // 处理分页信息
-          if (data.pagination) {
-            this.totalItems = data.pagination.total;
-            this.totalPages = data.pagination.total_pages;
-            this.currentPage = data.pagination.page;
+        const response = await axios.get('/api/session/list-rule', {
+          params: {
+            page: this.currentPage,
+            page_size: this.itemsPerPage,
+            search: this.searchQuery || ''
           }
+        })
+        if (response.data.status === 'ok') {
+          const data = response.data.data
+          this.rulesList = data.rules
+          this.totalItems = data.total
+          this.availablePersonas = data.available_personas
+          this.availableChatProviders = data.available_chat_providers
+          this.availableSttProviders = data.available_stt_providers
+          this.availableTtsProviders = data.available_tts_providers
+          this.availablePlugins = data.available_plugins || []
+          this.availableKbs = data.available_kbs || []
         } else {
-          this.showError(response.data.message || this.tm('messages.loadSessionsError'));
+          this.showError(response.data.message || this.tm('messages.loadError'))
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.loadSessionsError'));
+        this.showError(error.response?.data?.message || this.tm('messages.loadError'))
       }
-      this.loading = false;
+      this.loading = false
     },
 
-    async refreshSessions() {
-      await this.loadSessions();
-      this.showSuccess(this.tm('messages.refreshSuccess'));
+    onTableOptionsUpdate(options) {
+      // 当分页参数变化时重新加载数据
+      this.currentPage = options.page
+      this.itemsPerPage = options.itemsPerPage
+      this.loadData()
     },
 
-    async updatePersona(session, personaName) {
-      return this._updateSession('persona', session, { persona_name: personaName }, (s, success) => {
-        if (success) {
-          s.persona_id = personaName;
-          s.persona_name = personaName === '[%None]' ? this.tm('persona.none') :
-            this.availablePersonas.find(p => p.name === personaName)?.name || personaName;
+    onSearchChange() {
+      // 搜索时重置到第一页
+      this.currentPage = 1
+      this.loadData()
+    },
+
+    async loadUmos() {
+      this.loadingUmos = true
+      try {
+        const response = await axios.get('/api/session/active-umos')
+        if (response.data.status === 'ok') {
+          // 过滤掉已有规则的 umo
+          const existingUmos = new Set(this.rulesList.map(r => r.umo))
+          this.availableUmos = response.data.data.umos.filter(umo => !existingUmos.has(umo))
         }
-      });
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.loadError'))
+      }
+      this.loadingUmos = false
     },
 
-    async updateProvider(session, providerId, providerType) {
-      return this._updateSession('provider', session, { 
-        provider_id: providerId, 
-        provider_type: providerType 
-      }, (s, success) => {
-        if (success) {
-          if (providerType === 'chat_completion') {
-            s.chat_provider_id = providerId;
-            const provider = this.availableChatProviders.find(p => p.id === providerId);
-            s.chat_provider_name = provider?.name || providerId;
-          } else if (providerType === 'speech_to_text') {
-            s.stt_provider_id = providerId;
-            const provider = this.availableSttProviders.find(p => p.id === providerId);
-            s.stt_provider_name = provider?.name || providerId;
-          } else if (providerType === 'text_to_speech') {
-            s.tts_provider_id = providerId;
-            const provider = this.availableTtsProviders.find(p => p.id === providerId);
-            s.tts_provider_name = provider?.name || providerId;
+    async refreshData() {
+      await this.loadData()
+      this.showSuccess(this.tm('messages.refreshSuccess'))
+    },
+
+    hasProviderConfig(rules) {
+      return rules && (
+        rules['provider_perf_chat_completion'] ||
+        rules['provider_perf_speech_to_text'] ||
+        rules['provider_perf_text_to_speech']
+      )
+    },
+
+    async openAddRuleDialog() {
+      this.addRuleDialog = true
+      this.selectedNewUmo = null
+      await this.loadUmos()
+    },
+
+    createNewRule() {
+      if (!this.selectedNewUmo) return
+
+      // 创建一个新的规则项并打开编辑器
+      const newItem = {
+        umo: this.selectedNewUmo,
+        rules: {},
+      }
+      // 解析 umo 格式
+      const parts = this.selectedNewUmo.split(':')
+      if (parts.length >= 3) {
+        newItem.platform = parts[0]
+        newItem.message_type = parts[1]
+        newItem.session_id = parts[2]
+      }
+
+      this.addRuleDialog = false
+      this.openRuleEditor(newItem)
+    },
+
+    openRuleEditor(item) {
+      this.selectedUmo = item
+      this.editingRules = item.rules || {}
+
+      // 初始化服务配置
+      const svcConfig = this.editingRules.session_service_config || {}
+      this.serviceConfig = {
+        session_enabled: svcConfig.session_enabled !== false,
+        llm_enabled: svcConfig.llm_enabled !== false,
+        tts_enabled: svcConfig.tts_enabled !== false,
+        custom_name: svcConfig.custom_name || '',
+        persona_id: svcConfig.persona_id || null,
+      }
+
+      // 初始化 Provider 配置
+      this.providerConfig = {
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || null,
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || null,
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || null,
+      }
+
+      // 初始化插件配置
+      const pluginCfg = this.editingRules.session_plugin_config || {}
+      this.pluginConfig = {
+        enabled_plugins: pluginCfg.enabled_plugins || [],
+        disabled_plugins: pluginCfg.disabled_plugins || [],
+      }
+
+      // 初始化知识库配置
+      const kbCfg = this.editingRules.kb_config || {}
+      this.kbConfig = {
+        kb_ids: kbCfg.kb_ids || [],
+        top_k: kbCfg.top_k ?? 5,
+        enable_rerank: kbCfg.enable_rerank !== false,
+      }
+
+      this.ruleDialog = true
+    },
+
+    closeRuleEditor() {
+      this.ruleDialog = false
+      this.selectedUmo = null
+      this.editingRules = {}
+    },
+
+    async saveServiceConfig() {
+      if (!this.selectedUmo) return
+
+      this.saving = true
+      try {
+        const config = { ...this.serviceConfig }
+        // 清理空值
+        if (!config.custom_name) delete config.custom_name
+        if (config.persona_id === null) delete config.persona_id
+
+        const response = await axios.post('/api/session/update-rule', {
+          umo: this.selectedUmo.umo,
+          rule_key: 'session_service_config',
+          rule_value: config
+        })
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(this.tm('messages.saveSuccess'))
+          this.editingRules.session_service_config = config
+
+          // 更新或添加到列表
+          let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+          if (item) {
+            item.rules = { ...item.rules, session_service_config: config }
+          } else {
+            // 新规则，添加到列表
+            this.rulesList.push({
+              umo: this.selectedUmo.umo,
+              platform: this.selectedUmo.platform,
+              message_type: this.selectedUmo.message_type,
+              session_id: this.selectedUmo.session_id,
+              rules: { session_service_config: config }
+            })
+          }
+        } else {
+          this.showError(response.data.message || this.tm('messages.saveError'))
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      }
+      this.saving = false
+    },
+
+    async saveProviderConfig() {
+      if (!this.selectedUmo) return
+
+      this.saving = true
+      try {
+        const updateTasks = []
+        const deleteTasks = []
+        const providerTypes = ['chat_completion', 'speech_to_text', 'text_to_speech']
+
+        for (const type of providerTypes) {
+          const value = this.providerConfig[type]
+          if (value) {
+            // 有值时更新
+            updateTasks.push(
+              axios.post('/api/session/update-rule', {
+                umo: this.selectedUmo.umo,
+                rule_key: `provider_perf_${type}`,
+                rule_value: value
+              })
+            )
+          } else if (this.editingRules[`provider_perf_${type}`]) {
+            // 选择了"跟随配置文件"（null）且之前有配置，则删除
+            deleteTasks.push(
+              axios.post('/api/session/delete-rule', {
+                umo: this.selectedUmo.umo,
+                rule_key: `provider_perf_${type}`
+              })
+            )
           }
         }
-      });
+
+        const allTasks = [...updateTasks, ...deleteTasks]
+        if (allTasks.length > 0) {
+          await Promise.all(allTasks)
+          this.showSuccess(this.tm('messages.saveSuccess'))
+
+          // 更新或添加到列表
+          let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+          if (!item) {
+            item = {
+              umo: this.selectedUmo.umo,
+              platform: this.selectedUmo.platform,
+              message_type: this.selectedUmo.message_type,
+              session_id: this.selectedUmo.session_id,
+              rules: {}
+            }
+            this.rulesList.push(item)
+          }
+          for (const type of providerTypes) {
+            if (this.providerConfig[type]) {
+              item.rules[`provider_perf_${type}`] = this.providerConfig[type]
+              this.editingRules[`provider_perf_${type}`] = this.providerConfig[type]
+            } else {
+              // 删除本地数据
+              delete item.rules[`provider_perf_${type}`]
+              delete this.editingRules[`provider_perf_${type}`]
+            }
+          }
+        } else {
+          this.showSuccess(this.tm('messages.noChanges'))
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      }
+      this.saving = false
     },
 
-    async updateLLM(session, enabled) {
-      return this._updateSession('llm', session, { enabled }, (s, success) => {
-        if (success) s.llm_enabled = enabled;
-      });
-    },
+    async savePluginConfig() {
+      if (!this.selectedUmo) return
 
-    async updateTTS(session, enabled) {
-      return this._updateSession('tts', session, { enabled }, (s, success) => {
-        if (success) s.tts_enabled = enabled;
-      });
-    },
+      this.saving = true
+      try {
+        const config = {
+          enabled_plugins: this.pluginConfig.enabled_plugins,
+          disabled_plugins: this.pluginConfig.disabled_plugins,
+        }
 
-    // 通用的更新会话方法，支持单个和批量操作
-    async _updateSession(type, sessionOrSessions, params, updateLocalData) {
-      const isBatch = Array.isArray(sessionOrSessions);
-      
-      if (!isBatch) {
-        // 单个操作
-        const session = sessionOrSessions;
-        session.updating = true;
-        
-        try {
-          const payload = {
-            is_batch: false,
-            session_id: session.session_id,
-            ...params
-          };
-
-          const response = await axios.post(`/api/session/update_${type}`, payload);
+        // 如果两个列表都为空，删除配置
+        if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
+          if (this.editingRules.session_plugin_config) {
+            await axios.post('/api/session/delete-rule', {
+              umo: this.selectedUmo.umo,
+              rule_key: 'session_plugin_config'
+            })
+            delete this.editingRules.session_plugin_config
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) delete item.rules.session_plugin_config
+          }
+          this.showSuccess(this.tm('messages.saveSuccess'))
+        } else {
+          const response = await axios.post('/api/session/update-rule', {
+            umo: this.selectedUmo.umo,
+            rule_key: 'session_plugin_config',
+            rule_value: config
+          })
 
           if (response.data.status === 'ok') {
-            updateLocalData(session, true);
-            this.showSuccess(this.tm(`messages.${type}UpdateSuccess`));
-            return { success: true };
-          } else {
-            this.showError(response.data.message || this.tm(`messages.${type}UpdateError`));
-            return { success: false, error: response.data.message };
-          }
-        } catch (error) {
-          this.showError(error.response?.data?.message || this.tm(`messages.${type}UpdateError`));
-          return { success: false, error: error.message };
-        } finally {
-          session.updating = false;
-        }
-      } else {
-        // 批量操作
-        const sessions = sessionOrSessions;
-        const sessionIds = sessions.map(s => s.session_id);
-        
-        try {
-          const payload = {
-            is_batch: true,
-            session_ids: sessionIds,
-            ...params
-          };
+            this.showSuccess(this.tm('messages.saveSuccess'))
+            this.editingRules.session_plugin_config = config
 
-          const response = await axios.post(`/api/session/update_${type}`, payload);
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) {
+              item.rules.session_plugin_config = config
+            } else {
+              this.rulesList.push({
+                umo: this.selectedUmo.umo,
+                platform: this.selectedUmo.platform,
+                message_type: this.selectedUmo.message_type,
+                session_id: this.selectedUmo.session_id,
+                rules: { session_plugin_config: config }
+              })
+            }
+          } else {
+            this.showError(response.data.message || this.tm('messages.saveError'))
+          }
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      }
+      this.saving = false
+    },
+
+    async saveKbConfig() {
+      if (!this.selectedUmo) return
+
+      this.saving = true
+      try {
+        const config = {
+          kb_ids: this.kbConfig.kb_ids,
+          top_k: this.kbConfig.top_k,
+          enable_rerank: this.kbConfig.enable_rerank,
+        }
+
+        // 如果 kb_ids 为空，删除配置
+        if (config.kb_ids.length === 0) {
+          if (this.editingRules.kb_config) {
+            await axios.post('/api/session/delete-rule', {
+              umo: this.selectedUmo.umo,
+              rule_key: 'kb_config'
+            })
+            delete this.editingRules.kb_config
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) delete item.rules.kb_config
+          }
+          this.showSuccess(this.tm('messages.saveSuccess'))
+        } else {
+          const response = await axios.post('/api/session/update-rule', {
+            umo: this.selectedUmo.umo,
+            rule_key: 'kb_config',
+            rule_value: config
+          })
 
           if (response.data.status === 'ok') {
-            const data = response.data.data;
-            
-            // 更新成功的会话的本地数据
-            sessions.forEach(session => {
-              const wasSuccessful = !data.error_sessions || !data.error_sessions.includes(session.session_id);
-              updateLocalData(session, wasSuccessful);
-            });
+            this.showSuccess(this.tm('messages.saveSuccess'))
+            this.editingRules.kb_config = config
 
-            return {
-              success: true,
-              successCount: data.success_count || 0,
-              errorCount: data.error_count || 0,
-              errorSessions: data.error_sessions || []
-            };
+            let item = this.rulesList.find(u => u.umo === this.selectedUmo.umo)
+            if (item) {
+              item.rules.kb_config = config
+            } else {
+              this.rulesList.push({
+                umo: this.selectedUmo.umo,
+                platform: this.selectedUmo.platform,
+                message_type: this.selectedUmo.message_type,
+                session_id: this.selectedUmo.session_id,
+                rules: { kb_config: config }
+              })
+            }
           } else {
-            return { 
-              success: false, 
-              error: response.data.message,
-              errorCount: sessionIds.length,
-              successCount: 0
-            };
-          }
-        } catch (error) {
-          return { 
-            success: false, 
-            error: error.response?.data?.message || error.message,
-            errorCount: sessionIds.length,
-            successCount: 0
-          };
-        }
-      }
-    },
-
-    // 单独的会话状态更新方法（不支持批量操作）
-    async updateSessionStatus(session, enabled) {
-      session.updating = true;
-      try {
-        const response = await axios.post('/api/session/update_status', {
-          session_id: session.session_id,
-          session_enabled: enabled
-        });
-
-        if (response.data.status === 'ok') {
-          session.session_enabled = enabled;
-          this.showSuccess(this.tm('messages.sessionStatusSuccess', { 
-            status: enabled ? this.tm('status.enabled') : this.tm('status.disabled') 
-          }));
-        } else {
-          this.showError(response.data.message || this.tm('messages.statusUpdateError'));
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.statusUpdateError'));
-      }
-      session.updating = false;
-    },
-
-    async applyBatchChanges() {
-      if (!this.batchPersona && !this.batchChatProvider && !this.batchSttProvider && !this.batchTtsProvider && this.batchLlmStatus === null && this.batchTtsStatus === null) {
-        return;
-      }
-
-      this.batchUpdating = true;
-      let totalSuccessCount = 0;
-      let totalErrorCount = 0;
-      let allErrorSessions = [];
-
-      const sessions = this.sessions;
-
-      try {
-        // 定义批量操作任务
-        const batchTasks = [];
-
-        if (this.batchPersona) {
-          batchTasks.push({
-            type: 'persona',
-            params: { persona_name: this.batchPersona }
-          });
-        }
-
-        if (this.batchChatProvider) {
-          batchTasks.push({
-            type: 'provider',
-            params: { provider_id: this.batchChatProvider, provider_type: 'chat_completion' }
-          });
-        }
-
-        if (this.batchSttProvider) {
-          batchTasks.push({
-            type: 'provider',
-            params: { provider_id: this.batchSttProvider, provider_type: 'speech_to_text' }
-          });
-        }
-
-        if (this.batchTtsProvider) {
-          batchTasks.push({
-            type: 'provider',
-            params: { provider_id: this.batchTtsProvider, provider_type: 'text_to_speech' }
-          });
-        }
-
-        if (this.batchLlmStatus !== null) {
-          batchTasks.push({
-            type: 'llm',
-            params: { enabled: this.batchLlmStatus }
-          });
-        }
-
-        if (this.batchTtsStatus !== null) {
-          batchTasks.push({
-            type: 'tts',
-            params: { enabled: this.batchTtsStatus }
-          });
-        }
-
-        // 执行所有批量任务
-        for (const task of batchTasks) {
-          let updateLocalData;
-          
-          // 定义本地数据更新逻辑
-          switch (task.type) {
-            case 'persona':
-              updateLocalData = (s, success) => {
-                if (success) s.persona_id = task.params.persona_name;
-              };
-              break;
-            case 'provider':
-              updateLocalData = (s, success) => {
-                if (!success) return;
-                const { provider_id, provider_type } = task.params;
-                if (provider_type === 'chat_completion') {
-                  s.chat_provider_id = provider_id;
-                } else if (provider_type === 'speech_to_text') {
-                  s.stt_provider_id = provider_id;
-                } else if (provider_type === 'text_to_speech') {
-                  s.tts_provider_id = provider_id;
-                }
-              };
-              break;
-            case 'llm':
-              updateLocalData = (s, success) => {
-                if (success) s.llm_enabled = task.params.enabled;
-              };
-              break;
-            case 'tts':
-              updateLocalData = (s, success) => {
-                if (success) s.tts_enabled = task.params.enabled;
-              };
-              break;
-          }
-
-          const result = await this._updateSession(task.type, sessions, task.params, updateLocalData);
-          
-          totalSuccessCount += result.successCount || 0;
-          totalErrorCount += result.errorCount || 0;
-          if (result.errorSessions) {
-            allErrorSessions.push(...result.errorSessions);
+            this.showError(response.data.message || this.tm('messages.saveError'))
           }
         }
-
-        // 显示最终结果
-        if (totalErrorCount === 0) {
-          this.showSuccess(this.tm('messages.batchUpdateSuccess', { count: totalSuccessCount }));
-        } else {
-          const uniqueErrorSessions = [...new Set(allErrorSessions)];
-          this.showError(this.tm('messages.batchUpdatePartial', { 
-            success: totalSuccessCount, 
-            error: uniqueErrorSessions.length 
-          }));
-        }
-
       } catch (error) {
-        this.showError(this.tm('messages.batchUpdateError'));
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
       }
-
-      this.batchUpdating = false;
-
-      // 清空批量设置
-      this.batchPersona = null;
-      this.batchChatProvider = null;
-      this.batchSttProvider = null;
-      this.batchTtsProvider = null;
-      this.batchLlmStatus = null;
-      this.batchTtsStatus = null;
+      this.saving = false
     },
 
-    async openPluginManager(session) {
-      this.selectedSessionForPlugin = session;
-      this.pluginDialog = true;
-      this.loadingPlugins = true;
-      this.sessionPlugins = [];
+    confirmDeleteRules(item) {
+      this.deleteTarget = item
+      this.deleteDialog = true
+    },
 
+    async deleteAllRules() {
+      if (!this.deleteTarget) return
+
+      this.deleting = true
       try {
-        const response = await axios.get('/api/session/plugins', {
-          params: { session_id: session.session_id }
-        });
+        const response = await axios.post('/api/session/delete-rule', {
+          umo: this.deleteTarget.umo
+        })
 
         if (response.data.status === 'ok') {
-          this.sessionPlugins = response.data.data.plugins.map(plugin => ({
-            ...plugin,
-            updating: false
-          }));
+          this.showSuccess(this.tm('messages.deleteSuccess'))
+          // 从列表中移除
+          const index = this.rulesList.findIndex(u => u.umo === this.deleteTarget.umo)
+          if (index > -1) {
+            this.rulesList.splice(index, 1)
+          }
+          this.deleteDialog = false
+          this.deleteTarget = null
+          // 重新加载数据以更新 totalItems
+          await this.loadData()
         } else {
-          this.showError(response.data.message || this.tm('messages.loadPluginsError'));
+          this.showError(response.data.message || this.tm('messages.deleteError'))
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.loadPluginsError'));
+        this.showError(error.response?.data?.message || this.tm('messages.deleteError'))
       }
-
-      this.loadingPlugins = false;
+      this.deleting = false
     },
 
-    async togglePlugin(plugin, enabled) {
-      plugin.updating = true;
+    confirmBatchDelete() {
+      if (this.selectedItems.length === 0) return
+      this.batchDeleteDialog = true
+    },
 
+    async batchDeleteRules() {
+      if (this.selectedItems.length === 0) return
+
+      this.deleting = true
       try {
-        const response = await axios.post('/api/session/update_plugin', {
-          session_id: this.selectedSessionForPlugin.session_id,
-          plugin_name: plugin.name,
-          enabled: enabled
-        });
+        const umos = this.selectedItems.map(item => item.umo)
+        const response = await axios.post('/api/session/batch-delete-rule', {
+          umos: umos
+        })
 
         if (response.data.status === 'ok') {
-          plugin.enabled = enabled;
-          this.showSuccess(this.tm('messages.pluginStatusSuccess', {
-            name: plugin.name,
-            status: enabled ? this.tm('status.enabled') : this.tm('status.disabled')
-          }));
+          const data = response.data.data
+          this.showSuccess(data.message || this.tm('messages.batchDeleteSuccess'))
+          this.batchDeleteDialog = false
+          this.selectedItems = []
+          // 重新加载数据
+          await this.loadData()
         } else {
-          this.showError(response.data.message || this.tm('messages.pluginStatusError'));
+          this.showError(response.data.message || this.tm('messages.batchDeleteError'))
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.pluginStatusError'));
+        this.showError(error.response?.data?.message || this.tm('messages.batchDeleteError'))
       }
-
-      plugin.updating = false;
-    },
-
-    openNameEditor(session) {
-      this.selectedSessionForName = session;
-      this.newSessionName = session.session_name === session.session_raw_name ? '' : session.session_name;
-      this.nameEditDialog = true;
-    },
-
-    async saveSessionName() {
-      if (!this.selectedSessionForName) return;
-
-      this.nameEditLoading = true;
-      try {
-        const response = await axios.post('/api/session/update_name', {
-          session_id: this.selectedSessionForName.session_id,
-          custom_name: this.newSessionName || ''
-        });
-
-        if (response.data.status === 'ok') {
-          // 更新本地数据
-          this.selectedSessionForName.session_name = response.data.data.display_name;
-          this.showSuccess(response.data.data.message || this.tm('messages.nameUpdateSuccess'));
-          this.nameEditDialog = false;
-        } else {
-          this.showError(response.data.message || this.tm('messages.nameUpdateError'));
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.nameUpdateError'));
-      }
-
-      this.nameEditLoading = false;
+      this.deleting = false
     },
 
     getPlatformColor(platform) {
@@ -1038,260 +990,102 @@ export default {
         'qq_official': 'purple',
         'telegram': 'light-blue',
         'discord': 'indigo',
+        'webchat': 'orange',
         'default': 'grey'
-      };
-      return colors[platform] || colors.default;
+      }
+      return colors[platform] || colors.default
     },
 
     showSuccess(message) {
-      this.snackbarText = message;
-      this.snackbarColor = 'success';
-      this.snackbar = true;
+      this.snackbarText = message
+      this.snackbarColor = 'success'
+      this.snackbar = true
     },
 
     showError(message) {
-      this.snackbarText = message;
-      this.snackbarColor = 'error';
-      this.snackbar = true;
+      this.snackbarText = message
+      this.snackbarColor = 'error'
+      this.snackbar = true
     },
 
-    async deleteSession(session) {
-      const confirmMessage = this.tm('deleteConfirm.message', { 
-        sessionName: session.session_name || session.session_id 
-      }) + '\n\n' + this.tm('deleteConfirm.warning');
-      
-      if (!confirm(confirmMessage)) {
-        return;
-      }
+    openQuickEditName(item) {
+      this.quickEditNameTarget = item
+      this.quickEditNameValue = item.rules?.session_service_config?.custom_name || ''
+      this.quickEditNameDialog = true
+    },
 
-      session.deleting = true;
+    async saveQuickEditName() {
+      if (!this.quickEditNameTarget) return
+
+      this.saving = true
       try {
-        const response = await axios.post('/api/session/delete', {
-          session_id: session.session_id
-        });
+        // 获取现有的 session_service_config 或创建新的
+        const existingConfig = this.quickEditNameTarget.rules?.session_service_config || {}
+        const config = {
+          session_enabled: existingConfig.session_enabled !== false,
+          llm_enabled: existingConfig.llm_enabled !== false,
+          tts_enabled: existingConfig.tts_enabled !== false,
+          ...existingConfig,
+        }
+
+        // 更新 custom_name
+        if (this.quickEditNameValue) {
+          config.custom_name = this.quickEditNameValue
+        } else {
+          delete config.custom_name
+        }
+
+        const response = await axios.post('/api/session/update-rule', {
+          umo: this.quickEditNameTarget.umo,
+          rule_key: 'session_service_config',
+          rule_value: config
+        })
 
         if (response.data.status === 'ok') {
-          this.showSuccess(response.data.data.message || this.tm('messages.deleteSuccess'));
-          // 从列表中移除已删除的会话
-          const index = this.sessions.findIndex(s => s.session_id === session.session_id);
-          if (index > -1) {
-            this.sessions.splice(index, 1);
+          this.showSuccess(this.tm('messages.saveSuccess'))
+
+          // 更新或添加到列表
+          let item = this.rulesList.find(u => u.umo === this.quickEditNameTarget.umo)
+          if (item) {
+            if (!item.rules) item.rules = {}
+            item.rules.session_service_config = config
+          } else {
+            // 新规则，添加到列表
+            const parts = this.quickEditNameTarget.umo.split(':')
+            this.rulesList.push({
+              umo: this.quickEditNameTarget.umo,
+              platform: parts[0] || '',
+              message_type: parts[1] || '',
+              session_id: parts[2] || '',
+              rules: { session_service_config: config }
+            })
           }
+
+          this.quickEditNameDialog = false
+          this.quickEditNameTarget = null
+          this.quickEditNameValue = ''
         } else {
-          this.showError(response.data.message || this.tm('messages.deleteError'));
+          this.showError(response.data.message || this.tm('messages.saveError'))
         }
       } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.deleteError'));
+        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
       }
-
-      session.deleting = false;
-    },
-
-    // 处理分页更新事件
-    handlePaginationUpdate(options) {
-      this.currentPage = options.page;
-      this.itemsPerPage = options.itemsPerPage;
-      this.loadSessions();
-    },
-
-    // 处理搜索变化
-    handleSearchChange: debounce(function() {
-      this.currentPage = 1; // 重置到第一页
-      this.loadSessions();
-    }, 300),
-
-    // 处理平台筛选变化
-    handlePlatformChange() {
-      this.currentPage = 1; // 重置到第一页
-      this.loadSessions();
-    },
-
-    // 知识库配置相关方法
-    async openKBManager(session) {
-      this.selectedSessionForKB = session;
-      
-      // ✅ 先重置配置为默认值，避免数据残留
-      this.sessionKBConfig = {
-        kb_ids: [],
-        top_k: 5,
-        enable_rerank: true
-      };
-      
-      this.kbDialog = true;
-      this.loadingKBConfig = true;
-
-      try {
-        // 加载可用的知识库列表
-        const kbListResponse = await axios.get('/api/kb/list');
-        if (kbListResponse.data.status === 'ok') {
-          this.availableKBs = kbListResponse.data.data.items;
-        }
-
-        // 加载当前会话的知识库配置
-        const configResponse = await axios.get('/api/kb/session/config/get', {
-          params: { session_id: session.session_id }
-        });
-
-        if (configResponse.data.status === 'ok') {
-          const config = configResponse.data.data;
-          
-          // 初始化配置
-          this.sessionKBConfig = {
-            kb_ids: [],
-            top_k: config.top_k || 5,
-            enable_rerank: config.enable_rerank !== false
-          };
-
-          // 如果有配置的 kb_ids，进行清理后赋值
-          if (config.kb_ids && Array.isArray(config.kb_ids)) {
-            this.sessionKBConfig.kb_ids = config.kb_ids.filter(id => id != null && id !== '');
-          }
-        } else {
-          // 保持默认值（已在开头设置）
-          this.sessionKBConfig = {
-            kb_ids: [],
-            top_k: 5,
-            enable_rerank: true
-          };
-        }
-      } catch (error) {
-        console.error('加载知识库配置失败:', error);
-        this.showError(this.tm('knowledgeBase.loadFailed'));
-      } finally {
-        this.loadingKBConfig = false;
-      }
-    },
-
-    async saveKBConfig() {
-      if (!this.selectedSessionForKB) return;
-
-      // 确保 kb_ids 是一个干净的数组
-      const cleanKbIds = Array.isArray(this.sessionKBConfig.kb_ids)
-        ? this.sessionKBConfig.kb_ids.filter(id => id != null && id !== '')
-        : [];
-
-      this.savingKBConfig = true;
-      try {
-        const payload = {
-          scope: 'session',
-          scope_id: this.selectedSessionForKB.session_id,
-          kb_ids: cleanKbIds,  // 使用清理后的数组
-          top_k: this.sessionKBConfig.top_k,
-          enable_rerank: this.sessionKBConfig.enable_rerank
-        };
-        
-        const response = await axios.post('/api/kb/session/config/set', payload);
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('knowledgeBase.saveSuccess'));
-          this.kbDialog = false;
-          // ✅ 保存成功后清理数据
-          this.sessionKBConfig = {
-            kb_ids: [],
-            top_k: 5,
-            enable_rerank: true
-          };
-          this.selectedSessionForKB = null;
-        } else {
-          this.showError(response.data.message || this.tm('knowledgeBase.saveFailed'));
-        }
-      } catch (error) {
-        console.error('保存知识库配置失败:', error);
-        this.showError(error.response?.data?.message || this.tm('knowledgeBase.saveFailed'));
-      } finally {
-        this.savingKBConfig = false;
-      }
-    },
-
-    // 关闭知识库配置对话框并清理数据
-    closeKBDialog() {
-      this.kbDialog = false;
-      // 清理数据，避免下次打开时出现旧数据
-      this.sessionKBConfig = {
-        kb_ids: [],
-        top_k: 5,
-        enable_rerank: true
-      };
-      this.selectedSessionForKB = null;
-      this.availableKBs = [];
-    },
-
-    async clearKBConfig() {
-      if (!this.selectedSessionForKB) return;
-
-      if (!confirm(this.tm('knowledgeBase.clearConfirm'))) {
-        return;
-      }
-
-      this.savingKBConfig = true;
-      try {
-        const response = await axios.post('/api/kb/session/config/delete', {
-          scope: 'session',
-          scope_id: this.selectedSessionForKB.session_id
-        });
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('knowledgeBase.clearSuccess'));
-          this.sessionKBConfig = {
-            kb_ids: [],
-            top_k: 5,
-            enable_rerank: true
-          };
-        } else {
-          this.showError(response.data.message || this.tm('knowledgeBase.clearFailed'));
-        }
-      } catch (error) {
-        console.error('清除知识库配置失败:', error);
-        this.showError(error.response?.data?.message || this.tm('knowledgeBase.clearFailed'));
-      } finally {
-        this.savingKBConfig = false;
-      }
-    },
-
-    goToKBPage() {
-      this.$router.push('/knowledge-base');
+      this.saving = false
     },
   },
 }
 </script>
 
 <style scoped>
-
 .v-data-table :deep(.v-data-table__td) {
   padding: 8px 16px !important;
   vertical-align: middle !important;
 }
 
-/* 知识库选择列表滚动条样式 */
-.kb-selector-list {
-  max-height: 150px;
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-/* 自定义滚动条样式 - Webkit浏览器 */
-.kb-selector-list::-webkit-scrollbar {
-  width: 8px;
-}
-
-.kb-selector-list::-webkit-scrollbar-track {
-  background: #f1f1f1;
+code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
   border-radius: 4px;
+  font-size: 12px;
 }
-
-.kb-selector-list::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.kb-selector-list::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Firefox滚动条样式 */
-.kb-selector-list {
-  scrollbar-width: thin;
-  scrollbar-color: #888 #f1f1f1;
-}
-
 </style>

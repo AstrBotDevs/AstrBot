@@ -9,7 +9,7 @@
         style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
         <div class="d-flex flex-row align-center" style="gap: 12px;">
           <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
-            v-if="!isSystemConfig" item-value="id" label="选择配置文件" hide-details density="compact" rounded="md"
+            v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
           <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a>
@@ -19,10 +19,10 @@
         <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
           rounded="md" @update:model-value="onConfigTypeToggle">
           <v-btn value="normal" prepend-icon="mdi-cog" size="large">
-            普通
+            {{ tm('configSelection.normalConfig') }}
           </v-btn>
           <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
-            系统
+            {{ tm('configSelection.systemConfig') }}
           </v-btn>
         </v-btn-toggle>
       </div>
@@ -68,7 +68,7 @@
         <v-btn icon @click="codeEditorDialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
-        <v-toolbar-title>编辑配置文件</v-toolbar-title>
+        <v-toolbar-title>{{ tm('codeEditor.title') }}</v-toolbar-title>
         <v-spacer></v-spacer>
         <v-toolbar-items style="display: flex; align-items: center;">
           <v-btn style="margin-left: 16px;" size="small" @click="configToString()">{{
@@ -90,15 +90,15 @@
   <v-dialog v-model="configManageDialog" max-width="800px">
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
-        <span class="text-h4">配置文件管理</span>
+        <span class="text-h4">{{ tm('configManagement.title') }}</span>
         <v-btn icon="mdi-close" variant="text" @click="configManageDialog = false"></v-btn>
       </v-card-title>
 
       <v-card-text>
-        <small>AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。</small>
+        <small>{{ tm('configManagement.description') }}</small>
         <div class="mt-6 mb-4">
           <v-btn prepend-icon="mdi-plus" @click="startCreateConfig" variant="tonal" color="primary">
-            新建配置文件
+            {{ tm('configManagement.newConfig') }}
           </v-btn>
         </div>
 
@@ -120,18 +120,18 @@
         <v-divider v-if="showConfigForm" class="my-6"></v-divider>
 
         <div v-if="showConfigForm">
-          <h3 class="mb-4">{{ isEditingConfig ? '编辑配置文件' : '新建配置文件' }}</h3>
+          <h3 class="mb-4">{{ isEditingConfig ? tm('configManagement.editConfig') : tm('configManagement.newConfig') }}</h3>
 
-          <h4>名称</h4>
+          <h4>{{ tm('configManagement.configName') }}</h4>
 
-          <v-text-field v-model="configFormData.name" label="填写配置文件名称" variant="outlined" class="mt-4 mb-4"
+          <v-text-field v-model="configFormData.name" :label="tm('configManagement.fillConfigName')" variant="outlined" class="mt-4 mb-4"
             hide-details></v-text-field>
 
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
-            <v-btn variant="text" @click="cancelConfigForm">取消</v-btn>
+            <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
             <v-btn color="primary" @click="saveConfigForm"
               :disabled="!configFormData.name">
-              {{ isEditingConfig ? '更新' : '创建' }}
+              {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
           </div>
         </div>
@@ -227,7 +227,7 @@ export default {
       const items = [...this.configInfoList];
       items.push({
         id: '_%manage%_',
-        name: '管理配置文件...',
+        name: this.tm('configManagement.manageConfigs'),
         umop: []
       });
       return items;
@@ -410,7 +410,7 @@ export default {
         }
       }).catch((err) => {
         console.error(err);
-        this.save_message = "新配置文件创建失败";
+        this.save_message = this.tm('configManagement.createFailed');
         this.save_message_snack = true;
         this.save_message_success = "error";
       });
@@ -453,7 +453,7 @@ export default {
     },
     saveConfigForm() {
       if (!this.configFormData.name) {
-        this.save_message = "请填写配置名称";
+        this.save_message = this.tm('configManagement.pleaseEnterName');
         this.save_message_snack = true;
         this.save_message_success = "error";
         return;
@@ -466,7 +466,7 @@ export default {
       }
     },
     confirmDeleteConfig(config) {
-      if (confirm(`确定要删除配置文件 "${config.name}" 吗？此操作不可恢复。`)) {
+      if (confirm(this.tm('configManagement.confirmDelete').replace('{name}', config.name))) {
         this.deleteConfig(config.id);
       }
     },
@@ -488,7 +488,7 @@ export default {
         }
       }).catch((err) => {
         console.error(err);
-        this.save_message = "删除配置文件失败";
+        this.save_message = this.tm('configManagement.deleteFailed');
         this.save_message_snack = true;
         this.save_message_success = "error";
       });
@@ -511,7 +511,7 @@ export default {
         }
       }).catch((err) => {
         console.error(err);
-        this.save_message = "更新配置文件失败";
+        this.save_message = this.tm('configManagement.updateFailed');
         this.save_message_snack = true;
         this.save_message_success = "error";
       });

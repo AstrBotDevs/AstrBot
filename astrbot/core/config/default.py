@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.6.1"
+VERSION = "4.7.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
         "image_caption": False,
+        "image_caption_provider_id": "",
         "active_reply": {
             "enable": False,
             "method": "possibility_reply",
@@ -145,7 +146,16 @@ DEFAULT_CONFIG = {
 }
 
 
-# 配置项的中文描述、值类型
+"""
+AstrBot v3 时代的配置元数据，目前仅承担以下功能：
+
+1. 保存配置时，配置项的类型验证
+2. WebUI 展示提供商和平台适配器模版
+
+WebUI 的配置文件在 `CONFIG_METADATA_3` 中。
+
+未来将会逐步淘汰此配置元数据。
+"""
 CONFIG_METADATA_2 = {
     "platform_group": {
         "metadata": {
@@ -638,7 +648,7 @@ CONFIG_METADATA_2 = {
                             },
                             "words_count_threshold": {
                                 "type": "int",
-                                "hint": "超过这个字数的消息不会被分段回复。默认为 150",
+                                "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                             },
                             "regex": {
                                 "type": "string",
@@ -1091,7 +1101,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "whisper-1",
                     },
-                    "Whisper(本地加载)": {
+                    "Whisper(Local)": {
                         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -1100,7 +1110,7 @@ CONFIG_METADATA_2 = {
                         "id": "whisper_selfhost",
                         "model": "tiny",
                     },
-                    "SenseVoice(本地加载)": {
+                    "SenseVoice(Local)": {
                         "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "type": "sensevoice_stt_selfhost",
                         "provider": "sensevoice",
@@ -1135,7 +1145,7 @@ CONFIG_METADATA_2 = {
                         "pitch": "+0Hz",
                         "timeout": 20,
                     },
-                    "GSV TTS(本地加载)": {
+                    "GSV TTS(Local)": {
                         "id": "gsv_tts",
                         "enable": False,
                         "provider": "gpt_sovits",
@@ -2100,6 +2110,9 @@ CONFIG_METADATA_2 = {
                     "image_caption": {
                         "type": "bool",
                     },
+                    "image_caption_provider_id": {
+                        "type": "string",
+                    },
                     "image_caption_prompt": {
                         "type": "string",
                     },
@@ -2189,6 +2202,14 @@ CONFIG_METADATA_2 = {
 }
 
 
+"""
+v4.7.0 之后，name, description, hint 等字段已经实现 i18n 国际化。国际化资源文件位于：
+
+- dashboard/src/i18n/locales/en-US/features/config-metadata.json
+- dashboard/src/i18n/locales/zh-CN/features/config-metadata.json
+
+如果在此文件中添加了新的配置字段，请务必同步更新上述两个国际化资源文件。
+"""
 CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
@@ -2768,7 +2789,16 @@ CONFIG_METADATA_3 = {
                     "provider_ltm_settings.image_caption": {
                         "description": "自动理解图片",
                         "type": "bool",
-                        "hint": "需要设置默认图片转述模型。",
+                        "hint": "需要设置群聊图片转述模型。",
+                    },
+                    "provider_ltm_settings.image_caption_provider_id": {
+                        "description": "群聊图片转述模型",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "用于群聊上下文感知的图片理解，与默认图片转述模型分开配置。",
+                        "condition": {
+                            "provider_ltm_settings.image_caption": True,
+                        },
                     },
                     "provider_ltm_settings.active_reply.enable": {
                         "description": "主动回复",
