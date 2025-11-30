@@ -20,7 +20,9 @@ from astrbot.core.star.star_manager import PluginManager
 
 from .route import Response, Route, RouteContext
 
-PLUGIN_UPDATE_CONCURRENCY = 3  # limit concurrent updates to avoid overwhelming plugin sources
+PLUGIN_UPDATE_CONCURRENCY = (
+    3  # limit concurrent updates to avoid overwhelming plugin sources
+)
 
 
 class PluginRoute(Route):
