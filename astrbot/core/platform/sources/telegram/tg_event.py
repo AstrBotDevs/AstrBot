@@ -18,8 +18,6 @@ from astrbot.api.message_components import (
     Reply,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import download_file
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -127,15 +125,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 image_path = await i.convert_to_file_path()
                 await client.send_photo(photo=image_path, **cast(Any, payload))
             elif isinstance(i, File):
-                if i.file.startswith("https://"):
-                    assert i.name is not None
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    path = os.path.join(temp_dir, i.name)
-                    await download_file(i.file, path)
-                    i.file = path
-
+                path = await i.get_file()
+                name = i.name or os.path.basename(path)
                 await client.send_document(
-                    document=i.file, filename=i.name, **cast(Any, payload)
+                    document=path, filename=name, **cast(Any, payload)
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
@@ -222,16 +215,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                         continue
                     elif isinstance(i, File):
-                        if i.file.startswith("https://"):
-                            assert i.name is not None
-                            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                            path = os.path.join(temp_dir, i.name)
-                            await download_file(i.file, path)
-                            i.file = path
+                        path = await i.get_file()
+                        name = i.name or os.path.basename(path)
 
                         await self.client.send_document(
-                            document=i.file,
-                            filename=i.name,
+                            document=path,
+                            filename=name,
                             **cast(Any, payload),
                         )
                         continue
