@@ -36,6 +36,10 @@
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
         },
+        "reachability_check": {
+          "description": "Provider Reachability Check",
+          "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
+        },
         "image_caption_prompt": {
           "description": "Image Caption Prompt"
         }

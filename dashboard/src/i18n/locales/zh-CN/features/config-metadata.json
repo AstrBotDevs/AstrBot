@@ -36,6 +36,10 @@
           "description": "默认图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
         },
+        "reachability_check": {
+          "description": "提供商可达性检测",
+          "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
+        },
         "image_caption_prompt": {
           "description": "图片转述提示词"
         }
