@@ -42,6 +42,7 @@ const loadingDialog = reactive({
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
 const curr_namespace = ref("");
+const updatingAll = ref(false);
 
 const readmeDialog = reactive({
   show: false,
@@ -226,6 +227,10 @@ const paginatedPlugins = computed(() => {
   return sortedPlugins.value.slice(start, end);
 });
 
+const updatableExtensions = computed(() => {
+  return extension_data?.data?.filter(ext => ext.has_update) || [];
+});
+
 // 方法
 const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
@@ -370,6 +375,52 @@ const updateExtension = async (extension_name) => {
   } catch (err) {
     toast(err, "error");
   }
+};
+
+const updateAllExtensions = async () => {
+  if (updatingAll.value || updatableExtensions.value.length === 0) return;
+  updatingAll.value = true;
+  loadingDialog.title = tm('status.loading');
+  loadingDialog.statusCode = 0;
+  loadingDialog.result = "";
+  loadingDialog.show = true;
+
+  const failures = [];
+  const targets = [...updatableExtensions.value];
+
+  for (const ext of targets) {
+    try {
+      const res = await axios.post('/api/plugin/update', {
+        name: ext.name,
+        proxy: localStorage.getItem('selectedGitHubProxy') || ""
+      });
+      if (res.data.status === "error") {
+        failures.push(`${ext.name}: ${res.data.message}`);
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.message || String(err);
+      failures.push(`${ext.name}: ${errorMsg}`);
+    }
+  }
+
+  try {
+    await getExtensions();
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    failures.push(tm('messages.refreshFailed') + " " + errorMsg);
+  }
+
+  if (failures.length === 0) {
+    onLoadingDialogResult(1, tm('messages.updateAllSuccess'));
+  } else {
+    const failureText = tm('messages.updateAllFailed', {
+      failed: failures.length,
+      total: targets.length
+    });
+    onLoadingDialogResult(2, `${failureText}\n${failures.join('\n')}`, -1);
+  }
+
+  updatingAll.value = false;
 };
 
 const pluginOn = async (extension) => {
@@ -718,6 +769,12 @@ watch(marketSearch, (newVal) => {
                 <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
                   <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
+                </v-btn>
+
+                <v-btn class="ml-2" color="warning" variant="tonal" :disabled="updatableExtensions.length === 0"
+                  :loading="updatingAll" @click="updateAllExtensions">
+                  <v-icon>mdi-update</v-icon>
+                  {{ tm('buttons.updateAll') }}
                 </v-btn>
 
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
