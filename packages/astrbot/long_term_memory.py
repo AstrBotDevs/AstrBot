@@ -177,7 +177,9 @@ class LongTermMemory:
 
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
-            logger.debug(f"Recorded AI response: {event.unified_msg_origin} | {final_message}")
+            logger.debug(
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+            )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
