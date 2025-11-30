@@ -63,7 +63,12 @@ class DiscordPlatformAdapter(Platform):
         message_chain: MessageChain,
     ):
         """通过会话发送消息"""
-        assert self.client.user is not None
+        if self.client.user is None:
+            logger.error(
+                "[Discord] 客户端未就绪 (self.client.user is None)，无法发送消息"
+            )
+            return
+
         # 创建一个 message_obj 以便在 event 中使用
         message_obj = AstrBotMessage()
         if "_" in session.session_id:
@@ -257,8 +262,12 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
-        assert message.raw_message is discord.Message
-        assert self.client.user is not None
+
+        if self.client.user is None:
+            logger.error(
+                "[Discord] 客户端未就绪 (self.client.user is None)，无法处理消息"
+            )
+            return
 
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
