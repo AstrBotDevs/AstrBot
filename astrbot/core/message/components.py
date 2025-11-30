@@ -724,7 +724,8 @@ class File(BaseMessageComponent):
 
     async def _download_file(self):
         """下载文件"""
-        assert self.url is not None
+        if not self.url:
+            raise ValueError("Download failed: No URL provided in File component.")
         download_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(download_dir, exist_ok=True)
         file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
