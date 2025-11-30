@@ -32,7 +32,8 @@
     "actions": "操作",
     "back": "返回",
     "selectFile": "选择文件",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "updateAll": "更新全部插件"
   },
   "status": {
     "enabled": "启用",
@@ -141,7 +142,9 @@
     "confirmDelete": "确定要删除插件吗？",
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
-    "supportedFormats": "支持 .zip 格式的插件文件"
+    "supportedFormats": "支持 .zip 格式的插件文件",
+    "updateAllSuccess": "所有可更新的插件都已更新！",
+    "updateAllFailed": "有 {failed}/{total} 个插件更新失败:"
   },
   "upload": {
     "fromFile": "从文件安装",
