@@ -1,5 +1,6 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
+import { storeToRefs } from 'pinia';
 </script>
 
 <template>
@@ -23,6 +24,8 @@ import { useCommonStore } from '@/stores/common';
 export default {
   name: 'ConsoleDisplayer',
   data() {
+    const commonStore = useCommonStore();
+    const { log_cache } = storeToRefs(commonStore);
     return {
       autoScroll: true,  // 默认开启自动滚动
       logColorAnsiMap: {
@@ -35,7 +38,8 @@ export default {
         '\u001b[32m': 'color: #00FF00;',  // green
         'default': 'color: #FFFFFF;'
       },
-      logCache: useCommonStore().getLogCache(),
+      commonStore,
+      logCache: log_cache,
       historyNum_: -1,
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4], // 默认选中所有级别
