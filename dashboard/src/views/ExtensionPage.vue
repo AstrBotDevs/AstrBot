@@ -385,42 +385,46 @@ const updateAllExtensions = async () => {
   loadingDialog.result = "";
   loadingDialog.show = true;
 
-  const failures = [];
-  const targets = [...updatableExtensions.value];
+  const targets = updatableExtensions.value.map(ext => ext.name);
+  try {
+    const res = await axios.post('/api/plugin/update-all', {
+      names: targets,
+      proxy: localStorage.getItem('selectedGitHubProxy') || ""
+    });
 
-  for (const ext of targets) {
+    if (res.data.status === "error") {
+      onLoadingDialogResult(2, res.data.message || tm('messages.updateAllFailed', {
+        failed: targets.length,
+        total: targets.length
+      }), -1);
+      return;
+    }
+
+    const results = res.data.data?.results || [];
+    const failures = results.filter(r => r.status !== 'ok');
     try {
-      const res = await axios.post('/api/plugin/update', {
-        name: ext.name,
-        proxy: localStorage.getItem('selectedGitHubProxy') || ""
-      });
-      if (res.data.status === "error") {
-        failures.push(`${ext.name}: ${res.data.message}`);
-      }
+      await getExtensions();
     } catch (err) {
       const errorMsg = err.response?.data?.message || err.message || String(err);
-      failures.push(`${ext.name}: ${errorMsg}`);
+      failures.push({ name: 'refresh', status: 'error', message: errorMsg });
     }
-  }
 
-  try {
-    await getExtensions();
+    if (failures.length === 0) {
+      onLoadingDialogResult(1, tm('messages.updateAllSuccess'));
+    } else {
+      const failureText = tm('messages.updateAllFailed', {
+        failed: failures.length,
+        total: targets.length
+      });
+      const detail = failures.map(f => `${f.name}: ${f.message}`).join('\n');
+      onLoadingDialogResult(2, `${failureText}\n${detail}`, -1);
+    }
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message || String(err);
-    failures.push(tm('messages.refreshFailed') + " " + errorMsg);
+    onLoadingDialogResult(2, errorMsg, -1);
+  } finally {
+    updatingAll.value = false;
   }
-
-  if (failures.length === 0) {
-    onLoadingDialogResult(1, tm('messages.updateAllSuccess'));
-  } else {
-    const failureText = tm('messages.updateAllFailed', {
-      failed: failures.length,
-      total: targets.length
-    });
-    onLoadingDialogResult(2, `${failureText}\n${failures.join('\n')}`, -1);
-  }
-
-  updatingAll.value = false;
 };
 
 const pluginOn = async (extension) => {

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import ssl
@@ -33,6 +34,7 @@ class PluginRoute(Route):
             "/plugin/install": ("POST", self.install_plugin),
             "/plugin/install-upload": ("POST", self.install_plugin_upload),
             "/plugin/update": ("POST", self.update_plugin),
+            "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
@@ -431,6 +433,47 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
+
+    async def update_all_plugins(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.json
+        plugin_names: list[str] = post_data.get("names") or []
+        proxy: str = post_data.get("proxy", "")
+
+        if not isinstance(plugin_names, list) or not plugin_names:
+            return Response().error("插件列表不能为空").__dict__
+
+        results = []
+        sem = asyncio.Semaphore(3)  # 控制并发数量
+
+        async def _update_one(name: str):
+            async with sem:
+                try:
+                    logger.info(f"批量更新插件 {name}")
+                    await self.plugin_manager.update_plugin(name, proxy)
+                    return {"name": name, "status": "ok", "message": "更新成功"}
+                except Exception as e:
+                    logger.error(
+                        f"/api/plugin/update-all: 更新插件 {name} 失败: {traceback.format_exc()}",
+                    )
+                    return {"name": name, "status": "error", "message": str(e)}
+
+        results = await asyncio.gather(*[_update_one(name) for name in plugin_names])
+
+        failed = [r for r in results if r["status"] == "error"]
+        message = (
+            "批量更新完成，全部成功。"
+            if not failed
+            else f"批量更新完成，其中 {len(failed)}/{len(results)} 个插件失败。"
+        )
+
+        return Response().ok({"results": results}, message).__dict__
 
     async def off_plugin(self):
         if DEMO_MODE:
