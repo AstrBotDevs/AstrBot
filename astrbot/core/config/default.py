@@ -2447,6 +2447,10 @@ CONFIG_METADATA_3 = {
                         },
                     },
                 },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
             },
             "others": {
                 "description": "其他配置",
