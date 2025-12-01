@@ -412,7 +412,10 @@ class InternalAgentSubStage(Stage):
 
             # apply file extract
             if self.file_extract_enabled:
-                await self._apply_file_extract(event, req)
+                try:
+                    await self._apply_file_extract(event, req)
+                except Exception as e:
+                    logger.error(f"Error occurred while applying file extract: {e}")
 
             # truncate contexts to fit max length
             if req.contexts:
