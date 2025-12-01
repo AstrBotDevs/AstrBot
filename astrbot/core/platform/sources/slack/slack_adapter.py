@@ -67,7 +67,7 @@ class SlackAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="slack",
             description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
 

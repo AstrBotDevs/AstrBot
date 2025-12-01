@@ -142,7 +142,7 @@ class QQOfficialPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
         )
 
     @staticmethod
