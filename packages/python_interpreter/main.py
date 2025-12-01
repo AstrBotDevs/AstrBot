@@ -243,6 +243,8 @@ class Main(star.Star):
     async def on_llm_req(self, event: AstrMessageEvent, request: ProviderRequest):
         if event.get_session_id() in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[event.get_session_id()]
+            if not request.prompt:
+                request.prompt = ""
             request.prompt += f"\nUser provided files: {files}"
 
     @filter.command_group("pi")
