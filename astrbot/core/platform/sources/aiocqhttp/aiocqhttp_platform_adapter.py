@@ -4,7 +4,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable
-from typing import Any
+from typing import Any, cast
 
 from aiocqhttp import CQHttp, Event
 from aiocqhttp.exceptions import ActionFailed
@@ -49,7 +49,7 @@ class AiocqhttpAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="aiocqhttp",
             description="适用于 OneBot 标准的消息平台适配器，支持反向 WebSockets。",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
 
