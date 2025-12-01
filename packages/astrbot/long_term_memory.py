@@ -8,7 +8,7 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
-from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -158,8 +158,12 @@ class LongTermMemory:
         cfg = self.cfg(event)
         if cfg["enable_active_reply"]:
             prompt = req.prompt
-            req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
-            req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
+            req.prompt = (
+                f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
+                f"\nNow, a new message is coming: `{prompt}`. "
+                "Please react to it. Only output your response and do not output any other information. "
+                "You MUST use the SAME language as the chatroom is using."
+            )
             req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
@@ -167,14 +171,15 @@ class LongTermMemory:
             )
             req.system_prompt += chats_str
 
-    async def after_req_llm(self, event: AstrMessageEvent):
+    async def after_req_llm(self, event: AstrMessageEvent, llm_resp: LLMResponse):
         if event.unified_msg_origin not in self.session_chats:
             return
 
-        result = event.get_result()
-        if result is not None and result.is_llm_result():
-            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {result.get_plain_text()}"
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
+        if llm_resp.completion_text:
+            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
+            logger.debug(
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+            )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:

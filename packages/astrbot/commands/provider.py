@@ -1,15 +1,10 @@
 import asyncio
-import os
 import re
 
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import RerankProvider
-from astrbot.core.utils.astrbot_path import get_astrbot_path
-
-REACHABILITY_CHECK_TIMEOUT = 30.0
 
 
 class ProviderCommands:
@@ -34,135 +29,20 @@ class ProviderCommands:
         )
 
     async def _test_provider_capability(self, provider):
-        """测试单个 provider 的可用性 (复用 Dashboard 的检测逻辑)"""
+        """测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_capability_type = meta.provider_type
 
         try:
-            if provider_capability_type == ProviderType.CHAT_COMPLETION:
-                # 发送 "Ping" 测试对话
-                response = await asyncio.wait_for(
-                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
-                    timeout=REACHABILITY_CHECK_TIMEOUT,
-                )
-                if response is not None:
-                    return True, None, None
-                err_code = "EMPTY_RESPONSE"
-                err_reason = "Provider returned empty response"
-                self._log_reachability_failure(
-                    provider, provider_capability_type, err_code, err_reason
-                )
-                return False, err_code, err_reason
-
-            elif provider_capability_type == ProviderType.EMBEDDING:
-                # 测试 Embedding
-                embedding_result = await asyncio.wait_for(
-                    provider.get_embedding("health_check"),
-                    timeout=REACHABILITY_CHECK_TIMEOUT,
-                )
-                if (
-                    isinstance(embedding_result, list)
-                    and embedding_result
-                    and all(isinstance(x, (int, float)) for x in embedding_result)
-                ):
-                    return True, None, None
-                err_code = "INVALID_EMBEDDING"
-                err_reason = "Provider returned invalid embedding"
-                self._log_reachability_failure(
-                    provider, provider_capability_type, err_code, err_reason
-                )
-                return False, err_code, err_reason
-
-            elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
-                # 测试 TTS
-                audio_result = await asyncio.wait_for(
-                    provider.get_audio("你好"),
-                    timeout=REACHABILITY_CHECK_TIMEOUT,
-                )
-                if isinstance(audio_result, str) and audio_result:
-                    # 清理检测生成的临时音频文件，避免频繁检测时堆积
-                    if os.path.isfile(audio_result):
-                        try:
-                            os.remove(audio_result)
-                        except OSError as e:
-                            logger.debug(
-                                "Failed to cleanup TTS health check file %s: %s",
-                                audio_result,
-                                e,
-                            )
-                    return True, None, None
-                err_code = "INVALID_AUDIO"
-                err_reason = "Provider returned invalid audio"
-                self._log_reachability_failure(
-                    provider, provider_capability_type, err_code, err_reason
-                )
-                return False, err_code, err_reason
-
-            elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
-                # 测试 STT
-                sample_audio_path = os.path.join(
-                    get_astrbot_path(),
-                    "samples",
-                    "stt_health_check.wav",
-                )
-                if not os.path.exists(sample_audio_path):
-                    # 如果样本文件不存在，降级为检查是否实现了方法
-                    return hasattr(provider, "get_text"), None, None
-
-                text_result = await asyncio.wait_for(
-                    provider.get_text(sample_audio_path),
-                    timeout=REACHABILITY_CHECK_TIMEOUT,
-                )
-                if isinstance(text_result, str) and text_result:
-                    return True, None, None
-                err_code = "INVALID_TEXT"
-                err_reason = "Provider returned invalid text"
-                self._log_reachability_failure(
-                    provider, provider_capability_type, err_code, err_reason
-                )
-                return False, err_code, err_reason
-
-            elif provider_capability_type == ProviderType.RERANK:
-                # 测试 Rerank
-                if isinstance(provider, RerankProvider):
-                    await asyncio.wait_for(
-                        provider.rerank("Apple", documents=["apple", "banana"]),
-                        timeout=REACHABILITY_CHECK_TIMEOUT,
-                    )
-                    return True, None, None
-                err_code = "NOT_RERANK_PROVIDER"
-                err_reason = "Provider is not RerankProvider"
-                self._log_reachability_failure(
-                    provider, provider_capability_type, err_code, err_reason
-                )
-                return False, err_code, err_reason
-
-            else:
-                # 其他类型暂时视为通过，或者回退到 get_models
-                if hasattr(provider, "get_models"):
-                    await asyncio.wait_for(
-                        provider.get_models(), timeout=REACHABILITY_CHECK_TIMEOUT
-                    )
-                    return True, None, None
-                return True, None, None  # 未知类型默认通过
-
-        except asyncio.TimeoutError:
-            err_code = "TIMEOUT"
-            err_reason = "Reachability check timed out"
-        except Exception as exc:
-            err_code = (
-                getattr(exc, "status_code", None)
-                or getattr(exc, "code", None)
-                or getattr(exc, "error_code", None)
+            await provider.test()
+            return True, None, None
+        except Exception as e:
+            err_code = "TEST_FAILED"
+            err_reason = str(e)
+            self._log_reachability_failure(
+                provider, provider_capability_type, err_code, err_reason
             )
-            err_reason = str(exc)
-            if not err_code:
-                err_code = exc.__class__.__name__
-
-        self._log_reachability_failure(
-            provider, provider_capability_type, err_code, err_reason
-        )
-        return False, err_code, err_reason
+            return False, err_code, err_reason
 
     async def provider(
         self,

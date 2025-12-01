@@ -728,7 +728,12 @@ class File(BaseMessageComponent):
             raise ValueError("Download failed: No URL provided in File component.")
         download_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(download_dir, exist_ok=True)
-        file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+        if self.name:
+            name, ext = os.path.splitext(self.name)
+            filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+        else:
+            filename = f"{uuid.uuid4().hex}"
+        file_path = os.path.join(download_dir, filename)
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 
