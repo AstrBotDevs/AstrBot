@@ -108,7 +108,7 @@ class ChatRoute(Route):
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
-        filename = f"{uuid.uuid4()!s}"
+        filename = file.filename or f"{uuid.uuid4()!s}"
         content_type = file.content_type or ""
 
         # 根据 content_type 判断文件类型并添加扩展名
