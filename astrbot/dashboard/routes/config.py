@@ -354,17 +354,11 @@ class ConfigRoute(Route):
         )
 
         try:
-            result = await provider.test()
-            if result:
-                status_info["status"] = "available"
-                logger.info(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) is available.",
-                )
-            else:
-                status_info["error"] = "Provider test returned False."
-                logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) test returned False.",
-                )
+            await provider.test()
+            status_info["status"] = "available"
+            logger.info(
+                f"Provider {status_info['name']} (ID: {status_info['id']}) is available.",
+            )
         except Exception as e:
             error_message = str(e)
             status_info["error"] = error_message

@@ -34,25 +34,11 @@ class ProviderCommands:
         provider_capability_type = meta.provider_type
 
         try:
-            result = await provider.test()
-            if result:
-                return True, None, None
+            await provider.test()
+            return True, None, None
+        except Exception as e:
             err_code = "TEST_FAILED"
-            err_reason = "Provider test returned False"
-            self._log_reachability_failure(
-                provider, provider_capability_type, err_code, err_reason
-            )
-            return False, err_code, err_reason
-        except Exception as exc:
-            err_code = (
-                getattr(exc, "status_code", None)
-                or getattr(exc, "code", None)
-                or getattr(exc, "error_code", None)
-            )
-            err_reason = str(exc)
-            if not err_code:
-                err_code = exc.__class__.__name__
-
+            err_reason = str(e)
             self._log_reachability_failure(
                 provider, provider_capability_type, err_code, err_reason
             )
