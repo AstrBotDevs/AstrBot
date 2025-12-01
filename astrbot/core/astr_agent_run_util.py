@@ -9,6 +9,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.provider.entities import LLMResponse
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -73,6 +74,18 @@ async def run_agent(
         except Exception as e:
             logger.error(traceback.format_exc())
             err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在控制台查看和分享错误详情。\n"
+
+            error_llm_response = LLMResponse(
+                role="err",
+                completion_text=err_msg,
+            )
+            try:
+                await agent_runner.agent_hooks.on_agent_done(
+                    agent_runner.run_context, error_llm_response
+                )
+            except Exception as hook_err:
+                logger.error(f"Error in on_agent_done hook: {hook_err}", exc_info=True)
+
             if agent_runner.streaming:
                 yield MessageChain().message(err_msg)
             else:
