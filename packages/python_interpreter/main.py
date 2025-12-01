@@ -225,7 +225,8 @@ class Main(star.Star):
                     del self.user_waiting[uid]
             elif isinstance(comp, Image):
                 image_url = comp.url if comp.url else comp.file
-                assert image_url is not None
+                if image_url is None:
+                    raise ValueError("Image URL is None")
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
                 elif image_url.startswith("file:///"):
