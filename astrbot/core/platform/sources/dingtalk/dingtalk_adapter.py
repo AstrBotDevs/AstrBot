@@ -80,9 +80,9 @@ class DingtalkPlatformAdapter(Platform):
         self.client_ = client  # 用于 websockets 的 client
         self._shutdown_event: threading.Event | None = None
 
-    def _id_to_sid(self, dingtalk_id: str | None) -> str | None:
+    def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
-            return dingtalk_id
+            return ""
         prefix = "$:LWCP_v1:$"
         if dingtalk_id.startswith(prefix):
             return dingtalk_id[len(prefix) :]
@@ -99,7 +99,7 @@ class DingtalkPlatformAdapter(Platform):
         return PlatformMetadata(
             name="dingtalk",
             description="钉钉机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
 
@@ -121,7 +121,7 @@ class DingtalkPlatformAdapter(Platform):
             nickname=message.sender_nick,
         )
         abm.self_id = self._id_to_sid(message.chatbot_user_id)
-        abm.message_id = message.message_id
+        abm.message_id = cast(str, message.message_id)
         abm.raw_message = message
 
         if abm.type == MessageType.GROUP_MESSAGE:
