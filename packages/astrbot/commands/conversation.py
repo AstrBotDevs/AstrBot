@@ -1,5 +1,4 @@
 import datetime
-from typing import cast
 
 from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -263,7 +262,7 @@ class ConversationCommands:
         if sid:
             session = str(
                 MessageSession(
-                    platform_name=cast(str, message.platform_meta.id),
+                    platform_name=message.platform_meta.id,
                     message_type=MessageType("GroupMessage"),
                     session_id=sid,
                 ),
