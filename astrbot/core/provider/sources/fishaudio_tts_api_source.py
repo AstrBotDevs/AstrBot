@@ -109,7 +109,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         pattern = r"^[a-fA-F0-9]{32}$"
         return bool(re.match(pattern, reference_id.strip()))
 
-    async def _generate_request(self, text: str) -> dict:
+    async def _generate_request(self, text: str) -> ServeTTSRequest:
         # 向前兼容逻辑：优先使用reference_id，如果没有则使用角色名称查询
         if self.reference_id and self.reference_id.strip():
             # 验证reference_id格式
@@ -128,7 +128,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             text=text,
             format="wav",
             reference_id=reference_id,
-        ).model_dump()
+        )
 
     async def get_audio(self, text: str) -> str:
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")

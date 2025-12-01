@@ -114,12 +114,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
     async def _get_channel(
         self,
-    ) -> (
-        discord.abc.Messageable
-        | discord.abc.GuildChannel
-        | discord.abc.PrivateChannel
-        | None
-    ):
+    ) -> discord.Thread | discord.abc.GuildChannel | discord.abc.PrivateChannel | None:
         """获取当前事件对应的频道对象"""
         try:
             channel_id = int(self.session_id)
