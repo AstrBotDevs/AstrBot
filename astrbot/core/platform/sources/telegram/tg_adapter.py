@@ -381,7 +381,9 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
-                message.message.append(Comp.File(file=file_path, name=file_name))
+                message.message.append(
+                    Comp.File(file=file_path, name=file_name, url=file_path)
+                )
 
         elif update.message.video:
             file = await update.message.video.get_file()

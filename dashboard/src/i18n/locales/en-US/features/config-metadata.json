@@ -109,6 +109,22 @@
         }
       }
     },
+    "file_extract": {
+      "description": "File Extract",
+      "provider_settings": {
+        "file_extract": {
+          "enable": {
+            "description": "Enable File Extract"
+          },
+          "provider": {
+            "description": "File Extract Provider"
+          },
+          "moonshotai_api_key": {
+            "description": "Moonshot AI API Key"
+          }
+        }
+      }
+    },
     "others": {
       "description": "Other Settings",
       "provider_settings": {

@@ -11,7 +11,12 @@
         },
         "agent_runner_type": {
           "description": "执行器",
-          "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"]
+          "labels": [
+            "内置 Agent",
+            "Dify",
+            "Coze",
+            "阿里云百炼应用"
+          ]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent 执行器提供商 ID"
@@ -109,6 +114,22 @@
         }
       }
     },
+    "file_extract": {
+      "description": "文档解析能力",
+      "provider_settings": {
+        "file_extract": {
+          "enable": {
+            "description": "启用文档解析能力"
+          },
+          "provider": {
+            "description": "文档解析提供商"
+          },
+          "moonshotai_api_key": {
+            "description": "Moonshot AI API Key"
+          }
+        }
+      }
+    },
     "others": {
       "description": "其他配置",
       "provider_settings": {
@@ -142,7 +163,10 @@
         "unsupported_streaming_strategy": {
           "description": "不支持流式回复的平台",
           "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时,立即发送当前已接收的内容",
-          "labels": ["实时分段回复", "关闭流式回复"]
+          "labels": [
+            "实时分段回复",
+            "关闭流式回复"
+          ]
         },
         "max_context_length": {
           "description": "最多携带对话轮数",
