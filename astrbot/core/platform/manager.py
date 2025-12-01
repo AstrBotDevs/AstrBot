@@ -107,7 +107,7 @@ class PlatformManager:
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->控制台->安装Pip库 中安装依赖库。",
+                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
             )
         except Exception as e:
             logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
