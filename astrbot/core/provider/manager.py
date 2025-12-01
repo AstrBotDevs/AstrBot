@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-from typing import Protocol, cast
+from typing import Protocol, runtime_checkable
 
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -19,6 +19,7 @@ from .provider import (
 from .register import llm_tools, provider_cls_map
 
 
+@runtime_checkable
 class HasInitialize(Protocol):
     async def initialize(self) -> None: ...
 
@@ -195,47 +196,42 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
-        selected_provider_id = cast(
-            str,
-            sp.get(
-                "curr_provider",
-                self.provider_settings.get("default_provider_id"),
-                scope="global",
-                scope_id="global",
-            ),
+        selected_provider_id = sp.get(
+            "curr_provider",
+            self.provider_settings.get("default_provider_id"),
+            scope="global",
+            scope_id="global",
         )
-        selected_stt_provider_id = cast(
-            str,
-            sp.get(
-                "curr_provider_stt",
-                self.provider_stt_settings.get("provider_id"),
-                scope="global",
-                scope_id="global",
-            ),
+        selected_stt_provider_id = sp.get(
+            "curr_provider_stt",
+            self.provider_stt_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
-        selected_tts_provider_id = cast(
-            str,
-            sp.get(
-                "curr_provider_tts",
-                self.provider_tts_settings.get("provider_id"),
-                scope="global",
-                scope_id="global",
-            ),
+        selected_tts_provider_id = sp.get(
+            "curr_provider_tts",
+            self.provider_tts_settings.get("provider_id"),
+            scope="global",
+            scope_id="global",
         )
-        self.curr_provider_inst = cast(
-            Provider | None, self.inst_map.get(selected_provider_id)
+
+        temp_provider = self.inst_map.get(selected_provider_id)
+        self.curr_provider_inst = (
+            temp_provider if isinstance(temp_provider, Provider) else None
         )
         if not self.curr_provider_inst and self.provider_insts:
             self.curr_provider_inst = self.provider_insts[0]
 
-        self.curr_stt_provider_inst = cast(
-            STTProvider | None, self.inst_map.get(selected_stt_provider_id)
+        temp_stt = self.inst_map.get(selected_stt_provider_id)
+        self.curr_stt_provider_inst = (
+            temp_stt if isinstance(temp_stt, STTProvider) else None
         )
         if not self.curr_stt_provider_inst and self.stt_provider_insts:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
 
-        self.curr_tts_provider_inst = cast(
-            TTSProvider | None, self.inst_map.get(selected_tts_provider_id)
+        temp_tts = self.inst_map.get(selected_tts_provider_id)
+        self.curr_tts_provider_inst = (
+            temp_tts if isinstance(temp_tts, TTSProvider) else None
         )
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
@@ -385,8 +381,8 @@ class ProviderManager:
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
-                    if getattr(inst, "initialize", None):
-                        await cast(HasInitialize, inst).initialize()
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
 
                     self.stt_provider_insts.append(inst)
                     if (
@@ -408,8 +404,8 @@ class ProviderManager:
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
-                    if getattr(inst, "initialize", None):
-                        await cast(HasInitialize, inst).initialize()
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
 
                     self.tts_provider_insts.append(inst)
                     if (
@@ -434,8 +430,8 @@ class ProviderManager:
                         self.provider_settings,
                     )
 
-                    if getattr(inst, "initialize", None):
-                        await cast(HasInitialize, inst).initialize()
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
 
                     self.provider_insts.append(inst)
                     if (
@@ -455,8 +451,8 @@ class ProviderManager:
                             f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
                         )
                     inst = cls_type(provider_config, self.provider_settings)
-                    if getattr(inst, "initialize", None):
-                        await cast(HasInitialize, inst).initialize()
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
                     self.embedding_provider_insts.append(inst)
                 case ProviderType.RERANK:
                     if not issubclass(cls_type, RerankProvider):
@@ -464,8 +460,8 @@ class ProviderManager:
                             f"Provider class {cls_type} is not a subclass of RerankProvider"
                         )
                     inst = cls_type(provider_config, self.provider_settings)
-                    if getattr(inst, "initialize", None):
-                        await cast(HasInitialize, inst).initialize()
+                    if isinstance(inst, HasInitialize):
+                        await inst.initialize()
                     self.rerank_provider_insts.append(inst)
                 case _:
                     # 未知供应商抛出异常，确保inst初始化
