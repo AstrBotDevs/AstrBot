@@ -27,7 +27,6 @@ import json
 import os
 import uuid
 from enum import Enum
-from typing import cast
 
 from pydantic.v1 import BaseModel
 
@@ -718,7 +717,8 @@ class File(BaseMessageComponent):
 
         if self.url:
             await self._download_file()
-            return os.path.abspath(cast(str, self.file_))
+            if self.file_:
+                return os.path.abspath(self.file_)
 
         return ""
 
