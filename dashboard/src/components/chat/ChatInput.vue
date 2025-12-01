@@ -81,9 +81,11 @@ import ConfigSelector from './ConfigSelector.vue';
 import type { Session } from '@/composables/useSessions';
 
 interface StagedFileInfo {
+    attachment_id: string;
     filename: string;
     original_name: string;
     url: string;
+    type: string;
 }
 
 interface Props {

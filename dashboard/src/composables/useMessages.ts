@@ -7,13 +7,14 @@ export interface MessagePart {
     type: 'plain' | 'image' | 'record' | 'file' | 'video';
     text?: string;           // for plain
     attachment_id?: string;  // for image, record, file, video
-    name?: string;           // for file (original filename)
+    filename?: string;           // for file (filename from backend)
 }
 
 // 文件信息结构
 export interface FileInfo {
-    url: string;
-    name: string;
+    url?: string;           // blob URL (可选，点击时才加载)
+    filename: string;
+    attachment_id?: string; // 用于按需下载
 }
 
 export interface MessageContent {
@@ -97,13 +98,11 @@ export function useMessages(
                 } else if (part.type === 'record' && part.attachment_id) {
                     audioUrl = await getAttachment(part.attachment_id);
                 } else if (part.type === 'file' && part.attachment_id) {
-                    const url = await getAttachment(part.attachment_id);
-                    if (url) {
-                        fileInfos.push({
-                            url: url,
-                            name: part.name || 'file'
-                        });
-                    }
+                    // file 类型不预加载，保留 attachment_id 以便点击时下载
+                    fileInfos.push({
+                        attachment_id: part.attachment_id,
+                        filename: part.filename || 'file'
+                    });
                 }
                 // video 类型可以后续扩展
             }
@@ -193,11 +192,10 @@ export function useMessages(
 
     async function sendMessage(
         prompt: string,
-        imageNames: string[],
+        stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
         audioName: string,
         selectedProviderId: string,
-        selectedModelName: string,
-        fileInfos: { filename: string; original_name: string }[] = []
+        selectedModelName: string
     ) {
         // Create user message
         const userMessage: MessageContent = {
@@ -208,36 +206,29 @@ export function useMessages(
             file_url: []
         };
 
-        // Convert image filenames to blob URLs
-        if (imageNames.length > 0) {
-            const imagePromises = imageNames.map(name => {
-                if (!name.startsWith('blob:')) {
-                    return getMediaFile(name);
-                }
-                return Promise.resolve(name);
-            });
-            userMessage.image_url = await Promise.all(imagePromises);
+        // 分离图片和文件
+        const imageFiles = stagedFiles.filter(f => f.type === 'image');
+        const nonImageFiles = stagedFiles.filter(f => f.type !== 'image');
+
+        // 使用 attachment_id 获取图片内容（避免 blob URL 被 revoke 后 404）
+        if (imageFiles.length > 0) {
+            const imageUrls = await Promise.all(
+                imageFiles.map(f => getAttachment(f.attachment_id))
+            );
+            userMessage.image_url = imageUrls.filter(url => url !== '');
         }
 
-        // Convert audio filename to blob URL
+        // 使用 blob URL 作为音频预览（录音不走 attachment）
         if (audioName) {
-            if (!audioName.startsWith('blob:')) {
-                userMessage.audio_url = await getMediaFile(audioName);
-            } else {
-                userMessage.audio_url = audioName;
-            }
+            userMessage.audio_url = audioName;
         }
 
-        // Convert file filenames to blob URLs
-        if (fileInfos.length > 0) {
-            const filePromises = fileInfos.map(async (info) => {
-                const url = await getMediaFile(info.filename);
-                return {
-                    url: url,
-                    name: info.original_name || info.filename
-                };
-            });
-            userMessage.file_url = await Promise.all(filePromises);
+        // 文件不预加载，只显示文件名和 attachment_id
+        if (nonImageFiles.length > 0) {
+            userMessage.file_url = nonImageFiles.map(f => ({
+                filename: f.original_name,
+                attachment_id: f.attachment_id
+            }));
         }
 
         messages.value.push({ content: userMessage });
@@ -257,6 +248,9 @@ export function useMessages(
                 isConvRunning.value = true;
             }
 
+            // 收集所有 attachment_id
+            const files = stagedFiles.map(f => f.attachment_id);
+
             const response = await fetch('/api/chat/send', {
                 method: 'POST',
                 headers: {
@@ -266,9 +260,7 @@ export function useMessages(
                 body: JSON.stringify({
                     message: prompt,
                     session_id: currSessionId.value,
-                    image_url: imageNames,
-                    audio_url: audioName ? [audioName] : [],
-                    file_url: fileInfos,
+                    files: files,
                     selected_provider: selectedProviderId,
                     selected_model: selectedModelName,
                     enable_streaming: enableStreaming.value
@@ -420,7 +412,8 @@ export function useMessages(
         enableStreaming,
         getSessionMessages,
         sendMessage,
-        toggleStreaming
+        toggleStreaming,
+        getAttachment
     };
 }
 

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.message.components import File, Image, Plain, Record
+from astrbot.core.message.components import File, Image, Plain, Record, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -112,37 +112,19 @@ class WebChatAdapter(Platform):
 
         if payload["message"]:
             abm.message.append(Plain(payload["message"]))
-        if payload["image_url"]:
-            if isinstance(payload["image_url"], list):
-                for img in payload["image_url"]:
-                    abm.message.append(
-                        Image.fromFileSystem(os.path.join(self.imgs_dir, img)),
-                    )
-            else:
-                abm.message.append(
-                    Image.fromFileSystem(
-                        os.path.join(self.imgs_dir, payload["image_url"]),
-                    ),
-                )
-        if payload["audio_url"]:
-            if isinstance(payload["audio_url"], list):
-                for audio in payload["audio_url"]:
-                    path = os.path.join(self.imgs_dir, audio)
-                    abm.message.append(Record(file=path, path=path))
-            else:
-                path = os.path.join(self.imgs_dir, payload["audio_url"])
-                abm.message.append(Record(file=path, path=path))
-        if payload.get("file_url"):
-            file_list = payload["file_url"]
-            if isinstance(file_list, str):
-                file_list = [file_list]
-            for file_info in file_list:
-                # file_info 格式: {"filename": "xxx", "original_name": "xxx"}
-                if isinstance(file_info, dict):
-                    path = os.path.join(self.imgs_dir, file_info["filename"])
-                    abm.message.append(
-                        File(name=file_info.get("original_name", ""), file=path)
-                    )
+
+        # 处理 files
+        files_info = payload.get("files", [])
+        for file_info in files_info:
+            if file_info["type"] == "image":
+                abm.message.append(Image.fromFileSystem(file_info["path"]))
+            elif file_info["type"] == "record":
+                abm.message.append(Record.fromFileSystem(file_info["path"]))
+            elif file_info["type"] == "file":
+                filename = os.path.basename(file_info["path"])
+                abm.message.append(File(name=filename, file=file_info["path"]))
+            elif file_info["type"] == "video":
+                abm.message.append(Video.fromFileSystem(file_info["path"]))
 
         logger.debug(f"WebChatAdapter: {abm.message}")
 

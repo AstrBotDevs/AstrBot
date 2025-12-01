@@ -10,6 +10,7 @@ from quart import g, make_response, request, send_file
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import Attachment
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -103,48 +104,97 @@ class ChatRoute(Route):
             return Response().error("File access error").__dict__
 
     async def post_file(self):
+        """Upload a file and create an attachment record, return attachment_id."""
         post_data = await request.files
         if "file" not in post_data:
             return Response().error("Missing key: file").__dict__
 
         file = post_data["file"]
         filename = file.filename or f"{uuid.uuid4()!s}"
-        content_type = file.content_type or ""
+        content_type = file.content_type or "application/octet-stream"
 
         # 根据 content_type 判断文件类型并添加扩展名
         if content_type.startswith("image"):
-            ext = content_type.split("/")[-1]
-            if ext in ("jpeg", "jpg", "png", "gif", "webp"):
-                filename += f".{ext}"
-            else:
-                filename += ".jpg"  # 默认使用 jpg
+            attach_type = "image"
         elif content_type.startswith("audio"):
-            filename += ".wav"
+            attach_type = "record"
+        elif content_type.startswith("video"):
+            attach_type = "video"
+        else:
+            attach_type = "file"
 
         path = os.path.join(self.imgs_dir, filename)
         await file.save(path)
 
-        return Response().ok(data={"filename": filename}).__dict__
+        # 创建 attachment 记录
+        attachment = await self.db.insert_attachment(
+            path=path,
+            type=attach_type,
+            mime_type=content_type,
+        )
 
-    async def _create_attachment(
-        self, filename: str, attach_type: str, original_name: str = ""
+        if not attachment:
+            return Response().error("Failed to create attachment").__dict__
+
+        filename = os.path.basename(attachment.path)
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "attachment_id": attachment.attachment_id,
+                    "filename": filename,
+                    "type": attach_type,
+                }
+            )
+            .__dict__
+        )
+
+    async def _build_user_message_parts(
+        self,
+        message: str,
+        attachments: list[Attachment],
+    ) -> list:
+        """构建用户消息的部分列表
+
+        Args:
+            message: 文本消息
+            files: attachment_id 列表
+        """
+        parts = []
+
+        if message:
+            parts.append({"type": "plain", "text": message})
+
+        if attachments:
+            for attachment in attachments:
+                parts.append(
+                    {
+                        "type": attachment.type,
+                        "attachment_id": attachment.attachment_id,
+                        "filename": os.path.basename(attachment.path),
+                    }
+                )
+
+        return parts
+
+    async def _create_attachment_from_file(
+        self, filename: str, attach_type: str
     ) -> dict | None:
-        """创建 attachment 并返回消息部分
+        """从本地文件创建 attachment 并返回消息部分
+
+        用于处理 bot 回复中的媒体文件
 
         Args:
             filename: 存储的文件名
-            attach_type: 附件类型 (image, record, file)
-            original_name: 原始文件名（仅对 file 类型有效）
+            attach_type: 附件类型 (image, record, file, video)
         """
         file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
         if not os.path.exists(file_path):
             return None
 
-        # for file type, use original name for mime type
-        name_for_mime = original_name or filename if attach_type == "file" else filename
-
         # guess mime type
-        mime_type, _ = mimetypes.guess_type(name_for_mime)
+        mime_type, _ = mimetypes.guess_type(filename)
         if not mime_type:
             mime_type = "application/octet-stream"
 
@@ -157,49 +207,11 @@ class ChatRoute(Route):
         if not attachment:
             return None
 
-        result = {"type": attach_type, "attachment_id": attachment.attachment_id}
-        if attach_type == "file":
-            result["name"] = original_name or filename
-        return result
-
-    async def _build_user_message_parts(
-        self,
-        message: str,
-        image_urls: list | None,
-        audio_url: str | None,
-        file_urls: list | None = None,
-    ) -> list:
-        """构建用户消息的部分列表"""
-        parts = []
-
-        if message:
-            parts.append({"type": "plain", "text": message})
-
-        if image_urls:
-            for img_filename in image_urls:
-                part = await self._create_attachment(img_filename, "image")
-                if part:
-                    parts.append(part)
-
-        if audio_url:
-            part = await self._create_attachment(audio_url, "record")
-            if part:
-                parts.append(part)
-
-        if file_urls:
-            for file_info in file_urls:
-                if isinstance(file_info, dict):
-                    part = await self._create_attachment(
-                        file_info["filename"],
-                        "file",
-                        file_info.get("original_name", ""),
-                    )
-                else:
-                    part = await self._create_attachment(file_info, "file")
-                if part:
-                    parts.append(part)
-
-        return parts
+        return {
+            "type": attach_type,
+            "attachment_id": attachment.attachment_id,
+            "filename": os.path.basename(file_path),
+        }
 
     async def _save_bot_message(
         self,
@@ -230,8 +242,8 @@ class ChatRoute(Route):
         username = g.get("username", "guest")
 
         post_data = await request.json
-        if "message" not in post_data and "image_url" not in post_data:
-            return Response().error("Missing key: message or image_url").__dict__
+        if "message" not in post_data and "files" not in post_data:
+            return Response().error("Missing key: message or files").__dict__
 
         if "session_id" not in post_data and "conversation_id" not in post_data:
             return (
@@ -240,19 +252,13 @@ class ChatRoute(Route):
 
         message = post_data["message"]
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
-        image_url = post_data.get("image_url")
-        audio_url = post_data.get("audio_url")
-        file_url = post_data.get("file_url")
+        files = post_data.get("files")  # list of attachment_id
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-        if not message and not image_url and not audio_url and not file_url:
-            return (
-                Response()
-                .error("Message, image_url, audio_url and file_url are all empty")
-                .__dict__
-            )
+        if not message and not files:
+            return Response().error("Message and files are both empty").__dict__
         if not session_id:
             return Response().error("session_id is empty").__dict__
 
@@ -260,9 +266,16 @@ class ChatRoute(Route):
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
         # 构建并保存用户消息
-        message_parts = await self._build_user_message_parts(
-            message, image_url, audio_url, file_url
-        )
+        attachments = await self.db.get_attachments(files)
+        message_parts = await self._build_user_message_parts(message, attachments)
+        files_info = [
+            {
+                "type": attachment.type,
+                "path": attachment.path,
+            }
+            for attachment in attachments
+        ]
+
         await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
@@ -324,24 +337,23 @@ class ChatRoute(Route):
                                 accumulated_text += result_text
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
-                            part = await self._create_attachment(filename, "image")
+                            part = await self._create_attachment_from_file(
+                                filename, "image"
+                            )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "record":
                             filename = result_text.replace("[RECORD]", "")
-                            part = await self._create_attachment(filename, "record")
+                            part = await self._create_attachment_from_file(
+                                filename, "record"
+                            )
                             if part:
                                 accumulated_parts.append(part)
                         elif msg_type == "file":
-                            # 格式: [FILE]filename|original_name
-                            file_data = result_text.replace("[FILE]", "")
-                            if "|" in file_data:
-                                filename, original_name = file_data.split("|", 1)
-                            else:
-                                filename = file_data
-                                original_name = ""
-                            part = await self._create_attachment(
-                                filename, "file", original_name
+                            # 格式: [FILE]filename
+                            filename = result_text.replace("[FILE]", "")
+                            part = await self._create_attachment_from_file(
+                                filename, "file"
                             )
                             if part:
                                 accumulated_parts.append(part)
@@ -376,9 +388,7 @@ class ChatRoute(Route):
                 webchat_conv_id,
                 {
                     "message": message,
-                    "image_url": image_url,
-                    "audio_url": audio_url,
-                    "file_url": file_url,
+                    "files": files_info,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,

@@ -27,10 +27,16 @@
 
                         <!-- 文件附件 -->
                         <div class="file-attachments" v-if="msg.content.file_url && msg.content.file_url.length > 0">
-                            <div v-for="(file, index) in msg.content.file_url" :key="index" class="file-attachment">
-                                <a :href="file.url" :download="file.name" class="file-link">
+                            <div v-for="(file, fileIdx) in msg.content.file_url" :key="fileIdx" class="file-attachment">
+                                <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
                                     <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                    <span class="file-name">{{ file.name }}</span>
+                                    <span class="file-name">{{ file.filename }}</span>
+                                </a>
+                                <a v-else @click="downloadFile(file)" class="file-link file-link-download">
+                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                    <span class="file-name">{{ file.filename }}</span>
+                                    <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                    <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
                                 </a>
                             </div>
                         </div>
@@ -93,9 +99,15 @@
                                     v-if="msg.content.embedded_files && msg.content.embedded_files.length > 0">
                                     <div v-for="(file, fileIndex) in msg.content.embedded_files" :key="fileIndex"
                                         class="embedded-file">
-                                        <a :href="file.url" :download="file.name" class="file-link">
+                                        <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
                                             <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                            <span class="file-name">{{ file.name }}</span>
+                                            <span class="file-name">{{ file.filename }}</span>
+                                        </a>
+                                        <a v-else @click="downloadFile(file)" class="file-link file-link-download">
+                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                            <span class="file-name">{{ file.filename }}</span>
+                                            <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                            <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
                                         </a>
                                     </div>
                                 </div>
@@ -119,6 +131,7 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import axios from 'axios';
 
 const md = new MarkdownIt({
     html: false,
@@ -170,6 +183,7 @@ export default {
             scrollThreshold: 1,
             scrollTimer: null,
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
+            downloadingFiles: new Set(), // Track which files are being downloaded
         };
     },
     mounted() {
@@ -200,6 +214,35 @@ export default {
         // Check if reasoning is expanded
         isReasoningExpanded(messageIndex) {
             return this.expandedReasoning.has(messageIndex);
+        },
+
+        // 下载文件
+        async downloadFile(file) {
+            if (!file.attachment_id) return;
+            
+            // 标记为下载中
+            this.downloadingFiles.add(file.attachment_id);
+            this.downloadingFiles = new Set(this.downloadingFiles);
+            
+            try {
+                const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+                    responseType: 'blob'
+                });
+                
+                const url = URL.createObjectURL(response.data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.filename || 'file';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+            } catch (err) {
+                console.error('Download file failed:', err);
+            } finally {
+                this.downloadingFiles.delete(file.attachment_id);
+                this.downloadingFiles = new Set(this.downloadingFiles);
+            }
         },
 
         // 复制代码到剪贴板
@@ -659,11 +702,13 @@ export default {
     max-width: 300px;
 }
 
-.file-link:hover {
-    background-color: rgba(var(--v-theme-primary), 0.15);
-    border-color: rgba(var(--v-theme-primary), 0.3);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.file-link-download {
+    cursor: pointer;
+}
+
+.download-icon {
+    margin-left: 4px;
+    opacity: 0.7;
 }
 
 .file-icon {
