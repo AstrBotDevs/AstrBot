@@ -117,7 +117,7 @@ class DiscordPlatformAdapter(Platform):
         return PlatformMetadata(
             "discord",
             "Discord 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             default_config_tmpl=self.config,
             support_streaming_message=False,
         )
@@ -272,29 +272,43 @@ class DiscordPlatformAdapter(Platform):
         # 检查是否为斜杠指令
         is_slash_command = message_event.interaction_followup_webhook is not None
 
+        # 1. 优先处理斜杠指令
+        if is_slash_command:
+            message_event.is_wake = True
+            message_event.is_at_or_wake_command = True
+            self.commit_event(message_event)
+            return
+
+        # 2. 处理普通消息（提及检测）
+        # 确保 raw_message 是 discord.Message 类型，以便静态检查通过
+        raw_message = message.raw_message
+        if not isinstance(raw_message, discord.Message):
+            logger.warning(
+                f"[Discord] 收到非 Message 类型的消息: {type(raw_message)}，已忽略。"
+            )
+            return
+
         # 检查是否被@（User Mention 或 Bot 拥有的 Role Mention）
         is_mention = False
+
         # User Mention
-        if (
-            self.client
-            and self.client.user
-            and hasattr(message.raw_message, "mentions")
-        ):
-            if self.client.user in message.raw_message.mentions:
-                is_mention = True
+        # 此时 Pylance 知道 raw_message 是 discord.Message，具有 mentions 属性
+        if self.client.user in raw_message.mentions:
+            is_mention = True
+
         # Role Mention（Bot 拥有的角色被提及）
-        if not is_mention and hasattr(message.raw_message, "role_mentions"):
+        if not is_mention and raw_message.role_mentions:
             bot_member = None
-            if hasattr(message.raw_message, "guild") and message.raw_message.guild:
+            if raw_message.guild:
                 try:
-                    bot_member = message.raw_message.guild.get_member(
+                    bot_member = raw_message.guild.get_member(
                         self.client.user.id,
                     )
                 except Exception:
                     bot_member = None
             if bot_member and hasattr(bot_member, "roles"):
                 bot_roles = set(bot_member.roles)
-                mentioned_roles = set(message.raw_message.role_mentions)
+                mentioned_roles = set(raw_message.role_mentions)
                 if (
                     bot_roles
                     and mentioned_roles
@@ -302,8 +316,8 @@ class DiscordPlatformAdapter(Platform):
                 ):
                     is_mention = True
 
-        # 如果是斜杠指令或被@的消息，设置为唤醒状态
-        if is_slash_command or is_mention:
+        # 如果是被@的消息，设置为唤醒状态
+        if is_mention:
             message_event.is_wake = True
             message_event.is_at_or_wake_command = True
 
