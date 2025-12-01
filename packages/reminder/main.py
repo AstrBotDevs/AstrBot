@@ -151,7 +151,8 @@ class Main(star.Star):
             if human_readable_cron:
                 reminder_time = f"{human_readable_cron}(Cron: {cron_expression})"
         else:
-            assert datetime_str is not None
+            if datetime_str is None:
+                raise ValueError("datetime_str cannot be None.")
             d = {"text": text, "datetime": datetime_str, "id": str(uuid.uuid4())}
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(
