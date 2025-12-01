@@ -159,6 +159,10 @@
         "prompt_prefix": {
           "description": "User Prompt",
           "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
+        },
+        "reachability_check": {
+          "description": "Provider Reachability Check",
+          "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
         }
       },
       "provider_tts_settings": {

@@ -42,6 +42,7 @@ const loadingDialog = reactive({
 const showPluginInfoDialog = ref(false);
 const selectedPlugin = ref({});
 const curr_namespace = ref("");
+const updatingAll = ref(false);
 
 const readmeDialog = reactive({
   show: false,
@@ -226,6 +227,10 @@ const paginatedPlugins = computed(() => {
   return sortedPlugins.value.slice(start, end);
 });
 
+const updatableExtensions = computed(() => {
+  return extension_data?.data?.filter(ext => ext.has_update) || [];
+});
+
 // 方法
 const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
@@ -369,6 +374,56 @@ const updateExtension = async (extension_name) => {
     }, 1000);
   } catch (err) {
     toast(err, "error");
+  }
+};
+
+const updateAllExtensions = async () => {
+  if (updatingAll.value || updatableExtensions.value.length === 0) return;
+  updatingAll.value = true;
+  loadingDialog.title = tm('status.loading');
+  loadingDialog.statusCode = 0;
+  loadingDialog.result = "";
+  loadingDialog.show = true;
+
+  const targets = updatableExtensions.value.map(ext => ext.name);
+  try {
+    const res = await axios.post('/api/plugin/update-all', {
+      names: targets,
+      proxy: localStorage.getItem('selectedGitHubProxy') || ""
+    });
+
+    if (res.data.status === "error") {
+      onLoadingDialogResult(2, res.data.message || tm('messages.updateAllFailed', {
+        failed: targets.length,
+        total: targets.length
+      }), -1);
+      return;
+    }
+
+    const results = res.data.data?.results || [];
+    const failures = results.filter(r => r.status !== 'ok');
+    try {
+      await getExtensions();
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.message || String(err);
+      failures.push({ name: 'refresh', status: 'error', message: errorMsg });
+    }
+
+    if (failures.length === 0) {
+      onLoadingDialogResult(1, tm('messages.updateAllSuccess'));
+    } else {
+      const failureText = tm('messages.updateAllFailed', {
+        failed: failures.length,
+        total: targets.length
+      });
+      const detail = failures.map(f => `${f.name}: ${f.message}`).join('\n');
+      onLoadingDialogResult(2, `${failureText}\n${detail}`, -1);
+    }
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    onLoadingDialogResult(2, errorMsg, -1);
+  } finally {
+    updatingAll.value = false;
   }
 };
 
@@ -718,6 +773,12 @@ watch(marketSearch, (newVal) => {
                 <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
                   <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
                   {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
+                </v-btn>
+
+                <v-btn class="ml-2" color="warning" variant="tonal" :disabled="updatableExtensions.length === 0"
+                  :loading="updatingAll" @click="updateAllExtensions">
+                  <v-icon>mdi-update</v-icon>
+                  {{ tm('buttons.updateAll') }}
                 </v-btn>
 
                 <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">

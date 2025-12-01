@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import ssl
@@ -19,6 +20,10 @@ from astrbot.core.star.star_manager import PluginManager
 
 from .route import Response, Route, RouteContext
 
+PLUGIN_UPDATE_CONCURRENCY = (
+    3  # limit concurrent updates to avoid overwhelming plugin sources
+)
+
 
 class PluginRoute(Route):
     def __init__(
@@ -33,6 +38,7 @@ class PluginRoute(Route):
             "/plugin/install": ("POST", self.install_plugin),
             "/plugin/install-upload": ("POST", self.install_plugin_upload),
             "/plugin/update": ("POST", self.update_plugin),
+            "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
@@ -63,7 +69,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        data = await request.json
+        data = await request.get_json()
         plugin_name = data.get("name", None)
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
@@ -346,7 +352,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         repo_url = post_data["url"]
 
         proxy: str = post_data.get("proxy", None)
@@ -393,7 +399,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         delete_config = post_data.get("delete_config", False)
         delete_data = post_data.get("delete_data", False)
@@ -418,7 +424,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         proxy: str = post_data.get("proxy", None)
         try:
@@ -432,6 +438,59 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
+    async def update_all_plugins(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.get_json()
+        plugin_names: list[str] = post_data.get("names") or []
+        proxy: str = post_data.get("proxy", "")
+
+        if not isinstance(plugin_names, list) or not plugin_names:
+            return Response().error("插件列表不能为空").__dict__
+
+        results = []
+        sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
+
+        async def _update_one(name: str):
+            async with sem:
+                try:
+                    logger.info(f"批量更新插件 {name}")
+                    await self.plugin_manager.update_plugin(name, proxy)
+                    return {"name": name, "status": "ok", "message": "更新成功"}
+                except Exception as e:
+                    logger.error(
+                        f"/api/plugin/update-all: 更新插件 {name} 失败: {traceback.format_exc()}",
+                    )
+                    return {"name": name, "status": "error", "message": str(e)}
+
+        raw_results = await asyncio.gather(
+            *(_update_one(name) for name in plugin_names),
+            return_exceptions=True,
+        )
+        for name, result in zip(plugin_names, raw_results):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, BaseException):
+                results.append(
+                    {"name": name, "status": "error", "message": str(result)}
+                )
+            else:
+                results.append(result)
+
+        failed = [r for r in results if r["status"] == "error"]
+        message = (
+            "批量更新完成，全部成功。"
+            if not failed
+            else f"批量更新完成，其中 {len(failed)}/{len(results)} 个插件失败。"
+        )
+
+        return Response().ok({"results": results}, message).__dict__
+
     async def off_plugin(self):
         if DEMO_MODE:
             return (
@@ -440,7 +499,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_off_plugin(plugin_name)
@@ -458,7 +517,7 @@ class PluginRoute(Route):
                 .__dict__
             )
 
-        post_data = await request.json
+        post_data = await request.get_json()
         plugin_name = post_data["name"]
         try:
             await self.plugin_manager.turn_on_plugin(plugin_name)

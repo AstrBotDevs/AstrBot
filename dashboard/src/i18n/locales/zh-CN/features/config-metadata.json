@@ -159,6 +159,10 @@
         "prompt_prefix": {
           "description": "用户提示词",
           "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。"
+        },
+        "reachability_check": {
+          "description": "提供商可达性检测",
+          "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
         }
       },
       "provider_tts_settings": {

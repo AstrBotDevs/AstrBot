@@ -73,6 +73,7 @@ DEFAULT_CONFIG = {
         "coze_agent_runner_provider_id": "",
         "dashscope_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
+        "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
     },
@@ -2495,6 +2496,11 @@ CONFIG_METADATA_3 = {
                     "provider_tts_settings.dual_output": {
                         "description": "开启 TTS 时同时输出语音和文字内容",
                         "type": "bool",
+                    },
+                    "provider_settings.reachability_check": {
+                        "description": "提供商可达性检测",
+                        "type": "bool",
+                        "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
                     },
                 },
                 "condition": {

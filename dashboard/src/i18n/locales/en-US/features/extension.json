@@ -32,7 +32,8 @@
     "actions": "Actions",
     "back": "Back",
     "selectFile": "Select File",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "updateAll": "Update All"
   },
   "status": {
     "enabled": "Enabled",
@@ -141,7 +142,9 @@
     "confirmDelete": "Are you sure you want to delete this extension?",
     "fillUrlOrFile": "Please fill in extension URL or upload extension file",
     "dontFillBoth": "Please don't fill in both extension URL and upload file",
-    "supportedFormats": "Supports .zip extension files"
+    "supportedFormats": "Supports .zip extension files",
+    "updateAllSuccess": "All upgradable extensions have been updated!",
+    "updateAllFailed": "{failed} of {total} extensions failed to update:"
   },
   "upload": {
     "fromFile": "Install from File",
