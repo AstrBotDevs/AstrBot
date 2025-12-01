@@ -80,7 +80,7 @@ DEFAULT_CONFIG = {
             "enable": False,
             "provider": "moonshotai",
             "moonshotai_api_key": "",
-        }
+        },
     },
     "provider_stt_settings": {
         "enable": False,
