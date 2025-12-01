@@ -76,6 +76,11 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
+        "file_extract": {
+            "enable": False,
+            "provider": "moonshotai",
+            "moonshotai_api_key": "",
+        }
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2069,6 +2074,20 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
+                    "file_extract": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "provider": {
+                                "type": "string",
+                            },
+                            "moonshotai_api_key": {
+                                "type": "string",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2401,6 +2420,32 @@ CONFIG_METADATA_3 = {
                 "condition": {
                     "provider_settings.agent_runner_type": "local",
                     "provider_settings.enable": True,
+                },
+            },
+            "file_extract": {
+                "description": "文档解析能力",
+                "type": "object",
+                "items": {
+                    "provider_settings.file_extract.enable": {
+                        "description": "启用文档解析能力",
+                        "type": "bool",
+                    },
+                    "provider_settings.file_extract.provider": {
+                        "description": "文档解析提供商",
+                        "type": "string",
+                        "options": ["moonshotai"],
+                        "condition": {
+                            "provider_settings.file_extract.enable": True,
+                        },
+                    },
+                    "provider_settings.file_extract.moonshotai_api_key": {
+                        "description": "Moonshot AI API Key",
+                        "type": "string",
+                        "condition": {
+                            "provider_settings.file_extract.provider": "moonshotai",
+                            "provider_settings.file_extract.enable": True,
+                        },
+                    },
                 },
             },
             "others": {
