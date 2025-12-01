@@ -141,6 +141,8 @@ class InternalAgentSubStage(Stage):
                         file_names.append(reply_comp.name)
         if not file_paths:
             return
+        if not req.prompt:
+            req.prompt = "总结一下文件里面讲了什么？"
         if self.file_extract_prov == "moonshotai":
             if not self.file_extract_msh_api_key:
                 logger.error("Moonshot AI API key for file extract is not set")
@@ -396,16 +398,6 @@ class InternalAgentSubStage(Stage):
 
                 event.set_extra("provider_request", req)
 
-            if not req.prompt and not req.image_urls:
-                return
-
-            # call event hook
-            if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                return
-
-            # apply knowledge base feature
-            await self._apply_kb(event, req)
-
             # fix contexts json str
             if isinstance(req.contexts, str):
                 req.contexts = json.loads(req.contexts)
@@ -416,6 +408,16 @@ class InternalAgentSubStage(Stage):
                     await self._apply_file_extract(event, req)
                 except Exception as e:
                     logger.error(f"Error occurred while applying file extract: {e}")
+
+            if not req.prompt and not req.image_urls:
+                return
+
+            # call event hook
+            if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                return
+
+            # apply knowledge base feature
+            await self._apply_kb(event, req)
 
             # truncate contexts to fit max length
             if req.contexts:
