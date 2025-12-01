@@ -215,21 +215,33 @@ class ProviderManager:
             scope_id="global",
         )
 
-        temp_provider = self.inst_map.get(selected_provider_id)
+        temp_provider = (
+            self.inst_map.get(selected_provider_id)
+            if isinstance(selected_provider_id, str)
+            else None
+        )
         self.curr_provider_inst = (
             temp_provider if isinstance(temp_provider, Provider) else None
         )
         if not self.curr_provider_inst and self.provider_insts:
             self.curr_provider_inst = self.provider_insts[0]
 
-        temp_stt = self.inst_map.get(selected_stt_provider_id)
+        temp_stt = (
+            self.inst_map.get(selected_stt_provider_id)
+            if isinstance(selected_stt_provider_id, str)
+            else None
+        )
         self.curr_stt_provider_inst = (
             temp_stt if isinstance(temp_stt, STTProvider) else None
         )
         if not self.curr_stt_provider_inst and self.stt_provider_insts:
             self.curr_stt_provider_inst = self.stt_provider_insts[0]
 
-        temp_tts = self.inst_map.get(selected_tts_provider_id)
+        temp_tts = (
+            self.inst_map.get(selected_tts_provider_id)
+            if isinstance(selected_tts_provider_id, str)
+            else None
+        )
         self.curr_tts_provider_inst = (
             temp_tts if isinstance(temp_tts, TTSProvider) else None
         )
