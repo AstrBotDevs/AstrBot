@@ -76,7 +76,8 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 
-        result = await loop.run_in_executor(
-            None, cast(whisper.Whisper, self.model).transcribe, audio_url
-        )
+        if not self.model:
+            raise RuntimeError("Whisper 模型未初始化")
+
+        result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
         return cast(str, result["text"])
