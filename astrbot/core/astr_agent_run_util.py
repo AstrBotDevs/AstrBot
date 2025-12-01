@@ -83,9 +83,8 @@ async def run_agent(
                 await agent_runner.agent_hooks.on_agent_done(
                     agent_runner.run_context, error_llm_response
                 )
-            except Exception as hook_err:
-                logger.error(f"Error in on_agent_done hook: {hook_err}", exc_info=True)
-
+            except Exception:
+                logger.exception("Error in on_agent_done hook")
             if agent_runner.streaming:
                 yield MessageChain().message(err_msg)
             else:
