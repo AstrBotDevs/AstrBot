@@ -30,7 +30,7 @@ USER_AGENTS = [
 @dataclass
 class SearchResult:
     title: str
-    url: str | Tag
+    url: str
     snippet: str
 
     def __str__(self) -> str:
@@ -83,6 +83,9 @@ class SearchEngine:
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
+    def _get_url(self, tag: Tag) -> str:
+        return self.tidy_text(tag.get_text())
+
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
         query = urllib.parse.quote(query)
 
@@ -98,9 +101,10 @@ class SearchEngine:
                 if title_elem is not None:
                     title = self.tidy_text(title_elem.get_text())
 
-                url = link.select_one(self._set_selector("url"))
+                url_tag = link.select_one(self._set_selector("url"))
                 snippet = ""
-                if title and url:
+                if title and url_tag:
+                    url = self._get_url(url_tag)
                     results.append(SearchResult(title=title, url=url, snippet=snippet))
             return results[:num_results] if len(results) > num_results else results
         except Exception as e:

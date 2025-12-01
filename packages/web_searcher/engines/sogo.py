@@ -2,7 +2,7 @@ import random
 import re
 from typing import cast
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from . import USER_AGENTS, SearchEngine, SearchResult
 
@@ -27,12 +27,12 @@ class Sogo(SearchEngine):
         url = f"{self.base_url}/web?query={query}"
         return await self._get_html(url, None)
 
+    def _get_url(self, tag: Tag) -> str:
+        return cast(str, tag.get("href"))
+
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
         results = await super().search(query, num_results)
         for result in results:
-            if isinstance(result.url, str):
-                continue
-            result.url = cast(str, result.url.get("href"))
             if result.url.startswith("/link?"):
                 result.url = self.base_url + result.url
                 result.url = await self._parse_url(result.url)
