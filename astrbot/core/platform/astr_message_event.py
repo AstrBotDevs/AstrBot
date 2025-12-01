@@ -4,7 +4,7 @@ import hashlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any, cast
+from typing import Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -52,7 +52,7 @@ class AstrMessageEvent(abc.ABC):
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
         self.session = MessageSesion(
-            platform_name=cast(str, platform_meta.id),
+            platform_name=platform_meta.id,
             message_type=message_obj.type,
             session_id=session_id,
         )
