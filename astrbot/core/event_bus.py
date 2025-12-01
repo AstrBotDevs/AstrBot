@@ -12,7 +12,6 @@ class:
 
 import asyncio
 from asyncio import Queue
-from typing import cast
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -40,9 +39,12 @@ class EventBus:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             self._print_event(event, conf_info["name"])
-            scheduler = cast(
-                PipelineScheduler, self.pipeline_scheduler_mapping.get(conf_info["id"])
-            )
+            scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
+            if not scheduler:
+                logger.error(
+                    f"PipelineScheduler not found for id: {conf_info['id']}, event ignored."
+                )
+                continue
             asyncio.create_task(scheduler.execute(event))
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str):
