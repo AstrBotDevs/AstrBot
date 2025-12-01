@@ -2,7 +2,6 @@ import re
 import time
 import traceback
 from collections.abc import AsyncGenerator
-from typing import cast
 
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
@@ -95,13 +94,13 @@ class ResultDecorateStage(Stage):
             for comp in result.chain:
                 if isinstance(comp, Plain):
                     text += comp.text
-            async for _ in cast(
-                ContentSafetyCheckStage, self.content_safe_check_stage
-            ).process(
-                event,
-                check_text=text,
-            ):
-                yield
+
+            if isinstance(self.content_safe_check_stage, ContentSafetyCheckStage):
+                async for _ in self.content_safe_check_stage.process(
+                    event,
+                    check_text=text,
+                ):
+                    yield
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
