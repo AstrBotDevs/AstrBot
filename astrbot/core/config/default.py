@@ -4,7 +4,7 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.7.3"
+VERSION = "4.7.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 # 默认配置
@@ -2422,36 +2422,36 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            "file_extract": {
-                "description": "文档解析能力",
-                "type": "object",
-                "items": {
-                    "provider_settings.file_extract.enable": {
-                        "description": "启用文档解析能力",
-                        "type": "bool",
-                    },
-                    "provider_settings.file_extract.provider": {
-                        "description": "文档解析提供商",
-                        "type": "string",
-                        "options": ["moonshotai"],
-                        "condition": {
-                            "provider_settings.file_extract.enable": True,
-                        },
-                    },
-                    "provider_settings.file_extract.moonshotai_api_key": {
-                        "description": "Moonshot AI API Key",
-                        "type": "string",
-                        "condition": {
-                            "provider_settings.file_extract.provider": "moonshotai",
-                            "provider_settings.file_extract.enable": True,
-                        },
-                    },
-                },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
-            },
+            # "file_extract": {
+            #     "description": "文档解析能力 [beta]",
+            #     "type": "object",
+            #     "items": {
+            #         "provider_settings.file_extract.enable": {
+            #             "description": "启用文档解析能力",
+            #             "type": "bool",
+            #         },
+            #         "provider_settings.file_extract.provider": {
+            #             "description": "文档解析提供商",
+            #             "type": "string",
+            #             "options": ["moonshotai"],
+            #             "condition": {
+            #                 "provider_settings.file_extract.enable": True,
+            #             },
+            #         },
+            #         "provider_settings.file_extract.moonshotai_api_key": {
+            #             "description": "Moonshot AI API Key",
+            #             "type": "string",
+            #             "condition": {
+            #                 "provider_settings.file_extract.provider": "moonshotai",
+            #                 "provider_settings.file_extract.enable": True,
+            #             },
+            #         },
+            #     },
+            #     "condition": {
+            #         "provider_settings.agent_runner_type": "local",
+            #         "provider_settings.enable": True,
+            #     },
+            # },
             "others": {
                 "description": "其他配置",
                 "type": "object",
