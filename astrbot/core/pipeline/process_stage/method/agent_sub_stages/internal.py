@@ -156,11 +156,11 @@ class InternalAgentSubStage(Stage):
             return
 
         # add file extract results to contexts
-        for file_content in file_contents:
+        for file_content, file_name in zip(file_contents, file_names):
             req.contexts.append(
                 {
                     "role": "system",
-                    "content": f"File Extract Results of user uploaded files:\n{file_content}\nFile Name: {file_names or 'Unknown'}",
+                    "content": f"File Extract Results of user uploaded files:\n{file_content}\nFile Name: {file_name or 'Unknown'}",
                 },
             )
 
