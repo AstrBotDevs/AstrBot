@@ -2,6 +2,14 @@
     <div class="input-area fade-in">
         <div class="input-container"
             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
+            <!-- 引用预览区 -->
+            <div class="reply-preview" v-if="props.replyTo">
+                <div class="reply-content">
+                    <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
+                    "<span class="reply-text">{{ props.replyTo.messageContent }}</span>"
+                </div>
+                <v-btn @click="$emit('clearReply')" class="remove-reply-btn" icon="mdi-close" size="x-small" color="grey" variant="text" />
+            </div>
             <textarea 
                 ref="inputField"
                 v-model="localPrompt" 
@@ -30,7 +38,7 @@
                     </v-tooltip>
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
-                    <input type="file" ref="imageInputRef" @change="handleFileSelect" accept="image/*"
+                    <input type="file" ref="imageInputRef" @change="handleFileSelect"
                         style="display: none" multiple />
                     <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
                     <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
@@ -45,8 +53,8 @@
         </div>
 
         <!-- 附件预览区 -->
-        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl">
-            <div v-for="(img, index) in stagedImagesUrl" :key="index" class="image-preview">
+        <div class="attachments-preview" v-if="stagedImagesUrl.length > 0 || stagedAudioUrl || (stagedFiles && stagedFiles.length > 0)">
+            <div v-for="(img, index) in stagedImagesUrl" :key="'img-' + index" class="image-preview">
                 <img :src="img" class="preview-image" />
                 <v-btn @click="$emit('removeImage', index)" class="remove-attachment-btn" icon="mdi-close"
                     size="small" color="error" variant="text" />
@@ -60,6 +68,15 @@
                 <v-btn @click="$emit('removeAudio')" class="remove-attachment-btn" icon="mdi-close" size="small"
                     color="error" variant="text" />
             </div>
+
+            <div v-for="(file, index) in stagedFiles" :key="'file-' + index" class="file-preview">
+                <v-chip color="blue-grey-lighten-4" class="file-chip">
+                    <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
+                    <span class="file-name-preview">{{ file.original_name }}</span>
+                </v-chip>
+                <v-btn @click="$emit('removeFile', index)" class="remove-attachment-btn" icon="mdi-close" size="small"
+                    color="error" variant="text" />
+            </div>
         </div>
     </div>
 </template>
@@ -71,22 +88,39 @@ import ProviderModelSelector from './ProviderModelSelector.vue';
 import ConfigSelector from './ConfigSelector.vue';
 import type { Session } from '@/composables/useSessions';
 
+interface StagedFileInfo {
+    attachment_id: string;
+    filename: string;
+    original_name: string;
+    url: string;
+    type: string;
+}
+
+interface ReplyInfo {
+    messageId: number;
+    messageContent: string;
+}
+
 interface Props {
     prompt: string;
     stagedImagesUrl: string[];
     stagedAudioUrl: string;
+    stagedFiles?: StagedFileInfo[];
     disabled: boolean;
     enableStreaming: boolean;
     isRecording: boolean;
     sessionId?: string | null;
     currentSession?: Session | null;
     configId?: string | null;
+    replyTo?: ReplyInfo | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     sessionId: null,
     currentSession: null,
-    configId: null
+    configId: null,
+    stagedFiles: () => [],
+    replyTo: null
 });
 
 const emit = defineEmits<{
@@ -95,10 +129,12 @@ const emit = defineEmits<{
     toggleStreaming: [];
     removeImage: [index: number];
     removeAudio: [];
+    removeFile: [index: number];
     startRecording: [];
     stopRecording: [];
     pasteImage: [event: ClipboardEvent];
     fileSelect: [files: FileList];
+    clearReply: [];
 }>();
 
 const { tm } = useModuleI18n('features/chat');
@@ -117,7 +153,7 @@ const sessionPlatformId = computed(() => props.currentSession?.platform_id || 'w
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
-    return (props.prompt && props.prompt.trim()) || props.stagedImagesUrl.length > 0 || props.stagedAudioUrl;
+    return (props.prompt && props.prompt.trim()) || props.stagedImagesUrl.length > 0 || props.stagedAudioUrl || (props.stagedFiles && props.stagedFiles.length > 0);
 });
 
 // Ctrl+B 长按录音相关
@@ -229,6 +265,46 @@ defineExpose({
     flex-shrink: 0;
 }
 
+.reply-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    margin: 8px 8px 0 8px;
+    background-color: rgba(103, 58, 183, 0.06);
+    border-radius: 12px;
+    gap: 8px;
+}
+
+.reply-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.reply-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.reply-text {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.remove-reply-btn {
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
 .attachments-preview {
     display: flex;
     gap: 8px;
@@ -239,7 +315,8 @@ defineExpose({
 }
 
 .image-preview,
-.audio-preview {
+.audio-preview,
+.file-preview {
     position: relative;
     display: inline-flex;
 }
@@ -252,9 +329,17 @@ defineExpose({
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.audio-chip {
+.audio-chip,
+.file-chip {
     height: 36px;
     border-radius: 18px;
+}
+
+.file-name-preview {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .remove-attachment-btn {

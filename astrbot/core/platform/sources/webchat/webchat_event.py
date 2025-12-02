@@ -1,12 +1,12 @@
 import base64
 import os
+import shutil
 import uuid
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import download_image_by_url
 
 from .webchat_queue_mgr import webchat_queue_mgr
 
@@ -19,7 +19,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         os.makedirs(imgs_dir, exist_ok=True)
 
     @staticmethod
-    async def _send(message: MessageChain, session_id: str, streaming: bool = False):
+    async def _send(
+        message: MessageChain | None, session_id: str, streaming: bool = False
+    ) -> str | None:
         cid = session_id.split("!")[-1]
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         if not message:
@@ -30,7 +32,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "streaming": False,
                 },  # end means this request is finished
             )
-            return ""
+            return
 
         data = ""
         for comp in message.chain:
@@ -47,24 +49,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = str(uuid.uuid4()) + ".jpg"
+                filename = f"{str(uuid.uuid4())}.jpg"
                 path = os.path.join(imgs_dir, filename)
-                if comp.file and comp.file.startswith("file:///"):
-                    ph = comp.file[8:]
-                    with open(path, "wb") as f:
-                        with open(ph, "rb") as f2:
-                            f.write(f2.read())
-                elif comp.file.startswith("base64://"):
-                    base64_str = comp.file[9:]
-                    image_data = base64.b64decode(base64_str)
-                    with open(path, "wb") as f:
-                        f.write(image_data)
-                elif comp.file and comp.file.startswith("http"):
-                    await download_image_by_url(comp.file, path=path)
-                else:
-                    with open(path, "wb") as f:
-                        with open(comp.file, "rb") as f2:
-                            f.write(f2.read())
+                image_base64 = await comp.convert_to_base64()
+                with open(path, "wb") as f:
+                    f.write(base64.b64decode(image_base64))
                 data = f"[IMAGE]{filename}"
                 await web_chat_back_queue.put(
                     {
@@ -76,23 +65,32 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Record):
                 # save record to local
-                filename = str(uuid.uuid4()) + ".wav"
+                filename = f"{str(uuid.uuid4())}.wav"
                 path = os.path.join(imgs_dir, filename)
-                if comp.file and comp.file.startswith("file:///"):
-                    ph = comp.file[8:]
-                    with open(path, "wb") as f:
-                        with open(ph, "rb") as f2:
-                            f.write(f2.read())
-                elif comp.file and comp.file.startswith("http"):
-                    await download_image_by_url(comp.file, path=path)
-                else:
-                    with open(path, "wb") as f:
-                        with open(comp.file, "rb") as f2:
-                            f.write(f2.read())
+                record_base64 = await comp.convert_to_base64()
+                with open(path, "wb") as f:
+                    f.write(base64.b64decode(record_base64))
                 data = f"[RECORD]{filename}"
                 await web_chat_back_queue.put(
                     {
                         "type": "record",
+                        "cid": cid,
+                        "data": data,
+                        "streaming": streaming,
+                    },
+                )
+            elif isinstance(comp, File):
+                # save file to local
+                file_path = await comp.get_file()
+                original_name = comp.name or os.path.basename(file_path)
+                ext = os.path.splitext(original_name)[1] or ""
+                filename = f"{uuid.uuid4()!s}{ext}"
+                dest_path = os.path.join(imgs_dir, filename)
+                shutil.copy2(file_path, dest_path)
+                data = f"[FILE]{filename}|{original_name}"
+                await web_chat_back_queue.put(
+                    {
+                        "type": "file",
                         "cid": cid,
                         "data": data,
                         "streaming": streaming,
@@ -131,6 +129,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 session_id=self.session_id,
                 streaming=True,
             )
+            if not r:
+                continue
             if chain.type == "reasoning":
                 reasoning_content += chain.get_plain_text()
             else:
