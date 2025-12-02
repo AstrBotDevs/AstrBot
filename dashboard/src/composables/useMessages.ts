@@ -346,7 +346,7 @@ export function useMessages(
                                 message: '',
                                 embedded_files: [{
                                     url: fileUrl,
-                                    name: originalName
+                                    filename: originalName
                                 }]
                             };
                             messages.value.push({ content: bot_resp });
