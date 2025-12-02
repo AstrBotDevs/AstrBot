@@ -9,6 +9,8 @@ from sqlmodel import col, delete, desc, func, or_, select, text, update
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
     Attachment,
+    CommandConfig,
+    CommandConflict,
     ConversationV2,
     Persona,
     PlatformMessageHistory,
@@ -614,6 +616,177 @@ class SQLiteDatabase(BaseDatabase):
                     ),
                 )
             await session.commit()
+
+    # ====
+    # Command Configuration & Conflict Tracking
+    # ====
+
+    async def get_command_configs(self) -> list[CommandConfig]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(select(CommandConfig))
+            return list(result.scalars().all())
+
+    async def get_command_config(
+        self,
+        handler_full_name: str,
+    ) -> CommandConfig | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            return await session.get(CommandConfig, handler_full_name)
+
+    async def upsert_command_config(
+        self,
+        handler_full_name: str,
+        plugin_name: str,
+        module_path: str,
+        original_command: str,
+        *,
+        resolved_command: str | None = None,
+        enabled: bool | None = None,
+        keep_original_alias: bool | None = None,
+        conflict_key: str | None = None,
+        resolution_strategy: str | None = None,
+        note: str | None = None,
+        extra_data: dict | None = None,
+        auto_managed: bool | None = None,
+    ) -> CommandConfig:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                config = await session.get(CommandConfig, handler_full_name)
+                if not config:
+                    config = CommandConfig(
+                        handler_full_name=handler_full_name,
+                        plugin_name=plugin_name,
+                        module_path=module_path,
+                        original_command=original_command,
+                        resolved_command=resolved_command,
+                        enabled=enabled if enabled is not None else True,
+                        keep_original_alias=keep_original_alias or False,
+                        conflict_key=conflict_key or original_command,
+                        resolution_strategy=resolution_strategy,
+                        note=note,
+                        extra_data=extra_data,
+                        auto_managed=bool(auto_managed),
+                    )
+                    session.add(config)
+                else:
+                    config.plugin_name = plugin_name or config.plugin_name
+                    config.module_path = module_path or config.module_path
+                    config.original_command = (
+                        original_command or config.original_command
+                    )
+                    if resolved_command is not None:
+                        config.resolved_command = resolved_command
+                    if enabled is not None:
+                        config.enabled = enabled
+                    if keep_original_alias is not None:
+                        config.keep_original_alias = keep_original_alias
+                    if conflict_key is not None:
+                        config.conflict_key = conflict_key
+                    if resolution_strategy is not None:
+                        config.resolution_strategy = resolution_strategy
+                    if note is not None:
+                        config.note = note
+                    if extra_data is not None:
+                        config.extra_data = extra_data
+                    if auto_managed is not None:
+                        config.auto_managed = auto_managed
+                await session.flush()
+                await session.refresh(config)
+                return config
+
+    async def delete_command_config(self, handler_full_name: str) -> None:
+        await self.delete_command_configs([handler_full_name])
+
+    async def delete_command_configs(self, handler_full_names: list[str]) -> None:
+        if not handler_full_names:
+            return
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(CommandConfig).where(
+                        col(CommandConfig.handler_full_name).in_(handler_full_names),
+                    ),
+                )
+
+    async def list_command_conflicts(
+        self,
+        status: str | None = None,
+    ) -> list[CommandConflict]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(CommandConflict)
+            if status:
+                query = query.where(CommandConflict.status == status)
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def upsert_command_conflict(
+        self,
+        conflict_key: str,
+        handler_full_name: str,
+        plugin_name: str,
+        *,
+        status: str | None = None,
+        resolution: str | None = None,
+        resolved_command: str | None = None,
+        note: str | None = None,
+        extra_data: dict | None = None,
+        auto_generated: bool | None = None,
+    ) -> CommandConflict:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    select(CommandConflict).where(
+                        CommandConflict.conflict_key == conflict_key,
+                        CommandConflict.handler_full_name == handler_full_name,
+                    ),
+                )
+                record = result.scalar_one_or_none()
+                if not record:
+                    record = CommandConflict(
+                        conflict_key=conflict_key,
+                        handler_full_name=handler_full_name,
+                        plugin_name=plugin_name,
+                        status=status or "pending",
+                        resolution=resolution,
+                        resolved_command=resolved_command,
+                        note=note,
+                        extra_data=extra_data,
+                        auto_generated=bool(auto_generated),
+                    )
+                    session.add(record)
+                else:
+                    record.plugin_name = plugin_name or record.plugin_name
+                    if status is not None:
+                        record.status = status
+                    if resolution is not None:
+                        record.resolution = resolution
+                    if resolved_command is not None:
+                        record.resolved_command = resolved_command
+                    if note is not None:
+                        record.note = note
+                    if extra_data is not None:
+                        record.extra_data = extra_data
+                    if auto_generated is not None:
+                        record.auto_generated = auto_generated
+                await session.flush()
+                await session.refresh(record)
+                return record
+
+    async def delete_command_conflicts(self, ids: list[int]) -> None:
+        if not ids:
+            return
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    delete(CommandConflict).where(col(CommandConflict.id).in_(ids)),
+                )
 
     # ====
     # Deprecated Methods

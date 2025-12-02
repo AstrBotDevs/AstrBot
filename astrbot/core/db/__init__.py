@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from astrbot.core.db.po import (
     Attachment,
+    CommandConfig,
+    CommandConflict,
     ConversationV2,
     Persona,
     PlatformMessageHistory,
@@ -284,6 +286,76 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def clear_preferences(self, scope: str, scope_id: str) -> None:
         """Clear all preferences for a specific scope ID."""
+        ...
+
+    @abc.abstractmethod
+    async def get_command_configs(self) -> list[CommandConfig]:
+        """Get all stored command configurations."""
+        ...
+
+    @abc.abstractmethod
+    async def get_command_config(self, handler_full_name: str) -> CommandConfig | None:
+        """Fetch a single command configuration by handler."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_command_config(
+        self,
+        handler_full_name: str,
+        plugin_name: str,
+        module_path: str,
+        original_command: str,
+        *,
+        resolved_command: str | None = None,
+        enabled: bool | None = None,
+        keep_original_alias: bool | None = None,
+        conflict_key: str | None = None,
+        resolution_strategy: str | None = None,
+        note: str | None = None,
+        extra_data: dict | None = None,
+        auto_managed: bool | None = None,
+    ) -> CommandConfig:
+        """Create or update a command configuration."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_command_config(self, handler_full_name: str) -> None:
+        """Delete a single command configuration."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_command_configs(self, handler_full_names: list[str]) -> None:
+        """Bulk delete command configurations."""
+        ...
+
+    @abc.abstractmethod
+    async def list_command_conflicts(
+        self,
+        status: str | None = None,
+    ) -> list[CommandConflict]:
+        """List recorded command conflict entries."""
+        ...
+
+    @abc.abstractmethod
+    async def upsert_command_conflict(
+        self,
+        conflict_key: str,
+        handler_full_name: str,
+        plugin_name: str,
+        *,
+        status: str | None = None,
+        resolution: str | None = None,
+        resolved_command: str | None = None,
+        note: str | None = None,
+        extra_data: dict | None = None,
+        auto_generated: bool | None = None,
+    ) -> CommandConflict:
+        """Create or update a conflict record."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_command_conflicts(self, ids: list[int]) -> None:
+        """Delete conflict records."""
         ...
 
     # @abc.abstractmethod
