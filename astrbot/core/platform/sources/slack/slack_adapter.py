@@ -21,6 +21,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
@@ -39,9 +40,7 @@ class SlackAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.unique_session = platform_settings.get("unique_session", False)
 
@@ -49,6 +48,7 @@ class SlackAdapter(Platform):
         self.app_token = platform_config.get("app_token")
         self.signing_secret = platform_config.get("signing_secret")
         self.connection_mode = platform_config.get("slack_connection_mode", "socket")
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
@@ -361,10 +361,17 @@ class SlackAdapter(Platform):
                 self._handle_webhook_event,
             )
 
-            logger.info(
-                f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
-            )
-            await self.webhook_client.start()
+            # 如果启用统一 webhook 模式，则不启动独立服务器
+            webhook_uuid = self.config.get("webhook_uuid")
+            if self.unified_webhook_mode and webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(Slack)", webhook_uuid)
+                # 保持运行状态，等待 shutdown
+                await self.webhook_client.shutdown_event.wait()
+            else:
+                logger.info(
+                    f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
+                )
+                await self.webhook_client.start()
 
         else:
             raise ValueError(
@@ -390,6 +397,13 @@ class SlackAdapter(Platform):
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        if self.connection_mode != "webhook" or not self.webhook_client:
+            return {"error": "Slack adapter is not in webhook mode"}, 400
+
+        return await self.webhook_client.handle_callback(request)
 
     async def terminate(self):
         if self.socket_client:

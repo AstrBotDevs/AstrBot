@@ -4,6 +4,14 @@
   "adapters": "Platform Adapters",
   "addAdapter": "Add Adapter",
   "emptyText": "No platform adapters yet, click Add Adapter to create one",
+  "viewWebhook": "View Webhook URL",
+  "webhookCopied": "Webhook URL copied to clipboard",
+  "webhookCopyFailed": "Copy failed, please copy manually",
+  "webhookDialog": {
+    "title": "Webhook Callback URL",
+    "description": "Please configure the following URL in the platform's webhook callback settings:",
+    "close": "Close"
+  },
   "details": {
     "adapterType": "Adapter Type",
     "token": "Token",

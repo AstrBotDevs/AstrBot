@@ -29,6 +29,20 @@
             <item-card :item="platform" title-field="id" enabled-field="enable"
               :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
               @delete="deletePlatform" @edit="editPlatform">
+              <template #item-details="{ item }">
+                <div v-if="item.unified_webhook_mode && item.webhook_uuid" class="webhook-info">
+                  <v-chip
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="webhook-chip"
+                    @click.stop="openWebhookDialog(item.webhook_uuid)"
+                  >
+                    <v-icon size="small" start>mdi-webhook</v-icon>
+                    {{ tm('viewWebhook') }}
+                  </v-chip>
+                </div>
+              </template>
             </item-card>
           </v-col>
         </v-row>
@@ -59,6 +73,43 @@
     <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="metadata" :config_data="config_data" ref="addPlatformDialog"
       :updating-mode="updatingMode" :updating-platform-config="updatingPlatformConfig" @update="getConfig"
       @show-toast="showToast" @refresh-config="getConfig"/>
+
+    <!-- Webhook URL 对话框 -->
+    <v-dialog v-model="showWebhookDialog" max-width="600">
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2" color="primary">mdi-webhook</v-icon>
+          {{ tm('webhookDialog.title') }}
+        </v-card-title>
+        <v-card-text class="px-4 pb-2">
+          <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('webhookDialog.description') }}</p>
+          <v-text-field
+            :model-value="currentWebhookUrl"
+            readonly
+            variant="outlined"
+            hide-details
+            class="webhook-url-field"
+          >
+            <template v-slot:append-inner>
+              <v-btn
+                icon
+                size="small"
+                variant="text"
+                @click="copyWebhookUrl(currentWebhookUuid)"
+              >
+                <v-icon>mdi-content-copy</v-icon>
+              </v-btn>
+            </template>
+          </v-text-field>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-2">
+          <v-spacer></v-spacer>
+          <v-btn variant="tonal" color="primary" @click="showWebhookDialog = false">
+            {{ tm('webhookDialog.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- 消息提示 -->
     <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
@@ -97,18 +148,6 @@ export default {
       tm
     };
   },
-  computed: {
-    // 安全访问翻译的计算属性
-    messages() {
-      return {
-        updateSuccess: this.tm('messages.updateSuccess'),
-        addSuccess: this.tm('messages.addSuccess'),
-        deleteSuccess: this.tm('messages.deleteSuccess'),
-        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
-        deleteConfirm: this.tm('messages.deleteConfirm')
-      };
-    }
-  },
   data() {
     return {
       config_data: {},
@@ -124,6 +163,9 @@ export default {
       save_message_success: "success",
 
       showConsole: false,
+
+      showWebhookDialog: false,
+      currentWebhookUuid: '',
 
       store: useCommonStore()
     }
@@ -224,6 +266,47 @@ export default {
       this.save_message = message;
       this.save_message_success = "error";
       this.save_message_snack = true;
+    },
+
+    getWebhookUrl(webhookUuid) {
+      let callbackBase = this.config_data.callback_api_base || '';
+      if (!callbackBase) {
+        callbackBase = "http(s)://<your-domain-or-ip>";
+      }
+      if (callbackBase) {
+        return `${callbackBase.replace(/\/$/, '')}/platform/webhook/${webhookUuid}`;
+      }
+      return `/platform/webhook/${webhookUuid}`;
+    },
+
+    openWebhookDialog(webhookUuid) {
+      this.currentWebhookUuid = webhookUuid;
+      this.showWebhookDialog = true;
+    },
+
+    async copyWebhookUrl(webhookUuid) {
+      const url = this.getWebhookUrl(webhookUuid);
+      try {
+        await navigator.clipboard.writeText(url);
+        this.showSuccess(this.tm('webhookCopied'));
+      } catch (err) {
+        this.showError(this.tm('webhookCopyFailed'));
+      }
+    }
+  },
+  computed: {
+    // 安全访问翻译的计算属性
+    messages() {
+      return {
+        updateSuccess: this.tm('messages.updateSuccess'),
+        addSuccess: this.tm('messages.addSuccess'),
+        deleteSuccess: this.tm('messages.deleteSuccess'),
+        statusUpdateSuccess: this.tm('messages.statusUpdateSuccess'),
+        deleteConfirm: this.tm('messages.deleteConfirm')
+      };
+    },
+    currentWebhookUrl() {
+      return this.getWebhookUrl(this.currentWebhookUuid);
     }
   }
 }
@@ -234,5 +317,13 @@ export default {
   padding: 20px;
   padding-top: 8px;
   padding-bottom: 40px;
+}
+
+.webhook-info {
+  margin-top: 4px;
+}
+
+.webhook-chip {
+  cursor: pointer;
 }
 </style>

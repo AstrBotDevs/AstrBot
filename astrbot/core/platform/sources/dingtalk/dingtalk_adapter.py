@@ -47,9 +47,7 @@ class DingtalkPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
 
         self.unique_session = platform_settings["unique_session"]
 
@@ -76,13 +74,13 @@ class DingtalkPlatformAdapter(Platform):
         )
         self.client_ = client  # 用于 websockets 的 client
 
-    def _id_to_sid(self, dingtalk_id: str | None) -> str | None:
+    def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
-            return dingtalk_id
+            return dingtalk_id or "unknown"
         prefix = "$:LWCP_v1:$"
         if dingtalk_id.startswith(prefix):
             return dingtalk_id[len(prefix) :]
-        return dingtalk_id
+        return dingtalk_id or "unknown"
 
     async def send_by_session(
         self,

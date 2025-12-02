@@ -4,6 +4,14 @@
   "adapters": "平台适配器",
   "addAdapter": "创建机器人",
   "emptyText": "暂无平台适配器，点击 创建机器人 添加",
+  "viewWebhook": "查看 Webhook 链接",
+  "webhookCopied": "Webhook URL 已复制到剪贴板",
+  "webhookCopyFailed": "复制失败，请手动复制",
+  "webhookDialog": {
+    "title": "Webhook 回调地址",
+    "description": "回调地址如下，请确保可以公网访问。建议填写 配置文件 -> 系统 中的「对外可达的回调接口地址」配置项。",
+    "close": "关闭"
+  },
   "details": {
     "adapterType": "适配器类型",
     "token": "Token",

@@ -38,9 +38,8 @@ class AiocqhttpAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
+        super().__init__(platform_config, event_queue)
 
-        self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
         self.host = platform_config["ws_reverse_host"]
@@ -154,7 +153,7 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=event.user_id)
+        abm.sender = MessageMember(user_id=str(event.user_id), nickname=str(event.user_id))
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
             abm.group_id = str(event.group_id)
