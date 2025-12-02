@@ -153,7 +153,9 @@ class AiocqhttpAdapter(Platform):
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        abm.sender = MessageMember(user_id=str(event.user_id), nickname=str(event.user_id))
+        abm.sender = MessageMember(
+            user_id=str(event.user_id), nickname=str(event.user_id)
+        )
         abm.type = MessageType.OTHER_MESSAGE
         if event.get("group_id"):
             abm.group_id = str(event.group_id)

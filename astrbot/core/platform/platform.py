@@ -67,6 +67,4 @@ class Platform(abc.ABC):
         Raises:
             NotImplementedError: 平台未实现统一 Webhook 模式
         """
-        raise NotImplementedError(
-            f"平台 {self.meta().name} 未实现统一 Webhook 模式"
-        )
+        raise NotImplementedError(f"平台 {self.meta().name} 未实现统一 Webhook 模式")
