@@ -72,6 +72,6 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
-            file=open(audio_url, "rb"),
+            file=("audio.wav", open(audio_url, "rb")),
         )
         return result.text
