@@ -1,0 +1,75 @@
+{
+  "title": "Command Management",
+  "summary": {
+    "total": "Total Commands",
+    "disabled": "Disabled",
+    "conflicts": "Conflicts"
+  },
+  "table": {
+    "headers": {
+      "command": "Command",
+      "plugin": "Plugin",
+      "description": "Description",
+      "permission": "Permission",
+      "status": "Status",
+      "actions": "Actions"
+    }
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "conflict": "Conflict"
+  },
+  "permission": {
+    "everyone": "Everyone",
+    "admin": "Admin",
+    "member": "Member"
+  },
+  "tooltips": {
+    "enable": "Enable command",
+    "disable": "Disable command",
+    "rename": "Rename command",
+    "viewDetails": "View details"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "Rename Command",
+      "newName": "New command name",
+      "keepAlias": "Keep original name as alias",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "details": {
+      "title": "Command Details",
+      "handler": "Handler",
+      "module": "Module Path",
+      "originalCommand": "Original Command",
+      "effectiveCommand": "Effective Command",
+      "aliases": "Aliases",
+      "permission": "Permission",
+      "conflictStatus": "Conflict Status"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "Command status updated",
+    "toggleFailed": "Failed to update command status",
+    "renameSuccess": "Command renamed",
+    "renameFailed": "Rename failed",
+    "loadFailed": "Failed to load commands"
+  },
+  "search": {
+    "placeholder": "Search commands..."
+  },
+  "empty": {
+    "noCommands": "No Commands",
+    "noCommandsDesc": "No registered commands found"
+  },
+  "filters": {
+    "all": "All",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "conflict": "Conflict",
+    "byPlugin": "Filter by plugin",
+    "byPermission": "Filter by permission"
+  }
+}
