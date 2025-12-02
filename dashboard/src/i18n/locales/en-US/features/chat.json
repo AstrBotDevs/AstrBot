@@ -40,7 +40,8 @@
     "deleteChat": "Delete this conversation",
     "editTitle": "Edit Title",
     "fullscreen": "Fullscreen Mode",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "reply": "Reply"
   },
   "conversation": {
     "newConversation": "New Conversation",
@@ -70,6 +71,10 @@
   },
   "reasoning": {
     "thinking": "Thinking Process"
+  },
+  "reply": {
+    "replyTo": "Reply to",
+    "notFound": "Message not found"
   },
   "time": {
     "today": "Today",

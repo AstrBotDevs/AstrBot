@@ -449,6 +449,18 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query.offset(offset).limit(page_size))
             return result.scalars().all()
 
+    async def get_platform_message_history_by_id(
+        self, message_id: int
+    ) -> PlatformMessageHistory | None:
+        """Get a platform message history record by its ID."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(PlatformMessageHistory).where(
+                PlatformMessageHistory.id == message_id
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
     async def insert_attachment(self, path, type, mime_type):
         """Insert a new attachment record."""
         async with self.get_db() as session:
@@ -491,7 +503,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 query = delete(Attachment).where(
-                    Attachment.attachment_id == attachment_id
+                    col(Attachment.attachment_id) == attachment_id
                 )
                 result = await session.execute(query)
                 return result.rowcount > 0
@@ -507,7 +519,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 query = delete(Attachment).where(
-                    Attachment.attachment_id.in_(attachment_ids)
+                    col(Attachment.attachment_id).in_(attachment_ids)
                 )
                 result = await session.execute(query)
                 return result.rowcount

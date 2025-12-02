@@ -173,7 +173,7 @@ class BaseDatabase(abc.ABC):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-    ) -> None:
+    ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...
 
@@ -196,6 +196,14 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
     ) -> list[PlatformMessageHistory]:
         """Get platform message history for a specific user."""
+        ...
+
+    @abc.abstractmethod
+    async def get_platform_message_history_by_id(
+        self,
+        message_id: int,
+    ) -> PlatformMessageHistory | None:
+        """Get a platform message history record by its ID."""
         ...
 
     @abc.abstractmethod

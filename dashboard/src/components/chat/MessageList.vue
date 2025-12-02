@@ -7,6 +7,11 @@
                 <div v-if="msg.content.type == 'user'" class="user-message">
                     <div class="message-bubble user-bubble" :class="{ 'has-audio': msg.content.audio_url }"
                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
+                        <!-- 引用消息 -->
+                        <div v-if="msg.content.reply_to" class="reply-quote" @click="scrollToMessage(msg.content.reply_to.message_id)">
+                            <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
+                            <span class="reply-quote-text">{{ getReplyContent(msg.content.reply_to.message_id) }}</span>
+                        </div>
                         <pre
                             style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
 
@@ -118,6 +123,8 @@
                             <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
+                            <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
+                                @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
                         </div>
                     </div>
                 </div>
@@ -165,7 +172,7 @@ export default {
             default: false
         }
     },
-    emits: ['openImagePreview'],
+    emits: ['openImagePreview', 'replyMessage'],
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
@@ -200,6 +207,45 @@ export default {
         }
     },
     methods: {
+        // 获取被引用消息的内容
+        getReplyContent(messageId) {
+            const replyMsg = this.messages.find(m => m.id === messageId);
+            if (!replyMsg) {
+                return this.tm('reply.notFound');
+            }
+            let content = '';
+            if (typeof replyMsg.content.message === 'string') {
+                content = replyMsg.content.message;
+            } else if (Array.isArray(replyMsg.content.message)) {
+                const textParts = replyMsg.content.message
+                    .filter(part => part.type === 'plain' && part.text)
+                    .map(part => part.text);
+                content = textParts.join('');
+            }
+            // 截断过长内容
+            if (content.length > 50) {
+                content = content.substring(0, 50) + '...';
+            }
+            return content || '[媒体内容]';
+        },
+
+        // 滚动到指定消息
+        scrollToMessage(messageId) {
+            const msgIndex = this.messages.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return;
+            
+            const container = this.$refs.messageContainer;
+            const messageItems = container?.querySelectorAll('.message-item');
+            if (messageItems && messageItems[msgIndex]) {
+                messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 高亮一下
+                messageItems[msgIndex].classList.add('highlight-message');
+                setTimeout(() => {
+                    messageItems[msgIndex].classList.remove('highlight-message');
+                }, 2000);
+            }
+        },
+
         // Toggle reasoning expansion state
         toggleReasoning(messageIndex) {
             if (this.expandedReasoning.has(messageIndex)) {
@@ -575,6 +621,62 @@ export default {
 .copy-message-btn.copy-success:hover {
     color: #4caf50;
     background-color: rgba(76, 175, 80, 0.1);
+}
+
+.reply-message-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    color: var(--v-theme-secondary);
+}
+
+.reply-message-btn:hover {
+    opacity: 1;
+    background-color: rgba(103, 58, 183, 0.1);
+}
+
+/* 引用消息显示样式 */
+.reply-quote {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    background-color: rgba(103, 58, 183, 0.08);
+    border-left: 3px solid var(--v-theme-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.reply-quote:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reply-quote-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.reply-quote-text {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 消息高亮动画 */
+.highlight-message {
+    animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+    0% {
+        background-color: rgba(103, 58, 183, 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
 }
 
 .message-bubble {

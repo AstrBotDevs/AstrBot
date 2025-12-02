@@ -2,6 +2,14 @@
     <div class="input-area fade-in">
         <div class="input-container"
             style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
+            <!-- 引用预览区 -->
+            <div class="reply-preview" v-if="props.replyTo">
+                <div class="reply-content">
+                    <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
+                    "<span class="reply-text">{{ props.replyTo.messageContent }}</span>"
+                </div>
+                <v-btn @click="$emit('clearReply')" class="remove-reply-btn" icon="mdi-close" size="x-small" color="grey" variant="text" />
+            </div>
             <textarea 
                 ref="inputField"
                 v-model="localPrompt" 
@@ -88,6 +96,11 @@ interface StagedFileInfo {
     type: string;
 }
 
+interface ReplyInfo {
+    messageId: number;
+    messageContent: string;
+}
+
 interface Props {
     prompt: string;
     stagedImagesUrl: string[];
@@ -99,13 +112,15 @@ interface Props {
     sessionId?: string | null;
     currentSession?: Session | null;
     configId?: string | null;
+    replyTo?: ReplyInfo | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     sessionId: null,
     currentSession: null,
     configId: null,
-    stagedFiles: () => []
+    stagedFiles: () => [],
+    replyTo: null
 });
 
 const emit = defineEmits<{
@@ -119,6 +134,7 @@ const emit = defineEmits<{
     stopRecording: [];
     pasteImage: [event: ClipboardEvent];
     fileSelect: [files: FileList];
+    clearReply: [];
 }>();
 
 const { tm } = useModuleI18n('features/chat');
@@ -247,6 +263,46 @@ defineExpose({
     position: relative;
     border-top: 1px solid var(--v-theme-border);
     flex-shrink: 0;
+}
+
+.reply-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    margin: 8px 8px 0 8px;
+    background-color: rgba(103, 58, 183, 0.06);
+    border-radius: 12px;
+    gap: 8px;
+}
+
+.reply-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.reply-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.reply-text {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.remove-reply-btn {
+    flex-shrink: 0;
+    opacity: 0.6;
 }
 
 .attachments-preview {

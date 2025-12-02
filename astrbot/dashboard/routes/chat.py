@@ -10,7 +10,6 @@ from quart import g, make_response, request, send_file
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import Attachment
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -150,31 +149,38 @@ class ChatRoute(Route):
             .__dict__
         )
 
-    async def _build_user_message_parts(
-        self,
-        message: str,
-        attachments: list[Attachment],
-    ) -> list:
+    async def _build_user_message_parts(self, message: str | list) -> list[dict]:
         """构建用户消息的部分列表
 
         Args:
-            message: 文本消息
-            files: attachment_id 列表
+            message: 文本消息 (str) 或消息段列表 (list)
         """
         parts = []
 
+        if isinstance(message, list):
+            for part in message:
+                part_type = part.get("type")
+                if part_type == "plain":
+                    parts.append({"type": "plain", "text": part.get("text", "")})
+                elif part_type == "reply":
+                    parts.append(
+                        {"type": "reply", "message_id": part.get("message_id")}
+                    )
+                elif attachment_id := part.get("attachment_id"):
+                    attachment = await self.db.get_attachment_by_id(attachment_id)
+                    if attachment:
+                        parts.append(
+                            {
+                                "type": attachment.type,
+                                "attachment_id": attachment.attachment_id,
+                                "filename": os.path.basename(attachment.path),
+                                "path": attachment.path,  # will be deleted
+                            }
+                        )
+            return parts
+
         if message:
             parts.append({"type": "plain", "text": message})
-
-        if attachments:
-            for attachment in attachments:
-                parts.append(
-                    {
-                        "type": attachment.type,
-                        "attachment_id": attachment.attachment_id,
-                        "filename": os.path.basename(attachment.path),
-                    }
-                )
 
         return parts
 
@@ -220,7 +226,7 @@ class ChatRoute(Route):
         media_parts: list,
         reasoning: str,
     ):
-        """保存 bot 消息到历史记录"""
+        """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
@@ -230,13 +236,14 @@ class ChatRoute(Route):
         if reasoning:
             new_his["reasoning"] = reasoning
 
-        await self.platform_history_mgr.insert(
+        record = await self.platform_history_mgr.insert(
             platform_id="webchat",
             user_id=webchat_conv_id,
             content=new_his,
             sender_id="bot",
             sender_name="bot",
         )
+        return record
 
     async def chat(self):
         username = g.get("username", "guest")
@@ -252,37 +259,33 @@ class ChatRoute(Route):
 
         message = post_data["message"]
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
-        files = post_data.get("files")  # list of attachment_id
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-        if not message and not files:
-            return Response().error("Message and files are both empty").__dict__
+        # 检查消息是否为空
+        if isinstance(message, list):
+            has_content = any(
+                part.get("type") in ("plain", "image", "record", "file", "video")
+                for part in message
+            )
+            if not has_content:
+                return (
+                    Response()
+                    .error("Message content is empty (reply only is not allowed)")
+                    .__dict__
+                )
+        elif not message:
+            return Response().error("Message are both empty").__dict__
+
         if not session_id:
             return Response().error("session_id is empty").__dict__
 
         webchat_conv_id = session_id
         back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
-        # 构建并保存用户消息
-        attachments = await self.db.get_attachments(files)
-        message_parts = await self._build_user_message_parts(message, attachments)
-        files_info = [
-            {
-                "type": attachment.type,
-                "path": attachment.path,
-            }
-            for attachment in attachments
-        ]
-
-        await self.platform_history_mgr.insert(
-            platform_id="webchat",
-            user_id=webchat_conv_id,
-            content={"type": "user", "message": message_parts},
-            sender_id=username,
-            sender_name=username,
-        )
+        # 构建用户消息段（包含 path 用于传递给 adapter）
+        message_parts = await self._build_user_message_parts(message)
 
         async def stream():
             client_disconnected = False
@@ -366,12 +369,25 @@ class ChatRoute(Route):
                             or not streaming
                             or msg_type == "break"
                         ):
-                            await self._save_bot_message(
+                            saved_record = await self._save_bot_message(
                                 webchat_conv_id,
                                 accumulated_text,
                                 accumulated_parts,
                                 accumulated_reasoning,
                             )
+                            # 发送保存的消息信息给前端
+                            if saved_record and not client_disconnected:
+                                saved_info = {
+                                    "type": "message_saved",
+                                    "data": {
+                                        "id": saved_record.id,
+                                        "created_at": saved_record.created_at.astimezone().isoformat(),
+                                    },
+                                }
+                                try:
+                                    yield f"data: {json.dumps(saved_info, ensure_ascii=False)}\n\n"
+                                except Exception:
+                                    pass
                             # 重置累积变量 (对于 break 后的下一段消息)
                             if msg_type == "break":
                                 accumulated_parts = []
@@ -387,13 +403,25 @@ class ChatRoute(Route):
                 username,
                 webchat_conv_id,
                 {
-                    "message": message,
-                    "files": files_info,
+                    "message": message_parts,
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
                 },
             ),
+        )
+
+        message_parts_for_storage = []
+        for part in message_parts:
+            part_copy = {k: v for k, v in part.items() if k != "path"}
+            message_parts_for_storage.append(part_copy)
+
+        await self.platform_history_mgr.insert(
+            platform_id="webchat",
+            user_id=webchat_conv_id,
+            content={"type": "user", "message": message_parts_for_storage},
+            sender_id=username,
+            sender_name=username,
         )
 
         response = await make_response(

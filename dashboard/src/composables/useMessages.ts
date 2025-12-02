@@ -4,10 +4,17 @@ import { useToast } from '@/utils/toast';
 
 // 新格式消息部分的类型定义
 export interface MessagePart {
-    type: 'plain' | 'image' | 'record' | 'file' | 'video';
+    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply';
     text?: string;           // for plain
     attachment_id?: string;  // for image, record, file, video
-    filename?: string;           // for file (filename from backend)
+    filename?: string;       // for file (filename from backend)
+    message_id?: number;     // for reply (PlatformSessionHistoryMessage.id)
+}
+
+// 引用信息
+export interface ReplyInfo {
+    messageId: number;
+    messageContent: string;
 }
 
 // 文件信息结构
@@ -15,6 +22,12 @@ export interface FileInfo {
     url?: string;           // blob URL (可选，点击时才加载)
     filename: string;
     attachment_id?: string; // 用于按需下载
+}
+
+// 引用消息信息
+export interface ReplyTo {
+    message_id: number;
+    message_content?: string;  // 被引用消息的内容（解析后填充）
 }
 
 export interface MessageContent {
@@ -28,9 +41,11 @@ export interface MessageContent {
     embedded_audio?: string;
     embedded_files?: FileInfo[];
     isLoading?: boolean;
+    reply_to?: ReplyTo;  // 引用的消息
 }
 
 export interface Message {
+    id?: number;
     content: MessageContent;
     created_at?: string;
 }
@@ -88,6 +103,7 @@ export function useMessages(
             let imageUrls: string[] = [];
             let audioUrl: string | undefined;
             let fileInfos: FileInfo[] = [];
+            let replyTo: ReplyTo | undefined;
 
             for (const part of message as MessagePart[]) {
                 if (part.type === 'plain' && part.text) {
@@ -103,12 +119,15 @@ export function useMessages(
                         attachment_id: part.attachment_id,
                         filename: part.filename || 'file'
                     });
+                } else if (part.type === 'reply' && part.message_id) {
+                    replyTo = { message_id: part.message_id };
                 }
                 // video 类型可以后续扩展
             }
 
             // 转换为旧格式兼容的结构
             content.message = textParts.join('\n');
+            content.reply_to = replyTo;
             if (content.type === 'user') {
                 content.image_url = imageUrls.length > 0 ? imageUrls : undefined;
                 content.audio_url = audioUrl;
@@ -195,7 +214,8 @@ export function useMessages(
         stagedFiles: { attachment_id: string; url: string; original_name: string; type: string }[],
         audioName: string,
         selectedProviderId: string,
-        selectedModelName: string
+        selectedModelName: string,
+        replyTo: ReplyInfo | null = null
     ) {
         // Create user message
         const userMessage: MessageContent = {
@@ -203,7 +223,8 @@ export function useMessages(
             message: prompt,
             image_url: [],
             audio_url: undefined,
-            file_url: []
+            file_url: [],
+            reply_to: replyTo ? { message_id: replyTo.messageId } : undefined
         };
 
         // 分离图片和文件
@@ -251,6 +272,43 @@ export function useMessages(
             // 收集所有 attachment_id
             const files = stagedFiles.map(f => f.attachment_id);
 
+            // 构建 message 参数
+            // 当 files 或 reply 存在时，message 是 list，否则是 str
+            let messageToSend: string | MessagePart[];
+            if (files.length > 0 || replyTo) {
+                const parts: MessagePart[] = [];
+                
+                // 添加引用消息段
+                if (replyTo) {
+                    parts.push({
+                        type: 'reply',
+                        message_id: replyTo.messageId
+                    });
+                }
+                
+                // 添加纯文本消息段
+                if (prompt) {
+                    parts.push({
+                        type: 'plain',
+                        text: prompt
+                    });
+                }
+                
+                // 添加文件消息段
+                for (const f of stagedFiles) {
+                    const partType = f.type === 'image' ? 'image' : 
+                                     f.type === 'record' ? 'record' : 'file';
+                    parts.push({
+                        type: partType as 'image' | 'record' | 'file',
+                        attachment_id: f.attachment_id
+                    });
+                }
+                
+                messageToSend = parts;
+            } else {
+                messageToSend = prompt;
+            }
+
             const response = await fetch('/api/chat/send', {
                 method: 'POST',
                 headers: {
@@ -258,9 +316,8 @@ export function useMessages(
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
                 body: JSON.stringify({
-                    message: prompt,
+                    message: messageToSend,
                     session_id: currSessionId.value,
-                    files: files,
                     selected_provider: selectedProviderId,
                     selected_model: selectedModelName,
                     enable_streaming: enableStreaming.value
@@ -371,6 +428,13 @@ export function useMessages(
                             }
                         } else if (chunk_json.type === 'update_title') {
                             updateSessionTitle(chunk_json.session_id, chunk_json.data);
+                        } else if (chunk_json.type === 'message_saved') {
+                            // 更新最后一条 bot 消息的 id 和 created_at
+                            const lastBotMsg = messages.value[messages.value.length - 1];
+                            if (lastBotMsg && lastBotMsg.content?.type === 'bot') {
+                                lastBotMsg.id = chunk_json.data.id;
+                                lastBotMsg.created_at = chunk_json.data.created_at;
+                            }
                         }
 
                         if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
