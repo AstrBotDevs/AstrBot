@@ -195,7 +195,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="false" />
+                        <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
                     </div>
                 </v-card-text>
 
@@ -320,6 +320,7 @@ import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
 
@@ -341,11 +342,13 @@ export default {
     setup() {
         const { t, locale } = useI18n();
         const { tm } = useModuleI18n('features/conversation');
+        const customizerStore = useCustomizerStore();
 
         return {
             t,
             tm,
-            locale
+            locale,
+            customizerStore
         };
     },
 
@@ -483,6 +486,11 @@ export default {
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
+        },
+
+        // 检测是否为暗色模式
+        isDark() {
+            return this.customizerStore.uiTheme === 'PurpleThemeDark';
         },
 
         // 将对话历史转换为 MessageList 组件期望的格式
@@ -985,6 +993,11 @@ export default {
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;
+}
+
+/* 暗色模式下的聊天消息容器 */
+.v-theme--dark .conversation-messages-container {
+    background-color: #1e1e1e;
 }
 
 /* 对话详情卡片 */
