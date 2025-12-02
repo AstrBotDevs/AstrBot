@@ -40,6 +40,8 @@ class StarHandlerRegistry(Generic[T]):
             # 过滤事件类型
             if handler.event_type != event_type:
                 continue
+            if not handler.enabled:
+                continue
             # 过滤启用状态
             if only_activated:
                 plugin = star_map.get(handler.handler_module_path)
@@ -138,6 +140,8 @@ class StarHandlerMetadata:
 
     extras_configs: dict = field(default_factory=dict)
     """插件注册的一些其他的信息, 如 priority 等"""
+
+    enabled: bool = True
 
     def __lt__(self, other: StarHandlerMetadata):
         """定义小于运算符以支持优先队列"""
