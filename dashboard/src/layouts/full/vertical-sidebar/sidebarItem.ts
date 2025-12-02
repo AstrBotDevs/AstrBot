@@ -44,6 +44,11 @@ const sidebarItem: menu[] = [
     to: '/extension'
   },
   {
+    title: 'core.navigation.commands',
+    icon: 'mdi-console-line',
+    to: '/commands'
+  },
+  {
     title: 'core.navigation.knowledgeBase',
     icon: 'mdi-book-open-variant',
     to: '/knowledge-base',

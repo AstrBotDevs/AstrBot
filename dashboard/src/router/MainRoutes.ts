@@ -17,6 +17,11 @@ const MainRoutes = {
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
+      name: 'Commands',
+      path: '/commands',
+      component: () => import('@/views/CommandPage.vue')
+    },
+    {
       name: 'ExtensionMarketplace',
       path: '/extension-marketplace',
       component: () => import('@/views/ExtensionPage.vue')
