@@ -118,7 +118,7 @@
                                 </div>
                             </template>
                         </div>
-                        <div class="message-actions" v-if="!msg.content.isLoading">
+                        <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
                             <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at) }}</span>
                             <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
@@ -589,6 +589,11 @@ export default {
     opacity: 0;
     transition: opacity 0.2s ease;
     margin-left: 16px;
+}
+
+/* 最后一条消息始终显示操作按钮 */
+.message-item:last-child .message-actions {
+    opacity: 1;
 }
 
 .message-time {
