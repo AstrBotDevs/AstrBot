@@ -187,7 +187,7 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -490,6 +490,7 @@ export default {
 
         // 检测是否为暗色模式
         isDark() {
+            console.log('isDark', this.customizerStore.uiTheme);
             return this.customizerStore.uiTheme === 'PurpleThemeDark';
         },
 
