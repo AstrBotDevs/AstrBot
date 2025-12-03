@@ -10,8 +10,9 @@ interface CommandItem {
   plugin_display_name: string | null;
   module_path: string;
   description: string;
-  type: string;
+  type: string;  // "command" | "group" | "sub_command"
   parent_signature: string;
+  parent_group_handler: string;
   original_command: string;
   current_fragment: string;
   effective_command: string;
@@ -20,6 +21,7 @@ interface CommandItem {
   enabled: boolean;
   is_group: boolean;
   has_conflict: boolean;
+  sub_commands: CommandItem[];
 }
 
 interface CommandSummary {
@@ -49,6 +51,10 @@ const searchQuery = ref('');
 const pluginFilter = ref('all');
 const permissionFilter = ref('all');
 const statusFilter = ref('all');
+const typeFilter = ref('all');
+
+// Track expanded groups
+const expandedGroups = ref<Set<string>>(new Set());
 
 // Rename dialog
 const renameDialog = reactive({
@@ -66,12 +72,13 @@ const detailsDialog = reactive({
 
 // Table headers
 const commandHeaders = computed(() => [
-  { title: tm('table.headers.command'), key: 'effective_command', width: '180px' },
+  { title: tm('table.headers.command'), key: 'effective_command', width: '150px' },
+  { title: tm('table.headers.type'), key: 'type', sortable: false, width: '110px' },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
-  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '260px' },
+  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '240px' },
   { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
-  { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '120px' },
-  { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '160px' }
+  { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '100px' },
+  { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '140px' }
 ]);
 
 // Computed: unique plugins for filter
@@ -80,65 +87,125 @@ const availablePlugins = computed(() => {
   return Array.from(plugins).sort();
 });
 
-// Computed: filtered commands
-const filteredCommands = computed(() => {
-  let result = commands.value;
-
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase();
-    result = result.filter(cmd =>
+// Helper: check if a command matches filters
+const matchesFilters = (cmd: CommandItem, query: string): boolean => {
+  // Search filter
+  if (query) {
+    const matchesSearch = 
       cmd.effective_command?.toLowerCase().includes(query) ||
       cmd.description?.toLowerCase().includes(query) ||
-      cmd.plugin?.toLowerCase().includes(query)
-    );
+      cmd.plugin?.toLowerCase().includes(query);
+    if (!matchesSearch) return false;
   }
 
-  if (pluginFilter.value !== 'all') {
-    result = result.filter(cmd => cmd.plugin === pluginFilter.value);
+  // Plugin filter
+  if (pluginFilter.value !== 'all' && cmd.plugin !== pluginFilter.value) {
+    return false;
   }
 
+  // Permission filter
   if (permissionFilter.value !== 'all') {
     if (permissionFilter.value === 'everyone') {
-      // "所有人"筛选：包括 everyone 和 member 权限（当前 member 权限实际作用与 everyone 相同）
-      result = result.filter(cmd => cmd.permission === 'everyone' || cmd.permission === 'member');
-    } else {
-      result = result.filter(cmd => cmd.permission === permissionFilter.value);
+      if (cmd.permission !== 'everyone' && cmd.permission !== 'member') return false;
+    } else if (cmd.permission !== permissionFilter.value) {
+      return false;
     }
   }
 
+  // Status filter
   if (statusFilter.value !== 'all') {
-    if (statusFilter.value === 'enabled') {
-      result = result.filter(cmd => cmd.enabled);
-    } else if (statusFilter.value === 'disabled') {
-      result = result.filter(cmd => !cmd.enabled);
-    } else if (statusFilter.value === 'conflict') {
-      result = result.filter(cmd => cmd.has_conflict);
-    }
+    if (statusFilter.value === 'enabled' && !cmd.enabled) return false;
+    if (statusFilter.value === 'disabled' && cmd.enabled) return false;
+    if (statusFilter.value === 'conflict' && !cmd.has_conflict) return false;
   }
 
-  // Sort: conflict commands first, grouped by effective_command
+  // Type filter
+  if (typeFilter.value !== 'all') {
+    if (typeFilter.value === 'group' && cmd.type !== 'group') return false;
+    if (typeFilter.value === 'command' && cmd.type !== 'command') return false;
+    if (typeFilter.value === 'sub_command' && cmd.type !== 'sub_command') return false;
+  }
+
+  return true;
+};
+
+// Computed: filtered commands with hierarchy support
+const filteredCommands = computed(() => {
+  const query = searchQuery.value.toLowerCase();
+  const result: CommandItem[] = [];
   const conflictCmds: CommandItem[] = [];
   const normalCmds: CommandItem[] = [];
-  
-  const conflictGroupMap: Map<string, CommandItem[]> = new Map();
-  for (const cmd of result) {
-    if (cmd.has_conflict) {
-      const key = cmd.effective_command || '';
-      if (!conflictGroupMap.has(key)) {
-        conflictGroupMap.set(key, []);
+
+  for (const cmd of commands.value) {
+    // For groups, check if group or any sub-command matches
+    if (cmd.is_group) {
+      const groupMatches = matchesFilters(cmd, query);
+      const matchingSubCmds = (cmd.sub_commands || []).filter(sub => matchesFilters(sub, query));
+      
+      // If group matches or has matching sub-commands, include it
+      if (groupMatches || matchingSubCmds.length > 0) {
+        if (cmd.has_conflict) {
+          conflictCmds.push(cmd);
+        } else {
+          normalCmds.push(cmd);
+        }
+        
+        // If group is expanded, add matching sub-commands
+        if (expandedGroups.value.has(cmd.handler_full_name)) {
+          const subsToShow = query ? matchingSubCmds : (cmd.sub_commands || []);
+          for (const sub of subsToShow) {
+            if (sub.has_conflict) {
+              conflictCmds.push(sub);
+            } else {
+              normalCmds.push(sub);
+            }
+          }
+        }
       }
-      conflictGroupMap.get(key)!.push(cmd);
-    } else {
-      normalCmds.push(cmd);
+    } else if (cmd.type !== 'sub_command') {
+      // Regular commands (not sub-commands, they're handled via groups)
+      if (matchesFilters(cmd, query)) {
+        if (cmd.has_conflict) {
+          conflictCmds.push(cmd);
+        } else {
+          normalCmds.push(cmd);
+        }
+      }
     }
   }
-  
-  for (const [_, group] of conflictGroupMap) {
-    conflictCmds.push(...group);
-  }
+
+  // Sort conflicts by effective_command to group them together
+  conflictCmds.sort((a, b) => (a.effective_command || '').localeCompare(b.effective_command || ''));
 
   return [...conflictCmds, ...normalCmds];
 });
+
+// Toggle group expansion
+const toggleGroupExpand = (cmd: CommandItem) => {
+  if (!cmd.is_group) return;
+  if (expandedGroups.value.has(cmd.handler_full_name)) {
+    expandedGroups.value.delete(cmd.handler_full_name);
+  } else {
+    expandedGroups.value.add(cmd.handler_full_name);
+  }
+};
+
+// Check if group is expanded
+const isGroupExpanded = (cmd: CommandItem): boolean => {
+  return expandedGroups.value.has(cmd.handler_full_name);
+};
+
+// Get type display info
+const getTypeInfo = (type: string) => {
+  switch (type) {
+    case 'group':
+      return { text: tm('type.group'), color: 'info', icon: 'mdi-folder-outline' };
+    case 'sub_command':
+      return { text: tm('type.subCommand'), color: 'secondary', icon: 'mdi-subdirectory-arrow-right' };
+    default:
+      return { text: tm('type.command'), color: 'primary', icon: 'mdi-console-line' };
+  }
+};
 
 // Toast helper
 const toast = (message: string, color: string = 'success') => {
@@ -250,12 +317,19 @@ const getStatusInfo = (cmd: CommandItem) => {
   return { text: tm('status.disabled'), color: 'error', variant: 'outlined' as const };
 };
 
-// Get row props for conflict highlighting
+// Get row props for conflict highlighting and sub-command styling
 const getRowProps = ({ item }: { item: CommandItem }) => {
+  const classes: string[] = [];
   if (item.has_conflict) {
-    return { class: 'conflict-row' };
+    classes.push('conflict-row');
   }
-  return {};
+  if (item.type === 'sub_command') {
+    classes.push('sub-command-row');
+  }
+  if (item.is_group) {
+    classes.push('group-row');
+  }
+  return classes.length > 0 ? { class: classes.join(' ') } : {};
 };
 
 onMounted(async () => {
@@ -270,7 +344,7 @@ onMounted(async () => {
         <v-card-text style="padding: 0px 12px;">
           <!-- Filters Row (Top) -->
           <v-row class="mb-4" align="center">
-            <v-col cols="12" sm="4" md="3">
+            <v-col cols="12" sm="6" md="3">
               <v-select
                 v-model="pluginFilter"
                 :items="[{ title: tm('filters.all'), value: 'all' }, ...availablePlugins.map(p => ({ title: p, value: p }))]"
@@ -280,7 +354,22 @@ onMounted(async () => {
                 hide-details
               />
             </v-col>
-            <v-col cols="12" sm="4" md="3">
+            <v-col cols="12" sm="6" md="2">
+              <v-select
+                v-model="typeFilter"
+                :items="[
+                  { title: tm('filters.all'), value: 'all' },
+                  { title: tm('type.group'), value: 'group' },
+                  { title: tm('type.command'), value: 'command' },
+                  { title: tm('type.subCommand'), value: 'sub_command' }
+                ]"
+                :label="tm('filters.byType')"
+                density="compact"
+                variant="outlined"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="2">
               <v-select
                 v-model="permissionFilter"
                 :items="[
@@ -294,7 +383,7 @@ onMounted(async () => {
                 hide-details
               />
             </v-col>
-            <v-col cols="12" sm="4" md="3">
+            <v-col cols="12" sm="6" md="2">
               <v-select
                 v-model="statusFilter"
                 :items="[
@@ -383,12 +472,45 @@ onMounted(async () => {
 
               <template v-slot:item.effective_command="{ item }">
                 <div class="d-flex align-center py-2">
+                  <!-- Expand/collapse button for groups -->
+                  <v-btn
+                    v-if="item.is_group && item.sub_commands?.length > 0"
+                    icon
+                    variant="text"
+                    size="x-small"
+                    class="mr-1"
+                    @click.stop="toggleGroupExpand(item)"
+                  >
+                    <v-icon size="18">{{ isGroupExpanded(item) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                  </v-btn>
+                  <!-- Indent for sub-commands -->
+                  <div v-else-if="item.type === 'sub_command'" class="ml-6"></div>
                   <div>
                     <div class="text-subtitle-1 font-weight-medium">
-                      <code>{{ item.effective_command }}</code>
+                      <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ item.effective_command }}</code>
+                      <v-chip 
+                        v-if="item.is_group && item.sub_commands?.length > 0" 
+                        size="x-small" 
+                        color="info" 
+                        variant="tonal"
+                        class="ml-2"
+                      >
+                        {{ item.sub_commands.length }} {{ tm('subCommandCount') }}
+                      </v-chip>
                     </div>
                   </div>
                 </div>
+              </template>
+
+              <template v-slot:item.type="{ item }">
+                <v-chip
+                  :color="getTypeInfo(item.type).color"
+                  size="small"
+                  variant="tonal"
+                >
+                  <v-icon start size="14">{{ getTypeInfo(item.type).icon }}</v-icon>
+                  {{ getTypeInfo(item.type).text }}
+                </v-chip>
               </template>
 
               <template v-slot:item.plugin="{ item }">
@@ -506,6 +628,19 @@ onMounted(async () => {
       <v-card-text>
         <v-list density="compact">
           <v-list-item>
+            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.type') }}</v-list-item-title>
+            <v-list-item-subtitle>
+              <v-chip
+                :color="getTypeInfo(detailsDialog.command.type).color"
+                size="small"
+                variant="tonal"
+              >
+                <v-icon start size="14">{{ getTypeInfo(detailsDialog.command.type).icon }}</v-icon>
+                {{ getTypeInfo(detailsDialog.command.type).text }}
+              </v-chip>
+            </v-list-item-subtitle>
+          </v-list-item>
+          <v-list-item>
             <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.handler') }}</v-list-item-title>
             <v-list-item-subtitle><code>{{ detailsDialog.command.handler_name }}</code></v-list-item-subtitle>
           </v-list-item>
@@ -521,12 +656,31 @@ onMounted(async () => {
             <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.effectiveCommand') }}</v-list-item-title>
             <v-list-item-subtitle><code>{{ detailsDialog.command.effective_command }}</code></v-list-item-subtitle>
           </v-list-item>
+          <v-list-item v-if="detailsDialog.command.parent_signature">
+            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.parentGroup') }}</v-list-item-title>
+            <v-list-item-subtitle><code>{{ detailsDialog.command.parent_signature }}</code></v-list-item-subtitle>
+          </v-list-item>
           <v-list-item v-if="detailsDialog.command.aliases.length > 0">
             <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.aliases') }}</v-list-item-title>
             <v-list-item-subtitle>
               <v-chip v-for="alias in detailsDialog.command.aliases" :key="alias" size="small" class="mr-1">
                 {{ alias }}
               </v-chip>
+            </v-list-item-subtitle>
+          </v-list-item>
+          <v-list-item v-if="detailsDialog.command.is_group && detailsDialog.command.sub_commands?.length > 0">
+            <v-list-item-title class="font-weight-bold">{{ tm('dialogs.details.subCommands') }}</v-list-item-title>
+            <v-list-item-subtitle>
+              <div class="d-flex flex-wrap ga-1 mt-1">
+                <v-chip 
+                  v-for="sub in detailsDialog.command.sub_commands" 
+                  :key="sub.handler_full_name" 
+                  size="small"
+                  variant="outlined"
+                >
+                  {{ sub.current_fragment }}
+                </v-chip>
+              </div>
             </v-list-item-subtitle>
           </v-list-item>
           <v-list-item>
@@ -567,6 +721,11 @@ code {
   border-radius: 4px;
   font-size: 0.9em;
 }
+
+code.sub-command-code {
+  background-color: rgba(var(--v-theme-secondary), 0.1);
+  color: rgb(var(--v-theme-secondary));
+}
 </style>
 
 <style>
@@ -579,4 +738,23 @@ code {
 .v-data-table .conflict-row:hover {
   background: linear-gradient(90deg, rgba(var(--v-theme-warning), 0.25) 0%, rgba(var(--v-theme-warning), 0.1) 100%) !important;
 }
+
+/* Group row styling */
+.v-data-table .group-row {
+  background-color: rgba(var(--v-theme-info), 0.03);
+}
+
+.v-data-table .group-row:hover {
+  background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
+
+/* Sub-command row styling */
+.v-data-table .sub-command-row {
+  /* background-color: rgba(var(--v-theme-surface-variant), 0.3); */
+  border-left: 2px solid rgba(var(--v-theme-secondary), 0.3);
+}
+
+/* .v-data-table .sub-command-row:hover {
+  background-color: rgba(var(--v-theme-surface-variant), 0.5) !important;
+} */
 </style>

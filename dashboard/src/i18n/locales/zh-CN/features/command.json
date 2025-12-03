@@ -13,6 +13,7 @@
   "table": {
     "headers": {
       "command": "指令",
+      "type": "类型",
       "plugin": "所属插件",
       "description": "描述",
       "permission": "权限",
@@ -20,6 +21,12 @@
       "actions": "操作"
     }
   },
+  "type": {
+    "command": "指令",
+    "group": "指令组",
+    "subCommand": "子指令"
+  },
+  "subCommandCount": "个子指令",
   "status": {
     "enabled": "已启用",
     "disabled": "已禁用",
@@ -44,10 +51,13 @@
     },
     "details": {
       "title": "指令详情",
+      "type": "指令类型",
       "handler": "处理函数",
       "module": "模块路径",
       "originalCommand": "原始指令",
       "effectiveCommand": "生效指令",
+      "parentGroup": "所属指令组",
+      "subCommands": "子指令列表",
       "aliases": "别名",
       "permission": "权限要求",
       "conflictStatus": "冲突状态"
@@ -73,6 +83,7 @@
     "disabled": "已禁用",
     "conflict": "有冲突",
     "byPlugin": "按插件筛选",
+    "byType": "按类型筛选",
     "byPermission": "按权限筛选",
     "byStatus": "按状态筛选"
   }

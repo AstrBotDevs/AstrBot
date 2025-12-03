@@ -13,6 +13,7 @@
   "table": {
     "headers": {
       "command": "Command",
+      "type": "Type",
       "plugin": "Plugin",
       "description": "Description",
       "permission": "Permission",
@@ -20,6 +21,12 @@
       "actions": "Actions"
     }
   },
+  "type": {
+    "command": "Command",
+    "group": "Group",
+    "subCommand": "Sub-command"
+  },
+  "subCommandCount": "sub-commands",
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -44,10 +51,13 @@
     },
     "details": {
       "title": "Command Details",
+      "type": "Command Type",
       "handler": "Handler",
       "module": "Module Path",
       "originalCommand": "Original Command",
       "effectiveCommand": "Effective Command",
+      "parentGroup": "Parent Group",
+      "subCommands": "Sub-commands",
       "aliases": "Aliases",
       "permission": "Permission",
       "conflictStatus": "Conflict Status"
@@ -73,6 +83,7 @@
     "disabled": "Disabled",
     "conflict": "Conflict",
     "byPlugin": "Filter by plugin",
+    "byType": "Filter by type",
     "byPermission": "Filter by permission",
     "byStatus": "Filter by status"
   }

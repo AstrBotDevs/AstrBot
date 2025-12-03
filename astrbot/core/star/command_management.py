@@ -26,10 +26,11 @@ class CommandDescriptor:
     plugin_display_name: str | None = None
     module_path: str = ""
     description: str = ""
-    command_type: str = "command"
+    command_type: str = "command"  # "command" | "group" | "sub_command"
     raw_command_name: str | None = None
     current_fragment: str | None = None
     parent_signature: str = ""
+    parent_group_handler: str = ""  # 父指令组的 handler_full_name
     original_command: str | None = None
     effective_command: str | None = None
     aliases: list[str] = field(default_factory=list)
@@ -39,6 +40,7 @@ class CommandDescriptor:
     is_sub_command: bool = False
     config: CommandConfig | None = None
     has_conflict: bool = False
+    sub_commands: list[CommandDescriptor] = field(default_factory=list)
 
 
 async def sync_command_configs() -> None:
@@ -127,7 +129,7 @@ async def rename_command(
 
 
 async def list_commands() -> list[dict[str, Any]]:
-    descriptors = _collect_raw_descriptors()
+    descriptors = _collect_all_descriptors()
     config_records = await db_helper.get_command_configs()
     config_map = {cfg.handler_full_name: cfg for cfg in config_records}
 
@@ -135,7 +137,7 @@ async def list_commands() -> list[dict[str, Any]]:
         if cfg := config_map.get(desc.handler_full_name):
             _bind_descriptor_with_config(desc, cfg)
 
-    # 检测冲突：按 effective_command 分组
+    # 检测冲突：按 effective_command 分组（只检测已启用的指令）
     conflict_groups: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
         if desc.effective_command and desc.enabled:
@@ -147,10 +149,36 @@ async def list_commands() -> list[dict[str, Any]]:
             for desc in group:
                 conflict_handler_names.add(desc.handler_full_name)
 
-    result = []
+    # 构建层级结构：将子指令挂载到父指令组
+    group_map: dict[str, CommandDescriptor] = {}
+    sub_commands: list[CommandDescriptor] = []
+    root_commands: list[CommandDescriptor] = []
+
     for desc in descriptors:
         desc.has_conflict = desc.handler_full_name in conflict_handler_names
+        if desc.is_group:
+            group_map[desc.handler_full_name] = desc
+        elif desc.is_sub_command:
+            sub_commands.append(desc)
+        else:
+            root_commands.append(desc)
+
+    # 将子指令挂载到对应的指令组
+    for sub in sub_commands:
+        sub.has_conflict = sub.handler_full_name in conflict_handler_names
+        if sub.parent_group_handler and sub.parent_group_handler in group_map:
+            group_map[sub.parent_group_handler].sub_commands.append(sub)
+        else:
+            # 如果找不到父指令组，作为独立指令处理
+            root_commands.append(sub)
+
+    # 合并结果：指令组（含子指令）+ 普通指令
+    result = []
+    for desc in group_map.values():
         result.append(_descriptor_to_dict(desc))
+    for desc in root_commands:
+        result.append(_descriptor_to_dict(desc))
+
     return result
 
 
@@ -193,10 +221,22 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 
 
 def _collect_raw_descriptors() -> list[CommandDescriptor]:
+    """收集所有根级指令（不含子指令）。"""
     descriptors: list[CommandDescriptor] = []
     for handler in star_handlers_registry:
         desc = _build_descriptor(handler)
         if not desc or desc.is_sub_command:
+            continue
+        descriptors.append(desc)
+    return descriptors
+
+
+def _collect_all_descriptors() -> list[CommandDescriptor]:
+    """收集所有指令，包括子指令。"""
+    descriptors: list[CommandDescriptor] = []
+    for handler in star_handlers_registry:
+        desc = _build_descriptor(handler)
+        if not desc:
             continue
         descriptors.append(desc)
     return descriptors
@@ -213,12 +253,20 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
     ) or handler.handler_module_path
     plugin_display = plugin_meta.display_name if plugin_meta else None
 
+    is_sub_command = bool(handler.extras_configs.get("sub_command"))
+    parent_group_handler = ""
+
     if isinstance(filter_ref, CommandFilter):
         raw_fragment = getattr(
             filter_ref, "_original_command_name", filter_ref.command_name
         )
         current_fragment = filter_ref.command_name
         parent_signature = (filter_ref.parent_command_names or [""])[0].strip()
+        # 如果是子指令，尝试找到父指令组的 handler_full_name
+        if is_sub_command and parent_signature:
+            parent_group_handler = _find_parent_group_handler(
+                handler.handler_module_path, parent_signature
+            )
     else:
         raw_fragment = getattr(
             filter_ref, "_original_group_name", filter_ref.group_name
@@ -229,6 +277,14 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
     original_command = _compose_command(parent_signature, raw_fragment)
     effective_command = _compose_command(parent_signature, current_fragment)
 
+    # 确定 command_type
+    if isinstance(filter_ref, CommandGroupFilter):
+        command_type = "group"
+    elif is_sub_command:
+        command_type = "sub_command"
+    else:
+        command_type = "command"
+
     descriptor = CommandDescriptor(
         handler=handler,
         filter_ref=filter_ref,
@@ -238,19 +294,18 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         plugin_display_name=plugin_display,
         module_path=handler.handler_module_path,
         description=handler.desc or "",
-        command_type="group"
-        if isinstance(filter_ref, CommandGroupFilter)
-        else "command",
+        command_type=command_type,
         raw_command_name=raw_fragment,
         current_fragment=current_fragment,
         parent_signature=parent_signature,
+        parent_group_handler=parent_group_handler,
         original_command=original_command,
         effective_command=effective_command,
         aliases=sorted(getattr(filter_ref, "alias", set())),
         permission=_determine_permission(handler),
         enabled=handler.enabled,
         is_group=isinstance(filter_ref, CommandGroupFilter),
-        is_sub_command=bool(handler.extras_configs.get("sub_command")),
+        is_sub_command=is_sub_command,
     )
     return descriptor
 
@@ -289,6 +344,22 @@ def _resolve_group_parent_signature(group_filter: CommandGroupFilter) -> str:
         signatures.append(getattr(parent, "_original_group_name", parent.group_name))
         parent = parent.parent_group
     return " ".join(reversed(signatures)).strip()
+
+
+def _find_parent_group_handler(module_path: str, parent_signature: str) -> str:
+    """根据模块路径和父级签名，找到对应的指令组 handler_full_name。"""
+    parent_sig_normalized = parent_signature.strip()
+    for handler in star_handlers_registry:
+        if handler.handler_module_path != module_path:
+            continue
+        filter_ref = _locate_primary_filter(handler)
+        if not isinstance(filter_ref, CommandGroupFilter):
+            continue
+        # 检查该指令组的完整指令名是否匹配 parent_signature
+        group_names = filter_ref.get_complete_command_names()
+        if parent_sig_normalized in group_names:
+            return handler.handler_full_name
+    return ""
 
 
 def _compose_command(parent_signature: str, fragment: str | None) -> str:
@@ -353,7 +424,7 @@ def _is_command_in_use(
 
 
 def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
-    return {
+    result = {
         "handler_full_name": desc.handler_full_name,
         "handler_name": desc.handler_name,
         "plugin": desc.plugin_name,
@@ -362,6 +433,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "description": desc.description,
         "type": desc.command_type,
         "parent_signature": desc.parent_signature,
+        "parent_group_handler": desc.parent_group_handler,
         "original_command": desc.original_command,
         "current_fragment": desc.current_fragment,
         "effective_command": desc.effective_command,
@@ -371,3 +443,9 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
     }
+    # 如果是指令组，包含子指令列表
+    if desc.is_group and desc.sub_commands:
+        result["sub_commands"] = [_descriptor_to_dict(sub) for sub in desc.sub_commands]
+    else:
+        result["sub_commands"] = []
+    return result
