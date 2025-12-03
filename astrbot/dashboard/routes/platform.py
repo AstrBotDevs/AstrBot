@@ -24,8 +24,6 @@ class PlatformRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.platform_manager = core_lifecycle.platform_manager
 
-        # 路由不使用标准的 /api 前缀，因为 webhook 回调需要直接访问
-        # 所以我们手动注册路由
         self._register_webhook_routes()
 
     def _register_webhook_routes(self):
@@ -35,6 +33,13 @@ class PlatformRoute(Route):
             "/api/platform/webhook/<webhook_uuid>",
             view_func=self.unified_webhook_callback,
             methods=["GET", "POST"],
+        )
+
+        # 平台统计信息接口
+        self.app.add_url_rule(
+            "/api/platform/stats",
+            view_func=self.get_platform_stats,
+            methods=["GET"],
         )
 
     async def unified_webhook_callback(self, webhook_uuid: str):
@@ -80,3 +85,16 @@ class PlatformRoute(Route):
                 if platform.config.get("unified_webhook_mode", False):
                     return platform
         return None
+
+    async def get_platform_stats(self):
+        """获取所有平台的统计信息
+
+        Returns:
+            包含平台统计信息的响应
+        """
+        try:
+            stats = self.platform_manager.get_all_stats()
+            return Response().ok(stats).__dict__
+        except Exception as e:
+            logger.error(f"获取平台统计信息失败: {e}", exc_info=True)
+            return Response().error(f"获取统计信息失败: {e}").__dict__, 500

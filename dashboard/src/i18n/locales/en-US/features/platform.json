@@ -58,5 +58,22 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "error": "Error"
+  },
+  "runtimeStatus": {
+    "running": "Running",
+    "error": "Error",
+    "pending": "Pending",
+    "stopped": "Stopped",
+    "unknown": "Unknown",
+    "errors": "error(s)"
+  },
+  "errorDialog": {
+    "title": "Error Details",
+    "platformId": "Platform ID",
+    "errorCount": "Error Count",
+    "lastError": "Last Error",
+    "occurredAt": "Occurred At",
+    "traceback": "Traceback",
+    "close": "Close"
   }
 } 

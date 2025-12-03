@@ -58,5 +58,22 @@
     "connected": "已连接",
     "disconnected": "已断开",
     "error": "错误"
+  },
+  "runtimeStatus": {
+    "running": "运行中",
+    "error": "发生错误",
+    "pending": "等待启动",
+    "stopped": "已停止",
+    "unknown": "未知",
+    "errors": "个错误"
+  },
+  "errorDialog": {
+    "title": "错误详情",
+    "platformId": "平台 ID",
+    "errorCount": "错误数量",
+    "lastError": "最近错误",
+    "occurredAt": "发生时间",
+    "traceback": "错误堆栈",
+    "close": "关闭"
   }
 } 
