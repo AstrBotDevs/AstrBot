@@ -159,5 +159,8 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             try:
                 await self.webhook_helper.server.shutdown()
             except Exception as exc:
-                logger.warning(f"Exception occurred during QQOfficialWebhook server shutdown: {exc}", exc_info=True)
+                logger.warning(
+                    f"Exception occurred during QQOfficialWebhook server shutdown: {exc}",
+                    exc_info=True,
+                )
         logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")
