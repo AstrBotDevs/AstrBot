@@ -35,7 +35,6 @@
     "rename": {
       "title": "重命名指令",
       "newName": "新指令名",
-      "keepAlias": "保留原名作为别名",
       "cancel": "取消",
       "confirm": "确认"
     },

@@ -62,13 +62,12 @@ class CommandRoute(Route):
         data = await request.get_json()
         handler_full_name = data.get("handler_full_name")
         new_name = data.get("new_name")
-        keep_original = bool(data.get("keep_original_alias", False))
 
         if not handler_full_name or not new_name:
             return Response().error("handler_full_name 与 new_name 均为必填。").__dict__
 
         try:
-            await rename_command_service(handler_full_name, new_name, keep_original)
+            await rename_command_service(handler_full_name, new_name)
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
 

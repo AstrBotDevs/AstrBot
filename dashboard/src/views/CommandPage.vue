@@ -20,7 +20,6 @@ interface CommandItem {
   enabled: boolean;
   is_group: boolean;
   has_conflict: boolean;
-  keep_original_alias: boolean;
 }
 
 interface CommandSummary {
@@ -56,7 +55,6 @@ const renameDialog = reactive({
   show: false,
   command: null as CommandItem | null,
   newName: '',
-  keepAlias: false,
   loading: false
 });
 
@@ -166,7 +164,6 @@ const toggleCommand = async (cmd: CommandItem) => {
 const openRenameDialog = (cmd: CommandItem) => {
   renameDialog.command = cmd;
   renameDialog.newName = cmd.current_fragment || '';
-  renameDialog.keepAlias = cmd.keep_original_alias;
   renameDialog.show = true;
 };
 
@@ -178,8 +175,7 @@ const confirmRename = async () => {
   try {
     const res = await axios.post('/api/commands/rename', {
       handler_full_name: renameDialog.command.handler_full_name,
-      new_name: renameDialog.newName.trim(),
-      keep_original_alias: renameDialog.keepAlias
+      new_name: renameDialog.newName.trim()
     });
     if (res.data.status === 'ok') {
       toast(tm('messages.renameSuccess'), 'success');
@@ -284,148 +280,148 @@ onMounted(async () => {
             </div>
           </div>
 
-            <!-- Filters -->
-            <v-row class="mb-3">
-              <v-col cols="12" sm="4" md="3">
-                <v-select
-                  v-model="pluginFilter"
-                  :items="[{ title: tm('filters.all'), value: 'all' }, ...availablePlugins.map(p => ({ title: p, value: p }))]"
-                  :label="tm('filters.byPlugin')"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
-              </v-col>
-              <v-col cols="12" sm="4" md="3">
-                <v-select
-                  v-model="permissionFilter"
-                  :items="[
-                    { title: tm('filters.all'), value: 'all' },
-                    { title: tm('permission.everyone'), value: 'everyone' },
-                    { title: tm('permission.admin'), value: 'admin' },
-                    { title: tm('permission.member'), value: 'member' }
-                  ]"
-                  :label="tm('filters.byPermission')"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
-              </v-col>
-              <v-col cols="12" sm="4" md="3">
-                <v-select
-                  v-model="statusFilter"
-                  :items="[
-                    { title: tm('filters.all'), value: 'all' },
-                    { title: tm('filters.enabled'), value: 'enabled' },
+          <!-- Filters -->
+          <v-row class="mb-3">
+            <v-col cols="12" sm="4" md="3">
+              <v-select
+                v-model="pluginFilter"
+                :items="[{ title: tm('filters.all'), value: 'all' }, ...availablePlugins.map(p => ({ title: p, value: p }))]"
+                :label="tm('filters.byPlugin')"
+                density="compact"
+                variant="outlined"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" sm="4" md="3">
+              <v-select
+                v-model="permissionFilter"
+                :items="[
+                  { title: tm('filters.all'), value: 'all' },
+                  { title: tm('permission.everyone'), value: 'everyone' },
+                  { title: tm('permission.admin'), value: 'admin' },
+                  { title: tm('permission.member'), value: 'member' }
+                ]"
+                :label="tm('filters.byPermission')"
+                density="compact"
+                variant="outlined"
+                hide-details
+              />
+            </v-col>
+            <v-col cols="12" sm="4" md="3">
+              <v-select
+                v-model="statusFilter"
+                :items="[
+                  { title: tm('filters.all'), value: 'all' },
+                  { title: tm('filters.enabled'), value: 'enabled' },
                   { title: tm('filters.disabled'), value: 'disabled' },
                   { title: tm('filters.conflict'), value: 'conflict' }
-                  ]"
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                />
-              </v-col>
-            </v-row>
+                ]"
+                density="compact"
+                variant="outlined"
+                hide-details
+              />
+            </v-col>
+          </v-row>
 
-            <!-- Commands Table -->
-            <v-card class="rounded-lg overflow-hidden elevation-1">
-              <v-data-table
-                :headers="commandHeaders"
-                :items="filteredCommands"
-                :loading="loading"
-                item-key="handler_full_name"
-                hover
-              >
-                <template v-slot:loader>
-                  <v-row class="py-8 d-flex align-center justify-center">
-                    <v-progress-circular indeterminate color="primary" />
-                    <span class="ml-2">{{ t('core.status.loading') }}</span>
-                  </v-row>
-                </template>
+          <!-- Commands Table -->
+          <v-card class="rounded-lg overflow-hidden elevation-1">
+            <v-data-table
+              :headers="commandHeaders"
+              :items="filteredCommands"
+              :loading="loading"
+              item-key="handler_full_name"
+              hover
+            >
+              <template v-slot:loader>
+                <v-row class="py-8 d-flex align-center justify-center">
+                  <v-progress-circular indeterminate color="primary" />
+                  <span class="ml-2">{{ t('core.status.loading') }}</span>
+                </v-row>
+              </template>
 
-                <template v-slot:item.effective_command="{ item }">
-                  <div class="d-flex align-center py-2">
-                    <div>
-                      <div class="text-subtitle-1 font-weight-medium">
-                        <code>{{ item.effective_command }}</code>
-                      </div>
+              <template v-slot:item.effective_command="{ item }">
+                <div class="d-flex align-center py-2">
+                  <div>
+                    <div class="text-subtitle-1 font-weight-medium">
+                      <code>{{ item.effective_command }}</code>
                     </div>
                   </div>
-                </template>
+                </div>
+              </template>
 
-                <template v-slot:item.plugin="{ item }">
-                  <div class="text-body-2">{{ item.plugin_display_name || item.plugin }}</div>
-                </template>
+              <template v-slot:item.plugin="{ item }">
+                <div class="text-body-2">{{ item.plugin_display_name || item.plugin }}</div>
+              </template>
 
-                <template v-slot:item.description="{ item }">
-                  <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    {{ item.description || '-' }}
-                  </div>
-                </template>
+              <template v-slot:item.description="{ item }">
+                <div class="text-body-2 text-medium-emphasis" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  {{ item.description || '-' }}
+                </div>
+              </template>
 
-                <template v-slot:item.permission="{ item }">
-                  <v-chip :color="getPermissionColor(item.permission)" size="small" class="font-weight-medium">
-                    {{ getPermissionLabel(item.permission) }}
-                  </v-chip>
-                </template>
+              <template v-slot:item.permission="{ item }">
+                <v-chip :color="getPermissionColor(item.permission)" size="small" class="font-weight-medium">
+                  {{ getPermissionLabel(item.permission) }}
+                </v-chip>
+              </template>
 
-                <template v-slot:item.enabled="{ item }">
-                  <v-chip
+              <template v-slot:item.enabled="{ item }">
+                <v-chip
                   :color="getStatusInfo(item).color"
-                    size="small"
-                    class="font-weight-medium"
+                  size="small"
+                  class="font-weight-medium"
                   :variant="getStatusInfo(item).variant"
-                  >
+                >
                   {{ getStatusInfo(item).text }}
-                  </v-chip>
-                </template>
+                </v-chip>
+              </template>
 
-                <template v-slot:item.actions="{ item }">
-                  <div class="d-flex align-center">
-                    <v-btn-group density="comfortable" variant="text" color="primary">
-                      <v-btn
-                        v-if="!item.enabled"
-                        icon
-                        size="small"
-                        color="success"
-                        @click="toggleCommand(item)"
-                      >
-                        <v-icon>mdi-play</v-icon>
-                        <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
-                      </v-btn>
-                      <v-btn
-                        v-else
-                        icon
-                        size="small"
-                        color="error"
-                        @click="toggleCommand(item)"
-                      >
-                        <v-icon>mdi-pause</v-icon>
-                        <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
-                      </v-btn>
+              <template v-slot:item.actions="{ item }">
+                <div class="d-flex align-center">
+                  <v-btn-group density="comfortable" variant="text" color="primary">
+                    <v-btn
+                      v-if="!item.enabled"
+                      icon
+                      size="small"
+                      color="success"
+                      @click="toggleCommand(item)"
+                    >
+                      <v-icon>mdi-play</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
+                    </v-btn>
+                    <v-btn
+                      v-else
+                      icon
+                      size="small"
+                      color="error"
+                      @click="toggleCommand(item)"
+                    >
+                      <v-icon>mdi-pause</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
+                    </v-btn>
 
-                      <v-btn icon size="small" color="warning" @click="openRenameDialog(item)">
-                        <v-icon>mdi-pencil</v-icon>
-                        <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
-                      </v-btn>
+                    <v-btn icon size="small" color="warning" @click="openRenameDialog(item)">
+                      <v-icon>mdi-pencil</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
+                    </v-btn>
 
-                      <v-btn icon size="small" @click="openDetailsDialog(item)">
-                        <v-icon>mdi-information</v-icon>
-                        <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDetails') }}</v-tooltip>
-                      </v-btn>
-                    </v-btn-group>
-                  </div>
-                </template>
+                    <v-btn icon size="small" @click="openDetailsDialog(item)">
+                      <v-icon>mdi-information</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDetails') }}</v-tooltip>
+                    </v-btn>
+                  </v-btn-group>
+                </div>
+              </template>
 
-                <template v-slot:no-data>
-                  <div class="text-center pa-8">
-                    <v-icon size="64" color="info" class="mb-4">mdi-console-line</v-icon>
-                    <div class="text-h5 mb-2">{{ tm('empty.noCommands') }}</div>
-                    <div class="text-body-1 mb-4">{{ tm('empty.noCommandsDesc') }}</div>
-                  </div>
-                </template>
-              </v-data-table>
-            </v-card>
+              <template v-slot:no-data>
+                <div class="text-center pa-8">
+                  <v-icon size="64" color="info" class="mb-4">mdi-console-line</v-icon>
+                  <div class="text-h5 mb-2">{{ tm('empty.noCommands') }}</div>
+                  <div class="text-body-1 mb-4">{{ tm('empty.noCommandsDesc') }}</div>
+                </div>
+              </template>
+            </v-data-table>
+          </v-card>
         </v-card-text>
       </v-card>
     </v-col>
@@ -441,14 +437,7 @@ onMounted(async () => {
           :label="tm('dialogs.rename.newName')"
           variant="outlined"
           density="compact"
-          class="mb-4"
           autofocus
-        />
-        <v-checkbox
-          v-model="renameDialog.keepAlias"
-          :label="tm('dialogs.rename.keepAlias')"
-          density="compact"
-          hide-details
         />
       </v-card-text>
       <v-card-actions>

@@ -38,7 +38,6 @@ class CommandDescriptor:
     is_group: bool = False
     is_sub_command: bool = False
     config: CommandConfig | None = None
-    keep_original_alias: bool = False
     has_conflict: bool = False
 
 
@@ -77,7 +76,7 @@ async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescri
             else descriptor.current_fragment
         ),
         enabled=enabled,
-        keep_original_alias=existing_cfg.keep_original_alias if existing_cfg else False,
+        keep_original_alias=False,
         conflict_key=existing_cfg.conflict_key
         if existing_cfg and existing_cfg.conflict_key
         else descriptor.original_command,
@@ -94,7 +93,6 @@ async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescri
 async def rename_command(
     handler_full_name: str,
     new_fragment: str,
-    keep_original_alias: bool = False,
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
@@ -115,7 +113,7 @@ async def rename_command(
         original_command=descriptor.original_command or descriptor.handler_name,
         resolved_command=new_fragment,
         enabled=True if descriptor.enabled else False,
-        keep_original_alias=keep_original_alias,
+        keep_original_alias=False,
         conflict_key=descriptor.original_command,
         resolution_strategy="manual_rename",
         note=None,
@@ -304,7 +302,6 @@ def _compose_command(parent_signature: str, fragment: str | None) -> str:
 
 def _bind_descriptor_with_config(descriptor: CommandDescriptor, config: CommandConfig):
     descriptor.config = config
-    descriptor.keep_original_alias = config.keep_original_alias
     descriptor.enabled = config.enabled
     descriptor.handler.enabled = config.enabled
 
@@ -319,20 +316,12 @@ def _bind_descriptor_with_config(descriptor: CommandDescriptor, config: CommandC
     )
 
     if descriptor.filter_ref and new_fragment:
-        _set_filter_fragment(
-            descriptor.filter_ref,
-            new_fragment,
-            keep_original=config.keep_original_alias,
-            original_fragment=descriptor.raw_command_name,
-        )
+        _set_filter_fragment(descriptor.filter_ref, new_fragment)
 
 
 def _set_filter_fragment(
     filter_ref: CommandFilter | CommandGroupFilter,
     fragment: str,
-    *,
-    keep_original: bool,
-    original_fragment: str | None,
 ) -> None:
     attr = (
         "group_name" if isinstance(filter_ref, CommandGroupFilter) else "command_name"
@@ -340,9 +329,6 @@ def _set_filter_fragment(
     current_value = getattr(filter_ref, attr)
     if fragment == current_value:
         return
-    if keep_original and original_fragment:
-        alias_set = getattr(filter_ref, "alias", set())
-        alias_set.add(original_fragment)
     setattr(filter_ref, attr, fragment)
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
@@ -383,5 +369,4 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "enabled": desc.enabled,
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
-        "keep_original_alias": desc.keep_original_alias,
     }
