@@ -68,9 +68,9 @@ const detailsDialog = reactive({
 const commandHeaders = computed(() => [
   { title: tm('table.headers.command'), key: 'effective_command', width: '180px' },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
-  { title: tm('table.headers.description'), key: 'description', maxWidth: '280px' },
-  { title: tm('table.headers.permission'), key: 'permission', width: '100px' },
-  { title: tm('table.headers.status'), key: 'enabled', width: '120px' },
+  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '280px' },
+  { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
+  { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '120px' },
   { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '160px' }
 ]);
 
