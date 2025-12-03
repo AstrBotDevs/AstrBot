@@ -137,7 +137,7 @@ async def list_commands() -> list[dict[str, Any]]:
         if cfg := config_map.get(desc.handler_full_name):
             _bind_descriptor_with_config(desc, cfg)
 
-    # 检测冲突：按 effective_command 分组（只检测已启用的指令）
+    # 检测冲突：按 effective_command 分组
     conflict_groups: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
         if desc.effective_command and desc.enabled:
@@ -149,7 +149,7 @@ async def list_commands() -> list[dict[str, Any]]:
             for desc in group:
                 conflict_handler_names.add(desc.handler_full_name)
 
-    # 构建层级结构：将子指令挂载到父指令组
+    # 分类，设置冲突标志，将子指令挂载到父指令组
     group_map: dict[str, CommandDescriptor] = {}
     sub_commands: list[CommandDescriptor] = []
     root_commands: list[CommandDescriptor] = []
@@ -163,22 +163,17 @@ async def list_commands() -> list[dict[str, Any]]:
         else:
             root_commands.append(desc)
 
-    # 将子指令挂载到对应的指令组
     for sub in sub_commands:
-        sub.has_conflict = sub.handler_full_name in conflict_handler_names
         if sub.parent_group_handler and sub.parent_group_handler in group_map:
             group_map[sub.parent_group_handler].sub_commands.append(sub)
         else:
-            # 如果找不到父指令组，作为独立指令处理
             root_commands.append(sub)
 
-    # 合并结果：指令组（含子指令）+ 普通指令
-    result = []
-    for desc in group_map.values():
-        result.append(_descriptor_to_dict(desc))
-    for desc in root_commands:
-        result.append(_descriptor_to_dict(desc))
+    # 指令组 + 普通指令，按 effective_command 字母排序
+    all_commands = list(group_map.values()) + root_commands
+    all_commands.sort(key=lambda d: (d.effective_command or "").lower())
 
+    result = [_descriptor_to_dict(desc) for desc in all_commands]
     return result
 
 
