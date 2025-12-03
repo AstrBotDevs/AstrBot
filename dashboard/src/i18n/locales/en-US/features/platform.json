@@ -9,7 +9,7 @@
   "webhookCopyFailed": "Copy failed, please copy manually",
   "webhookDialog": {
     "title": "Webhook Callback URL",
-    "description": "Please configure the following URL in the platform's webhook callback settings:",
+    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
     "close": "Close"
   },
   "details": {
