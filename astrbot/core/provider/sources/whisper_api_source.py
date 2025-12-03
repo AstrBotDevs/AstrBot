@@ -36,13 +36,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         self.set_model(provider_config.get("model"))
 
-    
     async def _get_audio_format(self, file_path):
-        
         # 定义要检测的头部字节
         silk_header = b"SILK"
         amr_header = b"#!AMR"
-        
+
         try:
             with open(file_path, "rb") as f:
                 file_header = f.read(8)
@@ -51,7 +49,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         if silk_header in file_header:
             return "silk"
-            
+
         if amr_header in file_header:
             return "amr"
         return None
@@ -74,21 +72,24 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
-            file_format = await self._get_audio_format(audio_url) 
-            
+            file_format = await self._get_audio_format(audio_url)
+
             # 判断是否需要转换
             if file_format in ["silk", "amr"]:
-                
                 temp_dir = os.path.join(get_astrbot_data_path(), "temp")
                 output_path = os.path.join(temp_dir, str(uuid.uuid4()) + ".wav")
-                
+
                 if file_format == "silk":
-                    logger.info("Converting silk file to wav using tencent_silk_to_wav...")
+                    logger.info(
+                        "Converting silk file to wav using tencent_silk_to_wav..."
+                    )
                     await tencent_silk_to_wav(audio_url, output_path)
                 elif file_format == "amr":
-                    logger.info("Converting amr file to wav using convert_to_pcm_wav...")
+                    logger.info(
+                        "Converting amr file to wav using convert_to_pcm_wav..."
+                    )
                     await convert_to_pcm_wav(audio_url, output_path)
-                
+
                 audio_url = output_path
 
         result = await self.client.audio.transcriptions.create(
