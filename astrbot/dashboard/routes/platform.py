@@ -32,7 +32,7 @@ class PlatformRoute(Route):
         """注册 webhook 路由"""
         # 统一 webhook 入口，支持 GET 和 POST
         self.app.add_url_rule(
-            "/platform/webhook/<webhook_uuid>",
+            "/api/platform/webhook/<webhook_uuid>",
             view_func=self.unified_webhook_callback,
             methods=["GET", "POST"],
         )

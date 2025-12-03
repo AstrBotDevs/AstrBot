@@ -274,9 +274,9 @@ export default {
         callbackBase = "http(s)://<your-domain-or-ip>";
       }
       if (callbackBase) {
-        return `${callbackBase.replace(/\/$/, '')}/platform/webhook/${webhookUuid}`;
+        return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
       }
-      return `/platform/webhook/${webhookUuid}`;
+      return `/api/platform/webhook/${webhookUuid}`;
     },
 
     openWebhookDialog(webhookUuid) {

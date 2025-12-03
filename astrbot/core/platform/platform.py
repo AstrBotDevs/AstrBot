@@ -56,7 +56,7 @@ class Platform(abc.ABC):
         """统一 Webhook 回调入口。
 
         支持统一 Webhook 模式的平台需要实现此方法。
-        当 Dashboard 收到 /platform/webhook/{uuid} 请求时，会调用此方法。
+        当 Dashboard 收到 /api/platform/webhook/{uuid} 请求时，会调用此方法。
 
         Args:
             request: Quart 请求对象

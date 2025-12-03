@@ -636,7 +636,7 @@ CONFIG_METADATA_2 = {
                     "unified_webhook_mode": {
                         "description": "统一 Webhook 模式",
                         "type": "bool",
-                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /platform/webhook/{webhook_uuid}。",
+                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
                     "webhook_uuid": {
                         "invisible": True,

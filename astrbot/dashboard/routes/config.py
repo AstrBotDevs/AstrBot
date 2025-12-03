@@ -564,7 +564,7 @@ class ConfigRoute(Route):
             if new_platform_config.get("unified_webhook_mode", False):
                 # 如果没有 webhook_uuid 或为空，自动生成
                 if not new_platform_config.get("webhook_uuid"):
-                    new_platform_config["webhook_uuid"] = uuid.uuid4().hex
+                    new_platform_config["webhook_uuid"] = uuid.uuid4().hex[:16]
 
         self.config["platform"].append(new_platform_config)
         try:
