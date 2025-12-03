@@ -69,6 +69,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # 结束流式对话，并且传输 buffer 中剩余的消息
                 stream_payload["state"] = 10
                 ret = await self._post_send(stream=stream_payload)
+            else:
+                ret = await self._post_send()
 
         except Exception as e:
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
