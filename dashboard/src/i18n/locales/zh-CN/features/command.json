@@ -74,7 +74,7 @@
   },
   "empty": {
     "noCommands": "暂无指令",
-    "noCommandsDesc": "当前没有已注册的指令"
+    "noCommandsDesc": "当前筛选条件下没有找到任何指令"
   },
   "filters": {
     "all": "全部",
