@@ -72,10 +72,10 @@ const detailsDialog = reactive({
 
 // Table headers
 const commandHeaders = computed(() => [
-  { title: tm('table.headers.command'), key: 'effective_command', width: '150px' },
-  { title: tm('table.headers.type'), key: 'type', sortable: false, width: '110px' },
+  { title: tm('table.headers.command'), key: 'effective_command', minWidth: '100px' },
+  { title: tm('table.headers.type'), key: 'type', sortable: false, width: '100px' },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
-  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '240px' },
+  { title: tm('table.headers.description'), key: 'description', sortable: false },
   { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
   { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '100px' },
   { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '140px' }
@@ -711,6 +711,7 @@ code {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
+  white-space: nowrap;
 }
 
 code.sub-command-code {
@@ -732,7 +733,7 @@ code.sub-command-code {
 
 /* Group row styling */
 .v-data-table .group-row {
-  background-color: rgba(var(--v-theme-info), 0.03);
+  background-color: rgba(var(--v-theme-info), 0.05);
 }
 
 .v-data-table .group-row:hover {
@@ -741,11 +742,10 @@ code.sub-command-code {
 
 /* Sub-command row styling */
 .v-data-table .sub-command-row {
-  /* background-color: rgba(var(--v-theme-surface-variant), 0.3); */
-  border-left: 2px solid rgba(var(--v-theme-secondary), 0.3);
+  background-color: rgba(var(--v-theme-info), 0.05);
 }
 
-/* .v-data-table .sub-command-row:hover {
-  background-color: rgba(var(--v-theme-surface-variant), 0.5) !important;
-} */
+.v-data-table .sub-command-row:hover {
+  background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
 </style>
