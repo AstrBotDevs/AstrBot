@@ -84,6 +84,8 @@
     "byPlugin": "Filter by plugin",
     "byType": "Filter by type",
     "byPermission": "Filter by permission",
-    "byStatus": "Filter by status"
+    "byStatus": "Filter by status",
+    "showSystemPlugins": "Show system plugins commands",
+    "systemPluginConflictHint": "System plugin conflicts detected. Resolve conflicts to hide."
   }
 }

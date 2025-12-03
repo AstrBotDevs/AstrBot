@@ -21,6 +21,7 @@ interface CommandItem {
   enabled: boolean;
   is_group: boolean;
   has_conflict: boolean;
+  reserved: boolean;  // 是否是系统插件的指令
   sub_commands: CommandItem[];
 }
 
@@ -52,9 +53,20 @@ const pluginFilter = ref('all');
 const permissionFilter = ref('all');
 const statusFilter = ref('all');
 const typeFilter = ref('all');
+const showSystemPlugins = ref(false);
 
 // Track expanded groups
 const expandedGroups = ref<Set<string>>(new Set());
+
+// 检查是否有涉及系统插件的冲突
+const hasSystemPluginConflict = computed(() => {
+  return commands.value.some(cmd => cmd.has_conflict && cmd.reserved);
+});
+
+// 实际是否显示系统插件（如果有系统插件冲突则强制显示）
+const effectiveShowSystemPlugins = computed(() => {
+  return showSystemPlugins.value || hasSystemPluginConflict.value;
+});
 
 // Rename dialog
 const renameDialog = reactive({
@@ -81,14 +93,23 @@ const commandHeaders = computed(() => [
   { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '140px' }
 ]);
 
-// Computed: unique plugins for filter
+// Computed: unique plugins for filter (排除系统插件，除非显示系统插件)
 const availablePlugins = computed(() => {
-  const plugins = new Set(commands.value.map(cmd => cmd.plugin));
+  const plugins = new Set(
+    commands.value
+      .filter(cmd => effectiveShowSystemPlugins.value || !cmd.reserved)
+      .map(cmd => cmd.plugin)
+  );
   return Array.from(plugins).sort();
 });
 
 // Helper: check if a command matches filters
 const matchesFilters = (cmd: CommandItem, query: string): boolean => {
+  // 系统插件过滤（除非显示系统插件）
+  if (!effectiveShowSystemPlugins.value && cmd.reserved) {
+    return false;
+  }
+
   // Search filter
   if (query) {
     const matchesSearch = 
@@ -426,6 +447,26 @@ onMounted(async () => {
                 <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.disabled') }}:</span>
                 <span class="text-body-1 font-weight-bold text-error">{{ summary.disabled }}</span>
               </div>
+              <v-divider vertical class="mx-1" style="height: 20px;" />
+              <v-checkbox
+                :model-value="effectiveShowSystemPlugins"
+                @update:model-value="showSystemPlugins = !!$event"
+                :label="tm('filters.showSystemPlugins')"
+                density="compact"
+                hide-details
+                :disabled="hasSystemPluginConflict"
+                class="system-plugin-checkbox"
+              >
+                <template v-slot:label>
+                  <span class="text-body-2">{{ tm('filters.showSystemPlugins') }}</span>
+                  <v-tooltip v-if="hasSystemPluginConflict" location="top">
+                    <template v-slot:activator="{ props }">
+                      <v-icon v-bind="props" size="16" color="warning" class="ml-1">mdi-alert-circle</v-icon>
+                    </template>
+                    {{ tm('filters.systemPluginConflictHint') }}
+                  </v-tooltip>
+                </template>
+              </v-checkbox>
             </div>
           </div>
           
@@ -717,6 +758,14 @@ code {
 code.sub-command-code {
   background-color: rgba(var(--v-theme-secondary), 0.1);
   color: rgb(var(--v-theme-secondary));
+}
+
+.system-plugin-checkbox {
+  flex: none;
+}
+
+.system-plugin-checkbox :deep(.v-selection-control) {
+  min-height: auto;
 }
 </style>
 

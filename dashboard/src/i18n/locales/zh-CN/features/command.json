@@ -84,6 +84,8 @@
     "byPlugin": "按插件筛选",
     "byType": "按类型筛选",
     "byPermission": "按权限筛选",
-    "byStatus": "按状态筛选"
+    "byStatus": "按状态筛选",
+    "showSystemPlugins": "显示系统插件指令",
+    "systemPluginConflictHint": "存在涉及系统插件的冲突，需解决冲突后才能隐藏"
   }
 }
