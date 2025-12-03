@@ -265,52 +265,8 @@ onMounted(async () => {
     <v-col cols="12">
       <v-card variant="flat" style="background-color: transparent">
         <v-card-text style="padding: 0px 12px;">
-          <!-- Summary Cards -->
-          <v-row class="mb-4">
-            <v-col cols="12" sm="4">
-              <v-card class="rounded-lg" elevation="1">
-                <v-card-text class="text-center pa-3">
-                  <div class="text-h4 font-weight-bold text-primary">{{ summary.total }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ tm('summary.total') }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-card class="rounded-lg" elevation="1">
-                <v-card-text class="text-center pa-3">
-                  <div class="text-h4 font-weight-bold text-error">{{ summary.disabled }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ tm('summary.disabled') }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-card class="rounded-lg" elevation="1">
-                <v-card-text class="text-center pa-3">
-                  <div class="text-h4 font-weight-bold text-warning">{{ summary.conflicts }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ tm('summary.conflicts') }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
-
-          <!-- Search Bar -->
-          <div class="mb-4 d-flex flex-wrap align-center">
-            <div style="flex-grow: 1; min-width: 200px; max-width: 350px;">
-              <v-text-field
-                v-model="searchQuery"
-                density="compact"
-                :label="tm('search.placeholder')"
-                prepend-inner-icon="mdi-magnify"
-                variant="solo-filled"
-                flat
-                hide-details
-                single-line
-              />
-            </div>
-          </div>
-
-          <!-- Filters -->
-          <v-row class="mb-3">
+          <!-- Filters Row (Top) -->
+          <v-row class="mb-4" align="center">
             <v-col cols="12" sm="4" md="3">
               <v-select
                 v-model="pluginFilter"
@@ -345,6 +301,7 @@ onMounted(async () => {
                   { title: tm('filters.disabled'), value: 'disabled' },
                   { title: tm('filters.conflict'), value: 'conflict' }
                 ]"
+                :label="tm('filters.byStatus')"
                 density="compact"
                 variant="outlined"
                 hide-details
@@ -352,11 +309,40 @@ onMounted(async () => {
             </v-col>
           </v-row>
 
+          <!-- Search Bar + Summary Stats Row -->
+          <div class="mb-4 d-flex flex-wrap align-center ga-4">
+            <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
+              <v-text-field
+                v-model="searchQuery"
+                density="compact"
+                :label="tm('search.placeholder')"
+                prepend-inner-icon="mdi-magnify"
+                variant="solo-filled"
+                flat
+                hide-details
+                single-line
+              />
+            </div>
+            <div class="d-flex align-center ga-4">
+              <div class="d-flex align-center">
+                <v-icon size="18" color="primary" class="mr-1">mdi-console-line</v-icon>
+                <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
+                <span class="text-body-1 font-weight-bold text-primary">{{ summary.total }}</span>
+              </div>
+              <v-divider vertical class="mx-1" style="height: 20px;" />
+              <div class="d-flex align-center">
+                <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
+                <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.disabled') }}:</span>
+                <span class="text-body-1 font-weight-bold text-error">{{ summary.disabled }}</span>
+              </div>
+            </div>
+          </div>
+          
           <!-- Conflict Warning Alert -->
           <v-alert
             v-if="summary.conflicts > 0"
-            type="warning"
-            variant="flat"
+            type="error"
+            variant="tonal"
             class="mb-4"
             prominent
             border="start"

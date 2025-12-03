@@ -74,6 +74,7 @@
     "disabled": "已禁用",
     "conflict": "有冲突",
     "byPlugin": "按插件筛选",
-    "byPermission": "按权限筛选"
+    "byPermission": "按权限筛选",
+    "byStatus": "按状态筛选"
   }
 }

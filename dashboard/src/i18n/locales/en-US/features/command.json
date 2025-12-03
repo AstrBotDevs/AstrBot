@@ -74,6 +74,7 @@
     "disabled": "Disabled",
     "conflict": "Conflict",
     "byPlugin": "Filter by plugin",
-    "byPermission": "Filter by permission"
+    "byPermission": "Filter by permission",
+    "byStatus": "Filter by status"
   }
 }
