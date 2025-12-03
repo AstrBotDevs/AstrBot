@@ -68,7 +68,7 @@ const detailsDialog = reactive({
 const commandHeaders = computed(() => [
   { title: tm('table.headers.command'), key: 'effective_command', width: '180px' },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
-  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '280px' },
+  { title: tm('table.headers.description'), key: 'description', sortable: false, maxWidth: '260px' },
   { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
   { title: tm('table.headers.status'), key: 'enabled', sortable: false, width: '120px' },
   { title: tm('table.headers.actions'), key: 'actions', sortable: false, width: '160px' }
@@ -432,7 +432,7 @@ onMounted(async () => {
 
               <template v-slot:item.actions="{ item }">
                 <div class="d-flex align-center">
-                  <v-btn-group density="comfortable" variant="text" color="primary">
+                  <v-btn-group density="default" variant="text" color="primary">
                     <v-btn
                       v-if="!item.enabled"
                       icon
@@ -440,7 +440,7 @@ onMounted(async () => {
                       color="success"
                       @click="toggleCommand(item)"
                     >
-                      <v-icon>mdi-play</v-icon>
+                      <v-icon size="22">mdi-play</v-icon>
                       <v-tooltip activator="parent" location="top">{{ tm('tooltips.enable') }}</v-tooltip>
                     </v-btn>
                     <v-btn
@@ -450,17 +450,17 @@ onMounted(async () => {
                       color="error"
                       @click="toggleCommand(item)"
                     >
-                      <v-icon>mdi-pause</v-icon>
+                      <v-icon size="22">mdi-pause</v-icon>
                       <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
                     </v-btn>
 
                     <v-btn icon size="small" color="warning" @click="openRenameDialog(item)">
-                      <v-icon>mdi-pencil</v-icon>
+                      <v-icon size="22">mdi-pencil</v-icon>
                       <v-tooltip activator="parent" location="top">{{ tm('tooltips.rename') }}</v-tooltip>
                     </v-btn>
 
                     <v-btn icon size="small" @click="openDetailsDialog(item)">
-                      <v-icon>mdi-information</v-icon>
+                      <v-icon size="22">mdi-information</v-icon>
                       <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDetails') }}</v-tooltip>
                     </v-btn>
                   </v-btn-group>
