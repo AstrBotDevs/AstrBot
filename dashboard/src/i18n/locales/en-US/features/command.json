@@ -27,8 +27,7 @@
   },
   "permission": {
     "everyone": "Everyone",
-    "admin": "Admin",
-    "member": "Member"
+    "admin": "Admin"
   },
   "tooltips": {
     "enable": "Enable command",

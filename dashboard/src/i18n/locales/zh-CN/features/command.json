@@ -27,8 +27,7 @@
   },
   "permission": {
     "everyone": "所有人",
-    "admin": "管理员",
-    "member": "成员"
+    "admin": "管理员"
   },
   "tooltips": {
     "enable": "启用指令",

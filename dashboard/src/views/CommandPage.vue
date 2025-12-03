@@ -98,7 +98,12 @@ const filteredCommands = computed(() => {
   }
 
   if (permissionFilter.value !== 'all') {
-    result = result.filter(cmd => cmd.permission === permissionFilter.value);
+    if (permissionFilter.value === 'everyone') {
+      // "所有人"筛选：包括 everyone 和 member 权限（当前 member 权限实际作用与 everyone 相同）
+      result = result.filter(cmd => cmd.permission === 'everyone' || cmd.permission === 'member');
+    } else {
+      result = result.filter(cmd => cmd.permission === permissionFilter.value);
+    }
   }
 
   if (statusFilter.value !== 'all') {
@@ -222,7 +227,6 @@ const openDetailsDialog = (cmd: CommandItem) => {
 const getPermissionColor = (permission: string) => {
   switch (permission) {
     case 'admin': return 'error';
-    case 'member': return 'warning';
     default: return 'success';
   }
 };
@@ -231,7 +235,6 @@ const getPermissionColor = (permission: string) => {
 const getPermissionLabel = (permission: string) => {
   switch (permission) {
     case 'admin': return tm('permission.admin');
-    case 'member': return tm('permission.member');
     default: return tm('permission.everyone');
   }
 };
@@ -283,8 +286,7 @@ onMounted(async () => {
                 :items="[
                   { title: tm('filters.all'), value: 'all' },
                   { title: tm('permission.everyone'), value: 'everyone' },
-                  { title: tm('permission.admin'), value: 'admin' },
-                  { title: tm('permission.member'), value: 'member' }
+                  { title: tm('permission.admin'), value: 'admin' }
                 ]"
                 :label="tm('filters.byPermission')"
                 density="compact"
