@@ -5,6 +5,11 @@
     "disabled": "已禁用",
     "conflicts": "有冲突"
   },
+  "conflictAlert": {
+    "title": "检测到指令冲突",
+    "description": "当前有 {count} 对指令存在冲突，冲突的指令会同时触发多个插件响应，可能导致意外行为。",
+    "hint": "请点击「重命名」按钮修改冲突指令的名称以解决冲突。"
+  },
   "table": {
     "headers": {
       "command": "指令",

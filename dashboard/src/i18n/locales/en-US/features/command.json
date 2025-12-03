@@ -5,6 +5,11 @@
     "disabled": "Disabled",
     "conflicts": "Conflicts"
   },
+  "conflictAlert": {
+    "title": "Command Conflicts Detected",
+    "description": "There are {count} conflicting commands. Conflicting commands will trigger multiple plugins simultaneously, which may cause unexpected behavior.",
+    "hint": "Click the \"Rename\" button to rename conflicting commands and resolve conflicts."
+  },
   "table": {
     "headers": {
       "command": "Command",

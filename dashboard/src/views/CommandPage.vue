@@ -111,7 +111,28 @@ const filteredCommands = computed(() => {
     }
   }
 
-  return result;
+  // Sort: conflict commands first, grouped by effective_command
+  const conflictCmds: CommandItem[] = [];
+  const normalCmds: CommandItem[] = [];
+  
+  const conflictGroupMap: Map<string, CommandItem[]> = new Map();
+  for (const cmd of result) {
+    if (cmd.has_conflict) {
+      const key = cmd.effective_command || '';
+      if (!conflictGroupMap.has(key)) {
+        conflictGroupMap.set(key, []);
+      }
+      conflictGroupMap.get(key)!.push(cmd);
+    } else {
+      normalCmds.push(cmd);
+    }
+  }
+  
+  for (const [_, group] of conflictGroupMap) {
+    conflictCmds.push(...group);
+  }
+
+  return [...conflictCmds, ...normalCmds];
 });
 
 // Toast helper
@@ -226,6 +247,14 @@ const getStatusInfo = (cmd: CommandItem) => {
   return { text: tm('status.disabled'), color: 'error', variant: 'outlined' as const };
 };
 
+// Get row props for conflict highlighting
+const getRowProps = ({ item }: { item: CommandItem }) => {
+  if (item.has_conflict) {
+    return { class: 'conflict-row' };
+  }
+  return {};
+};
+
 onMounted(async () => {
   await fetchCommands();
 });
@@ -323,6 +352,30 @@ onMounted(async () => {
             </v-col>
           </v-row>
 
+          <!-- Conflict Warning Alert -->
+          <v-alert
+            v-if="summary.conflicts > 0"
+            type="warning"
+            variant="flat"
+            class="mb-4"
+            prominent
+            border="start"
+          >
+            <template v-slot:prepend>
+              <v-icon size="28">mdi-alert-circle</v-icon>
+            </template>
+            <v-alert-title class="text-subtitle-1 font-weight-bold">
+              {{ tm('conflictAlert.title') }}
+            </v-alert-title>
+            <div class="text-body-2 mt-1">
+              {{ tm('conflictAlert.description', { count: summary.conflicts }) }}
+            </div>
+            <div class="text-body-2 mt-2">
+              <v-icon size="16" class="mr-1">mdi-lightbulb-outline</v-icon>
+              {{ tm('conflictAlert.hint') }}
+            </div>
+          </v-alert>
+
           <!-- Commands Table -->
           <v-card class="rounded-lg overflow-hidden elevation-1">
             <v-data-table
@@ -331,6 +384,7 @@ onMounted(async () => {
               :loading="loading"
               item-key="handler_full_name"
               hover
+              :row-props="getRowProps"
             >
               <template v-slot:loader>
                 <v-row class="py-8 d-flex align-center justify-center">
@@ -524,5 +578,17 @@ code {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
+}
+</style>
+
+<style>
+/* Conflict row highlighting */
+.v-data-table .conflict-row {
+  background: linear-gradient(90deg, rgba(var(--v-theme-warning), 0.15) 0%, rgba(var(--v-theme-warning), 0.05) 100%) !important;
+  border-left: 3px solid rgb(var(--v-theme-warning)) !important;
+}
+
+.v-data-table .conflict-row:hover {
+  background: linear-gradient(90deg, rgba(var(--v-theme-warning), 0.25) 0%, rgba(var(--v-theme-warning), 0.1) 100%) !important;
 }
 </style>
