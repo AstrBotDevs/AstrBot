@@ -138,7 +138,7 @@ async def list_commands() -> list[dict[str, Any]]:
     # 检测冲突：按 effective_command 分组
     conflict_groups: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.effective_command:
+        if desc.effective_command and desc.enabled:
             conflict_groups[desc.effective_command].append(desc)
 
     conflict_handler_names: set[str] = set()
@@ -165,7 +165,7 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 
     conflicts = defaultdict(list)
     for desc in descriptors:
-        if not desc.effective_command:
+        if not desc.effective_command or not desc.enabled:
             continue
         conflicts[desc.effective_command].append(desc)
 
