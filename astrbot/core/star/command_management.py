@@ -131,13 +131,16 @@ async def list_commands() -> list[dict[str, Any]]:
     config_records = await db_helper.get_command_configs()
     config_map = {cfg.handler_full_name: cfg for cfg in config_records}
 
-    # 检测冲突：按 original_command 分组
+    for desc in descriptors:
+        if cfg := config_map.get(desc.handler_full_name):
+            _bind_descriptor_with_config(desc, cfg)
+
+    # 检测冲突：按 effective_command 分组
     conflict_groups: dict[str, list[CommandDescriptor]] = defaultdict(list)
     for desc in descriptors:
-        if desc.original_command:
-            conflict_groups[desc.original_command].append(desc)
+        if desc.effective_command:
+            conflict_groups[desc.effective_command].append(desc)
 
-    # 标记冲突的指令
     conflict_handler_names: set[str] = set()
     for key, group in conflict_groups.items():
         if len(group) > 1:
@@ -146,8 +149,6 @@ async def list_commands() -> list[dict[str, Any]]:
 
     result = []
     for desc in descriptors:
-        if cfg := config_map.get(desc.handler_full_name):
-            _bind_descriptor_with_config(desc, cfg)
         desc.has_conflict = desc.handler_full_name in conflict_handler_names
         result.append(_descriptor_to_dict(desc))
     return result
@@ -164,9 +165,9 @@ async def list_command_conflicts() -> list[dict[str, Any]]:
 
     conflicts = defaultdict(list)
     for desc in descriptors:
-        if not desc.original_command:
+        if not desc.effective_command:
             continue
-        conflicts[desc.original_command].append(desc)
+        conflicts[desc.effective_command].append(desc)
 
     details = []
     for key, group in conflicts.items():
