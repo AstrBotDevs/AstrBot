@@ -26,7 +26,6 @@
     "group": "Group",
     "subCommand": "Sub-command"
   },
-  "subCommandCount": "sub-commands",
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",

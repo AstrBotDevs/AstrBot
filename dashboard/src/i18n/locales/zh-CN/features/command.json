@@ -26,7 +26,6 @@
     "group": "指令组",
     "subCommand": "子指令"
   },
-  "subCommandCount": "个子指令",
   "status": {
     "enabled": "已启用",
     "disabled": "已禁用",

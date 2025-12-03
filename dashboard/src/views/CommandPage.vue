@@ -488,15 +488,6 @@ onMounted(async () => {
                   <div>
                     <div class="text-subtitle-1 font-weight-medium">
                       <code :class="{ 'sub-command-code': item.type === 'sub_command' }">{{ item.effective_command }}</code>
-                      <v-chip 
-                        v-if="item.is_group && item.sub_commands?.length > 0" 
-                        size="x-small" 
-                        color="info" 
-                        variant="tonal"
-                        class="ml-2"
-                      >
-                        {{ item.sub_commands.length }} {{ tm('subCommandCount') }}
-                      </v-chip>
                     </div>
                   </div>
                 </div>
@@ -509,7 +500,7 @@ onMounted(async () => {
                   variant="tonal"
                 >
                   <v-icon start size="14">{{ getTypeInfo(item.type).icon }}</v-icon>
-                  {{ getTypeInfo(item.type).text }}
+                  {{ getTypeInfo(item.type).text }}{{ item.is_group && item.sub_commands?.length > 0 ? `(${item.sub_commands.length})` : '' }}
                 </v-chip>
               </template>
 
