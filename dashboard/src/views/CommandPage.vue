@@ -498,7 +498,7 @@ onMounted(async () => {
   </v-dialog>
 
   <!-- Details Dialog -->
-  <v-dialog v-model="detailsDialog.show" max-width="600">
+  <v-dialog v-model="detailsDialog.show" max-width="500">
     <v-card v-if="detailsDialog.command">
       <v-card-title class="text-h5">{{ tm('dialogs.details.title') }}</v-card-title>
       <v-card-text>
