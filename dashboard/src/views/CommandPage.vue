@@ -26,7 +26,6 @@ interface CommandItem {
 }
 
 interface CommandSummary {
-  total: number;
   disabled: number;
   conflicts: number;
 }
@@ -37,7 +36,6 @@ const { tm } = useModuleI18n('features/command');
 const loading = ref(false);
 const commands = ref<CommandItem[]>([]);
 const summary = reactive<CommandSummary>({
-  total: 0,
   disabled: 0,
   conflicts: 0
 });
@@ -243,7 +241,6 @@ const fetchCommands = async () => {
     if (res.data.status === 'ok') {
       commands.value = res.data.data.items || [];
       const s = res.data.data.summary || {};
-      summary.total = s.total || 0;
       summary.disabled = s.disabled || 0;
       summary.conflicts = s.conflicts || 0;
     } else {
@@ -439,7 +436,7 @@ onMounted(async () => {
               <div class="d-flex align-center">
                 <v-icon size="18" color="primary" class="mr-1">mdi-console-line</v-icon>
                 <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
-                <span class="text-body-1 font-weight-bold text-primary">{{ summary.total }}</span>
+                <span class="text-body-1 font-weight-bold text-primary">{{ filteredCommands.length }}</span>
               </div>
               <v-divider vertical class="mx-1" style="height: 20px;" />
               <div class="d-flex align-center">

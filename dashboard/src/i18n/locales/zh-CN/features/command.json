@@ -1,7 +1,7 @@
 {
   "title": "指令管理",
   "summary": {
-    "total": "总指令数",
+    "total": "展示的指令数",
     "disabled": "已禁用",
     "conflicts": "有冲突"
   },
