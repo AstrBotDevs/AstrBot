@@ -11,12 +11,37 @@ import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import defaultPluginIcon from '@/assets/images/plugin_icon.png';
 
-import { ref, computed, onMounted, reactive, inject, watch } from 'vue';
-
+import { ref, computed, onMounted, reactive, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/extension');
+const router = useRouter();
+
+// 检查指令冲突并提示
+const conflictDialog = reactive({
+  show: false,
+  count: 0
+});
+const checkAndPromptConflicts = async () => {
+  try {
+    const res = await axios.get('/api/commands');
+    if (res.data.status === 'ok') {
+      const conflicts = res.data.data.summary?.conflicts || 0;
+      if (conflicts > 0) {
+        conflictDialog.count = conflicts;
+        conflictDialog.show = true;
+      }
+    }
+  } catch (err) {
+    console.debug('Failed to check command conflicts:', err);
+  }
+};
+const handleConflictConfirm = () => {
+  router.push('/commands');
+};
+
 const fileInput = ref(null);
 const activeTab = ref('installed');
 const extension_data = reactive({
@@ -435,7 +460,9 @@ const pluginOn = async (extension) => {
       return;
     }
     toast(res.data.message, "success");
-    getExtensions();
+    await getExtensions();
+
+    await checkAndPromptConflicts();
   } catch (err) {
     toast(err, "error");
   }
@@ -618,6 +645,8 @@ const newExtension = async () => {
         name: res.data.data.name,
         repo: res.data.data.repo || null
       });
+      
+      await checkAndPromptConflicts();
     }).catch((err) => {
       loading_.value = false;
       onLoadingDialogResult(2, err, -1);
@@ -644,6 +673,8 @@ const newExtension = async () => {
           name: res.data.data.name,
           repo: res.data.data.repo || null
         });
+        
+        await checkAndPromptConflicts();
       }).catch((err) => {
         loading_.value = false;
         toast(tm('messages.installFailed') + " " + err, "error");
@@ -1221,6 +1252,34 @@ watch(marketSearch, (newVal) => {
 
   <!-- 卸载插件确认对话框（列表模式用） -->
   <UninstallConfirmDialog v-model="showUninstallDialog" @confirm="handleUninstallConfirm" />
+
+  <!-- 指令冲突提示对话框 -->
+  <v-dialog v-model="conflictDialog.show" max-width="420">
+    <v-card class="rounded-lg">
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+        {{ tm('conflicts.title') }}
+      </v-card-title>
+      <v-card-text class="px-4 pb-2">
+        <div class="d-flex align-center mb-3">
+          <v-chip color="warning" variant="tonal" size="large" class="font-weight-bold">
+            {{ conflictDialog.count }}
+          </v-chip>
+          <span class="ml-2 text-body-1">{{ tm('conflicts.pairs') }}</span>
+        </div>
+        <p class="text-body-2" style="color: rgba(var(--v-theme-on-surface), 0.7);">
+          {{ tm('conflicts.message') }}
+        </p>
+      </v-card-text>
+      <v-card-actions class="pa-4 pt-2">
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="conflictDialog.show = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn color="warning" variant="flat" @click="handleConflictConfirm">
+          {{ tm('conflicts.goToManage') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- 危险插件确认对话框 -->
   <v-dialog v-model="dangerConfirmDialog" width="500" persistent>

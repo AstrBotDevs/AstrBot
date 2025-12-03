@@ -30,7 +30,7 @@ class CommandDescriptor:
     raw_command_name: str | None = None
     current_fragment: str | None = None
     parent_signature: str = ""
-    parent_group_handler: str = ""  # 父指令组的 handler_full_name
+    parent_group_handler: str = ""
     original_command: str | None = None
     effective_command: str | None = None
     aliases: list[str] = field(default_factory=list)

@@ -173,5 +173,11 @@
     "errors": {
       "confirmNotRegistered": "$confirm not properly registered"
     }
+  },
+  "conflicts": {
+    "title": "Command Conflicts Detected",
+    "message": "This may cause some commands to not work properly. It is recommended to go to Command Management to resolve.",
+    "pairs": "command conflicts",
+    "goToManage": "Go to Manage"
   }
 }
