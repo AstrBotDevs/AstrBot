@@ -63,8 +63,8 @@ class PlatformRoute(Route):
             )
             return Response().error("平台未支持统一 Webhook 模式").__dict__, 500
         except Exception as e:
-            logger.error(f"处理 webhook 回调时发生错误: {e}")
-            return Response().error(f"处理回调失败: {e}").__dict__, 500
+            logger.error(f"处理 webhook 回调时发生错误: {e}", exc_info=True)
+            return Response().error("处理回调失败").__dict__, 500
 
     def _find_platform_by_uuid(self, webhook_uuid: str) -> Platform | None:
         """根据 webhook_uuid 查找对应的平台适配器
