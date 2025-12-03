@@ -59,8 +59,19 @@ class WecomAIBotServer:
         )
 
     async def verify_url(self):
-        """验证回调 URL"""
-        args = quart.request.args
+        """内部服务器的 GET 验证入口"""
+        return await self.handle_verify(quart.request)
+
+    async def handle_verify(self, request):
+        """处理 URL 验证请求，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            验证响应元组 (content, status_code, headers)
+        """
+        args = request.args
         msg_signature = args.get("msg_signature")
         timestamp = args.get("timestamp")
         nonce = args.get("nonce")
@@ -81,8 +92,19 @@ class WecomAIBotServer:
         return result, 200, {"Content-Type": "text/plain"}
 
     async def handle_message(self):
-        """处理消息回调"""
-        args = quart.request.args
+        """内部服务器的 POST 消息回调入口"""
+        return await self.handle_callback(quart.request)
+
+    async def handle_callback(self, request):
+        """处理消息回调，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            响应元组 (content, status_code, headers)
+        """
+        args = request.args
         msg_signature = args.get("msg_signature")
         timestamp = args.get("timestamp")
         nonce = args.get("nonce")
@@ -102,7 +124,7 @@ class WecomAIBotServer:
 
         try:
             # 获取请求体
-            post_data = await quart.request.get_data()
+            post_data = await request.get_data()
 
             # 确保 post_data 是 bytes 类型
             if isinstance(post_data, str):

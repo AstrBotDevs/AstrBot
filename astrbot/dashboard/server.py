@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
+from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
@@ -79,6 +80,7 @@ class AstrBotDashboard:
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
+        self.platform_route = PlatformRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -102,7 +104,7 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
-        allowed_endpoints = ["/api/auth/login", "/api/file"]
+        allowed_endpoints = ["/api/auth/login", "/api/file", "/api/platform/webhook"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
         # 声明 JWT

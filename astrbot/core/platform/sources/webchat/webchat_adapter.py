@@ -76,9 +76,8 @@ class WebChatAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
+        super().__init__(platform_config, event_queue)
 
-        self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")

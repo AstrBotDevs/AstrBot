@@ -55,8 +55,7 @@ class MisskeyPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config or {}
+        super().__init__(platform_config or {}, event_queue)
         self.settings = platform_settings or {}
         self.instance_url = self.config.get("misskey_instance_url", "")
         self.access_token = self.config.get("misskey_token", "")

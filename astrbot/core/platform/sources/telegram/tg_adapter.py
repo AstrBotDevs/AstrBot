@@ -42,8 +42,7 @@ class TelegramPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
 
