@@ -19,7 +19,7 @@ const MainRoutes = {
     {
       name: 'Commands',
       path: '/commands',
-      component: () => import('@/views/command/index.vue')
+      component: () => import('@/views/commandPanel/index.vue')
     },
     {
       name: 'ExtensionMarketplace',
