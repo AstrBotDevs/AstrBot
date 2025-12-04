@@ -87,7 +87,9 @@ class StatRoute(Route):
             platform_stats = await self.db_helper.get_platform_stats(offset_sec)
 
             # 获取时间序列数据（按小时分桶）
-            time_series = await self.db_helper.get_platform_stats_time_series(offset_sec)
+            time_series = await self.db_helper.get_platform_stats_time_series(
+                offset_sec
+            )
             message_time_based_stats = [[ts, cnt] for ts, cnt in time_series]
             message_count = await self.db_helper.count_platform_stats()
 
@@ -112,7 +114,13 @@ class StatRoute(Route):
 
             # 构建平台统计数据
             platform_data = [
-                {"name": stat.platform_id, "count": stat.count, "timestamp": int(stat.timestamp.timestamp()) if stat.timestamp else 0}
+                {
+                    "name": stat.platform_id,
+                    "count": stat.count,
+                    "timestamp": int(stat.timestamp.timestamp())
+                    if stat.timestamp
+                    else 0,
+                }
                 for stat in platform_stats
             ]
 
