@@ -496,18 +496,10 @@ onMounted(async () => {
             <v-data-table
               :headers="commandHeaders"
               :items="filteredCommands"
-              :loading="loading"
               item-key="handler_full_name"
               hover
               :row-props="getRowProps"
             >
-              <template v-slot:loader>
-                <v-row class="py-8 d-flex align-center justify-center">
-                  <v-progress-circular indeterminate color="primary" />
-                  <span class="ml-2">{{ t('core.status.loading') }}</span>
-                </v-row>
-              </template>
-
               <template v-slot:item.effective_command="{ item }">
                 <div class="d-flex align-center py-2">
                   <!-- Expand/collapse button for groups -->
