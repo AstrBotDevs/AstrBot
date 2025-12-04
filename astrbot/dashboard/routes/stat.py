@@ -84,23 +84,12 @@ class StatRoute(Route):
         offset_sec = request.args.get("offset_sec", 86400)
         offset_sec = int(offset_sec)
         try:
-            stat = self.db_helper.get_base_stats(offset_sec)
-            now = int(time.time())
-            start_time = now - offset_sec
-            message_time_based_stats = []
+            platform_stats = await self.db_helper.get_platform_stats(offset_sec)
 
-            idx = 0
-            for bucket_end in range(start_time, now, 3600):
-                cnt = 0
-                while (
-                    idx < len(stat.platform)
-                    and stat.platform[idx].timestamp < bucket_end
-                ):
-                    cnt += stat.platform[idx].count
-                    idx += 1
-                message_time_based_stats.append([bucket_end, cnt])
-
-            stat_dict = stat.__dict__
+            # 获取时间序列数据（按小时分桶）
+            time_series = await self.db_helper.get_platform_stats_time_series(offset_sec)
+            message_time_based_stats = [[ts, cnt] for ts, cnt in time_series]
+            message_count = await self.db_helper.count_platform_stats()
 
             cpu_percent = psutil.cpu_percent(interval=0.5)
             thread_count = threading.active_count()
@@ -121,28 +110,30 @@ class StatRoute(Route):
                 int(time.time()) - self.core_lifecycle.start_time,
             )
 
-            stat_dict.update(
-                {
-                    "platform": self.db_helper.get_grouped_base_stats(
-                        offset_sec,
-                    ).platform,
-                    "message_count": self.db_helper.get_total_message_count() or 0,
-                    "platform_count": len(
-                        self.core_lifecycle.platform_manager.get_insts(),
-                    ),
-                    "plugin_count": len(plugins),
-                    "plugins": plugin_info,
-                    "message_time_series": message_time_based_stats,
-                    "running": running_time,  # 现在返回时间组件而不是格式化的字符串
-                    "memory": {
-                        "process": psutil.Process().memory_info().rss >> 20,
-                        "system": psutil.virtual_memory().total >> 20,
-                    },
-                    "cpu_percent": round(cpu_percent, 1),
-                    "thread_count": thread_count,
-                    "start_time": self.core_lifecycle.start_time,
+            # 构建平台统计数据
+            platform_data = [
+                {"name": stat.platform_id, "count": stat.count, "timestamp": int(stat.timestamp.timestamp()) if stat.timestamp else 0}
+                for stat in platform_stats
+            ]
+
+            stat_dict = {
+                "platform": platform_data,
+                "message_count": message_count,
+                "platform_count": len(
+                    self.core_lifecycle.platform_manager.get_insts(),
+                ),
+                "plugin_count": len(plugins),
+                "plugins": plugin_info,
+                "message_time_series": message_time_based_stats,
+                "running": running_time,  # 现在返回时间组件而不是格式化的字符串
+                "memory": {
+                    "process": psutil.Process().memory_info().rss >> 20,
+                    "system": psutil.virtual_memory().total >> 20,
                 },
-            )
+                "cpu_percent": round(cpu_percent, 1),
+                "thread_count": thread_count,
+                "start_time": self.core_lifecycle.start_time,
+            }
 
             return Response().ok(stat_dict).__dict__
         except Exception as e:
