@@ -87,7 +87,7 @@ onMounted(async () => {
   <v-row>
     <v-col cols="12">
       <v-card variant="flat" style="background-color: transparent">
-        <v-card-text style="padding: 0px 12px;">
+        <v-card-text style="padding: 20px 12px;">
           <!-- 过滤器组件 -->
           <CommandFilters
             :plugin-filter="pluginFilter"
