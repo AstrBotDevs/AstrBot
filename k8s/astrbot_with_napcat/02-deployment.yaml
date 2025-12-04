@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astrbot-stack
+  namespace: astrbot-ns
+  labels:
+    app: astrbot-stack
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Use Recreate strategy for stateful applications
+  selector:
+    matchLabels:
+      app: astrbot-stack
+  template:
+    metadata:
+      labels:
+        app: astrbot-stack
+    spec:
+      containers:
+        - name: napcat
+          image: mlikiowa/napcat-docker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAPCAT_UID
+              value: "1000"
+            - name: NAPCAT_GID
+              value: "1000"
+            - name: MODE
+              value: "astrbot"
+          ports:
+            - containerPort: 6099
+              name: napcat-web
+          volumeMounts:
+            - name: shared-data
+              mountPath: /AstrBot/data
+            - name: napcat-config
+              mountPath: /app/napcat/config
+            - name: napcat-qq
+              mountPath: /app/.config/QQ
+        
+        - name: astrbot
+          image: soulter/astrbot:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          ports:
+            - containerPort: 6185
+              name: astrbot-web
+          volumeMounts:
+            - name: shared-data
+              mountPath: /AstrBot/data
+
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim:
+            claimName: astrbot-data-shared-pvc
+        - name: napcat-config
+          persistentVolumeClaim:
+            claimName: napcat-config-pvc
+        - name: napcat-qq
+          persistentVolumeClaim:
+            claimName: napcat-qq-pvc
