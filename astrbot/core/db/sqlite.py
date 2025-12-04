@@ -695,7 +695,8 @@ class SQLiteDatabase(BaseDatabase):
                         config.auto_managed = auto_managed
                 await session.flush()
                 await session.refresh(config)
-                return config
+            await session.commit()
+            return config
 
     async def delete_command_config(self, handler_full_name: str) -> None:
         await self.delete_command_configs([handler_full_name])
@@ -711,6 +712,7 @@ class SQLiteDatabase(BaseDatabase):
                         col(CommandConfig.handler_full_name).in_(handler_full_names),
                     ),
                 )
+            await session.commit()
 
     async def list_command_conflicts(
         self,
@@ -776,7 +778,8 @@ class SQLiteDatabase(BaseDatabase):
                         record.auto_generated = auto_generated
                 await session.flush()
                 await session.refresh(record)
-                return record
+            await session.commit()
+            return record
 
     async def delete_command_conflicts(self, ids: list[int]) -> None:
         if not ids:
@@ -787,6 +790,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(
                     delete(CommandConflict).where(col(CommandConflict.id).in_(ids)),
                 )
+            await session.commit()
 
     # ====
     # Deprecated Methods
