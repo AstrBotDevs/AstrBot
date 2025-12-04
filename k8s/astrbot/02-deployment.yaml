@@ -27,14 +27,12 @@ spec:
           ports:
             - containerPort: 6185
               name: webui
-            - containerPort: 6195
-              name: wecom-wh
             - containerPort: 6199
               name: qq-ws
-            - containerPort: 6196
-              name: qq-off-wh
-            - containerPort: 11451
-              name: wechat-wh
+            # - containerPort: 6195
+            #   name: wecom-wh
+            # - containerPort: 6196
+            #   name: qq-off-wh
           volumeMounts:
             - name: data
               mountPath: /AstrBot/data

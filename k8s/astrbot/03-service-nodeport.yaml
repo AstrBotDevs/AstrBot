@@ -14,19 +14,15 @@ spec:
       port: 6185
       targetPort: 6185
       nodePort: 30185
-    - name: wecom-wh
-      port: 6195
-      targetPort: 6195
-      nodePort: 30195
     - name: qq-ws
       port: 6199
       targetPort: 6199
       nodePort: 30199
-    - name: qq-off-wh
-      port: 6196
-      targetPort: 6196
-      nodePort: 30196
-    - name: wechat-wh
-      port: 11451
-      targetPort: 11451
-      nodePort: 31451
+    # - name: wecom-wh
+    #   port: 6195
+    #   targetPort: 6195
+    #   nodePort: 30195
+    # - name: qq-off-wh
+    #   port: 6196
+    #   targetPort: 6196
+    #   nodePort: 30196

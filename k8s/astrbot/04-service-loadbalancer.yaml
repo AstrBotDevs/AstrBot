@@ -13,15 +13,12 @@ spec:
     - name: webui
       port: 6185
       targetPort: 6185
-    - name: wecom-wh
-      port: 6195
-      targetPort: 6195
     - name: qq-ws
       port: 6199
       targetPort: 6199
-    - name: qq-off-wh
-      port: 6196
-      targetPort: 6196
-    - name: wechat-wh
-      port: 11451
-      targetPort: 11451
+    # - name: wecom-wh
+    #   port: 6195
+    #   targetPort: 6195
+    # - name: qq-off-wh
+    #   port: 6196
+    #   targetPort: 6196
