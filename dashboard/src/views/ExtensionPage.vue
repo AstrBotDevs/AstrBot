@@ -1273,7 +1273,7 @@ watch(marketSearch, (newVal) => {
       </v-card-text>
       <v-card-actions class="pa-4 pt-2">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="conflictDialog.show = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn variant="text" @click="conflictDialog.show = false">{{ tm('conflicts.later') }}</v-btn>
         <v-btn color="warning" variant="flat" @click="handleConflictConfirm">
           {{ tm('conflicts.goToManage') }}
         </v-btn>
