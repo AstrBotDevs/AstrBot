@@ -105,8 +105,8 @@ class SQLiteDatabase(BaseDatabase):
                 text("""
                 SELECT * FROM platform_stats
                 WHERE timestamp >= :start_time
-                ORDER BY timestamp DESC
                 GROUP BY platform_id
+                ORDER BY timestamp DESC
                 """),
                 {"start_time": start_time},
             )
