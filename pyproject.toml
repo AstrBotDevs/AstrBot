@@ -60,6 +60,7 @@ dependencies = [
   "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
   "xinference-client",
   "tenacity>=9.1.2",
+  "aiomysql>=0.3.2",
 ]
 
 [dependency-groups]
