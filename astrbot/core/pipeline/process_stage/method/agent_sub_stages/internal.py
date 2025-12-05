@@ -9,7 +9,7 @@ from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
-from astrbot.core.message.components import Image
+from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -22,6 +22,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType, star_map
+from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -55,6 +56,13 @@ class InternalAgentSubStage(Stage):
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
         self.show_reasoning = settings.get("display_reasoning_text", False)
         self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
+
+        file_extract_conf: dict = settings.get("file_extract", {})
+        self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
+        self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
+        self.file_extract_msh_api_key: str = file_extract_conf.get(
+            "moonshotai_api_key", ""
+        )
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -113,6 +121,50 @@ class InternalAgentSubStage(Stage):
             if req.func_tool is None:
                 req.func_tool = ToolSet()
             req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+
+    async def _apply_file_extract(
+        self,
+        event: AstrMessageEvent,
+        req: ProviderRequest,
+    ):
+        """Apply file extract to the provider request"""
+        file_paths = []
+        file_names = []
+        for comp in event.message_obj.message:
+            if isinstance(comp, File):
+                file_paths.append(await comp.get_file())
+                file_names.append(comp.name)
+            elif isinstance(comp, Reply) and comp.chain:
+                for reply_comp in comp.chain:
+                    if isinstance(reply_comp, File):
+                        file_paths.append(await reply_comp.get_file())
+                        file_names.append(reply_comp.name)
+        if not file_paths:
+            return
+        if not req.prompt:
+            req.prompt = "总结一下文件里面讲了什么？"
+        if self.file_extract_prov == "moonshotai":
+            if not self.file_extract_msh_api_key:
+                logger.error("Moonshot AI API key for file extract is not set")
+                return
+            file_contents = await asyncio.gather(
+                *[
+                    extract_file_moonshotai(file_path, self.file_extract_msh_api_key)
+                    for file_path in file_paths
+                ]
+            )
+        else:
+            logger.error(f"Unsupported file extract provider: {self.file_extract_prov}")
+            return
+
+        # add file extract results to contexts
+        for file_content, file_name in zip(file_contents, file_names):
+            req.contexts.append(
+                {
+                    "role": "system",
+                    "content": f"File Extract Results of user uploaded files:\n{file_content}\nFile Name: {file_name or 'Unknown'}",
+                },
+            )
 
     def _truncate_contexts(
         self,
@@ -346,6 +398,17 @@ class InternalAgentSubStage(Stage):
 
                 event.set_extra("provider_request", req)
 
+            # fix contexts json str
+            if isinstance(req.contexts, str):
+                req.contexts = json.loads(req.contexts)
+
+            # apply file extract
+            if self.file_extract_enabled:
+                try:
+                    await self._apply_file_extract(event, req)
+                except Exception as e:
+                    logger.error(f"Error occurred while applying file extract: {e}")
+
             if not req.prompt and not req.image_urls:
                 return
 
@@ -355,10 +418,6 @@ class InternalAgentSubStage(Stage):
 
             # apply knowledge base feature
             await self._apply_kb(event, req)
-
-            # fix contexts json str
-            if isinstance(req.contexts, str):
-                req.contexts = json.loads(req.contexts)
 
             # truncate contexts to fit max length
             if req.contexts:

@@ -6,6 +6,7 @@ from .file import FileRoute
 from .knowledge_base import KnowledgeBaseRoute
 from .log import LogRoute
 from .persona import PersonaRoute
+from .platform import PlatformRoute
 from .plugin import PluginRoute
 from .session_management import SessionManagementRoute
 from .stat import StatRoute
@@ -22,6 +23,7 @@ __all__ = [
     "KnowledgeBaseRoute",
     "LogRoute",
     "PersonaRoute",
+    "PlatformRoute",
     "PluginRoute",
     "SessionManagementRoute",
     "StatRoute",

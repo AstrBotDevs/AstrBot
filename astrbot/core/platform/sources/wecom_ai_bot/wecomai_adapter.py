@@ -22,6 +22,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .wecomai_api import (
@@ -103,9 +104,7 @@ class WecomAIBotAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
 
         # 初始化配置参数
@@ -122,6 +121,7 @@ class WecomAIBotAdapter(Platform):
             "wecomaibot_friend_message_welcome_text",
             "",
         )
+        self.unified_webhook_mode = self.config.get("unified_webhook_mode", False)
 
         # 平台元数据
         self.metadata = PlatformMetadata(
@@ -425,16 +425,33 @@ class WecomAIBotAdapter(Platform):
 
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
-        logger.info("启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port)
 
         async def run_both():
-            # 同时运行HTTP服务器和队列监听器
-            await asyncio.gather(
-                self.server.start_server(),
-                self.queue_listener.run(),
-            )
+            # 如果启用统一 webhook 模式，则不启动独立服务器
+            webhook_uuid = self.config.get("webhook_uuid")
+            if self.unified_webhook_mode and webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(企业微信智能机器人)", webhook_uuid)
+                # 只运行队列监听器
+                await self.queue_listener.run()
+            else:
+                logger.info(
+                    "启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port
+                )
+                # 同时运行HTTP服务器和队列监听器
+                await asyncio.gather(
+                    self.server.start_server(),
+                    self.queue_listener.run(),
+                )
 
         return run_both()
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        # 根据请求方法分发到不同的处理函数
+        if request.method == "GET":
+            return await self.server.handle_verify(request)
+        else:
+            return await self.server.handle_callback(request)
 
     async def terminate(self):
         """终止适配器"""

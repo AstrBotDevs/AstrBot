@@ -6,7 +6,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core import db_helper
+from astrbot.core.db.po import PlatformMessageHistory
+from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -74,9 +76,8 @@ class WebChatAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
+        super().__init__(platform_config, event_queue)
 
-        self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
@@ -96,6 +97,92 @@ class WebChatAdapter(Platform):
         await WebChatMessageEvent._send(message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
 
+    async def _get_message_history(
+        self, message_id: int
+    ) -> PlatformMessageHistory | None:
+        return await db_helper.get_platform_message_history_by_id(message_id)
+
+    async def _parse_message_parts(
+        self,
+        message_parts: list,
+        depth: int = 0,
+        max_depth: int = 1,
+    ) -> tuple[list, list[str]]:
+        """解析消息段列表，返回消息组件列表和纯文本列表
+
+        Args:
+            message_parts: 消息段列表
+            depth: 当前递归深度
+            max_depth: 最大递归深度（用于处理 reply）
+
+        Returns:
+            tuple[list, list[str]]: (消息组件列表, 纯文本列表)
+        """
+        components = []
+        text_parts = []
+
+        for part in message_parts:
+            part_type = part.get("type")
+            if part_type == "plain":
+                text = part.get("text", "")
+                components.append(Plain(text))
+                text_parts.append(text)
+            elif part_type == "reply":
+                message_id = part.get("message_id")
+                reply_chain = []
+                reply_message_str = ""
+                sender_id = None
+                sender_name = None
+
+                # recursively get the content of the referenced message
+                if depth < max_depth and message_id:
+                    history = await self._get_message_history(message_id)
+                    if history and history.content:
+                        reply_parts = history.content.get("message", [])
+                        if isinstance(reply_parts, list):
+                            (
+                                reply_chain,
+                                reply_text_parts,
+                            ) = await self._parse_message_parts(
+                                reply_parts,
+                                depth=depth + 1,
+                                max_depth=max_depth,
+                            )
+                            reply_message_str = "".join(reply_text_parts)
+                        sender_id = history.sender_id
+                        sender_name = history.sender_name
+
+                components.append(
+                    Reply(
+                        id=message_id,
+                        chain=reply_chain,
+                        message_str=reply_message_str,
+                        sender_id=sender_id,
+                        sender_nickname=sender_name,
+                    )
+                )
+            elif part_type == "image":
+                path = part.get("path")
+                if path:
+                    components.append(Image.fromFileSystem(path))
+            elif part_type == "record":
+                path = part.get("path")
+                if path:
+                    components.append(Record.fromFileSystem(path))
+            elif part_type == "file":
+                path = part.get("path")
+                if path:
+                    filename = part.get("filename") or (
+                        os.path.basename(path) if path else "file"
+                    )
+                    components.append(File(name=filename, file=path))
+            elif part_type == "video":
+                path = part.get("path")
+                if path:
+                    components.append(Video.fromFileSystem(path))
+
+        return components, text_parts
+
     async def convert_message(self, data: tuple) -> AstrBotMessage:
         username, cid, payload = data
 
@@ -108,36 +195,15 @@ class WebChatAdapter(Platform):
         abm.session_id = f"webchat!{username}!{cid}"
 
         abm.message_id = str(uuid.uuid4())
-        abm.message = []
 
-        if payload["message"]:
-            abm.message.append(Plain(payload["message"]))
-        if payload["image_url"]:
-            if isinstance(payload["image_url"], list):
-                for img in payload["image_url"]:
-                    abm.message.append(
-                        Image.fromFileSystem(os.path.join(self.imgs_dir, img)),
-                    )
-            else:
-                abm.message.append(
-                    Image.fromFileSystem(
-                        os.path.join(self.imgs_dir, payload["image_url"]),
-                    ),
-                )
-        if payload["audio_url"]:
-            if isinstance(payload["audio_url"], list):
-                for audio in payload["audio_url"]:
-                    path = os.path.join(self.imgs_dir, audio)
-                    abm.message.append(Record(file=path, path=path))
-            else:
-                path = os.path.join(self.imgs_dir, payload["audio_url"])
-                abm.message.append(Record(file=path, path=path))
+        # 处理消息段列表
+        message_parts = payload.get("message", [])
+        abm.message, message_str_parts = await self._parse_message_parts(message_parts)
 
         logger.debug(f"WebChatAdapter: {abm.message}")
 
-        message_str = payload["message"]
         abm.timestamp = int(time.time())
-        abm.message_str = message_str
+        abm.message_str = "".join(message_str_parts)
         abm.raw_message = data
         return abm
 

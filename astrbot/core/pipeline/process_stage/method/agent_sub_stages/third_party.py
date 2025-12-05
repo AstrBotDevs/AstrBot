@@ -57,7 +57,7 @@ async def run_third_party_agent(
         logger.error(f"Third party agent runner error: {e}")
         err_msg = (
             f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
-            f"错误信息: {e!s}\n\n请在控制台查看和分享错误详情。\n"
+            f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
         )
         yield MessageChain().message(err_msg)
 

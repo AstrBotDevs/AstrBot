@@ -138,10 +138,11 @@ const pluginMarketHeaders = computed(() => [
 
 // 过滤要显示的插件
 const filteredExtensions = computed(() => {
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
   if (!showReserved.value) {
-    return extension_data?.data?.filter(ext => !ext.reserved) || [];
+    return data.filter(ext => !ext.reserved);
   }
-  return extension_data.data || [];
+  return data;
 });
 
 // 通过搜索过滤插件
@@ -280,7 +281,8 @@ const checkUpdate = () => {
     onlinePluginsNameMap.set(plugin.name, plugin);
   });
 
-  extension_data.data.forEach(extension => {
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  data.forEach(extension => {
     const repoKey = extension.repo?.toLowerCase();
     const onlinePlugin = repoKey ? onlinePluginsMap.get(repoKey) : null;
     const onlinePluginByName = onlinePluginsNameMap.get(extension.name);
@@ -562,8 +564,9 @@ const trimExtensionName = () => {
 };
 
 const checkAlreadyInstalled = () => {
-  const installedRepos = new Set(extension_data.data.map(ext => ext.repo?.toLowerCase()));
-  const installedNames = new Set(extension_data.data.map(ext => ext.name));
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const installedRepos = new Set(data.map(ext => ext.repo?.toLowerCase()));
+  const installedNames = new Set(data.map(ext => ext.name));
 
   for (let i = 0; i < pluginMarketData.value.length; i++) {
     const plugin = pluginMarketData.value[i];

@@ -36,7 +36,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库",
+            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
         )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())

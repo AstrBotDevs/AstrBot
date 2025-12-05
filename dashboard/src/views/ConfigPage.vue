@@ -37,13 +37,21 @@
             :config_data="config_data"
           />
 
-          <v-btn icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
-            color="darkprimary" @click="updateConfig">
-          </v-btn>
+          <v-tooltip :text="tm('actions.save')" location="left">
+            <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+                color="darkprimary" @click="updateConfig">
+              </v-btn>
+            </template>
+          </v-tooltip>
 
-          <v-btn icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
-            @click="configToString(); codeEditorDialog = true">
-          </v-btn>
+          <v-tooltip :text="tm('codeEditor.title')" location="left">
+            <template v-slot:activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+                @click="configToString(); codeEditorDialog = true">
+              </v-btn>
+            </template>
+          </v-tooltip>
 
           <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
             <template v-slot:activator="{ props }">

@@ -4,8 +4,16 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.7.3"
+VERSION = "4.7.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+
+WEBHOOK_SUPPORTED_PLATFORMS = [
+    "qq_official_webhook",
+    "weixin_official_account",
+    "wecom",
+    "wecom_ai_bot",
+    "slack",
+]
 
 # 默认配置
 DEFAULT_CONFIG = {
@@ -76,6 +84,11 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
+        "file_extract": {
+            "enable": False,
+            "provider": "moonshotai",
+            "moonshotai_api_key": "",
+        },
     },
     "provider_stt_settings": {
         "enable": False,
@@ -180,6 +193,8 @@ CONFIG_METADATA_2 = {
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
@@ -210,6 +225,8 @@ CONFIG_METADATA_2 = {
                         "token": "",
                         "encoding_aes_key": "",
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
                         "active_send_mode": False,
@@ -224,6 +241,8 @@ CONFIG_METADATA_2 = {
                         "encoding_aes_key": "",
                         "kf_name": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
@@ -236,6 +255,8 @@ CONFIG_METADATA_2 = {
                         "wecom_ai_bot_name": "",
                         "token": "",
                         "encoding_aes_key": "",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
                     },
@@ -303,6 +324,8 @@ CONFIG_METADATA_2 = {
                         "app_token": "",
                         "signing_secret": "",
                         "slack_connection_mode": "socket",  # webhook, socket
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "slack_webhook_host": "0.0.0.0",
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
@@ -382,16 +405,28 @@ CONFIG_METADATA_2 = {
                         "description": "Slack Webhook Host",
                         "type": "string",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "slack_webhook_port": {
                         "description": "Slack Webhook Port",
                         "type": "int",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "slack_webhook_path": {
                         "description": "Slack Webhook Path",
                         "type": "string",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "active_send_mode": {
                         "description": "是否换用主动发送接口",
@@ -581,6 +616,33 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 活动名称",
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "port": {
+                        "description": "回调服务器端口",
+                        "type": "int",
+                        "hint": "回调服务器端口。留空则不启用回调服务器。",
+                        "condition": {
+                            "unified_webhook_mode": False,
+                        },
+                    },
+                    "callback_server_host": {
+                        "description": "回调服务器主机",
+                        "type": "string",
+                        "hint": "回调服务器主机。留空则不启用回调服务器。",
+                        "condition": {
+                            "unified_webhook_mode": False,
+                        },
+                    },
+                    "unified_webhook_mode": {
+                        "description": "统一 Webhook 模式",
+                        "type": "bool",
+                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
+                    },
+                    "webhook_uuid": {
+                        "invisible": True,
+                        "description": "Webhook UUID",
+                        "type": "string",
+                        "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。",
                     },
                 },
             },
@@ -2069,6 +2131,20 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
+                    "file_extract": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "provider": {
+                                "type": "string",
+                            },
+                            "moonshotai_api_key": {
+                                "type": "string",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2403,6 +2479,36 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
+            # "file_extract": {
+            #     "description": "文档解析能力 [beta]",
+            #     "type": "object",
+            #     "items": {
+            #         "provider_settings.file_extract.enable": {
+            #             "description": "启用文档解析能力",
+            #             "type": "bool",
+            #         },
+            #         "provider_settings.file_extract.provider": {
+            #             "description": "文档解析提供商",
+            #             "type": "string",
+            #             "options": ["moonshotai"],
+            #             "condition": {
+            #                 "provider_settings.file_extract.enable": True,
+            #             },
+            #         },
+            #         "provider_settings.file_extract.moonshotai_api_key": {
+            #             "description": "Moonshot AI API Key",
+            #             "type": "string",
+            #             "condition": {
+            #                 "provider_settings.file_extract.provider": "moonshotai",
+            #                 "provider_settings.file_extract.enable": True,
+            #             },
+            #         },
+            #     },
+            #     "condition": {
+            #         "provider_settings.agent_runner_type": "local",
+            #         "provider_settings.enable": True,
+            #     },
+            # },
             "others": {
                 "description": "其他配置",
                 "type": "object",
