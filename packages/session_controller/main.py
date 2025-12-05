@@ -1,4 +1,3 @@
-import copy
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
@@ -7,7 +6,6 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.utils.session_waiter import (
     FILTERS,
-    USER_SESSIONS,
     SessionController,
     SessionWaiter,
     session_waiter,
@@ -23,10 +21,12 @@ class Main(Star):
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
     async def handle_session_control_agent(self, event: AstrMessageEvent):
         """会话控制代理"""
+        if getattr(event, "_bypass_session_waiter", False):
+            return
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
-            if session_id in USER_SESSIONS:
-                await SessionWaiter.trigger(session_id, event)
+            handled = await SessionWaiter.trigger(session_id, event)
+            if handled:
                 event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
@@ -96,11 +96,10 @@ class Main(Star):
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),
                         )
-                        new_event = copy.copy(event)
-                        # 重新推入事件队列
-                        self.context.get_event_queue().put_nowait(new_event)
-                        event.stop_event()
-                        controller.stop()
+                        controller.fallback_to_llm(
+                            self.context.get_event_queue(),
+                            event,
+                        )
 
                     try:
                         await empty_mention_waiter(event)

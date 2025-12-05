@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import copy
 import hashlib
 import re
 import uuid
@@ -29,6 +30,9 @@ from .platform_metadata import PlatformMetadata
 
 
 class AstrMessageEvent(abc.ABC):
+    # extras 中可安全清理的瞬态字段清单；子类可按需扩展
+    TRANSIENT_EXTRA_KEYS: set[str] = set()
+
     def __init__(
         self,
         message_str: str,
@@ -71,6 +75,8 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+        # 可选的绕过标记，避免被 SessionWaiter 再次截获
+        self._bypass_session_waiter = False
 
     def get_platform_name(self):
         """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
@@ -277,6 +283,22 @@ class AstrMessageEvent(abc.ABC):
     def clear_result(self):
         """清除消息事件的结果。"""
         self._result = None
+
+    def clone_for_llm(self) -> "AstrMessageEvent":
+        """浅拷贝并重置状态，以便重新走默认 LLM 流程。"""
+        new_event: AstrMessageEvent = copy.copy(self)
+        new_event.clear_result()
+        # 保留非瞬态 extras，避免跨管线上下文丢失
+        new_event._extras = self._extras.copy()
+        for key in self.TRANSIENT_EXTRA_KEYS:
+            new_event._extras.pop(key, None)
+        new_event._has_send_oper = False
+        new_event.call_llm = False
+        new_event.is_wake = False
+        new_event.is_at_or_wake_command = False
+        new_event.plugins_name = None
+        new_event._bypass_session_waiter = False
+        return new_event
 
     """消息链相关"""
 
