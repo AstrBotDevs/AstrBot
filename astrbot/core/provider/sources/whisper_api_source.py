@@ -6,8 +6,10 @@ from openai import NOT_GIVEN, AsyncOpenAI
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
-from astrbot.core.utils.tencent_record_helper import convert_to_pcm_wav
+from astrbot.core.utils.tencent_record_helper import (
+    convert_to_pcm_wav,
+    tencent_silk_to_wav,
+)
 
 from ..entities import ProviderType
 from ..provider import STTProvider
@@ -57,6 +59,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     async def get_text(self, audio_url: str) -> str:
         """Only supports mp3, mp4, mpeg, m4a, wav, webm"""
         is_tencent = False
+        output_path = None
 
         if audio_url.startswith("http"):
             if "multimedia.nt.qq.com.cn" in audio_url:
@@ -96,4 +99,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             model=self.model_name,
             file=("audio.wav", open(audio_url, "rb")),
         )
+
+        # remove temp file
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(audio_url)
+            except Exception as e:
+                logger.error(f"Failed to remove temp file {audio_url}: {e}")
         return result.text
