@@ -32,6 +32,7 @@ import zhCNKnowledgeBaseDetail from './locales/zh-CN/features/knowledge-base/det
 import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/document.json';
 import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNMigration from './locales/zh-CN/features/migration.json';
+import zhCNCommand from './locales/zh-CN/features/command.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -68,6 +69,7 @@ import enUSKnowledgeBaseDetail from './locales/en-US/features/knowledge-base/det
 import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/document.json';
 import enUSPersona from './locales/en-US/features/persona.json';
 import enUSMigration from './locales/en-US/features/migration.json';
+import enUSCommand from './locales/en-US/features/command.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -111,7 +113,8 @@ export const translations = {
         document: zhCNKnowledgeBaseDocument
       },
       persona: zhCNPersona,
-      migration: zhCNMigration
+      migration: zhCNMigration,
+      command: zhCNCommand
     },
     messages: {
       errors: zhCNErrors,
@@ -155,7 +158,8 @@ export const translations = {
         document: enUSKnowledgeBaseDocument
       },
       persona: enUSPersona,
-      migration: enUSMigration
+      migration: enUSMigration,
+      command: enUSCommand
     },
     messages: {
       errors: enUSErrors,
