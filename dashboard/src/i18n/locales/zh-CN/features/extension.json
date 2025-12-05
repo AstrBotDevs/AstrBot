@@ -94,7 +94,7 @@
   "dialogs": {
     "error": {
       "title": "错误信息",
-      "checkConsole": "详情请检查控制台"
+      "checkConsole": "详情请检查平台日志"
     },
     "config": {
       "title": "插件配置",

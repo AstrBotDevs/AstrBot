@@ -274,7 +274,7 @@ class KnowledgeBaseRoute(Route):
                 except Exception as e:
                     return (
                         Response()
-                        .error(f"测试重排序模型失败: {e!s}，请检查控制台日志输出。")
+                        .error(f"测试重排序模型失败: {e!s}，请检查平台日志输出。")
                         .__dict__
                     )
 

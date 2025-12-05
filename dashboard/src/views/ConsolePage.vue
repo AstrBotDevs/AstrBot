@@ -13,10 +13,11 @@ const { tm } = useModuleI18n('features/console');
       <h4>{{ tm('title') }}</h4>
       <div class="d-flex align-center">
         <v-switch
-          v-model="autoScrollDisabled"
-          :label="autoScrollDisabled ? tm('autoScroll.disabled') : tm('autoScroll.enabled')"
+          v-model="autoScrollEnabled"
+          :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
           density="compact"
+          color="primary"
           style="margin-right: 16px;"
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
@@ -57,7 +58,7 @@ export default {
   },
   data() {
     return {
-      autoScrollDisabled: false,
+      autoScrollEnabled: true,
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -68,9 +69,9 @@ export default {
     }
   },
   watch: {
-    autoScrollDisabled(val) {
+    autoScrollEnabled(val) {
       if (this.$refs.consoleDisplayer) {
-        this.$refs.consoleDisplayer.autoScroll = !val;
+        this.$refs.consoleDisplayer.autoScroll = val;
       }
     }
   },
