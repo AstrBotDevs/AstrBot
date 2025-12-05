@@ -115,6 +115,18 @@ class ProcessLLMRequest:
             f"Cannot get image caption because provider `{provider_id}` is not exist.",
         )
 
+    def _select_provider(self, event: AstrMessageEvent):
+        """选择使用的 LLM 提供商"""
+        sel_provider = event.get_extra("selected_provider")
+        _ctx = self.ctx
+        if sel_provider and isinstance(sel_provider, str):
+            provider = _ctx.get_provider_by_id(sel_provider)
+            if not provider:
+                logger.error(f"未找到指定的提供商: {sel_provider}。")
+            return provider
+
+        return _ctx.get_using_provider(umo=event.unified_msg_origin)
+
     async def process_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         cfg: dict = self.ctx.get_config(umo=event.unified_msg_origin)[
@@ -165,7 +177,14 @@ class ProcessLLMRequest:
             await self._ensure_persona(req, cfg, event.unified_msg_origin)
 
             # image caption
-            if img_cap_prov_id and req.image_urls:
+            if (
+                img_cap_prov_id
+                and req.image_urls
+                and "image"
+                not in self._select_provider(event).provider_config.get(
+                    "modalities", ["image"]
+                )
+            ):
                 await self._ensure_img_caption(req, cfg, img_cap_prov_id)
 
         # quote message processing
