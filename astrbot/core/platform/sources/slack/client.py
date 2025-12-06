@@ -49,50 +49,61 @@ class SlackWebhookClient:
 
         @self.app.route(self.path, methods=["POST"])
         async def slack_events():
-            """处理 Slack 事件"""
-            try:
-                # 获取请求体和头部
-                body = cast(bytes, await request.get_data())
-                event_data = json.loads(body.decode("utf-8"))
-
-                # Verify Slack request signature
-                timestamp = request.headers.get("X-Slack-Request-Timestamp")
-                signature = request.headers.get("X-Slack-Signature")
-                if not timestamp or not signature:
-                    return Response("Missing headers", status=400)
-                # Calculate the HMAC signature
-                sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
-                my_signature = (
-                    "v0="
-                    + hmac.new(
-                        self.signing_secret.encode("utf-8"),
-                        sig_basestring.encode("utf-8"),
-                        hashlib.sha256,
-                    ).hexdigest()
-                )
-                # Verify the signature
-                if not hmac.compare_digest(my_signature, signature):
-                    logger.warning("Slack request signature verification failed")
-                    return Response("Invalid signature", status=400)
-                logger.info(f"Received Slack event: {event_data}")
-
-                # 处理 URL 验证事件
-                if event_data.get("type") == "url_verification":
-                    return {"challenge": event_data.get("challenge")}
-                # 处理事件
-                if self.event_handler and event_data.get("type") == "event_callback":
-                    await self.event_handler(event_data)
-
-                return Response("", status=200)
-
-            except Exception as e:
-                logger.error(f"处理 Slack 事件时出错: {e}")
-                return Response("Internal Server Error", status=500)
+            """内部服务器的 POST 回调入口"""
+            return await self.handle_callback(request)
 
         @self.app.route("/health", methods=["GET"])
         async def health_check():
             """健康检查端点"""
             return {"status": "ok", "service": "slack-webhook"}
+
+    async def handle_callback(self, req):
+        """处理 Slack 回调请求，可被统一 webhook 入口复用
+
+        Args:
+            req: Quart 请求对象
+
+        Returns:
+            Response 对象或字典
+        """
+        try:
+            # 获取请求体和头部
+            body = cast(bytes, await req.get_data())
+            event_data = json.loads(body.decode("utf-8"))
+
+            # Verify Slack request signature
+            timestamp = req.headers.get("X-Slack-Request-Timestamp")
+            signature = req.headers.get("X-Slack-Signature")
+            if not timestamp or not signature:
+                return Response("Missing headers", status=400)
+            # Calculate the HMAC signature
+            sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
+            my_signature = (
+                "v0="
+                + hmac.new(
+                    self.signing_secret.encode("utf-8"),
+                    sig_basestring.encode("utf-8"),
+                    hashlib.sha256,
+                ).hexdigest()
+            )
+            # Verify the signature
+            if not hmac.compare_digest(my_signature, signature):
+                logger.warning("Slack request signature verification failed")
+                return Response("Invalid signature", status=400)
+            logger.info(f"Received Slack event: {event_data}")
+
+            # 处理 URL 验证事件
+            if event_data.get("type") == "url_verification":
+                return {"challenge": event_data.get("challenge")}
+            # 处理事件
+            if self.event_handler and event_data.get("type") == "event_callback":
+                await self.event_handler(event_data)
+
+            return Response("", status=200)
+
+        except Exception as e:
+            logger.error(f"处理 Slack 事件时出错: {e}")
+            return Response("Internal Server Error", status=500)
 
     async def start(self):
         """启动 Webhook 服务器"""

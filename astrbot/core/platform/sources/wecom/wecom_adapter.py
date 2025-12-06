@@ -3,7 +3,7 @@ import os
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import cast
+from typing import Any, cast
 
 import quart
 from requests import Response
@@ -26,6 +26,7 @@ from astrbot.api.platform import (
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
 from .wecom_kf import WeChatKF
@@ -64,8 +65,20 @@ class WecomServer:
         self.shutdown_event = asyncio.Event()
 
     async def verify(self):
-        logger.info(f"验证请求有效性: {quart.request.args}")
-        args = quart.request.args
+        """内部服务器的 GET 验证入口"""
+        return await self.handle_verify(quart.request)
+
+    async def handle_verify(self, request) -> str:
+        """处理验证请求，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            验证响应
+        """
+        logger.info(f"验证请求有效性: {request.args}")
+        args = request.args
         try:
             echo_str = self.crypto.check_signature(
                 args.get("msg_signature"),
@@ -80,10 +93,22 @@ class WecomServer:
             raise
 
     async def callback_command(self):
-        data = await quart.request.get_data()
-        msg_signature = quart.request.args.get("msg_signature")
-        timestamp = quart.request.args.get("timestamp")
-        nonce = quart.request.args.get("nonce")
+        """内部服务器的 POST 回调入口"""
+        return await self.handle_callback(quart.request)
+
+    async def handle_callback(self, request) -> str:
+        """处理回调请求，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            响应内容
+        """
+        data = await request.get_data()
+        msg_signature = request.args.get("msg_signature")
+        timestamp = request.args.get("timestamp")
+        nonce = request.args.get("nonce")
         try:
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
@@ -120,14 +145,14 @@ class WecomPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
             "api_base_url",
             "https://qyapi.weixin.qq.com/cgi-bin/",
         )
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
 
         if not self.api_base_url:
             self.api_base_url = "https://qyapi.weixin.qq.com/cgi-bin/"
@@ -234,7 +259,23 @@ class WecomPlatformAdapter(Platform):
                     )
             except Exception as e:
                 logger.error(e)
-        await self.server.start_polling()
+
+        # 如果启用统一 webhook 模式，则不启动独立服务器
+        webhook_uuid = self.config.get("webhook_uuid")
+        if self.unified_webhook_mode and webhook_uuid:
+            log_webhook_info(f"{self.meta().id}(企业微信)", webhook_uuid)
+            # 保持运行状态，等待 shutdown
+            await self.server.shutdown_event.wait()
+        else:
+            await self.server.start_polling()
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        # 根据请求方法分发到不同的处理函数
+        if request.method == "GET":
+            return await self.server.handle_verify(request)
+        else:
+            return await self.server.handle_callback(request)
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()

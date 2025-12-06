@@ -13,9 +13,9 @@ class PlatformMessageHistoryManager:
         content: dict,  # TODO: parse from message chain
         sender_id: str | None = None,
         sender_name: str | None = None,
-    ):
+    ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
-        await self.db.insert_platform_message_history(
+        return await self.db.insert_platform_message_history(
             platform_id=platform_id,
             user_id=user_id,
             content=content,

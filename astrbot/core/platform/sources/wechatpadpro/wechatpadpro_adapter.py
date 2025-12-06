@@ -43,10 +43,9 @@ class WeChatPadProAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
+        super().__init__(platform_config, event_queue)
         self._shutdown_event = None
         self.wxnewpass = None
-        self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings.get("unique_session", False)
 

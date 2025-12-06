@@ -38,9 +38,8 @@ class AiocqhttpAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
+        super().__init__(platform_config, event_queue)
 
-        self.config = platform_config
         self.settings = platform_settings
         self.unique_session = platform_settings["unique_session"]
         self.host = platform_config["ws_reverse_host"]

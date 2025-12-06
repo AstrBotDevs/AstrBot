@@ -14,7 +14,7 @@ try:
     import pydub
 except Exception:
     logger.warning(
-        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 控制台 -> 安装 Pip 库安装 pydub。",
+        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 平台日志 -> 安装 Pip 库安装 pydub。",
     )
 
 

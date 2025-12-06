@@ -32,7 +32,7 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _from_segment_to_slack_block(
         segment: BaseMessageComponent,
         web_client: AsyncWebClient,
-    ) -> dict:
+    ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
         if isinstance(segment, Plain):
             return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
@@ -86,7 +86,6 @@ class SlackMessageEvent(AstrMessageEvent):
                     "text": f"文件: <{file_url}|{segment.name or '文件'}>",
                 },
             }
-        return {"type": "section", "text": {"type": "mrkdwn", "text": str(segment)}}
 
     @staticmethod
     async def _parse_slack_blocks(
@@ -116,7 +115,8 @@ class SlackMessageEvent(AstrMessageEvent):
                     segment,
                     web_client,
                 )
-                blocks.append(block)
+                if block:
+                    blocks.append(block)
 
         # 如果最后还有文本内容
         if text_content.strip():

@@ -4,6 +4,14 @@
   "adapters": "平台适配器",
   "addAdapter": "创建机器人",
   "emptyText": "暂无平台适配器，点击 创建机器人 添加",
+  "viewWebhook": "查看 Webhook 链接",
+  "webhookCopied": "Webhook URL 已复制到剪贴板",
+  "webhookCopyFailed": "复制失败，请手动复制",
+  "webhookDialog": {
+    "title": "Webhook 回调地址",
+    "description": "回调地址如下，请确保网络环境可以公网访问。也可以在日志中查看回调地址信息。建议填写 配置文件 -> 系统 中的「对外可达的回调接口地址」配置项。",
+    "close": "关闭"
+  },
   "details": {
     "adapterType": "适配器类型",
     "token": "Token",
@@ -50,5 +58,22 @@
     "connected": "已连接",
     "disconnected": "已断开",
     "error": "错误"
+  },
+  "runtimeStatus": {
+    "running": "运行中",
+    "error": "发生错误",
+    "pending": "等待启动",
+    "stopped": "已停止",
+    "unknown": "未知",
+    "errors": "个错误"
+  },
+  "errorDialog": {
+    "title": "错误详情",
+    "platformId": "平台 ID",
+    "errorCount": "错误数量",
+    "lastError": "最近错误",
+    "occurredAt": "发生时间",
+    "traceback": "错误堆栈",
+    "close": "关闭"
   }
 } 

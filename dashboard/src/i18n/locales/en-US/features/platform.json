@@ -4,6 +4,14 @@
   "adapters": "Platform Adapters",
   "addAdapter": "Add Adapter",
   "emptyText": "No platform adapters yet, click Add Adapter to create one",
+  "viewWebhook": "View Webhook URL",
+  "webhookCopied": "Webhook URL copied to clipboard",
+  "webhookCopyFailed": "Copy failed, please copy manually",
+  "webhookDialog": {
+    "title": "Webhook Callback URL",
+    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
+    "close": "Close"
+  },
   "details": {
     "adapterType": "Adapter Type",
     "token": "Token",
@@ -50,5 +58,22 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "error": "Error"
+  },
+  "runtimeStatus": {
+    "running": "Running",
+    "error": "Error",
+    "pending": "Pending",
+    "stopped": "Stopped",
+    "unknown": "Unknown",
+    "errors": "error(s)"
+  },
+  "errorDialog": {
+    "title": "Error Details",
+    "platformId": "Platform ID",
+    "errorCount": "Error Count",
+    "lastError": "Last Error",
+    "occurredAt": "Occurred At",
+    "traceback": "Traceback",
+    "close": "Close"
   }
 } 
