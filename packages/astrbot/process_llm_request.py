@@ -165,8 +165,44 @@ class ProcessLLMRequest:
             await self._ensure_persona(req, cfg, event.unified_msg_origin)
 
             # image caption
+            # 只有当前 provider 不支持图像时才使用图像转述
             if img_cap_prov_id and req.image_urls:
-                await self._ensure_img_caption(req, cfg, img_cap_prov_id)
+                current_provider = self.ctx.get_using_provider(
+                    umo=event.unified_msg_origin
+                )
+                provider_supports_image = False
+
+                logger.debug(f"[IMG Caption] 当前 provider: {current_provider}")
+
+                if current_provider:
+                    try:
+                        provider_id = current_provider.meta().id
+                        logger.debug(f"[IMG Caption] Provider ID: {provider_id}")
+
+                        # 直接从当前 provider 的配置获取 modalities
+                        modalities = current_provider.provider_config.get(
+                            "modalities", []
+                        )
+                        logger.debug(
+                            f"[IMG Caption] 当前 provider 配置 modalities: {modalities}"
+                        )
+                        if "image" in modalities:
+                            provider_supports_image = True
+                            logger.debug(
+                                "[IMG Caption] Provider 支持图像能力，跳过图像转述"
+                            )
+                    except Exception as e:
+                        logger.warning(f"[IMG Caption] 获取 provider 信息失败: {e}")
+                else:
+                    logger.debug("[IMG Caption] 当前没有 provider")
+
+                if not provider_supports_image:
+                    logger.debug("[IMG Caption] 当前 provider 不支持图像，启用图像转述")
+                    await self._ensure_img_caption(req, cfg, img_cap_prov_id)
+                else:
+                    logger.debug(
+                        "[IMG Caption] 当前 provider 支持图像，直接传递图片 URL"
+                    )
 
         # quote message processing
         # 解析引用内容
