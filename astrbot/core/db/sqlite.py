@@ -522,7 +522,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id).in_(attachment_ids)
                 )
-                result = T.cast(CursorResult,await session.execute(query))
+                result = T.cast(CursorResult, await session.execute(query))
                 return result.rowcount
 
     async def insert_persona(
