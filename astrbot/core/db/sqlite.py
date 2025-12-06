@@ -3,6 +3,7 @@ import threading
 import typing as T
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
@@ -489,7 +490,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(Attachment).where(
-                Attachment.attachment_id.in_(attachment_ids)
+                col(Attachment.attachment_id).in_(attachment_ids)
             )
             result = await session.execute(query)
             return list(result.scalars().all())
@@ -505,7 +506,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id) == attachment_id
                 )
-                result = await session.execute(query)
+                result = T.cast(CursorResult, await session.execute(query))
                 return result.rowcount > 0
 
     async def delete_attachments(self, attachment_ids: list[str]) -> int:
@@ -521,7 +522,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id).in_(attachment_ids)
                 )
-                result = await session.execute(query)
+                result = T.cast(CursorResult,await session.execute(query))
                 return result.rowcount
 
     async def insert_persona(
