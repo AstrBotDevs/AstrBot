@@ -49,7 +49,7 @@ def port_checker(port: int, host: str = "localhost"):
         return False
 
 
-def save_temp_img(img: Image.Image | str) -> str:
+def save_temp_img(img: Image.Image | bytes) -> str:
     temp_dir = os.path.join(get_astrbot_data_path(), "temp")
     # 获得文件创建时间，清除超过 12 小时的
     try:

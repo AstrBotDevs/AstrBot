@@ -30,6 +30,8 @@ class ConversationCommands:
             session_id,
             curr,
         )
+        if not conv:
+            return None
         return conv.persona_id
 
     def ltm_enabled(self, event: AstrMessageEvent):

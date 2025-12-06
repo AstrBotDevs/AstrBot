@@ -284,6 +284,10 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(tool_call, str):
                     # workaround for #1359
                     tool_call = json.loads(tool_call)
+                if tools is None:
+                    # 工具集未提供
+                    # Should be unreachable
+                    raise Exception("工具集未提供")
                 for tool in tools.func_list:
                     if (
                         tool_call.type == "function"

@@ -3,6 +3,7 @@ import inspect
 import os
 import traceback
 import uuid
+from typing import Any
 
 from quart import request
 
@@ -26,7 +27,7 @@ from astrbot.core.star.star import star_registry
 from .route import Response, Route, RouteContext
 
 
-def try_cast(value: str, type_: str):
+def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
             return int(value)
@@ -505,9 +506,9 @@ class ConfigRoute(Route):
             if not isinstance(inst, EmbeddingProvider):
                 return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
 
-            # 初始化
-            if getattr(inst, "initialize", None):
-                await inst.initialize()
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
 
             # 获取嵌入向量维度
             vec = await inst.get_embedding("echo")
@@ -777,7 +778,7 @@ class ConfigRoute(Route):
         return {"metadata": CONFIG_METADATA_2, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

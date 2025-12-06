@@ -2,9 +2,12 @@ import asyncio
 import logging
 import os
 import socket
+from typing import cast
 
 import jwt
 import psutil
+from flask.json.provider import DefaultJSONProvider
+from psutil._common import addr as psutil_addr
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
@@ -21,7 +24,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
 
-APP: Quart = None
+APP: Quart
 
 
 class AstrBotDashboard:
@@ -48,7 +51,7 @@ class AstrBotDashboard:
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        self.app.json.sort_keys = False
+        cast(DefaultJSONProvider, self.app.json).sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
@@ -147,7 +150,7 @@ class AstrBotDashboard:
         """获取占用端口的进程详细信息"""
         try:
             for conn in psutil.net_connections(kind="inet"):
-                if conn.laddr.port == port:
+                if cast(psutil_addr, conn.laddr).port == port:
                     try:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息

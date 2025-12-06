@@ -117,7 +117,9 @@ class RespondStage(Stage):
         if not self.enable_seg:
             return False
 
-        if self.only_llm_result and not event.get_result().is_llm_result():
+        if (result := event.get_result()) is None:
+            return False
+        if self.only_llm_result and result.is_llm_result():
             return False
 
         if event.get_platform_name() in [
@@ -185,7 +187,7 @@ class RespondStage(Stage):
                     if isinstance(component, Comp.File) and component.file:
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
-                        event.get_result().chain[idx] = component
+                        result.chain[idx] = component
 
             # 检查消息链是否为空
             try:

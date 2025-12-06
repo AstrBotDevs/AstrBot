@@ -4,7 +4,7 @@ import asyncio
 import copy
 import json
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any
 
 import aiohttp
@@ -118,7 +118,7 @@ class FunctionToolManager:
         name: str,
         func_args: list[dict],
         desc: str,
-        handler: Callable[..., Awaitable[Any]],
+        handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
     ) -> FuncTool:
         params = {
             "type": "object",  # hard-coded here
@@ -140,7 +140,7 @@ class FunctionToolManager:
         name: str,
         func_args: list,
         desc: str,
-        handler: Callable[..., Awaitable[Any]],
+        handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
     ) -> None:
         """添加函数调用工具
 

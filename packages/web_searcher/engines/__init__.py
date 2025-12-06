@@ -3,7 +3,7 @@ import urllib.parse
 from dataclasses import dataclass
 
 from aiohttp import ClientSession
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 6.1; rv:84.0) Gecko/20100101 Firefox/84.0",
@@ -45,13 +45,13 @@ class SearchEngine:
         self.page = 1
         self.headers = HEADERS
 
-    def _set_selector(self, selector: str) -> None:
+    def _set_selector(self, selector: str) -> str:
         raise NotImplementedError
 
-    def _get_next_page(self):
+    def _get_next_page(self, query: str):
         raise NotImplementedError
 
-    async def _get_html(self, url: str, data: dict = None) -> str:
+    async def _get_html(self, url: str, data: dict | None = None) -> str:
         headers = self.headers
         headers["Referer"] = url
         headers["User-Agent"] = random.choice(USER_AGENTS)
@@ -83,6 +83,9 @@ class SearchEngine:
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
 
+    def _get_url(self, tag: Tag) -> str:
+        return self.tidy_text(tag.get_text())
+
     async def search(self, query: str, num_results: int) -> list[SearchResult]:
         query = urllib.parse.quote(query)
 
@@ -92,12 +95,16 @@ class SearchEngine:
             links = soup.select(self._set_selector("links"))
             results = []
             for link in links:
-                title = self.tidy_text(
-                    link.select_one(self._set_selector("title")).text,
-                )
-                url = link.select_one(self._set_selector("url"))
+                # Safely get the title text (select_one may return None)
+                title_elem = link.select_one(self._set_selector("title"))
+                title = ""
+                if title_elem is not None:
+                    title = self.tidy_text(title_elem.get_text())
+
+                url_tag = link.select_one(self._set_selector("url"))
                 snippet = ""
-                if title and url:
+                if title and url_tag:
+                    url = self._get_url(url_tag)
                     results.append(SearchResult(title=title, url=url, snippet=snippet))
             return results[:num_results] if len(results) > num_results else results
         except Exception as e:

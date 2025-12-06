@@ -127,7 +127,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: tuple = None):
+    def _exec_sql(self, sql: str, params: tuple | None = None):
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -224,9 +224,11 @@ class SQLiteDatabase:
 
         c.close()
 
-        return Stats(platform, [], [])
+        return Stats(platform)
 
-    def get_conversation_by_user_id(self, user_id: str, cid: str) -> Conversation:
+    def get_conversation_by_user_id(
+        self, user_id: str, cid: str
+    ) -> Conversation | None:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -258,7 +260,7 @@ class SQLiteDatabase:
             (user_id, cid, history, updated_at, created_at),
         )
 
-    def get_conversations(self, user_id: str) -> tuple:
+    def get_conversations(self, user_id: str) -> list[Conversation]:
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:

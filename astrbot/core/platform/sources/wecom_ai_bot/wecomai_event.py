@@ -39,7 +39,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _send(
-        message_chain: MessageChain,
+        message_chain: MessageChain | None,
         stream_id: str,
         queue_mgr: WecomAIQueueMgr,
         streaming: bool = False,
@@ -90,7 +90,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain | None):
         """发送消息"""
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
@@ -98,7 +98,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         )
         stream_id = raw.get("stream_id", self.session_id)
         await WecomAIBotMessageEvent._send(message, stream_id, self.queue_mgr)
-        await super().send(message)
+        await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback=False):
         """流式发送消息，参考webchat的send_streaming设计"""

@@ -24,6 +24,10 @@ class AstrBotConfig(dict):
     - 如果传入了 schema，将会通过 schema 解析出 default_config，此时传入的 default_config 会被忽略。
     """
 
+    config_path: str
+    default_config: dict
+    schema: dict | None
+
     def __init__(
         self,
         config_path: str = ASTRBOT_CONFIG_PATH,

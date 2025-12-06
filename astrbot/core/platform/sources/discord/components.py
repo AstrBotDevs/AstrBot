@@ -97,8 +97,8 @@ class DiscordView(BaseMessageComponent):
 
     def __init__(
         self,
-        components: list[BaseMessageComponent] = None,
-        timeout: float = None,
+        components: list[BaseMessageComponent] | None = None,
+        timeout: float | None = None,
     ):
         self.components = components or []
         self.timeout = timeout
