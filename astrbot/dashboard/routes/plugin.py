@@ -5,7 +5,6 @@ import ssl
 import traceback
 from datetime import datetime
 from dataclasses import dataclass
-from typing import List, Optional
 import hashlib
 
 import aiohttp
@@ -31,9 +30,9 @@ PLUGIN_UPDATE_CONCURRENCY = (
 
 @dataclass
 class RegistrySource:
-    urls: List[str]
+    urls: list[str]
     cache_file: str
-    md5_url: Optional[str]  # None means "no remote MD5, always treat cache as stale"
+    md5_url: str | None  # None means "no remote MD5, always treat cache as stale"
 
 
 class PluginRoute(Route):
