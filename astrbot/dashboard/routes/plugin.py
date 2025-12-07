@@ -84,11 +84,15 @@ class PluginRoute(Route):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
 
-        cache_file = "data/plugins.json"
-
+        # 根据插件源使用不同的缓存文件
         if custom:
+            # 对自定义URL生成一个安全的文件名
+            import hashlib
+            url_hash = hashlib.md5(custom.encode()).hexdigest()[:8]
+            cache_file = f"data/plugins_custom_{url_hash}.json"
             urls = [custom]
         else:
+            cache_file = "data/plugins.json"
             urls = [
                 "https://api.soulter.top/astrbot/plugins",
                 "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
@@ -98,7 +102,7 @@ class PluginRoute(Route):
         cached_data = None
         if not force_refresh:
             # 先检查MD5是否匹配，如果匹配则使用缓存
-            if await self._is_cache_valid(cache_file):
+            if await self._is_cache_valid(cache_file, custom):
                 cached_data = self._load_plugin_cache(cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
@@ -128,9 +132,9 @@ class PluginRoute(Route):
                             logger.warning(f"远程插件市场数据为空: {url}")
                             continue  # 继续尝试其他URL或使用缓存
 
-                        logger.info("成功获取远程插件市场数据")
+                        logger.info(f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件")
                         # 获取最新的MD5并保存到缓存
-                        current_md5 = await self._get_remote_md5()
+                        current_md5 = await self._get_remote_md5(custom)
                         self._save_plugin_cache(
                             cache_file,
                             remote_data,
@@ -151,7 +155,7 @@ class PluginRoute(Route):
 
         return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
 
-    async def _is_cache_valid(self, cache_file: str) -> bool:
+    async def _is_cache_valid(self, cache_file: str, custom_url: str | None = None) -> bool:
         """检查缓存是否有效（基于MD5）"""
         try:
             if not os.path.exists(cache_file):
@@ -167,7 +171,7 @@ class PluginRoute(Route):
                 return False
 
             # 获取远程MD5
-            remote_md5 = await self._get_remote_md5()
+            remote_md5 = await self._get_remote_md5(custom_url)
             if not remote_md5:
                 logger.warning("无法获取远程MD5，将使用缓存")
                 return True  # 如果无法获取远程MD5，认为缓存有效
@@ -182,12 +186,33 @@ class PluginRoute(Route):
             logger.warning(f"检查缓存有效性失败: {e}")
             return False
 
-    async def _get_remote_md5(self) -> str:
+    async def _get_remote_md5(self, custom_url: str | None = None) -> str:
         """获取远程插件数据的MD5"""
         try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
+            # 如果是自定义源，尝试获取MD5（如果有的话）
+            if custom_url:
+                # 尝试从自定义源获取MD5，假设有-md5后缀的URL
+                md5_url = custom_url.rstrip('.json') + '-md5.json'
+                try:
+                    async with (
+                        aiohttp.ClientSession(
+                            trust_env=True,
+                            connector=connector,
+                        ) as session,
+                        session.get(md5_url) as response,
+                    ):
+                        if response.status == 200:
+                            data = await response.json()
+                            return data.get("md5", "")
+                except Exception as e:
+                    logger.debug(f"从自定义源获取MD5失败: {e}")
+                # 如果无法获取MD5，返回空字符串
+                return ""
+            
+            # 默认源的MD5获取
             async with (
                 aiohttp.ClientSession(
                     trust_env=True,
@@ -547,7 +572,7 @@ class PluginRoute(Route):
 
         plugin_dir = os.path.join(
             self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name,
+            plugin_obj.root_dir_name or "",
         )
 
         if not os.path.isdir(plugin_dir):
