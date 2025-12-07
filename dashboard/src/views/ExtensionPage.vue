@@ -562,10 +562,18 @@ const cancelDangerInstall = () => {
 
 // 自定义插件源管理方法
 const loadCustomSources = () => {
-  const stored = localStorage.getItem('customPluginSources');
-  if (stored) {
-    customSources.value = JSON.parse(stored);
+  try {
+    const stored = localStorage.getItem('customPluginSources');
+    if (stored) {
+      customSources.value = JSON.parse(stored);
+    }
+  } catch (e) {
+    // 如果解析失败，回退到空数组并清理掉无效值
+    console.warn('Failed to parse customPluginSources from localStorage:', e);
+    customSources.value = [];
+    localStorage.removeItem('customPluginSources');
   }
+  
   // 加载当前选中的插件源
   const currentSource = localStorage.getItem('selectedPluginSource');
   if (currentSource) {
@@ -585,7 +593,34 @@ const addCustomSource = () => {
   showSourceDialog.value = true;
 };
 
+const selectPluginSource = (sourceUrl) => {
+  selectedSource.value = sourceUrl;
+  if (sourceUrl) {
+    localStorage.setItem('selectedPluginSource', sourceUrl);
+  } else {
+    localStorage.removeItem('selectedPluginSource');
+  }
+  // 重新加载插件市场数据
+  refreshPluginMarket();
+};
+
+// 获取当前选中的源对象
+const selectedSourceObj = computed(() => {
+  if (!selectedSource.value) return null;
+  return customSources.value.find(s => s.url === selectedSource.value) || null;
+});
+
+const editCustomSource = (source) => {
+  if (!source) return;
+  editingSource.value = true;
+  originalSourceUrl.value = source.url;
+  sourceName.value = source.name;
+  sourceUrl.value = source.url;
+  showSourceDialog.value = true;
+};
+
 const removeCustomSource = (source) => {
+  if (!source) return;
   sourceToRemove.value = source;
   showRemoveSourceDialog.value = true;
 };
@@ -609,36 +644,19 @@ const confirmRemoveSource = () => {
   }
 };
 
-const selectPluginSource = (sourceUrl) => {
-  selectedSource.value = sourceUrl;
-  if (sourceUrl) {
-    localStorage.setItem('selectedPluginSource', sourceUrl);
-  } else {
-    localStorage.removeItem('selectedPluginSource');
-  }
-  // 重新加载插件市场数据
-  refreshPluginMarket();
-};
-
-const editCustomSource = (source) => {
-  editingSource.value = true;
-  originalSourceUrl.value = source.url;
-  sourceName.value = source.name;
-  sourceUrl.value = source.url;
-  showSourceDialog.value = true;
-};
-
 const saveCustomSource = () => {
-  if (!sourceName.value.trim() || !sourceUrl.value.trim()) {
-    toast('请填写完整的插件源名称和地址', 'error');
+  const normalizedUrl = sourceUrl.value.trim();
+  
+  if (!sourceName.value.trim() || !normalizedUrl) {
+    toast(tm('messages.fillSourceNameAndUrl'), 'error');
     return;
   }
 
   // 检查URL格式
   try {
-    new URL(sourceUrl.value);
+    new URL(normalizedUrl);
   } catch (e) {
-    toast('请输入有效的URL地址', 'error');
+    toast(tm('messages.invalidUrl'), 'error');
     return;
   }
 
@@ -648,12 +666,12 @@ const saveCustomSource = () => {
     if (index !== -1) {
       customSources.value[index] = {
         name: sourceName.value.trim(),
-        url: sourceUrl.value.trim()
+        url: normalizedUrl
       };
       
       // 如果编辑的是当前选中的源，更新选中源
       if (selectedSource.value === originalSourceUrl.value) {
-        selectedSource.value = sourceUrl.value.trim();
+        selectedSource.value = normalizedUrl;
         localStorage.setItem('selectedPluginSource', selectedSource.value);
         // 重新加载插件市场数据
         refreshPluginMarket();
@@ -661,14 +679,14 @@ const saveCustomSource = () => {
     }
   } else {
     // 添加模式：检查是否已存在
-    if (customSources.value.some(source => source.url === sourceUrl.value)) {
-      toast('该插件源已存在', 'error');
+    if (customSources.value.some(source => source.url === normalizedUrl)) {
+      toast(tm('market.sourceExists'), 'error');
       return;
     }
 
     customSources.value.push({
       name: sourceName.value.trim(),
-      url: sourceUrl.value.trim()
+      url: normalizedUrl
     });
   }
 
@@ -1118,7 +1136,7 @@ watch(marketSearch, (newVal) => {
                           {{ selectedSource ? customSources.find(s => s.url === selectedSource)?.name : tm('market.defaultSource') }}
                         </span>
                         <v-icon right size="small" class="ml-1 text-medium-emphasis">mdi-chevron-down</v-icon>
-                        <v-tooltip activator="parent" location="top">{{ selectedSource || 'Default Official Source' }}</v-tooltip>
+                        <v-tooltip activator="parent" location="top">{{ selectedSource || tm('market.defaultOfficialSource') }}</v-tooltip>
                       </v-btn>
                     </template>
                     <v-list density="compact" nav class="pa-2">
@@ -1178,8 +1196,8 @@ watch(marketSearch, (newVal) => {
                      </template>
                   </v-tooltip>
 
-                  <template v-if="selectedSource">
-                    <v-tooltip location="top" text="编辑源">
+                  <template v-if="selectedSourceObj">
+                    <v-tooltip location="top" :text="tm('market.editSource')">
                       <template v-slot:activator="{ props }">
                          <v-btn
                           v-bind="props"
@@ -1189,7 +1207,7 @@ watch(marketSearch, (newVal) => {
                           density="comfortable"
                           color="medium-emphasis"
                           class="ml-1"
-                          @click="editCustomSource(customSources.find(s => s.url === selectedSource))"
+                          @click="editCustomSource(selectedSourceObj)"
                         ></v-btn>
                       </template>
                     </v-tooltip>
@@ -1204,7 +1222,7 @@ watch(marketSearch, (newVal) => {
                           density="comfortable"
                           color="error"
                           class="ml-1"
-                          @click="removeCustomSource(customSources.find(s => s.url === selectedSource))"
+                          @click="removeCustomSource(selectedSourceObj)"
                         ></v-btn>
                       </template>
                     </v-tooltip>
@@ -1562,7 +1580,7 @@ watch(marketSearch, (newVal) => {
   <!-- 添加/编辑自定义插件源对话框 -->
   <v-dialog v-model="showSourceDialog" width="500">
     <v-card>
-      <v-card-title class="text-h5">{{ editingSource ? '编辑插件源' : tm('market.addSource') }}</v-card-title>
+      <v-card-title class="text-h5">{{ editingSource ? tm('market.editSource') : tm('market.addSource') }}</v-card-title>
       <v-card-text>
         <div class="pa-2">
           <v-text-field
@@ -1585,7 +1603,7 @@ watch(marketSearch, (newVal) => {
           ></v-text-field>
           
           <div class="text-caption text-medium-emphasis mt-2">
-            请输入返回插件列表JSON数据的URL地址
+            {{ tm('messages.enterJsonUrl') }}
           </div>
         </div>
       </v-card-text>
@@ -1602,7 +1620,7 @@ watch(marketSearch, (newVal) => {
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
-        确认删除
+        {{ tm('dialogs.uninstall.title') }}
       </v-card-title>
       <v-card-text>
         <div>{{ tm('market.confirmRemoveSource') }}</div>
@@ -1614,7 +1632,7 @@ watch(marketSearch, (newVal) => {
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="showRemoveSourceDialog = false">{{ tm('buttons.cancel') }}</v-btn>
-        <v-btn color="error" variant="text" @click="confirmRemoveSource">{{ tm('buttons.uninstall') }}</v-btn>
+        <v-btn color="error" variant="text" @click="confirmRemoveSource">{{ tm('buttons.deleteSource') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
