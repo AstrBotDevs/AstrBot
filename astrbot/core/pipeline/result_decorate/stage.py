@@ -98,7 +98,7 @@ class ResultDecorateStage(Stage):
                     continue
                 for word in self.split_words:
                     if content.endswith(word):
-                        content = content[:-len(word)]
+                        content = content[: -len(word)]
                         break
                 if content.strip():
                     result.append(content)
