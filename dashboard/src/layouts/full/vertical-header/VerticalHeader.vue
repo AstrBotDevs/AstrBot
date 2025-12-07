@@ -39,7 +39,6 @@ let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref('');
 let version = ref('');
 let releases = ref([]);
-let devCommits = ref<{ sha: string; date: string; message: string }[]>([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
@@ -47,8 +46,6 @@ let installLoading = ref(false);
 let releaseNotesDialog = ref(false);
 let selectedReleaseNotes = ref('');
 let selectedReleaseTag = ref('');
-
-let tab = ref(0);
 
 const releasesHeader = computed(() => [
   { title: t('core.header.updateDialog.table.tag'), key: 'tag_name' },
@@ -196,48 +193,7 @@ function getReleases() {
     });
 }
 
-function getDevCommits() {
-  let proxy = localStorage.getItem('selectedGitHubProxy') || '';
-  const originalUrl = "https://api.github.com/repos/AstrBotDevs/AstrBot/commits";
-  let commits_url = originalUrl;
-  if (proxy !== '') {
-    proxy = proxy.endsWith('/') ? proxy : proxy + '/';
-    commits_url = proxy + originalUrl;
-  }
 
-  function fetchCommits(url: string, onError?: () => void) {
-    fetch(url, {
-      headers: {
-        'Host': 'api.github.com',
-        'Referer': 'https://api.github.com'
-      }
-    })
-      .then(response => response.json())
-      .then(data => {
-        devCommits.value = Array.isArray(data)
-          ? data.map((commit: any) => ({
-            sha: commit.sha,
-            date: new Date(commit.commit.author.date).toLocaleString(),
-            message: commit.commit.message
-          }))
-          : [];
-      })
-      .catch(err => {
-        if (onError) {
-          onError();
-        } else {
-          console.log('获取开发版提交信息失败:', err);
-        }
-      });
-  }
-
-  fetchCommits(commits_url, () => {
-    if (proxy !== '' && commits_url !== originalUrl) {
-      console.log('使用代理请求失败，尝试直接请求');
-      fetchCommits(originalUrl);
-    }
-  });
-}
 
 function switchVersion(version: string) {
   updateStatus.value = t('core.header.updateDialog.status.switching');
@@ -357,7 +313,7 @@ commonStore.getStartTime();
     <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1200'"
       :fullscreen="$vuetify.display.xs">
       <template v-slot:activator="{ props }">
-        <v-btn size="small" @click="checkUpdate(); getReleases(); getDevCommits();" class="action-btn"
+        <v-btn size="small" @click="checkUpdate(); getReleases();" class="action-btn"
           color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props" icon>
           <v-icon>mdi-arrow-up-circle</v-icon>
         </v-btn>
@@ -388,14 +344,8 @@ commonStore.getStartTime();
                 {{ t('core.header.updateDialog.tipContinue') }}</small>
             </div>
 
-            <v-tabs v-model="tab">
-              <v-tab value="0">{{ t('core.header.updateDialog.tabs.release') }}</v-tab>
-              <v-tab value="1">{{ t('core.header.updateDialog.tabs.dev') }}</v-tab>
-            </v-tabs>
-            <v-tabs-window v-model="tab">
-
-              <!-- 发行版 -->
-              <v-tabs-window-item key="0" v-show="tab == 0">
+            <!-- 发行版 -->
+            <div>
                 <div class="mb-4">
                   <small>{{ t('core.header.updateDialog.dockerTip') }} <a
                       href="https://containrrr.dev/watchtower/usage-overview/">{{
@@ -418,7 +368,7 @@ commonStore.getStartTime();
                   </div>
                 </v-alert>
 
-                <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="5">
+                <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="8">
                   <template v-slot:item.tag_name="{ item }: { item: { tag_name: string } }">
                     <div class="d-flex align-center">
                       <span>{{ item.tag_name }}</span>
@@ -439,41 +389,7 @@ commonStore.getStartTime();
                     </v-btn>
                   </template>
                 </v-data-table>
-              </v-tabs-window-item>
-
-              <!-- 开发版 -->
-              <v-tabs-window-item key="1" v-show="tab == 1">
-                <div style="margin-top: 16px;">
-                  <v-data-table :headers="[
-                    { title: t('core.header.updateDialog.table.sha'), key: 'sha' },
-                    { title: t('core.header.updateDialog.table.date'), key: 'date' },
-                    { title: t('core.header.updateDialog.table.message'), key: 'message' },
-                    { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
-                  ]" :items="devCommits" item-key="sha">
-                    <template v-slot:item.switch="{ item }: { item: { sha: string } }">
-                      <v-btn @click="switchVersion(item.sha)" rounded="xl" variant="plain" color="primary">
-                        {{ t('core.header.updateDialog.table.switch') }}
-                      </v-btn>
-                    </template>
-                  </v-data-table>
-                </div>
-              </v-tabs-window-item>
-
-            </v-tabs-window>
-
-            <h3 class="mb-4">{{ t('core.header.updateDialog.manualInput.title') }}</h3>
-
-            <v-text-field :label="t('core.header.updateDialog.manualInput.placeholder')" v-model="version" required
-              variant="outlined"></v-text-field>
-            <div class="mb-4">
-              <small>{{ t('core.header.updateDialog.manualInput.hint') }}</small>
-              <br>
-              <a href="https://github.com/AstrBotDevs/AstrBot/commits/master"><small>{{
-                t('core.header.updateDialog.manualInput.linkText') }}</small></a>
             </div>
-            <v-btn color="error" style="border-radius: 10px;" @click="switchVersion(version)">
-              {{ t('core.header.updateDialog.manualInput.confirm') }}
-            </v-btn>
 
             <v-divider class="mt-4 mb-4"></v-divider>
             <div style="margin-top: 16px;">
