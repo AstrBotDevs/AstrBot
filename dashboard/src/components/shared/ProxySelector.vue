@@ -12,38 +12,40 @@
             </template>
         </v-radio>
     </v-radio-group>
-    <div v-if="radioValue === '1'" style="margin-left: 16px;">
-        <v-radio-group v-model="githubProxyRadioControl" class="mt-2" hide-details="true">
-            <v-radio color="success" v-for="(proxy, idx) in githubProxies" :key="proxy" :value="idx">
-                <template v-slot:label>
-                    <div class="d-flex align-center">
-                        <span class="mr-2">{{ proxy }}</span>
-                        <div v-if="proxyStatus[idx]">
-                            <v-chip 
-                                :color="proxyStatus[idx].available ? 'success' : 'error'" 
-                                size="x-small" 
-                                class="mr-1">
-                                {{ proxyStatus[idx].available ? '可用' : '不可用' }}
-                            </v-chip>
-                            <v-chip 
-                                v-if="proxyStatus[idx].available" 
-                                color="info" 
-                                size="x-small">
-                                {{ proxyStatus[idx].latency }}ms
-                            </v-chip>
+    <v-expand-transition>
+        <div v-if="radioValue === '1'" style="margin-left: 16px;">
+            <v-radio-group v-model="githubProxyRadioControl" class="mt-2" hide-details="true">
+                <v-radio color="success" v-for="(proxy, idx) in githubProxies" :key="proxy" :value="idx">
+                    <template v-slot:label>
+                        <div class="d-flex align-center">
+                            <span class="mr-2">{{ proxy }}</span>
+                            <div v-if="proxyStatus[idx]">
+                                <v-chip 
+                                    :color="proxyStatus[idx].available ? 'success' : 'error'" 
+                                    size="x-small" 
+                                    class="mr-1">
+                                    {{ proxyStatus[idx].available ? '可用' : '不可用' }}
+                                </v-chip>
+                                <v-chip 
+                                    v-if="proxyStatus[idx].available" 
+                                    color="info" 
+                                    size="x-small">
+                                    {{ proxyStatus[idx].latency }}ms
+                                </v-chip>
+                            </div>
                         </div>
-                    </div>
-                </template>
-            </v-radio>
-            <v-radio color="primary" value="-1" label="自定义">
-                <template v-slot:label v-if="githubProxyRadioControl === '-1'">
-                    <v-text-field density="compact" v-model="selectedGitHubProxy" variant="outlined"
-                        style="width: 100vw;" placeholder="自定义" hide-details="true">
-                    </v-text-field>
-                </template>
-            </v-radio>
-        </v-radio-group>
-    </div>
+                    </template>
+                </v-radio>
+                <v-radio color="primary" value="-1" label="自定义">
+                    <template v-slot:label v-if="githubProxyRadioControl === '-1'">
+                        <v-text-field density="compact" v-model="selectedGitHubProxy" variant="outlined"
+                            style="width: 100vw;" placeholder="自定义" hide-details="true">
+                        </v-text-field>
+                    </template>
+                </v-radio>
+            </v-radio-group>
+        </div>
+    </v-expand-transition>
 </template>
 
 

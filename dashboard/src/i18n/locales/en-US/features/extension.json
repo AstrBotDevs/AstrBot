@@ -87,7 +87,7 @@
     "addSource": "Add Source",
     "sourceName": "Source Name",
     "sourceUrl": "Source URL",
-    "defaultSource": "Default Source",
+    "defaultSource": "Official Source",
     "removeSource": "Remove Source",
     "confirmRemoveSource": "Are you sure you want to remove this source?",
     "sourceAdded": "Source added successfully",
@@ -98,7 +98,8 @@
     "editSource": "Edit Source",
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
-    "sourceExists": "This source already exists"
+    "sourceExists": "This source already exists",
+    "installPlugin": "Install Plugin"
   },
   "sort": {
     "default": "Default",

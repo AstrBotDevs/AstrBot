@@ -13,6 +13,7 @@ import certifi
 from quart import request
 
 from astrbot.core import DEMO_MODE, file_token_service, logger
+from astrbot.api import sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -54,6 +55,8 @@ class PluginRoute(Route):
             "/plugin/on": ("POST", self.on_plugin),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
+            "/plugin/source/get": ("GET", self.get_custom_source),
+            "/plugin/source/save": ("POST", self.save_custom_source),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -601,3 +604,22 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {e!s}").__dict__
+
+    async def get_custom_source(self):
+        """获取自定义插件源"""
+        sources = await sp.global_get("custom_plugin_sources", [])
+        return Response().ok(sources).__dict__
+
+    async def save_custom_source(self):
+        """保存自定义插件源"""
+        try:
+            data = await request.get_json()
+            sources = data.get("sources", [])
+            if not isinstance(sources, list):
+                return Response().error("sources fields must be a list").__dict__
+            
+            await sp.global_put("custom_plugin_sources", sources)
+            return Response().ok(None, "保存成功").__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/source/save: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
