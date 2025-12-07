@@ -27,7 +27,7 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
-const { tm } = useModuleI18n('features/config-metadata')
+const { tm, getRaw } = useModuleI18n('features/config-metadata')
 
 // 翻译器函数 - 如果是国际化键则翻译，否则原样返回
 const translateIfKey = (value) => {
@@ -41,7 +41,7 @@ const getTranslatedLabels = (itemMeta) => {
   
   // 如果labels是字符串（国际化键）
   if (typeof itemMeta.labels === 'string') {
-    const translatedLabels = tm(itemMeta.labels)
+    const translatedLabels = getRaw(itemMeta.labels)
     // 如果翻译成功且是数组，返回翻译结果
     if (Array.isArray(translatedLabels)) {
       return translatedLabels

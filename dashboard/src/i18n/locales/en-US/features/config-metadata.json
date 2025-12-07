@@ -378,8 +378,16 @@
           "words_count_threshold": {
             "description": "Segmented Reply Word Count Threshold"
           },
+          "split_mode": {
+            "description": "Split Mode",
+            "labels": ["Regex", "Words List"]
+          },
           "regex": {
             "description": "Segmentation Regular Expression"
+          },
+          "split_words": {
+            "description": "Split Word List",
+            "hint": "Split when any word in the list is detected"
           },
           "content_cleanup_rule": {
             "description": "Content Filtering Regular Expression",
