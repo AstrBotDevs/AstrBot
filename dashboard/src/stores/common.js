@@ -154,35 +154,43 @@ export const useCommonStore = defineStore({
         this.startTime = res.data.data.start_time
       })
     },
-    async getPluginCollections(force = false) {
+    async getPluginCollections(force = false, customSource = null) {
       // 获取插件市场数据
-      if (!force && this.pluginMarketData.length > 0) {
+      if (!force && this.pluginMarketData.length > 0 && !customSource) {
         return Promise.resolve(this.pluginMarketData);
       }
 
-      // 如果是强制刷新，添加 force_refresh 参数
-      const url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      // 构建URL
+      let url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      if (customSource) {
+        url += (url.includes('?') ? '&' : '?') + `custom_registry=${encodeURIComponent(customSource)}`;
+      }
 
       return axios.get(url)
         .then((res) => {
           let data = []
-          for (let key in res.data.data) {
-            data.push({
-              "name": key,
-              "desc": res.data.data[key].desc,
-              "author": res.data.data[key].author,
-              "repo": res.data.data[key].repo,
-              "installed": false,
-              "version": res.data.data[key]?.version ? res.data.data[key].version : "未知",
-              "social_link": res.data.data[key]?.social_link,
-              "tags": res.data.data[key]?.tags ? res.data.data[key].tags : [],
-              "logo": res.data.data[key]?.logo ? res.data.data[key].logo : "",
-              "pinned": res.data.data[key]?.pinned ? res.data.data[key].pinned : false,
-              "stars": res.data.data[key]?.stars ? res.data.data[key].stars : 0,
-              "updated_at": res.data.data[key]?.updated_at ? res.data.data[key].updated_at : "",
-              "display_name": res.data.data[key]?.display_name ? res.data.data[key].display_name : "",
-            })
+          if (res.data.data && typeof res.data.data === 'object') {
+            for (let key in res.data.data) {
+              const pluginData = res.data.data[key];
+              
+              data.push({
+                "name": pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
+                "desc": pluginData.desc,
+                "author": pluginData.author,
+                "repo": pluginData.repo,
+                "installed": false,
+                "version": pluginData?.version ? pluginData.version : "未知",
+                "social_link": pluginData?.social_link,
+                "tags": pluginData?.tags ? pluginData.tags : [],
+                "logo": pluginData?.logo ? pluginData.logo : "",
+                "pinned": pluginData?.pinned ? pluginData.pinned : false,
+                "stars": pluginData?.stars ? pluginData.stars : 0,
+                "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
+                "display_name": pluginData?.display_name ? pluginData.display_name : "",
+              })
+            }
           }
+          
           this.pluginMarketData = data;
           return data;
         })
