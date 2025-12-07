@@ -382,7 +382,11 @@ class MisskeyPlatformAdapter(Platform):
 
             text, has_at_user = serialize_message_chain(message_chain.chain)
 
-            if not has_at_user and session_id:
+            if (
+                not has_at_user
+                and session_id
+                and self.settings.get("reply_with_mention", False)
+            ):
                 # 从session_id中提取用户ID用于缓存查询
                 # session_id格式为: "chat%<user_id>" 或 "room%<room_id>" 或 "note%<user_id>"
                 user_id_for_cache = None
