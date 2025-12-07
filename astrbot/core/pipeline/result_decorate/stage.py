@@ -53,7 +53,24 @@ class ResultDecorateStage(Stage):
         self.only_llm_result = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["only_llm_result"]
+        self.split_mode = ctx.astrbot_config["platform_settings"][
+            "segmented_reply"
+        ].get("split_mode", "regex")
         self.regex = ctx.astrbot_config["platform_settings"]["segmented_reply"]["regex"]
+        self.split_words = ctx.astrbot_config["platform_settings"][
+            "segmented_reply"
+        ].get("split_words", ["。", "？", "！", "~", "…"])
+        # 预编译分段词正则表达式以提升性能
+        if self.split_words:
+            # 转义特殊字符并按长度降序排序（优先匹配长的）
+            escaped_words = sorted(
+                [re.escape(word) for word in self.split_words], key=len, reverse=True
+            )
+            self.split_words_pattern = re.compile(
+                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
+            )
+        else:
+            self.split_words_pattern = None
         self.content_cleanup_rule = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["content_cleanup_rule"]
@@ -68,6 +85,17 @@ class ResultDecorateStage(Stage):
                 if stage_cls.__name__ == "ContentSafetyCheckStage":
                     self.content_safe_check_stage = stage_cls()
                     await self.content_safe_check_stage.initialize(ctx)
+
+    def _split_text_by_words(self, text: str) -> list[str]:
+        """使用分段词列表分段文本"""
+        if not self.split_words_pattern:
+            return [text]
+
+        # 使用预编译的正则表达式进行分段
+        segments = self.split_words_pattern.findall(text)
+        
+        # 过滤掉空白段落，但保留分段词
+        return [seg for seg in segments if seg and seg.strip()] if segments else [text]
 
     async def process(
         self,
@@ -161,21 +189,27 @@ class ResultDecorateStage(Stage):
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
-                            try:
-                                split_response = re.findall(
-                                    self.regex,
-                                    comp.text,
-                                    re.DOTALL | re.MULTILINE,
-                                )
-                            except re.error:
-                                logger.error(
-                                    f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
-                                )
-                                split_response = re.findall(
-                                    r".*?[。？！~…]+|.+$",
-                                    comp.text,
-                                    re.DOTALL | re.MULTILINE,
-                                )
+
+                            # 根据 split_mode 选择分段方式
+                            if self.split_mode == "words":
+                                split_response = self._split_text_by_words(comp.text)
+                            else:  # regex 模式
+                                try:
+                                    split_response = re.findall(
+                                        self.regex,
+                                        comp.text,
+                                        re.DOTALL | re.MULTILINE,
+                                    )
+                                except re.error:
+                                    logger.error(
+                                        f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
+                                    )
+                                    split_response = re.findall(
+                                        r".*?[。？！~…]+|.+$",
+                                        comp.text,
+                                        re.DOTALL | re.MULTILINE,
+                                    )
+
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
