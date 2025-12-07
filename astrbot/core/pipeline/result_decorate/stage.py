@@ -60,9 +60,7 @@ class ResultDecorateStage(Stage):
         self.split_words = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ].get("split_words", ["。", "？", "！", "~", "…"])
-        # 预编译分段词正则表达式以提升性能
         if self.split_words:
-            # 转义特殊字符并按长度降序排序（优先匹配长的）
             escaped_words = sorted(
                 [re.escape(word) for word in self.split_words], key=len, reverse=True
             )
@@ -91,11 +89,22 @@ class ResultDecorateStage(Stage):
         if not self.split_words_pattern:
             return [text]
 
-        # 使用预编译的正则表达式进行分段
         segments = self.split_words_pattern.findall(text)
-
-        # 过滤掉空白段落，但保留分段词
-        return [seg for seg in segments if seg and seg.strip()] if segments else [text]
+        result = []
+        for seg in segments:
+            if isinstance(seg, tuple):
+                content = seg[0]
+                if not isinstance(content, str):
+                    continue
+                for word in self.split_words:
+                    if content.endswith(word):
+                        content = content[:-len(word)]
+                        break
+                if content.strip():
+                    result.append(content)
+            elif seg and seg.strip():
+                result.append(seg)
+        return result if result else [text]
 
     async def process(
         self,
