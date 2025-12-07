@@ -28,6 +28,7 @@ PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
 
+
 @dataclass
 class RegistrySource:
     urls: List[str]
@@ -133,7 +134,9 @@ class PluginRoute(Route):
                             logger.warning(f"远程插件市场数据为空: {url}")
                             continue  # 继续尝试其他URL或使用缓存
 
-                        logger.info(f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件")
+                        logger.info(
+                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                        )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
                         self._save_plugin_cache(
@@ -162,13 +165,13 @@ class PluginRoute(Route):
             # 对自定义URL生成一个安全的文件名
             url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
             cache_file = f"data/plugins_custom_{url_hash}.json"
-            
+
             # 更安全的后缀处理方式
-            if custom_url.endswith('.json'):
-                md5_url = custom_url[:-5] + '-md5.json'
+            if custom_url.endswith(".json"):
+                md5_url = custom_url[:-5] + "-md5.json"
             else:
-                md5_url = custom_url + '-md5.json'
-                
+                md5_url = custom_url + "-md5.json"
+
             urls = [custom_url]
         else:
             cache_file = "data/plugins.json"
@@ -183,7 +186,7 @@ class PluginRoute(Route):
         """从缓存文件中加载MD5"""
         if not os.path.exists(cache_file):
             return None
-            
+
         try:
             with open(cache_file, encoding="utf-8") as f:
                 cache_data = json.load(f)
@@ -196,11 +199,11 @@ class PluginRoute(Route):
         """获取远程MD5"""
         if not md5_url:
             return None
-            
+
         try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            
+
             async with (
                 aiohttp.ClientSession(
                     trust_env=True,
@@ -617,7 +620,7 @@ class PluginRoute(Route):
             sources = data.get("sources", [])
             if not isinstance(sources, list):
                 return Response().error("sources fields must be a list").__dict__
-            
+
             await sp.global_put("custom_plugin_sources", sources)
             return Response().ok(None, "保存成功").__dict__
         except Exception as e:
