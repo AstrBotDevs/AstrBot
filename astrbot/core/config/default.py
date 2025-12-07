@@ -2887,7 +2887,7 @@ CONFIG_METADATA_3 = {
                         "description": "分段模式",
                         "type": "string",
                         "options": ["regex", "words"],
-                        "labels": ["正则表达式", "分段词列表"]
+                        "labels": ["正则表达式", "分段词列表"],
                     },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",

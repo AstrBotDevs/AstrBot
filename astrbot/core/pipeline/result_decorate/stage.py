@@ -93,7 +93,7 @@ class ResultDecorateStage(Stage):
 
         # 使用预编译的正则表达式进行分段
         segments = self.split_words_pattern.findall(text)
-        
+
         # 过滤掉空白段落，但保留分段词
         return [seg for seg in segments if seg and seg.strip()] if segments else [text]
 
