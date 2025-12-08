@@ -51,46 +51,43 @@ export function applySidebarCustomization(defaultItems) {
     return defaultItems;
   }
 
-  const { mainItems, moreItems } = customization;
+  const { mainItems = [], moreItems = [] } = customization;
   
-  // Create a map of all items by title for quick lookup
-  // Deep clone items to avoid mutating originals
-  const allItemsMap = new Map();
+  const all = new Map();
+  const defaultMain = [];
+  const defaultMore = [];
   defaultItems.forEach(item => {
     if (item.children) {
-      // If it's the "More" group, add children to map
       item.children.forEach(child => {
-        allItemsMap.set(child.title, { ...child });
+        all.set(child.title, { ...child });
+        defaultMore.push(child.title);
       });
     } else {
-      allItemsMap.set(item.title, { ...item });
+      all.set(item.title, { ...item });
+      defaultMain.push(item.title);
     }
   });
 
   const customizedItems = [];
+  const used = new Set([...mainItems, ...moreItems]);
   
-  // Add main items in custom order
-  mainItems.forEach(title => {
-    const item = allItemsMap.get(title);
-    if (item) {
-      customizedItems.push(item);
-    }
-  });
+  // 按用户顺序还原主区
+  mainItems.forEach(title => all.get(title) && customizedItems.push(all.get(title)));
+  // 追加新增的默认主区项
+  defaultMain.forEach(title => !used.has(title) && customizedItems.push(all.get(title)));
 
-  // If there are items in moreItems, create the "More Features" group
-  if (moreItems && moreItems.length > 0) {
+  // 更多区：用户配置 + 新增默认
+  const mergedMore = [...moreItems];
+  defaultMore.forEach(title => { if (!used.has(title)) mergedMore.push(title); });
+
+  if (mergedMore.length > 0) {
     const moreGroup = {
       title: 'core.navigation.groups.more',
       icon: 'mdi-dots-horizontal',
       children: []
     };
     
-    moreItems.forEach(title => {
-      const item = allItemsMap.get(title);
-      if (item) {
-        moreGroup.children.push(item);
-      }
-    });
+    mergedMore.forEach(title => all.get(title) && moreGroup.children.push(all.get(title)));
     
     customizedItems.push(moreGroup);
   }

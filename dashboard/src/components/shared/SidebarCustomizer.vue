@@ -133,32 +133,49 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  
+  const all = new Map();
+  const defaultMain = [];
+  const defaultMore = [];
+
+  sidebarItems.forEach(item => {
+    if (item.children) {
+      item.children.forEach(child => {
+        all.set(child.title, child);
+        defaultMore.push(child.title);
+      });
+    } else {
+      all.set(item.title, item);
+      defaultMain.push(item.title);
+    }
+  });
+
   if (customization) {
-    // Load from customization
-    const allItemsMap = new Map();
-    
-    sidebarItems.forEach(item => {
-      if (item.children) {
-        item.children.forEach(child => {
-          allItemsMap.set(child.title, child);
-        });
-      } else {
-        allItemsMap.set(item.title, item);
+    const used = new Set([...(customization.mainItems || []), ...(customization.moreItems || [])]);
+
+    mainItems.value = (customization.mainItems || [])
+      .map(title => all.get(title))
+      .filter(Boolean);
+    // 追加新增默认主区项
+    defaultMain.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) mainItems.value.push(item);
       }
     });
-    
-    mainItems.value = customization.mainItems
-      .map(title => allItemsMap.get(title))
-      .filter(item => item);
-    
-    moreItems.value = customization.moreItems
-      .map(title => allItemsMap.get(title))
-      .filter(item => item);
+
+    moreItems.value = (customization.moreItems || [])
+      .map(title => all.get(title))
+      .filter(Boolean);
+    // 追加新增默认更多区项
+    defaultMore.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) moreItems.value.push(item);
+      }
+    });
   } else {
     // Load default structure
     mainItems.value = sidebarItems.filter(item => !item.children);
-    
     const moreGroup = sidebarItems.find(item => item.title === 'core.navigation.groups.more');
     moreItems.value = moreGroup ? [...moreGroup.children] : [];
   }
