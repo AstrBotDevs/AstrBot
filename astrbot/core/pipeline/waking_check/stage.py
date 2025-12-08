@@ -7,7 +7,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
-from astrbot.core.star.star import star_map
+from astrbot.core.star.star import star_map, star_registry
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 from ..context import PipelineContext
@@ -49,6 +49,9 @@ class WakingCheckStage(Stage):
         self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
             "ignore_at_all",
             False,
+        )
+        self.disable_builtin_commands = self.ctx.astrbot_config.get(
+            "disable_builtin_commands", False
         )
 
     async def process(
@@ -131,6 +134,13 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         ):
+            if (
+                self.disable_builtin_commands
+                and handler.handler_module_path == "packages.builtin_commands.main"
+            ):
+                logger.debug("skipping builtin command")
+                continue
+
             # filter 需满足 AND 逻辑关系
             passed = True
             permission_not_pass = False
