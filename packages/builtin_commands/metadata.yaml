@@ -1,0 +1,4 @@
+name: builtin_commands
+desc: AstrBot 自带指令，提供常用的对话管理、工具使用、插件管理等功能。
+author: Soulter
+version: 0.0.1

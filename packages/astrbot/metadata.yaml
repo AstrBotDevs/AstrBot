@@ -1,4 +1,4 @@
 name: astrbot
-desc: AstrBot 基础指令结合 + 拓展功能
+desc: AstrBot 自带插件，包含人格注入、思考内容注入、群聊上下文感知等功能的实现，禁用后将无法使用这些功能。
 author: Soulter
-version: 4.0.0
+version: 4.1.0
