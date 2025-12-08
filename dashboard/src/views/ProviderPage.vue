@@ -202,6 +202,30 @@
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
 
+    <!-- Agent Runner 测试提示对话框 -->
+    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
+      <v-card>
+        <v-card-title class="text-h3 d-flex align-center">
+          <v-icon start class="me-2">mdi-information</v-icon>
+          请前往「配置文件」页测试 Agent 执行器
+        </v-card-title>
+        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+          Agent 执行器的测试请在「配置文件」页进行。
+          <ol class="ml-4 mt-4 mb-4">
+            <li>找到对应的配置文件并打开。</li>
+            <li>找到 Agent 执行方式部分，修改执行器后点击保存。</li>
+            <li>点击右下角的 💬 聊天按钮进行测试。</li>
+          </ol>
+          要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
+          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- ID冲突确认对话框 -->
     <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
       <v-card>
@@ -277,6 +301,9 @@ export default {
       // Key确认对话框
       showKeyConfirm: false,
       keyConfirmResolve: null,
+
+      // Agent Runner 提示对话框
+      showAgentRunnerDialog: false,
 
       newSelectedProviderName: '',
       newSelectedProviderConfig: {},
@@ -763,7 +790,9 @@ export default {
           throw new Error('该提供商未被用户启用');
         }
         if (provider.provider_type === 'agent_runner') {
-          throw new Error('暂时无法测试 Agent Runner 类型的提供商');
+          this.showAgentRunnerDialog = true;
+          this.providerStatuses = this.providerStatuses.filter(s => s.id !== provider.id);
+          return;
         }
 
         const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
@@ -824,6 +853,10 @@ export default {
         this.idConflictResolve(confirmed);
       }
       this.showIdConflictDialog = false;
+    },
+    goToConfigPage() {
+      this.showAgentRunnerDialog = false;
+      this.$router.push({ name: 'Configs' });
     },
     getStatusColor(status) {
       switch (status) {
