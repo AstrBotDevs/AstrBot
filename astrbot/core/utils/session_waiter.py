@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import astrbot.core.message.components as Comp
+from astrbot import logger
 from astrbot.core.platform import AstrMessageEvent
 
 USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
@@ -28,6 +29,33 @@ class SessionController:
         """上次保持(keep)开始时的超时时间"""
 
         self.history_chains: list[list[Comp.BaseMessageComponent]] = []
+
+    def fallback_to_llm(
+        self,
+        event_queue: asyncio.Queue,
+        event: AstrMessageEvent,
+        *,
+        stop_session: bool = True,
+    ) -> AstrMessageEvent:
+        """将当前事件重新入队，由默认 LLM 流程处理，适用于非预期输入的兜底。
+
+        Args:
+            event_queue: 事件队列
+            event: 当前事件
+            stop_session: 是否结束当前 SessionWaiter。False 时仅兜底当前输入，继续等待后续输入。
+        """
+        if not stop_session:
+            logger.warning(
+                "fallback_to_llm(stop_session=False) 会保留当前会话，默认会话拦截可能导致兜底无效，"
+                "建议谨慎使用或在后续输入中自行终止会话。",
+            )
+        new_event = event.clone_for_llm()
+        new_event._bypass_session_waiter = not stop_session
+        event_queue.put_nowait(new_event)
+        event.stop_event()
+        if stop_session:
+            self.stop()
+        return new_event
 
     def stop(self, error: Exception = None):
         """立即结束这个会话"""
@@ -147,11 +175,15 @@ class SessionWaiter:
         self.session_controller.stop(error)
 
     @classmethod
-    async def trigger(cls, session_id: str, event: AstrMessageEvent):
-        """外部输入触发会话处理"""
+    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> bool:
+        """外部输入触发会话处理
+
+        Returns:
+            bool: 是否成功触发处理。False 表示会话不存在或已结束。
+        """
         session = USER_SESSIONS.get(session_id)
         if not session or session.session_controller.future.done():
-            return
+            return False
 
         async with session._lock:
             if not session.session_controller.future.done():
@@ -164,6 +196,8 @@ class SessionWaiter:
                     await session.handler(session.session_controller, event)
                 except Exception as e:
                     session.session_controller.stop(e)
+                return True
+        return False
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
