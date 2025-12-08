@@ -50,6 +50,9 @@ class WakingCheckStage(Stage):
             "ignore_at_all",
             False,
         )
+        self.disable_builtin_commands = self.ctx.astrbot_config.get(
+            "disable_builtin_commands", False
+        )
 
     async def process(
         self,
@@ -131,6 +134,13 @@ class WakingCheckStage(Stage):
             EventType.AdapterMessageEvent,
             plugins_name=event.plugins_name,
         ):
+            if (
+                self.disable_builtin_commands
+                and handler.handler_module_path == "packages.builtin_commands.main"
+            ):
+                logger.debug("skipping builtin command")
+                continue
+
             # filter 需满足 AND 逻辑关系
             passed = True
             permission_not_pass = False

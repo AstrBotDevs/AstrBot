@@ -21,8 +21,7 @@
       "updating": "正在更新..."
     },
     "tabs": {
-      "release": "😊 正式版",
-      "dev": "🧐 开发版(master 分支)"
+      "release": "😊 正式版"
     },
     "updateToLatest": "更新到最新版本",
     "preRelease": "预发布",
@@ -42,18 +41,8 @@
       "content": "内容",
       "sourceUrl": "源码地址",
       "actions": "操作",
-      "sha": "SHA",
-      "date": "日期",
-      "message": "信息",
       "view": "查看",
       "switch": "切换"
-    },
-    "manualInput": {
-      "title": "手动输入版本号或 Commit SHA",
-      "placeholder": "输入版本号或 master 分支下的 commit hash。",
-      "hint": "如 v3.3.16 (不带 SHA) 或 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b",
-      "linkText": "查看 master 分支提交记录（点击右边的 copy 即可复制）",
-      "confirm": "确定切换"
     },
     "releaseNotes": {
       "title": "更新日志"

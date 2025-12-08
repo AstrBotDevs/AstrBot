@@ -21,8 +21,7 @@
       "updating": "Updating..."
     },
     "tabs": {
-      "release": "😊 Release",
-      "dev": "🧐 Development (master branch)"
+      "release": "😊 Release"
     },
     "updateToLatest": "Update to Latest Version",
     "preRelease": "Pre-release",
@@ -42,18 +41,8 @@
       "content": "Content",
       "sourceUrl": "Source URL",
       "actions": "Actions",
-      "sha": "SHA",
-      "date": "Date",
-      "message": "Message",
       "view": "View",
       "switch": "Switch"
-    },
-    "manualInput": {
-      "title": "Manual Input Version or Commit SHA",
-      "placeholder": "Enter version number or commit hash from master branch.",
-      "hint": "e.g. v3.3.16 (without SHA) or 42e5ec5d80b93b6bfe8b566754d45ffac4c3fe0b",
-      "linkText": "View master branch commit history (click copy on the right to copy)",
-      "confirm": "Confirm Switch"
     },
     "releaseNotes": {
       "title": "Release Notes"

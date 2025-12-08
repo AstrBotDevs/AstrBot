@@ -1,24 +1,23 @@
 import datetime
 
-from astrbot.api import logger, sp, star
+from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 
-from ..long_term_memory import LongTermMemory
 from .utils.rst_scene import RstScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
+    "dashscope": "dashscope_conversation_id",
 }
 THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 
 
 class ConversationCommands:
-    def __init__(self, context: star.Context, ltm: LongTermMemory | None = None):
+    def __init__(self, context: star.Context):
         self.context = context
-        self.ltm = ltm
 
     async def _get_current_persona_id(self, session_id):
         curr = await self.context.conversation_manager.get_curr_conversation_id(
@@ -33,14 +32,6 @@ class ConversationCommands:
         if not conv:
             return None
         return conv.persona_id
-
-    def ltm_enabled(self, event: AstrMessageEvent):
-        if not self.ltm:
-            return False
-        ltmse = self.context.get_config(umo=event.unified_msg_origin)[
-            "provider_ltm_settings"
-        ]
-        return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     async def reset(self, message: AstrMessageEvent):
         """重置 LLM 会话"""
@@ -101,10 +92,9 @@ class ConversationCommands:
             [],
         )
 
-        ret = "清除会话 LLM 聊天历史成功。"
-        if self.ltm and self.ltm_enabled(message):
-            cnt = await self.ltm.remove_session(event=message)
-            ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
+        ret = "清除聊天历史成功！"
+
+        message.set_extra("_clean_ltm_session", True)
 
         message.set_result(MessageEventResult().message(ret))
 
@@ -246,12 +236,7 @@ class ConversationCommands:
             persona_id=cpersona,
         )
 
-        # 长期记忆
-        if self.ltm and self.ltm_enabled(message):
-            try:
-                await self.ltm.remove_session(event=message)
-            except Exception as e:
-                logger.error(f"清理聊天增强记录失败: {e}")
+        message.set_extra("_clean_ltm_session", True)
 
         message.set_result(
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"),
@@ -377,7 +362,5 @@ class ConversationCommands:
         )
 
         ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
-        if self.ltm and self.ltm_enabled(message):
-            cnt = await self.ltm.remove_session(event=message)
-            ret += f"\n聊天增强: 已清除 {cnt} 条聊天记录。"
+        message.set_extra("_clean_ltm_session", True)
         message.set_result(MessageEventResult().message(ret))

@@ -122,7 +122,25 @@ export function useModuleI18n(moduleName: string) {
     return t(`${normalizedModuleName}.${key}`, params);
   };
   
-  return { tm };
+  // 获取原始翻译值（可能是字符串、数组或对象）
+  const getRaw = (key: string): any => {
+    const normalizedModuleName = moduleName.replace(/\//g, '.');
+    const fullKey = `${normalizedModuleName}.${key}`;
+    const keys = fullKey.split('.');
+    let value: any = translations.value;
+
+    for (const k of keys) {
+      if (value && typeof value === 'object' && k in value) {
+        value = value[k];
+      } else {
+        return null;
+      }
+    }
+    
+    return value;
+  };
+  
+  return { tm, getRaw };
 }
 
 /**

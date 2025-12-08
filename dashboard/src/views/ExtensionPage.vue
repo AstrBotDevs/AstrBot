@@ -67,6 +67,17 @@ const selectedDangerPlugin = ref(null);
 const showUninstallDialog = ref(false);
 const pluginToUninstall = ref(null);
 
+// 自定义插件源相关
+const showSourceDialog = ref(false);
+const sourceName = ref("");
+const sourceUrl = ref("");
+const customSources = ref([]);
+const selectedSource = ref(null);
+const showRemoveSourceDialog = ref(false);
+const sourceToRemove = ref(null);
+const editingSource = ref(false);
+const originalSourceUrl = ref("");
+
 // 插件市场相关
 const extension_url = ref("");
 const dialog = ref(false);
@@ -549,6 +560,156 @@ const cancelDangerInstall = () => {
   selectedDangerPlugin.value = null;
 };
 
+// 自定义插件源管理方法
+const loadCustomSources = async () => {
+  try {
+    const res = await axios.get('/api/plugin/source/get');
+    if (res.data.status === "ok") {
+        customSources.value = res.data.data;
+    } else {
+        toast(res.data.message, "error");
+    }
+  } catch (e) {
+    console.warn('Failed to load custom sources:', e);
+    customSources.value = [];
+  }
+  
+  // 加载当前选中的插件源
+  const currentSource = localStorage.getItem('selectedPluginSource');
+  if (currentSource) {
+    selectedSource.value = currentSource;
+  }
+};
+
+const saveCustomSources = async () => {
+    try {
+        const res = await axios.post('/api/plugin/source/save', {
+            sources: customSources.value
+        });
+        if (res.data.status !== "ok") {
+            toast(res.data.message, "error");
+        }
+    } catch (e) {
+        toast(e, "error");
+    }
+};
+
+const addCustomSource = () => {
+  editingSource.value = false;
+  originalSourceUrl.value = '';
+  sourceName.value = '';
+  sourceUrl.value = '';
+  showSourceDialog.value = true;
+};
+
+const selectPluginSource = (sourceUrl) => {
+  selectedSource.value = sourceUrl;
+  if (sourceUrl) {
+    localStorage.setItem('selectedPluginSource', sourceUrl);
+  } else {
+    localStorage.removeItem('selectedPluginSource');
+  }
+  // 重新加载插件市场数据
+  refreshPluginMarket();
+};
+
+// 获取当前选中的源对象
+const selectedSourceObj = computed(() => {
+  if (!selectedSource.value) return null;
+  return customSources.value.find(s => s.url === selectedSource.value) || null;
+});
+
+const editCustomSource = (source) => {
+  if (!source) return;
+  editingSource.value = true;
+  originalSourceUrl.value = source.url;
+  sourceName.value = source.name;
+  sourceUrl.value = source.url;
+  showSourceDialog.value = true;
+};
+
+const removeCustomSource = (source) => {
+  if (!source) return;
+  sourceToRemove.value = source;
+  showRemoveSourceDialog.value = true;
+};
+
+const confirmRemoveSource = () => {
+  if (sourceToRemove.value) {
+    customSources.value = customSources.value.filter(s => s.url !== sourceToRemove.value.url);
+    saveCustomSources();
+    
+    // 如果删除的是当前选中的源，切换到默认源
+    if (selectedSource.value === sourceToRemove.value.url) {
+      selectedSource.value = null;
+      localStorage.removeItem('selectedPluginSource');
+      // 重新加载插件市场数据
+      refreshPluginMarket();
+    }
+    
+    toast(tm('market.sourceRemoved'), 'success');
+    showRemoveSourceDialog.value = false;
+    sourceToRemove.value = null;
+  }
+};
+
+const saveCustomSource = () => {
+  const normalizedUrl = sourceUrl.value.trim();
+  
+  if (!sourceName.value.trim() || !normalizedUrl) {
+    toast(tm('messages.fillSourceNameAndUrl'), 'error');
+    return;
+  }
+
+  // 检查URL格式
+  try {
+    new URL(normalizedUrl);
+  } catch (e) {
+    toast(tm('messages.invalidUrl'), 'error');
+    return;
+  }
+
+  if (editingSource.value) {
+    // 编辑模式：更新现有源
+    const index = customSources.value.findIndex(s => s.url === originalSourceUrl.value);
+    if (index !== -1) {
+      customSources.value[index] = {
+        name: sourceName.value.trim(),
+        url: normalizedUrl
+      };
+      
+      // 如果编辑的是当前选中的源，更新选中源
+      if (selectedSource.value === originalSourceUrl.value) {
+        selectedSource.value = normalizedUrl;
+        localStorage.setItem('selectedPluginSource', selectedSource.value);
+        // 重新加载插件市场数据
+        refreshPluginMarket();
+      }
+    }
+  } else {
+    // 添加模式：检查是否已存在
+    if (customSources.value.some(source => source.url === normalizedUrl)) {
+      toast(tm('market.sourceExists'), 'error');
+      return;
+    }
+
+    customSources.value.push({
+      name: sourceName.value.trim(),
+      url: normalizedUrl
+    });
+  }
+
+  saveCustomSources();
+  toast(editingSource.value ? tm('market.sourceUpdated') : tm('market.sourceAdded'), 'success');
+  
+  // 重置表单
+  sourceName.value = '';
+  sourceUrl.value = '';
+  editingSource.value = false;
+  originalSourceUrl.value = '';
+  showSourceDialog.value = false;
+};
+
 // 插件市场显示完整插件名称
 const trimExtensionName = () => {
   pluginMarketData.value.forEach(plugin => {
@@ -660,7 +821,7 @@ const refreshPluginMarket = async () => {
   refreshingMarket.value = true;
   try {
     // 强制刷新插件市场数据
-    const data = await commonStore.getPluginCollections(true);
+    const data = await commonStore.getPluginCollections(true, selectedSource.value);
     pluginMarketData.value = data;
     trimExtensionName();
     checkAlreadyInstalled();
@@ -678,6 +839,9 @@ const refreshPluginMarket = async () => {
 // 生命周期
 onMounted(async () => {
   await getExtensions();
+  
+  // 加载自定义插件源
+  loadCustomSources();
 
   // 检查是否有 open_config 参数
   let urlParams;
@@ -697,7 +861,7 @@ onMounted(async () => {
   }
 
   try {
-    const data = await commonStore.getPluginCollections();
+    const data = await commonStore.getPluginCollections(false, selectedSource.value);
     pluginMarketData.value = data;
     trimExtensionName();
     checkAlreadyInstalled();
@@ -957,11 +1121,146 @@ watch(marketSearch, (newVal) => {
           <!-- 插件市场标签页内容 -->
           <v-tab-item v-show="activeTab === 'market'">
 
+            <!-- 插件源管理区域 -->
+            <div class="mb-6">
+              <div class="d-flex align-center pa-1 pl-2 pr-2" style="background: rgb(var(--v-theme-surface-variant), 0.1); border-radius: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));">
+                
+                <!-- 左侧：源选择 -->
+                <div class="d-flex align-center flex-grow-1" style="min-width: 0;">
+                  <v-icon color="primary" class="ml-2 mr-2" size="small">mdi-source-branch</v-icon>
+                  <span class="text-caption text-medium-emphasis text-uppercase font-weight-bold mr-2" style="letter-spacing: 0.05em; white-space: nowrap;">
+                    {{ tm('market.source') }}
+                  </span>
+                  
+                  <v-menu offset-y>
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        variant="text"
+                        class="text-capitalize px-1"
+                        :ripple="false"
+                        height="32"
+                      >
+                        <span class="text-body-2 font-weight-medium text-high-emphasis text-truncate" style="max-width: 200px;">
+                          {{ selectedSource ? customSources.find(s => s.url === selectedSource)?.name : tm('market.defaultSource') }}
+                        </span>
+                        <v-icon right size="small" class="ml-1 text-medium-emphasis">mdi-chevron-down</v-icon>
+                        <v-tooltip activator="parent" location="top">{{ selectedSource || tm('market.defaultOfficialSource') }}</v-tooltip>
+                      </v-btn>
+                    </template>
+                    <v-list density="compact" nav class="pa-2">
+                       <v-list-subheader class="font-weight-bold text-caption text-uppercase mb-1">
+                          {{ tm('market.availableSources') }}
+                        </v-list-subheader>
+                      <v-list-item
+                        :value="null"
+                        @click="selectPluginSource(null)"
+                        rounded="md"
+                        color="primary"
+                        :active="selectedSource === null"
+                      >
+                        <template v-slot:prepend>
+                          <v-icon icon="mdi-shield-check" size="small" class="mr-2"></v-icon>
+                        </template>
+                        <v-list-item-title>{{ tm('market.defaultSource') }}</v-list-item-title>
+                      </v-list-item>
+                      
+                      <v-divider class="my-1" v-if="customSources.length > 0"></v-divider>
+
+                      <v-list-item
+                        v-for="source in customSources"
+                        :key="source.url"
+                        :value="source.url"
+                        @click="selectPluginSource(source.url)"
+                        rounded="md"
+                        color="primary"
+                        :active="selectedSource === source.url"
+                      >
+                         <template v-slot:prepend>
+                          <v-icon icon="mdi-link-variant" size="small" class="mr-2"></v-icon>
+                        </template>
+                        <v-list-item-title>{{ source.name }}</v-list-item-title>
+                        <v-list-item-subtitle class="text-caption">{{ source.url }}</v-list-item-subtitle>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
+                </div>
+
+                <!-- 垂直分隔线 -->
+                <div style="height: 20px; width: 1px; background-color: rgba(var(--v-border-color), 0.15); margin: 0 8px;"></div>
+                
+                <!--右侧：操作按钮组-->
+                <div class="d-flex align-center">
+                   <v-tooltip location="top" :text="tm('market.addSource')">
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-plus"
+                        size="small"
+                        variant="text"
+                        density="comfortable"
+                        color="primary"
+                        @click="addCustomSource"
+                      ></v-btn>
+                     </template>
+                  </v-tooltip>
+
+                  <template v-if="selectedSourceObj">
+                    <v-tooltip location="top" :text="tm('market.editSource')">
+                      <template v-slot:activator="{ props }">
+                         <v-btn
+                          v-bind="props"
+                          icon="mdi-pencil-outline"
+                          size="small"
+                          variant="text"
+                          density="comfortable"
+                          color="medium-emphasis"
+                          class="ml-1"
+                          @click="editCustomSource(selectedSourceObj)"
+                        ></v-btn>
+                      </template>
+                    </v-tooltip>
+
+                     <v-tooltip location="top" :text="tm('market.removeSource')">
+                      <template v-slot:activator="{ props }">
+                        <v-btn
+                          v-bind="props"
+                          icon="mdi-trash-can-outline"
+                          size="small"
+                          variant="text"
+                          density="comfortable"
+                          color="error"
+                          class="ml-1"
+                          @click="removeCustomSource(selectedSourceObj)"
+                        ></v-btn>
+                      </template>
+                    </v-tooltip>
+                  </template>
+                </div>
+
+              </div>
+            </div>
+
             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
-            <v-btn icon="mdi-plus" size="x-large" style="position: fixed; right: 52px; bottom: 52px; z-index: 10000"
-              @click="dialog = true" color="darkprimary">
-            </v-btn>
+            <!-- FAB Button -->
+            <v-tooltip :text="tm('market.installPlugin')" location="left">
+               <template v-slot:activator="{ props }">
+                <button
+                  v-bind="props"
+                  type="button"
+                  class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
+                  style="position: fixed; right: 52px; bottom: 52px; z-index: 10000; border-radius: 16px;" 
+                  @click="dialog = true"
+                >
+                  <span class="v-btn__overlay"></span>
+                  <span class="v-btn__underlay"></span>
+                  <span class="v-btn__content" data-no-activator="">
+                    <i class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default" aria-hidden="true" style="font-size: 32px;"></i>
+                  </span>
+                </button>
+              </template>
+            </v-tooltip>
 
             <div class="mt-4">
               <div class="d-flex align-center mb-2" style="justify-content: space-between; flex-wrap: wrap; gap: 8px;">
@@ -1127,9 +1426,29 @@ watch(marketSearch, (newVal) => {
     </v-col>
 
     <v-col v-if="activeTab === 'market'" cols="12" md="12">
-      <small><a href="https://astrbot.app/dev/plugin.html">{{ tm('market.devDocs') }}</a></small> |
-      <small> <a href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection">{{ tm('market.submitRepo')
-      }}</a></small>
+      <div class="d-flex align-center justify-center mt-4 mb-4 gap-4">
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-book-open-variant"
+          href="https://astrbot.app/dev/plugin.html"
+          target="_blank"
+          color="primary"
+          class="text-none"
+        >
+          {{ tm('market.devDocs') }}
+        </v-btn>
+        <div style="height: 24px; width: 1px; background-color: rgba(var(--v-theme-on-surface), 0.12);"></div>
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-github"
+          href="https://github.com/AstrBotDevs/AstrBot_Plugins_Collection"
+          target="_blank"
+          color="primary"
+          class="text-none"
+        >
+          {{ tm('market.submitRepo') }}
+        </v-btn>
+      </div>
     </v-col>
   </v-row>
 
@@ -1249,10 +1568,15 @@ watch(marketSearch, (newVal) => {
 
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
-    <v-card>
-      <v-card-title class="text-h5">{{ tm('dialogs.install.title') }}</v-card-title>
-      <v-card-text>
-        <v-tabs v-model="uploadTab">
+    <div class="v-card v-theme--PurpleThemeDark v-card--density-default rounded-lg v-card--variant-elevated">
+      <div class="v-card__loader">
+        <v-progress-linear :indeterminate="loading_" color="primary" height="2" :active="loading_"></v-progress-linear>
+      </div>
+
+      <div class="v-card-title text-h5">{{ tm('dialogs.install.title') }}</div>
+      
+      <div class="v-card-text">
+        <v-tabs v-model="uploadTab" color="primary">
           <v-tab value="file">{{ tm('dialogs.install.fromFile') }}</v-tab>
           <v-tab value="url">{{ tm('dialogs.install.fromUrl') }}</v-tab>
         </v-tabs>
@@ -1263,7 +1587,7 @@ watch(marketSearch, (newVal) => {
               <v-file-input ref="fileInput" v-model="upload_file" :label="tm('upload.selectFile')" accept=".zip"
                 hide-details hide-input class="d-none"></v-file-input>
 
-              <v-btn color="primary" size="large" prepend-icon="mdi-upload" @click="$refs.fileInput.click()">
+              <v-btn color="primary" size="large" prepend-icon="mdi-upload" @click="$refs.fileInput.click()" elevation="2">
                 {{ tm('buttons.selectFile') }}
               </v-btn>
 
@@ -1285,19 +1609,79 @@ watch(marketSearch, (newVal) => {
           <v-window-item value="url">
             <div class="pa-4">
               <v-text-field v-model="extension_url" :label="tm('upload.enterUrl')" variant="outlined"
-                prepend-inner-icon="mdi-link" hide-details
+                prepend-inner-icon="mdi-link" hide-details class="rounded-lg mb-4"
                 placeholder="https://github.com/username/repo"></v-text-field>
-              <div class="mt-4">
-                <ProxySelector></ProxySelector>
-              </div>
+              
+              <ProxySelector></ProxySelector>
             </div>
           </v-window-item>
         </v-window>
-      </v-card-text>
-      <v-card-actions>
+      </div>
+
+      <div class="v-card-actions">
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="dialog = false">{{ tm('buttons.cancel') }}</v-btn>
         <v-btn color="primary" variant="text" @click="newExtension">{{ tm('buttons.install') }}</v-btn>
+      </div>
+    </div>
+  </v-dialog>
+
+  <!-- 添加/编辑自定义插件源对话框 -->
+  <v-dialog v-model="showSourceDialog" width="500">
+    <v-card>
+      <v-card-title class="text-h5">{{ editingSource ? tm('market.editSource') : tm('market.addSource') }}</v-card-title>
+      <v-card-text>
+        <div class="pa-2">
+          <v-text-field
+            v-model="sourceName"
+            :label="tm('market.sourceName')"
+            variant="outlined"
+            prepend-inner-icon="mdi-rename-box"
+            hide-details
+            class="mb-4"
+            placeholder="我的插件源"
+          ></v-text-field>
+          
+          <v-text-field
+            v-model="sourceUrl"
+            :label="tm('market.sourceUrl')"
+            variant="outlined"
+            prepend-inner-icon="mdi-link"
+            hide-details
+            placeholder="https://example.com/plugins.json"
+          ></v-text-field>
+          
+          <div class="text-caption text-medium-emphasis mt-2">
+            {{ tm('messages.enterJsonUrl') }}
+          </div>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="showSourceDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn color="primary" variant="text" @click="saveCustomSource">{{ tm('buttons.save') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 删除插件源确认对话框 -->
+  <v-dialog v-model="showRemoveSourceDialog" width="400">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+        {{ tm('dialogs.uninstall.title') }}
+      </v-card-title>
+      <v-card-text>
+        <div>{{ tm('market.confirmRemoveSource') }}</div>
+        <div v-if="sourceToRemove" class="mt-2">
+          <strong>{{ sourceToRemove.name }}</strong>
+          <div class="text-caption">{{ sourceToRemove.url }}</div>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" variant="text" @click="showRemoveSourceDialog = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn color="error" variant="text" @click="confirmRemoveSource">{{ tm('buttons.deleteSource') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -1341,5 +1725,15 @@ watch(marketSearch, (newVal) => {
 
 .plugin-description::-webkit-scrollbar-thumb:hover {
   background-color: rgba(var(--v-theme-primary-rgb), 0.6);
+}
+
+.fab-button {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.fab-button:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
 }
 </style>

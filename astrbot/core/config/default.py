@@ -42,7 +42,15 @@ DEFAULT_CONFIG = {
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
+            "split_mode": "regex",  # regex 或 words
             "regex": ".*?[。？！~…]+|.+$",
+            "split_words": [
+                "。",
+                "？",
+                "！",
+                "~",
+                "…",
+            ],  # 当 split_mode 为 words 时使用
             "content_cleanup_rule": "",
         },
         "no_permission_reply": True,
@@ -157,6 +165,7 @@ DEFAULT_CONFIG = {
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
+    "disable_builtin_commands": False,
 }
 
 
@@ -2661,6 +2670,11 @@ CONFIG_METADATA_3 = {
                         "description": "只 @ 机器人是否触发等待",
                         "type": "bool",
                     },
+                    "disable_builtin_commands": {
+                        "description": "禁用自带指令",
+                        "type": "bool",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                    },
                 },
             },
             "whitelist": {
@@ -2875,9 +2889,26 @@ CONFIG_METADATA_3 = {
                         "description": "分段回复字数阈值",
                         "type": "int",
                     },
+                    "platform_settings.segmented_reply.split_mode": {
+                        "description": "分段模式",
+                        "type": "string",
+                        "options": ["regex", "words"],
+                        "labels": ["正则表达式", "分段词列表"],
+                    },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",
                         "type": "string",
+                        "condition": {
+                            "platform_settings.segmented_reply.split_mode": "regex",
+                        },
+                    },
+                    "platform_settings.segmented_reply.split_words": {
+                        "description": "分段词列表",
+                        "type": "list",
+                        "hint": "检测到列表中的任意词时进行分段，如：。、？、！等",
+                        "condition": {
+                            "platform_settings.segmented_reply.split_mode": "words",
+                        },
                     },
                     "platform_settings.segmented_reply.content_cleanup_rule": {
                         "description": "内容过滤正则表达式",

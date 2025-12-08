@@ -54,7 +54,22 @@ class ResultDecorateStage(Stage):
         self.only_llm_result = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["only_llm_result"]
+        self.split_mode = ctx.astrbot_config["platform_settings"][
+            "segmented_reply"
+        ].get("split_mode", "regex")
         self.regex = ctx.astrbot_config["platform_settings"]["segmented_reply"]["regex"]
+        self.split_words = ctx.astrbot_config["platform_settings"][
+            "segmented_reply"
+        ].get("split_words", ["。", "？", "！", "~", "…"])
+        if self.split_words:
+            escaped_words = sorted(
+                [re.escape(word) for word in self.split_words], key=len, reverse=True
+            )
+            self.split_words_pattern = re.compile(
+                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
+            )
+        else:
+            self.split_words_pattern = None
         self.content_cleanup_rule = ctx.astrbot_config["platform_settings"][
             "segmented_reply"
         ]["content_cleanup_rule"]
@@ -69,6 +84,28 @@ class ResultDecorateStage(Stage):
                 if stage_cls.__name__ == "ContentSafetyCheckStage":
                     self.content_safe_check_stage = stage_cls()
                     await self.content_safe_check_stage.initialize(ctx)
+
+    def _split_text_by_words(self, text: str) -> list[str]:
+        """使用分段词列表分段文本"""
+        if not self.split_words_pattern:
+            return [text]
+
+        segments = self.split_words_pattern.findall(text)
+        result = []
+        for seg in segments:
+            if isinstance(seg, tuple):
+                content = seg[0]
+                if not isinstance(content, str):
+                    continue
+                for word in self.split_words:
+                    if content.endswith(word):
+                        content = content[: -len(word)]
+                        break
+                if content.strip():
+                    result.append(content)
+            elif seg and seg.strip():
+                result.append(seg)
+        return result if result else [text]
 
     async def process(
         self,
@@ -165,21 +202,27 @@ class ResultDecorateStage(Stage):
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
-                            try:
-                                split_response = re.findall(
-                                    self.regex,
-                                    comp.text,
-                                    re.DOTALL | re.MULTILINE,
-                                )
-                            except re.error:
-                                logger.error(
-                                    f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
-                                )
-                                split_response = re.findall(
-                                    r".*?[。？！~…]+|.+$",
-                                    comp.text,
-                                    re.DOTALL | re.MULTILINE,
-                                )
+
+                            # 根据 split_mode 选择分段方式
+                            if self.split_mode == "words":
+                                split_response = self._split_text_by_words(comp.text)
+                            else:  # regex 模式
+                                try:
+                                    split_response = re.findall(
+                                        self.regex,
+                                        comp.text,
+                                        re.DOTALL | re.MULTILINE,
+                                    )
+                                except re.error:
+                                    logger.error(
+                                        f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
+                                    )
+                                    split_response = re.findall(
+                                        r".*?[。？！~…]+|.+$",
+                                        comp.text,
+                                        re.DOTALL | re.MULTILINE,
+                                    )
+
                             if not split_response:
                                 new_chain.append(comp)
                                 continue
