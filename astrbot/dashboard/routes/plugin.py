@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import ssl
 import traceback
 from dataclasses import dataclass
@@ -113,18 +114,31 @@ class PluginRoute(Route):
         remote_data = None
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
+        headers = {"Accept": "application/json"}
 
         for url in source.urls:
             try:
-                async with (
-                    aiohttp.ClientSession(
-                        trust_env=True,
-                        connector=connector,
-                    ) as session,
-                    session.get(url) as response,
-                ):
-                    if response.status == 200:
-                        remote_data = await response.json()
+                async with aiohttp.ClientSession(
+                    trust_env=True, connector=connector, headers=headers
+                ) as session:
+                    async with session.get(url) as response:
+                        content_type = response.headers.get("Content-Type", "")
+                        text = await response.text()
+
+                        if response.status != 200:
+                            logger.error(
+                                f"请求 {url} 失败，状态码：{response.status}, content-type={content_type}"
+                            )
+                            continue
+
+                        # 尝试解析 JSON（很多 raw.githubusercontent.com 返回 text/plain）
+                        try:
+                            remote_data = json.loads(text)
+                        except Exception as e:
+                            logger.warning(
+                                f"解析远程 JSON 失败 (url={url}, content-type={content_type}): {e}"
+                            )
+                            continue
 
                         # 检查远程数据是否为空
                         if not remote_data or (
@@ -133,8 +147,9 @@ class PluginRoute(Route):
                             logger.warning(f"远程插件市场数据为空: {url}")
                             continue  # 继续尝试其他URL或使用缓存
 
+                        count = len(remote_data) if hasattr(remote_data, "__len__") else "?"
                         logger.info(
-                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                            f"成功获取远程插件市场数据，包含 {count} 个插件"
                         )
                         # 获取最新的MD5并保存到缓存
                         current_md5 = await self._fetch_remote_md5(source.md5_url)
@@ -144,7 +159,6 @@ class PluginRoute(Route):
                             current_md5,
                         )
                         return Response().ok(remote_data).__dict__
-                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
 
@@ -195,24 +209,43 @@ class PluginRoute(Route):
             return None
 
     async def _fetch_remote_md5(self, md5_url: str | None) -> str | None:
-        """获取远程MD5"""
+        """获取远程MD5，兼容返回 JSON 或者裸文本 md5 的情况"""
         if not md5_url:
             return None
 
         try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
+            headers = {"Accept": "application/json"}
 
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                ) as session,
-                session.get(md5_url) as response,
-            ):
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("md5", "")
+            async with aiohttp.ClientSession(
+                trust_env=True, connector=connector, headers=headers
+            ) as session:
+                async with session.get(md5_url) as response:
+                    text = await response.text()
+                    content_type = response.headers.get("Content-Type", "")
+
+                    if response.status != 200:
+                        logger.debug(
+                            f"获取远程MD5失败，url={md5_url}, status={response.status}, content-type={content_type}"
+                        )
+                        return None
+
+                    # 先尝试解析成 JSON 格式 { "md5": "..." }
+                    try:
+                        data = json.loads(text)
+                        if isinstance(data, dict):
+                            return data.get("md5", "") or None
+                    except Exception:
+                        # 不是 JSON，继续尝试作为纯文本 MD5
+                        pass
+
+                    # 作为裸文本处理（有时服务只返回纯 md5 字符串）
+                    md5_candidate = text.strip()
+                    if re.fullmatch(r"[0-9a-fA-F]{32}", md5_candidate):
+                        return md5_candidate
+
+                    logger.debug(f"远程 MD5 内容无法识别: {md5_candidate!r}")
         except Exception as e:
             logger.debug(f"获取远程MD5失败: {e}")
         return None
