@@ -67,6 +67,65 @@ class KnowledgeBaseRoute(Route):
     def _get_kb_manager(self):
         return self.core_lifecycle.kb_manager
 
+    def _init_task(self, task_id: str, status: str = "pending") -> None:
+        self.upload_tasks[task_id] = {
+            "status": status,
+            "result": None,
+            "error": None,
+        }
+
+    def _set_task_result(
+        self, task_id: str, status: str, result: any = None, error: str | None = None
+    ) -> None:
+        self.upload_tasks[task_id] = {
+            "status": status,
+            "result": result,
+            "error": error,
+        }
+        if task_id in self.upload_progress:
+            self.upload_progress[task_id]["status"] = status
+
+    def _update_progress(
+        self,
+        task_id: str,
+        *,
+        status: str | None = None,
+        file_index: int | None = None,
+        file_name: str | None = None,
+        stage: str | None = None,
+        current: int | None = None,
+        total: int | None = None,
+    ) -> None:
+        if task_id not in self.upload_progress:
+            return
+        p = self.upload_progress[task_id]
+        if status is not None:
+            p["status"] = status
+        if file_index is not None:
+            p["file_index"] = file_index
+        if file_name is not None:
+            p["file_name"] = file_name
+        if stage is not None:
+            p["stage"] = stage
+        if current is not None:
+            p["current"] = current
+        if total is not None:
+            p["total"] = total
+
+    def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
+        async def _callback(stage: str, current: int, total: int):
+            self._update_progress(
+                task_id,
+                status="processing",
+                file_index=file_idx,
+                file_name=file_name,
+                stage=stage,
+                current=current,
+                total=total,
+            )
+
+        return _callback
+
     async def _background_upload_task(
         self,
         task_id: str,
@@ -81,11 +140,7 @@ class KnowledgeBaseRoute(Route):
         """后台上传任务"""
         try:
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "processing",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="processing")
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -101,30 +156,20 @@ class KnowledgeBaseRoute(Route):
             for file_idx, file_info in enumerate(files_to_upload):
                 try:
                     # 更新整体进度
-                    self.upload_progress[task_id].update(
-                        {
-                            "status": "processing",
-                            "file_index": file_idx,
-                            "file_name": file_info["file_name"],
-                            "stage": "parsing",
-                            "current": 0,
-                            "total": 100,
-                        },
+                    self._update_progress(
+                        task_id,
+                        status="processing",
+                        file_index=file_idx,
+                        file_name=file_info["file_name"],
+                        stage="parsing",
+                        current=0,
+                        total=100,
                     )
 
                     # 创建进度回调函数
-                    async def progress_callback(stage, current, total):
-                        if task_id in self.upload_progress:
-                            self.upload_progress[task_id].update(
-                                {
-                                    "status": "processing",
-                                    "file_index": file_idx,
-                                    "file_name": file_info["file_name"],
-                                    "stage": stage,
-                                    "current": current,
-                                    "total": total,
-                                },
-                            )
+                    progress_callback = self._make_progress_callback(
+                        task_id, file_idx, file_info["file_name"]
+                    )
 
                     doc = await kb_helper.upload_document(
                         file_name=file_info["file_name"],
@@ -155,23 +200,12 @@ class KnowledgeBaseRoute(Route):
                 "failed_count": len(failed_docs),
             }
 
-            self.upload_tasks[task_id] = {
-                "status": "completed",
-                "result": result,
-                "error": None,
-            }
-            self.upload_progress[task_id]["status"] = "completed"
+            self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
             logger.error(f"后台上传任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
-            self.upload_tasks[task_id] = {
-                "status": "failed",
-                "result": None,
-                "error": str(e),
-            }
-            if task_id in self.upload_progress:
-                self.upload_progress[task_id]["status"] = "failed"
+            self._set_task_result(task_id, "failed", error=str(e))
 
     async def _background_import_task(
         self,
@@ -185,11 +219,7 @@ class KnowledgeBaseRoute(Route):
         """后台导入预切片文档任务"""
         try:
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "processing",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="processing")
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -208,30 +238,20 @@ class KnowledgeBaseRoute(Route):
 
                 try:
                     # 更新整体进度
-                    self.upload_progress[task_id].update(
-                        {
-                            "status": "processing",
-                            "file_index": file_idx,
-                            "file_name": file_name,
-                            "stage": "importing",
-                            "current": 0,
-                            "total": 100,
-                        },
+                    self._update_progress(
+                        task_id,
+                        status="processing",
+                        file_index=file_idx,
+                        file_name=file_name,
+                        stage="importing",
+                        current=0,
+                        total=100,
                     )
 
                     # 创建进度回调函数
-                    async def progress_callback(stage, current, total):
-                        if task_id in self.upload_progress:
-                            self.upload_progress[task_id].update(
-                                {
-                                    "status": "processing",
-                                    "file_index": file_idx,
-                                    "file_name": file_name,
-                                    "stage": stage,
-                                    "current": current,
-                                    "total": total,
-                                },
-                            )
+                    progress_callback = self._make_progress_callback(
+                        task_id, file_idx, file_name
+                    )
 
                     # 调用 upload_document，传入 pre_chunked_text
                     doc = await kb_helper.upload_document(
@@ -267,23 +287,12 @@ class KnowledgeBaseRoute(Route):
                 "failed_count": len(failed_docs),
             }
 
-            self.upload_tasks[task_id] = {
-                "status": "completed",
-                "result": result,
-                "error": None,
-            }
-            self.upload_progress[task_id]["status"] = "completed"
+            self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
             logger.error(f"后台导入任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
-            self.upload_tasks[task_id] = {
-                "status": "failed",
-                "result": None,
-                "error": str(e),
-            }
-            if task_id in self.upload_progress:
-                self.upload_progress[task_id]["status"] = "failed"
+            self._set_task_result(task_id, "failed", error=str(e))
 
     async def list_kbs(self):
         """获取知识库列表
@@ -727,11 +736,7 @@ class KnowledgeBaseRoute(Route):
             task_id = str(uuid.uuid4())
 
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "pending",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="pending")
 
             # 启动后台任务
             asyncio.create_task(
@@ -766,6 +771,30 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"上传文档失败: {e!s}").__dict__
 
+    def _validate_import_request(self, data: dict):
+        kb_id = data.get("kb_id")
+        if not kb_id:
+            raise ValueError("缺少参数 kb_id")
+
+        documents = data.get("documents")
+        if not documents or not isinstance(documents, list):
+            raise ValueError("缺少参数 documents 或格式错误")
+
+        for doc in documents:
+            if "file_name" not in doc or "chunks" not in doc:
+                raise ValueError("文档格式错误，必须包含 file_name 和 chunks")
+            if not isinstance(doc["chunks"], list):
+                raise ValueError("chunks 必须是列表")
+            if not all(
+                isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
+            ):
+                raise ValueError("chunks 必须是非空字符串列表")
+
+        batch_size = data.get("batch_size", 32)
+        tasks_limit = data.get("tasks_limit", 3)
+        max_retries = data.get("max_retries", 3)
+        return kb_id, documents, batch_size, tasks_limit, max_retries
+
     async def import_documents(self):
         """导入预切片文档
 
@@ -783,32 +812,9 @@ class KnowledgeBaseRoute(Route):
             kb_manager = self._get_kb_manager()
             data = await request.json
 
-            kb_id = data.get("kb_id")
-            if not kb_id:
-                return Response().error("缺少参数 kb_id").__dict__
-
-            documents = data.get("documents")
-            if not documents or not isinstance(documents, list):
-                return Response().error("缺少参数 documents 或格式错误").__dict__
-
-            batch_size = data.get("batch_size", 32)
-            tasks_limit = data.get("tasks_limit", 3)
-            max_retries = data.get("max_retries", 3)
-
-            # 简单验证文档格式
-            for doc in documents:
-                if "file_name" not in doc or "chunks" not in doc:
-                    return (
-                        Response()
-                        .error("文档格式错误，必须包含 file_name 和 chunks")
-                        .__dict__
-                    )
-                if not isinstance(doc["chunks"], list):
-                    return Response().error("chunks 必须是列表").__dict__
-                if not all(
-                    isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
-                ):
-                    return Response().error("chunks 必须是非空字符串列表").__dict__
+            kb_id, documents, batch_size, tasks_limit, max_retries = (
+                self._validate_import_request(data)
+            )
 
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
@@ -819,11 +825,7 @@ class KnowledgeBaseRoute(Route):
             task_id = str(uuid.uuid4())
 
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "pending",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="pending")
 
             # 启动后台任务
             asyncio.create_task(
@@ -1163,11 +1165,7 @@ class KnowledgeBaseRoute(Route):
             task_id = str(uuid.uuid4())
 
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "pending",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="pending")
 
             # 启动后台任务
             asyncio.create_task(
@@ -1220,11 +1218,7 @@ class KnowledgeBaseRoute(Route):
         """后台上传URL任务"""
         try:
             # 初始化任务状态
-            self.upload_tasks[task_id] = {
-                "status": "processing",
-                "result": None,
-                "error": None,
-            }
+            self._init_task(task_id, status="processing")
             self.upload_progress[task_id] = {
                 "status": "processing",
                 "file_index": 0,
@@ -1236,18 +1230,7 @@ class KnowledgeBaseRoute(Route):
             }
 
             # 创建进度回调函数
-            async def progress_callback(stage, current, total):
-                if task_id in self.upload_progress:
-                    self.upload_progress[task_id].update(
-                        {
-                            "status": "processing",
-                            "file_index": 0,
-                            "file_name": f"URL: {url}",
-                            "stage": stage,
-                            "current": current,
-                            "total": total,
-                        },
-                    )
+            progress_callback = self._make_progress_callback(task_id, 0, f"URL: {url}")
 
             # 上传文档
             doc = await kb_helper.upload_from_url(
@@ -1272,20 +1255,9 @@ class KnowledgeBaseRoute(Route):
                 "failed_count": 0,
             }
 
-            self.upload_tasks[task_id] = {
-                "status": "completed",
-                "result": result,
-                "error": None,
-            }
-            self.upload_progress[task_id]["status"] = "completed"
+            self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
             logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
-            self.upload_tasks[task_id] = {
-                "status": "failed",
-                "result": None,
-                "error": str(e),
-            }
-            if task_id in self.upload_progress:
-                self.upload_progress[task_id]["status"] = "failed"
+            self._set_task_result(task_id, "failed", error=str(e))
