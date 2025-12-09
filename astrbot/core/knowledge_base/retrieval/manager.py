@@ -166,7 +166,11 @@ class RetrievalManager:
         # 5. Rerank
         first_rerank = None
         for kb_id in kb_ids:
-            vec_db: FaissVecDB = kb_options[kb_id]["vec_db"]
+            vec_db = kb_options[kb_id]["vec_db"]
+            if not isinstance(vec_db, FaissVecDB):
+                logger.warning(f"vec_db for kb_id {kb_id} is not FaissVecDB")
+                continue
+
             rerank_pi = kb_options[kb_id]["rerank_provider_id"]
             if (
                 vec_db

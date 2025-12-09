@@ -97,7 +97,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
 
         async for llm_response in self._iter_llm_responses():
-            assert isinstance(llm_response, LLMResponse)
             if llm_response.is_chunk:
                 if llm_response.result_chain:
                     yield AgentResponse(

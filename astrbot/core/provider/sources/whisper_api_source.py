@@ -36,7 +36,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             timeout=provider_config.get("timeout", NOT_GIVEN),
         )
 
-        self.set_model(provider_config.get("model"))
+        self.set_model(provider_config["model"])
 
     async def _get_audio_format(self, file_path):
         # 定义要检测的头部字节

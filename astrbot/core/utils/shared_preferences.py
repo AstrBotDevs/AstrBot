@@ -53,6 +53,38 @@ class SharedPreferences:
         ret = await self.db_helper.get_preferences(scope, scope_id, key)
         return ret
 
+    @overload
+    async def session_get(
+        self,
+        umo: str,
+        key: str,
+        default: _VT = None,
+    ) -> _VT: ...
+
+    @overload
+    async def session_get(
+        self,
+        umo: None,
+        key: str,
+        default: Any = None,
+    ) -> list[Preference]: ...
+
+    @overload
+    async def session_get(
+        self,
+        umo: str,
+        key: None,
+        default: Any = None,
+    ) -> list[Preference]: ...
+
+    @overload
+    async def session_get(
+        self,
+        umo: None,
+        key: None,
+        default: Any = None,
+    ) -> list[Preference]: ...
+
     async def session_get(
         self,
         umo: str | None,

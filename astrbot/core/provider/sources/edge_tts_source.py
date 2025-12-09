@@ -67,7 +67,7 @@ class ProviderEdgeTTS(TTSProvider):
                 from pyffmpeg import FFmpeg
 
                 ff = FFmpeg()
-                ff.convert(input=mp3_path, output=wav_path)
+                ff.convert(input_file=mp3_path, output_file=wav_path)
             except Exception as e:
                 logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
                 # use ffmpeg command line

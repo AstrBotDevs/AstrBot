@@ -1,6 +1,8 @@
 import asyncio
 import json
+from typing import cast
 
+from quart import Response as QuartResponse
 from quart import make_response
 
 from astrbot.core import LogBroker, logger
@@ -39,14 +41,17 @@ class LogRoute(Route):
                 if queue:
                     self.log_broker.unregister(queue)
 
-        response = await make_response(
-            stream(),
-            {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Transfer-Encoding": "chunked",
-            },
+        response = cast(
+            QuartResponse,
+            await make_response(
+                stream(),
+                {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Transfer-Encoding": "chunked",
+                },
+            ),
         )
         response.timeout = None
         return response

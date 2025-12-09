@@ -40,6 +40,7 @@ def register_platform_adapter(
         pm = PlatformMetadata(
             name=adapter_name,
             description=desc,
+            id=adapter_name,
             default_config_tmpl=default_config_tmpl,
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,

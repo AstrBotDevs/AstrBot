@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
+from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
@@ -130,11 +131,13 @@ class ResultDecorateStage(Stage):
             for comp in result.chain:
                 if isinstance(comp, Plain):
                     text += comp.text
-            async for _ in self.content_safe_check_stage.process(
-                event,
-                check_text=text,
-            ):
-                yield
+
+            if isinstance(self.content_safe_check_stage, ContentSafetyCheckStage):
+                async for _ in self.content_safe_check_stage.process(
+                    event,
+                    check_text=text,
+                ):
+                    yield
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -151,7 +154,8 @@ class ResultDecorateStage(Stage):
                         "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作",
                     )
                 await handler.handler(event)
-                if event.get_result() is None or not event.get_result().chain:
+
+                if (result := event.get_result()) is None or not result.chain:
                     logger.debug(
                         f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。",
                     )

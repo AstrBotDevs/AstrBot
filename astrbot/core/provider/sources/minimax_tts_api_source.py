@@ -87,7 +87,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
 
         return json.dumps(dict_body)
 
-    async def _call_tts_stream(self, text: str) -> AsyncIterator[bytes]:
+    async def _call_tts_stream(self, text: str) -> AsyncIterator[str]:
         """进行流式请求"""
         try:
             async with (
@@ -117,7 +117,9 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                                     data = json.loads(message[6:])
                                     if "extra_info" in data:
                                         continue
-                                    audio = data.get("data", {}).get("audio")
+                                    audio: str | None = data.get("data", {}).get(
+                                        "audio"
+                                    )
                                     if audio is not None:
                                         yield audio
                                 except json.JSONDecodeError:

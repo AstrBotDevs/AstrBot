@@ -20,7 +20,7 @@ class FontManager:
     _font_cache = {}
 
     @classmethod
-    def get_font(cls, size: int) -> ImageFont.FreeTypeFont:
+    def get_font(cls, size: int) -> ImageFont.FreeTypeFont|ImageFont.ImageFont:
         """获取指定大小的字体，优先从缓存获取"""
         if size in cls._font_cache:
             return cls._font_cache[size]
@@ -66,23 +66,17 @@ class TextMeasurer:
     """测量文本尺寸的工具类"""
 
     @staticmethod
-    def get_text_size(text: str, font: ImageFont.FreeTypeFont) -> Tuple[int, int]:
+    def get_text_size(text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont) -> tuple[int, int]:
         """获取文本的尺寸"""
-        try:
-            # PIL 9.0.0 以上版本
-            return (
-                font.getbbox(text)[2:]
-                if hasattr(font, "getbbox")
-                else font.getsize(text)
-            )
-        except Exception:
-            # 兼容旧版本
-            return font.getsize(text)
+
+        # 依赖库Pillow>=11.2.1，不再需要考虑<9.0.0
+        left, top, right, bottom = font.getbbox("Hello world")
+        return int(right - left), int(bottom - top)
 
     @staticmethod
     def split_text_to_fit_width(
-        text: str, font: ImageFont.FreeTypeFont, max_width: int
-    ) -> List[str]:
+        text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont, max_width: int
+    ) -> list[str]:
         """将文本拆分为多行，确保每行不超过指定宽度"""
         lines = []
         if not text:
@@ -126,7 +120,7 @@ class MarkdownElement(ABC):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -152,7 +146,7 @@ class TextElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -186,7 +180,7 @@ class BoldTextElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -251,7 +245,7 @@ class ItalicTextElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -299,7 +293,7 @@ class ItalicTextElement(MarkdownElement):
                     # 倾斜变换，使用仿射变换实现斜体效果
                     # 变换矩阵: [1, 0.2, 0, 0, 1, 0]
                     italic_img = text_img.transform(
-                        text_img.size, Image.AFFINE, (1, 0.2, 0, 0, 1, 0), Image.BICUBIC
+                        text_img.size, Image.Transform.AFFINE, (1, 0.2, 0, 0, 1, 0), Image.Resampling.BICUBIC
                     )
 
                     # 粘贴到原图像
@@ -331,7 +325,7 @@ class UnderlineTextElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -371,7 +365,7 @@ class StrikethroughTextElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -422,7 +416,7 @@ class HeaderElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -458,7 +452,7 @@ class QuoteElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -502,7 +496,7 @@ class ListItemElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -532,7 +526,7 @@ class ListItemElement(MarkdownElement):
 class CodeBlockElement(MarkdownElement):
     """代码块元素"""
 
-    def __init__(self, content: List[str]):
+    def __init__(self, content: list[str]):
         super().__init__("\n".join(content))
 
     def calculate_height(self, image_width: int, font_size: int) -> int:
@@ -552,7 +546,7 @@ class CodeBlockElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -595,7 +589,7 @@ class InlineCodeElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -667,7 +661,7 @@ class ImageElement(MarkdownElement):
     def render(
         self,
         image: Image.Image,
-        draw: ImageDraw.Draw,
+        draw: ImageDraw.ImageDraw,
         x: int,
         y: int,
         image_width: int,
@@ -686,7 +680,7 @@ class ImageElement(MarkdownElement):
         if pasted_image.width > max_width:
             ratio = max_width / pasted_image.width
             new_size = (int(max_width), int(pasted_image.height * ratio))
-            pasted_image = pasted_image.resize(new_size, Image.LANCZOS)
+            pasted_image = pasted_image.resize(new_size, Image.Resampling.LANCZOS)
 
         # 计算居中位置
         paste_x = x + (image_width - pasted_image.width) // 2 - 10
@@ -705,7 +699,7 @@ class MarkdownParser:
     """Markdown解析器，将文本解析为元素"""
 
     @staticmethod
-    async def parse(text: str) -> List[MarkdownElement]:
+    async def parse(text: str) -> list[MarkdownElement]:
         elements = []
         lines = text.split("\n")
 
@@ -847,7 +841,7 @@ class MarkdownRenderer:
         self,
         font_size: int = 26,
         width: int = 800,
-        bg_color: Tuple[int, int, int] = (255, 255, 255),
+        bg_color: tuple[int, int, int] = (255, 255, 255),
     ):
         self.font_size = font_size
         self.width = width

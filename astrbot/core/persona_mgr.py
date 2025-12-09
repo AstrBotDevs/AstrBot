@@ -98,8 +98,8 @@ class PersonaManager:
         self,
         persona_id: str,
         system_prompt: str,
-        begin_dialogs: list[str] = None,
-        tools: list[str] = None,
+        begin_dialogs: list[str] | None = None,
+        tools: list[str] | None = None,
     ) -> Persona:
         """创建新的 persona。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         if await self.db.get_persona_by_id(persona_id):

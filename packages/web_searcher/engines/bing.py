@@ -1,4 +1,4 @@
-from . import USER_AGENT_BING, SearchEngine, SearchResult
+from . import USER_AGENT_BING, SearchEngine
 
 
 class Bing(SearchEngine):
@@ -28,11 +28,3 @@ class Bing(SearchEngine):
                 self.base_url = base_url
                 continue
         raise Exception("Bing search failed")
-
-    async def search(self, query: str, num_results: int) -> list[SearchResult]:
-        results = await super().search(query, num_results)
-        for result in results:
-            if not isinstance(result.url, str):
-                result.url = result.url.text
-
-        return results

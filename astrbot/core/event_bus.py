@@ -27,7 +27,7 @@ class EventBus:
         self,
         event_queue: Queue,
         pipeline_scheduler_mapping: dict[str, PipelineScheduler],
-        astrbot_config_mgr: AstrBotConfigManager = None,
+        astrbot_config_mgr: AstrBotConfigManager,
     ):
         self.event_queue = event_queue  # 事件队列
         # abconf uuid -> scheduler
@@ -40,6 +40,11 @@ class EventBus:
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             self._print_event(event, conf_info["name"])
             scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
+            if not scheduler:
+                logger.error(
+                    f"PipelineScheduler not found for id: {conf_info['id']}, event ignored."
+                )
+                continue
             asyncio.create_task(scheduler.execute(event))
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str):

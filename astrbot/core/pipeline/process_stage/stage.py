@@ -60,7 +60,7 @@ class ProcessStage(Stage):
         ):
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (
-                event.get_result() and not event.get_result().is_stopped()
+                event.get_result() and not event.is_stopped()
             ) or not event.get_result():
                 async for _ in self.agent_sub_stage.process(event):
                     yield

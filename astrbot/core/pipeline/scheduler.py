@@ -2,6 +2,10 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEvent
+from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
+    WecomAIBotMessageEvent,
+)
 
 from . import STAGES_ORDER
 from .context import PipelineContext
@@ -78,7 +82,7 @@ class PipelineScheduler:
         await self._process_stages(event)
 
         # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
-        if event.get_platform_name() in ["webchat", "wecom_ai_bot"]:
+        if isinstance(event, (WebChatMessageEvent, WecomAIBotMessageEvent)):
             await event.send(None)
 
         logger.debug("pipeline 执行完毕。")

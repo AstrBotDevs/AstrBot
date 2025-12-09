@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any
+from typing import Any, cast
 
 import botpy
 import botpy.message
@@ -36,7 +36,9 @@ class botClient(Client):
             MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.group_openid
+            abm.sender.user_id
+            if self.platform.unique_session
+            else cast(str, message.group_openid)
         )
         self._commit(abm)
 
@@ -120,7 +122,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
         )
 
     async def run(self):

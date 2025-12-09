@@ -90,4 +90,6 @@ class EmbeddingStorage:
             path (str): 保存索引的路径
 
         """
+        if self.index is None:
+            return
         faiss.write_index(self.index, self.path)

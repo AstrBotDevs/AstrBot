@@ -4,7 +4,9 @@ import mimetypes
 import os
 import uuid
 from contextlib import asynccontextmanager
+from typing import cast
 
+from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger
@@ -424,16 +426,19 @@ class ChatRoute(Route):
             sender_name=username,
         )
 
-        response = await make_response(
-            stream(),
-            {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Transfer-Encoding": "chunked",
-                "Connection": "keep-alive",
-            },
+        response = cast(
+            QuartResponse,
+            await make_response(
+                stream(),
+                {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Transfer-Encoding": "chunked",
+                    "Connection": "keep-alive",
+                },
+            ),
         )
-        response.timeout = None  # fix SSE auto disconnect issue  # pyright: ignore[reportAttributeAccessIssue]
+        response.timeout = None  # fix SSE auto disconnect issue
         return response
 
     async def delete_webchat_session(self):

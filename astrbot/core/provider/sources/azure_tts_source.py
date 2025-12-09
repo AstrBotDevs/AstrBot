@@ -29,15 +29,24 @@ class OTTSProvider:
         self.last_sync_time = 0
         self.timeout = Timeout(10.0)
         self.retry_count = 3
-        self.client = None
+        self._client: AsyncClient | None = None
+
+    @property
+    def client(self) -> AsyncClient:
+        if self._client is None:
+            raise RuntimeError(
+                "Client not initialized. Please use 'async with' context."
+            )
+        return self._client
 
     async def __aenter__(self):
-        self.client = AsyncClient(timeout=self.timeout)
+        self._client = AsyncClient(timeout=self.timeout)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.client:
-            await self.client.aclose()
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
     async def _sync_time(self):
         try:
@@ -90,6 +99,7 @@ class OTTSProvider:
                 if attempt == self.retry_count - 1:
                     raise RuntimeError(f"OTTS请求失败: {e!s}") from e
                 await asyncio.sleep(0.5 * (attempt + 1))
+        raise RuntimeError("OTTS未返回音频文件")
 
 
 class AzureNativeProvider(TTSProvider):
@@ -105,7 +115,7 @@ class AzureNativeProvider(TTSProvider):
         self.endpoint = (
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
-        self.client = None
+        self._client: AsyncClient | None = None
         self.token = None
         self.token_expire = 0
         self.voice_params = {
@@ -116,8 +126,16 @@ class AzureNativeProvider(TTSProvider):
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
 
+    @property
+    def client(self) -> AsyncClient:
+        if self._client is None:
+            raise RuntimeError(
+                "Client not initialized. Please use 'async with' context."
+            )
+        return self._client
+
     async def __aenter__(self):
-        self.client = AsyncClient(
+        self._client = AsyncClient(
             headers={
                 "User-Agent": f"AstrBot/{VERSION}",
                 "Content-Type": "application/ssml+xml",
@@ -127,8 +145,9 @@ class AzureNativeProvider(TTSProvider):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.client:
-            await self.client.aclose()
+        if self._client:
+            await self._client.aclose()
+            self._client = None
 
     async def _refresh_token(self):
         token_url = (
@@ -181,8 +200,11 @@ class AzureTTSProvider(TTSProvider):
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)
 
-    def _parse_provider(self, key_value: str, config: dict) -> TTSProvider:
+    def _parse_provider(
+        self, key_value: str, config: dict
+    ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
+            json_str = ""
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:

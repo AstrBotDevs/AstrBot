@@ -1,7 +1,8 @@
 import asyncio
 import sys
 import uuid
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 import quart
 from requests import Response
@@ -36,7 +37,7 @@ else:
 class WeixinOfficialAccountServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
+        self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -55,7 +56,7 @@ class WeixinOfficialAccountServer:
 
         self.event_queue = event_queue
 
-        self.callback = None
+        self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
     async def verify(self):
@@ -114,6 +115,9 @@ class WeixinOfficialAccountServer:
             raise
         else:
             msg = parse_message(xml)
+            if not msg:
+                logger.error("解析失败。msg为None。")
+                raise
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -176,7 +180,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.config["secret"].strip(),
         )
 
-        self.client.API_BASE_URL = self.api_base_url
+        self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
         # 微信公众号必须 5 秒内进行回复，否则会重试 3 次，我们需要对其进行消息排重
         # msgid -> Future
@@ -188,11 +192,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     await self.convert_message(msg, None)
                 else:
                     if msg.id in self.wexin_event_workers:
-                        future = self.wexin_event_workers[msg.id]
+                        future = self.wexin_event_workers[str(cast(str | int, msg.id))]
                         logger.debug(f"duplicate message id checked: {msg.id}")
                     else:
                         future = asyncio.get_event_loop().create_future()
-                        self.wexin_event_workers[msg.id] = future
+                        self.wexin_event_workers[str(cast(str | int, msg.id))] = future
                         await self.convert_message(msg, future)
                     # I love shield so much!
                     result = await asyncio.wait_for(
@@ -200,7 +204,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         60,
                     )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
-                    self.wexin_event_workers.pop(msg.id, None)
+                    self.wexin_event_workers.pop(str(cast(str | int, msg.id)), None)
                     return result  # xml. see weixin_offacc_event.py
             except asyncio.TimeoutError:
                 pass
@@ -248,33 +252,33 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     async def convert_message(
         self,
         msg,
-        future: asyncio.Future = None,
+        future: asyncio.Future | None = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
+            abm.message_str = cast(str, msg.content)
             abm.self_id = str(msg.target)
-            abm.message = [Plain(msg.content)]
+            abm.message = [Plain(cast(str, msg.content))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "image":
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=msg.image, url=msg.image)]
+            abm.message = [Image(file=cast(str, msg.image), url=cast(str, msg.image))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
@@ -306,15 +310,16 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
-            future.set_result(None)
+            if future:
+                future.set_result(None)
             return
         # 很不优雅 :(
         abm.raw_message = {

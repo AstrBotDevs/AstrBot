@@ -70,16 +70,18 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         bot: CQHttp,
         event: Event | None,
         is_group: bool,
-        session_id: str,
+        session_id: str | None,
         messages: list[dict],
     ):
         # session_id 必须是纯数字字符串
-        session_id = int(session_id) if session_id.isdigit() else None
+        session_id_int = (
+            int(session_id) if session_id and session_id.isdigit() else None
+        )
 
-        if is_group and isinstance(session_id, int):
-            await bot.send_group_msg(group_id=session_id, message=messages)
-        elif not is_group and isinstance(session_id, int):
-            await bot.send_private_msg(user_id=session_id, message=messages)
+        if is_group and isinstance(session_id_int, int):
+            await bot.send_group_msg(group_id=session_id_int, message=messages)
+        elif not is_group and isinstance(session_id_int, int):
+            await bot.send_private_msg(user_id=session_id_int, message=messages)
         elif isinstance(event, Event):  # 最后兜底
             await bot.send(event=event, message=messages)
         else:

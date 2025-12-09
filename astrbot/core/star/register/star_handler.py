@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any
 
 import docstring_parser
@@ -12,6 +12,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
 
@@ -28,13 +29,19 @@ from ..filter.regex import RegexFilter
 from ..star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 
-def get_handler_full_name(awaitable: Callable[..., Awaitable[Any]]) -> str:
+def get_handler_full_name(
+    awaitable: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+) -> str:
     """获取 Handler 的全名"""
     return f"{awaitable.__module__}_{awaitable.__name__}"
 
 
 def get_handler_or_create(
-    handler: Callable[..., Awaitable[Any]],
+    handler: Callable[
+        ...,
+        Awaitable[MessageEventResult | str | None]
+        | AsyncGenerator[MessageEventResult | str | None],
+    ],
     event_type: EventType,
     dont_add=False,
     **kwargs,
@@ -169,6 +176,8 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
                 for (
                     sub_handle
                 ) in parent_register_commandable.parent_group.sub_command_filters:
+                    if isinstance(sub_handle, CommandGroupFilter):
+                        continue
                     # 所有符合fullname一致的子指令handle添加自定义过滤器。
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
                     sub_handle_md = sub_handle.get_handler_md()
@@ -180,6 +189,8 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
             else:
                 # 裸指令
+                # 确保运行时是可调用的 handler，针对类型检查器添加忽略
+                assert isinstance(awaitable, Callable)
                 handler_md = get_handler_or_create(
                     awaitable,
                     EventType.AdapterMessageEvent,
@@ -237,7 +248,7 @@ class RegisteringCommandable:
 
     group: Callable[..., Callable[..., RegisteringCommandable]] = register_command_group
     command: Callable[..., Callable[..., None]] = register_command
-    custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
+    custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
     def __init__(self, parent_group: CommandGroupFilter):
         self.parent_group = parent_group
@@ -412,7 +423,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
     if kwargs.get("registering_agent"):
         registering_agent = kwargs["registering_agent"]
 
-    def decorator(awaitable: Callable[..., Awaitable[Any]]):
+    def decorator(
+        awaitable: Callable[
+            ...,
+            AsyncGenerator[MessageEventResult | str | None]
+            | Awaitable[MessageEventResult | str | None],
+        ],
+    ):
         llm_tool_name = name_ if name_ else awaitable.__name__
         func_doc = awaitable.__doc__ or ""
         docstring = docstring_parser.parse(func_doc)

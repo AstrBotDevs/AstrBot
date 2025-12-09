@@ -7,7 +7,7 @@ class PlatformMetadata:
     """平台的名称，即平台的类型，如 aiocqhttp, discord, slack"""
     description: str
     """平台的描述"""
-    id: str | None = None
+    id: str
     """平台的唯一标识符，用于配置中识别特定平台"""
 
     default_config_tmpl: dict | None = None

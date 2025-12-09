@@ -5,6 +5,7 @@ import uuid
 import zoneinfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from astrbot.api import llm_tool, logger, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
@@ -62,13 +63,13 @@ class Main(star.Star):
                         misfire_grace_time=60,
                     )
                 elif "cron" in reminder:
+                    trigger = CronTrigger(**self._parse_cron_expr(reminder["cron"]))
                     self.scheduler.add_job(
                         self._reminder_callback,
-                        trigger="cron",
+                        trigger=trigger,
                         id=id_,
                         args=[group, reminder],
                         misfire_grace_time=60,
-                        **self._parse_cron_expr(reminder["cron"]),
                     )
 
     def check_is_outdated(self, reminder: dict):
@@ -101,10 +102,10 @@ class Main(star.Star):
     async def reminder_tool(
         self,
         event: AstrMessageEvent,
-        text: str = None,
-        datetime_str: str = None,
-        cron_expression: str = None,
-        human_readable_cron: str = None,
+        text: str | None = None,
+        datetime_str: str | None = None,
+        cron_expression: str | None = None,
+        human_readable_cron: str | None = None,
     ):
         """Call this function when user is asking for setting a reminder.
 
@@ -139,17 +140,19 @@ class Main(star.Star):
                 "id": str(uuid.uuid4()),
             }
             self.reminder_data[event.unified_msg_origin].append(d)
+            trigger = CronTrigger(**self._parse_cron_expr(cron_expression))
             self.scheduler.add_job(
                 self._reminder_callback,
-                "cron",
+                trigger,
                 id=d["id"],
                 misfire_grace_time=60,
-                **self._parse_cron_expr(cron_expression),
                 args=[event.unified_msg_origin, d],
             )
             if human_readable_cron:
                 reminder_time = f"{human_readable_cron}(Cron: {cron_expression})"
         else:
+            if datetime_str is None:
+                raise ValueError("datetime_str cannot be None.")
             d = {"text": text, "datetime": datetime_str, "id": str(uuid.uuid4())}
             self.reminder_data[event.unified_msg_origin].append(d)
             datetime_scheduled = datetime.datetime.strptime(

@@ -24,7 +24,7 @@ class ContentSafetyCheckStage(Stage):
         self,
         event: AstrMessageEvent,
         check_text: str | None = None,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()
         ok, info = self.strategy_selector.check(text)

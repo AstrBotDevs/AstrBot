@@ -153,7 +153,9 @@ class AstrMessageEvent(abc.ABC):
 
     def get_sender_name(self) -> str:
         """获取消息发送者的名称。(可能会返回空字符串)"""
-        return self.message_obj.sender.nickname
+        if isinstance(self.message_obj.sender.nickname, str):
+            return self.message_obj.sender.nickname
+        return ""
 
     def set_extra(self, key, value):
         """设置额外的信息。"""
@@ -270,7 +272,7 @@ class AstrMessageEvent(abc.ABC):
         """
         self.call_llm = call_llm
 
-    def get_result(self) -> MessageEventResult:
+    def get_result(self) -> MessageEventResult | None:
         """获取消息事件的结果。"""
         return self._result
 
@@ -320,7 +322,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         prompt: str,
         func_tool_manager=None,
-        session_id: str = None,
+        session_id: str = "",
         image_urls: list[str] | None = None,
         contexts: list | None = None,
         system_prompt: str = "",

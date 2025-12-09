@@ -93,10 +93,10 @@ class WecomPlatformEvent(AstrMessageEvent):
         if is_wechat_kf:
             # 微信客服
             kf_message_api = getattr(self.client, "kf_message", None)
-            if not kf_message_api:
+            if not isinstance(kf_message_api, WeChatKFMessage):
                 logger.warning("未找到微信客服发送消息方法。")
                 return
-            assert isinstance(kf_message_api, WeChatKFMessage)
+
             user_id = self.get_sender_id()
             for comp in message.chain:
                 if isinstance(comp, Plain):
