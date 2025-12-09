@@ -48,6 +48,7 @@ class KnowledgeBaseRoute(Route):
             # 文档管理
             "/kb/document/list": ("GET", self.list_documents),
             "/kb/document/upload": ("POST", self.upload_document),
+            "/kb/document/import": ("POST", self.import_documents),
             "/kb/document/upload/url": ("POST", self.upload_document_from_url),
             "/kb/document/upload/progress": ("GET", self.get_upload_progress),
             "/kb/document/get": ("GET", self.get_document),
@@ -163,6 +164,113 @@ class KnowledgeBaseRoute(Route):
 
         except Exception as e:
             logger.error(f"后台上传任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
+            self.upload_tasks[task_id] = {
+                "status": "failed",
+                "result": None,
+                "error": str(e),
+            }
+            if task_id in self.upload_progress:
+                self.upload_progress[task_id]["status"] = "failed"
+
+    async def _background_import_task(
+        self,
+        task_id: str,
+        kb_helper,
+        documents: list,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ):
+        """后台导入预切片文档任务"""
+        try:
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "processing",
+                "result": None,
+                "error": None,
+            }
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": len(documents),
+                "stage": "waiting",
+                "current": 0,
+                "total": 100,
+            }
+
+            uploaded_docs = []
+            failed_docs = []
+
+            for file_idx, doc_info in enumerate(documents):
+                file_name = doc_info.get("file_name", f"imported_doc_{file_idx}")
+                chunks = doc_info.get("chunks", [])
+
+                try:
+                    # 更新整体进度
+                    self.upload_progress[task_id].update(
+                        {
+                            "status": "processing",
+                            "file_index": file_idx,
+                            "file_name": file_name,
+                            "stage": "importing",
+                            "current": 0,
+                            "total": 100,
+                        },
+                    )
+
+                    # 创建进度回调函数
+                    async def progress_callback(stage, current, total):
+                        if task_id in self.upload_progress:
+                            self.upload_progress[task_id].update(
+                                {
+                                    "status": "processing",
+                                    "file_index": file_idx,
+                                    "file_name": file_name,
+                                    "stage": stage,
+                                    "current": current,
+                                    "total": total,
+                                },
+                            )
+
+                    # 调用 upload_document，传入 pre_chunked_text
+                    doc = await kb_helper.upload_document(
+                        file_name=file_name,
+                        file_content=None,  # 预切片模式下不需要原始内容
+                        file_type="txt",  # 默认为 txt，或者从 doc_info 获取
+                        batch_size=batch_size,
+                        tasks_limit=tasks_limit,
+                        max_retries=max_retries,
+                        progress_callback=progress_callback,
+                        pre_chunked_text=chunks,
+                    )
+
+                    uploaded_docs.append(doc.model_dump())
+                except Exception as e:
+                    logger.error(f"导入文档 {file_name} 失败: {e}")
+                    failed_docs.append(
+                        {"file_name": file_name, "error": str(e)},
+                    )
+
+            # 更新任务完成状态
+            result = {
+                "task_id": task_id,
+                "uploaded": uploaded_docs,
+                "failed": failed_docs,
+                "total": len(documents),
+                "success_count": len(uploaded_docs),
+                "failed_count": len(failed_docs),
+            }
+
+            self.upload_tasks[task_id] = {
+                "status": "completed",
+                "result": result,
+                "error": None,
+            }
+            self.upload_progress[task_id]["status"] = "completed"
+
+        except Exception as e:
+            logger.error(f"后台导入任务 {task_id} 失败: {e}")
             logger.error(traceback.format_exc())
             self.upload_tasks[task_id] = {
                 "status": "failed",
@@ -652,6 +760,91 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"上传文档失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"上传文档失败: {e!s}").__dict__
+
+    async def import_documents(self):
+        """导入预切片文档
+
+        Body:
+        - kb_id: 知识库 ID (必填)
+        - documents: 文档列表 (必填)
+            - file_name: 文件名 (必填)
+            - chunks: 切片列表 (必填, list[str])
+        - batch_size: 批处理大小 (可选, 默认32)
+        - tasks_limit: 并发任务限制 (可选, 默认3)
+        - max_retries: 最大重试次数 (可选, 默认3)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            data = await request.json
+
+            kb_id = data.get("kb_id")
+            if not kb_id:
+                return Response().error("缺少参数 kb_id").__dict__
+
+            documents = data.get("documents")
+            if not documents or not isinstance(documents, list):
+                return Response().error("缺少参数 documents 或格式错误").__dict__
+
+            batch_size = data.get("batch_size", 32)
+            tasks_limit = data.get("tasks_limit", 3)
+            max_retries = data.get("max_retries", 3)
+
+            # 简单验证文档格式
+            for doc in documents:
+                if "file_name" not in doc or "chunks" not in doc:
+                    return (
+                        Response()
+                        .error("文档格式错误，必须包含 file_name 和 chunks")
+                        .__dict__
+                    )
+                if not isinstance(doc["chunks"], list):
+                    return Response().error("chunks 必须是列表").__dict__
+
+            # 获取知识库
+            kb_helper = await kb_manager.get_kb(kb_id)
+            if not kb_helper:
+                return Response().error("知识库不存在").__dict__
+
+            # 生成任务ID
+            task_id = str(uuid.uuid4())
+
+            # 初始化任务状态
+            self.upload_tasks[task_id] = {
+                "status": "pending",
+                "result": None,
+                "error": None,
+            }
+
+            # 启动后台任务
+            asyncio.create_task(
+                self._background_import_task(
+                    task_id=task_id,
+                    kb_helper=kb_helper,
+                    documents=documents,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                ),
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "task_id": task_id,
+                        "doc_count": len(documents),
+                        "message": "import task created, processing in background",
+                    },
+                )
+                .__dict__
+            )
+
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+        except Exception as e:
+            logger.error(f"导入文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"导入文档失败: {e!s}").__dict__
 
     async def get_upload_progress(self):
         """获取上传进度和结果
