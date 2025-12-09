@@ -237,7 +237,12 @@ class KnowledgeBaseRoute(Route):
                     doc = await kb_helper.upload_document(
                         file_name=file_name,
                         file_content=None,  # 预切片模式下不需要原始内容
-                        file_type="txt",  # 默认为 txt，或者从 doc_info 获取
+                        file_type=doc_info.get("file_type")
+                        or (
+                            file_name.rsplit(".", 1)[-1].lower()
+                            if "." in file_name
+                            else "txt"
+                        ),
                         batch_size=batch_size,
                         tasks_limit=tasks_limit,
                         max_retries=max_retries,
@@ -769,6 +774,7 @@ class KnowledgeBaseRoute(Route):
         - documents: 文档列表 (必填)
             - file_name: 文件名 (必填)
             - chunks: 切片列表 (必填, list[str])
+            - file_type: 文件类型 (可选, 默认从文件名推断或为 txt)
         - batch_size: 批处理大小 (可选, 默认32)
         - tasks_limit: 并发任务限制 (可选, 默认3)
         - max_retries: 最大重试次数 (可选, 默认3)
@@ -799,6 +805,10 @@ class KnowledgeBaseRoute(Route):
                     )
                 if not isinstance(doc["chunks"], list):
                     return Response().error("chunks 必须是列表").__dict__
+                if not all(
+                    isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
+                ):
+                    return Response().error("chunks 必须是非空字符串列表").__dict__
 
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
