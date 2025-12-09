@@ -181,3 +181,29 @@ async def test_import_documents_invalid_input(app: Quart, authenticated_header: 
     data = await response.get_json()
     assert data["status"] == "error"
     assert "文档格式错误" in data["message"]
+
+    # Invalid chunks type
+    response = await test_client.post(
+        "/api/kb/document/import",
+        json={
+            "kb_id": "test_kb",
+            "documents": [{"file_name": "test", "chunks": "not-a-list"}],
+        },
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "chunks 必须是列表" in data["message"]
+
+    # Invalid chunks content
+    response = await test_client.post(
+        "/api/kb/document/import",
+        json={
+            "kb_id": "test_kb",
+            "documents": [{"file_name": "test", "chunks": ["valid", ""]}],
+        },
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "chunks 必须是非空字符串列表" in data["message"]
