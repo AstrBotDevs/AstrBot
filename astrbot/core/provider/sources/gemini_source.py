@@ -127,15 +127,15 @@ class ProviderGoogleGenAI(Provider):
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
-            modalities = ["Text"]
+            modalities = ["TEXT"]
 
         # 流式输出不支持图片模态
         if (
             self.provider_settings.get("streaming_response", False)
-            and "Image" in modalities
+            and "IMAGE" in modalities
         ):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
-            modalities = ["Text"]
+            modalities = ["TEXT"]
 
         tool_list: list[types.Tool] | None = []
         model_name = self.get_model()
@@ -431,9 +431,9 @@ class ProviderGoogleGenAI(Provider):
             None,
         )
 
-        modalities = ["Text"]
+        modalities = ["TEXT"]
         if self.provider_config.get("gm_resp_image_modal", False):
-            modalities.append("Image")
+            modalities.append("IMAGE")
 
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
@@ -490,7 +490,7 @@ class ProviderGoogleGenAI(Provider):
                     logger.warning(
                         f"{self.get_model()} 不支持多模态输出，降级为文本模态",
                     )
-                    modalities = ["Text"]
+                    modalities = ["TEXT"]
                 else:
                     raise
                 continue
