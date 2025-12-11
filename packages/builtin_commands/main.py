@@ -219,6 +219,7 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
     async def update_dashboard(self, event: AstrMessageEvent):
+        """更新管理面板"""
         await self.admin_c.update_dashboard(event)
 
     @filter.command("set")
