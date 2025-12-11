@@ -193,7 +193,7 @@ class LogManager:
         class PluginFilter(logging.Filter):
             """插件过滤器类, 用于标记日志来源是插件还是核心组件"""
 
-            def filter(self, record):
+            def filter(self, record) -> bool:
                 record.plugin_tag = (
                     "[Plug]" if is_plugin_path(record.pathname) else "[Core]"
                 )
@@ -205,7 +205,7 @@ class LogManager:
             """
 
             # 获取这个文件和父文件夹的名字：<folder>.<file> 并且去除 .py
-            def filter(self, record):
+            def filter(self, record) -> bool:
                 dirname = os.path.dirname(record.pathname)
                 record.filename = (
                     os.path.basename(dirname)
@@ -218,7 +218,7 @@ class LogManager:
             """短日志级别名称过滤器类, 用于将日志级别名称转换为四个字母的缩写"""
 
             # 添加短日志级别名称
-            def filter(self, record):
+            def filter(self, record) -> bool:
                 record.short_levelname = get_short_level_name(record.levelname)
                 return True
 
@@ -232,7 +232,7 @@ class LogManager:
         return logger
 
     @classmethod
-    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker):
+    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
         """设置队列处理器, 用于将日志消息发送到 LogBroker
 
         Args:

@@ -56,7 +56,7 @@ class AstrBotConfigManager:
             )
         return self.abconf_data
 
-    def _load_all_configs(self):
+    def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
         abconf_data = self._get_abconf_data()
         self.abconf_data = abconf_data

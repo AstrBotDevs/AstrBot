@@ -91,7 +91,7 @@ class Main(Star):
                     async def empty_mention_waiter(
                         controller: SessionController,
                         event: AstrMessageEvent,
-                    ):
+                    ) -> None:
                         event.message_obj.message.insert(
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),

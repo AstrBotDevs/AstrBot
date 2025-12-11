@@ -28,7 +28,7 @@ class TemplateManager:
         os.makedirs(self.user_template_dir, exist_ok=True)
         self._initialize_user_templates()
 
-    def _copy_core_templates(self, overwrite: bool = False):
+    def _copy_core_templates(self, overwrite: bool = False) -> None:
         """从内置目录复制核心模板到用户目录。"""
         for filename in self.CORE_TEMPLATES:
             src = os.path.join(self.builtin_template_dir, filename)
@@ -36,7 +36,7 @@ class TemplateManager:
             if os.path.exists(src) and (overwrite or not os.path.exists(dst)):
                 shutil.copyfile(src, dst)
 
-    def _initialize_user_templates(self):
+    def _initialize_user_templates(self) -> None:
         """如果用户目录下缺少核心模板，则进行复制。"""
         self._copy_core_templates(overwrite=False)
 

@@ -144,7 +144,7 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(msg: str):
+        def logging_callback(msg: str) -> None:
             # Handle MCP service error logs
             print(f"MCP Server {name} Error: {msg}")
             self.server_errlogs.append(msg)
@@ -214,7 +214,7 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str):
+            def callback(msg: str) -> None:
                 # Handle MCP service error logs
                 self.server_errlogs.append(msg)
 

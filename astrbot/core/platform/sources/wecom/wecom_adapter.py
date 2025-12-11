@@ -182,7 +182,7 @@ class WecomPlatformAdapter(Platform):
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
-        async def callback(msg: BaseMessage):
+        async def callback(msg: BaseMessage) -> None:
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
 
                 def get_latest_msg_item() -> dict | None:

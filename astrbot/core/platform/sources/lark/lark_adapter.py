@@ -50,10 +50,10 @@ class LarkPlatformAdapter(Platform):
         if not self.bot_name:
             logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
-        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1):
+        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             await self.convert_msg(event)
 
-        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1):
+        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             asyncio.create_task(on_msg_event_recv(event))
 
         self.event_handler = (

@@ -44,7 +44,7 @@ class SlackWebhookClient:
 
         self.shutdown_event = asyncio.Event()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """设置路由"""
 
         @self.app.route(self.path, methods=["POST"])
@@ -143,7 +143,7 @@ class SlackSocketClient:
 
     async def _handle_events(
         self, _: AsyncBaseSocketModeClient, req: SocketModeRequest
-    ):
+    ) -> None:
         """处理 Socket Mode 事件"""
         try:
             if self.socket_client is None:

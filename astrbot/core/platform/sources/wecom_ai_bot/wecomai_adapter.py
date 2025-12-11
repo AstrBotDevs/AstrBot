@@ -153,7 +153,7 @@ class WecomAIBotAdapter(Platform):
             self._handle_queued_message,
         )
 
-    async def _handle_queued_message(self, data: dict):
+    async def _handle_queued_message(self, data: dict) -> None:
         """处理队列中的消息，类似webchat的callback"""
         try:
             abm = await self.convert_message(data)
@@ -313,7 +313,7 @@ class WecomAIBotAdapter(Platform):
         callback_params: dict[str, str],
         stream_id: str,
         session_id: str,
-    ):
+    ) -> None:
         """将消息放入队列进行异步处理"""
         input_queue = self.queue_mgr.get_or_create_queue(stream_id)
         _ = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -426,7 +426,7 @@ class WecomAIBotAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
 
-        async def run_both():
+        async def run_both() -> None:
             # 如果启用统一 webhook 模式，则不启动独立服务器
             webhook_uuid = self.config.get("webhook_uuid")
             if self.unified_webhook_mode and webhook_uuid:

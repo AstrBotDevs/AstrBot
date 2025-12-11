@@ -53,7 +53,7 @@ class Platform(abc.ABC):
         return self._status
 
     @status.setter
-    def status(self, value: PlatformStatus):
+    def status(self, value: PlatformStatus) -> None:
         """设置平台运行状态"""
         self._status = value
         if value == PlatformStatus.RUNNING and self._started_at is None:

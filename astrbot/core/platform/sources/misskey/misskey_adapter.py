@@ -152,7 +152,7 @@ class MisskeyPlatformAdapter(Platform):
 
         await self._start_websocket_connection()
 
-    def _register_event_handlers(self, streaming):
+    def _register_event_handlers(self, streaming) -> None:
         """注册事件处理器"""
         streaming.add_message_handler("notification", self._handle_notification)
         streaming.add_message_handler("main:notification", self._handle_notification)
@@ -196,7 +196,7 @@ class MisskeyPlatformAdapter(Platform):
         message: AstrBotMessage,
         poll: dict[str, Any],
         message_parts: list[str],
-    ):
+    ) -> None:
         """处理投票数据，将其添加到消息中"""
         try:
             if not isinstance(message.raw_message, dict):
@@ -235,7 +235,7 @@ class MisskeyPlatformAdapter(Platform):
 
         return fields
 
-    async def _start_websocket_connection(self):
+    async def _start_websocket_connection(self) -> None:
         backoff_delay = 1.0
         max_backoff = 300.0
         backoff_multiplier = 1.5
@@ -283,7 +283,7 @@ class MisskeyPlatformAdapter(Platform):
                 await asyncio.sleep(sleep_time)
                 backoff_delay = min(backoff_delay * backoff_multiplier, max_backoff)
 
-    async def _handle_notification(self, data: dict[str, Any]):
+    async def _handle_notification(self, data: dict[str, Any]) -> None:
         try:
             notification_type = data.get("type")
             logger.debug(
@@ -307,7 +307,7 @@ class MisskeyPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Misskey] 处理通知失败: {e}")
 
-    async def _handle_chat_message(self, data: dict[str, Any]):
+    async def _handle_chat_message(self, data: dict[str, Any]) -> None:
         try:
             sender_id = str(
                 data.get("fromUserId", "") or data.get("fromUser", {}).get("id", ""),
@@ -342,7 +342,7 @@ class MisskeyPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Misskey] 处理聊天消息失败: {e}")
 
-    async def _debug_handler(self, data: dict[str, Any]):
+    async def _debug_handler(self, data: dict[str, Any]) -> None:
         event_type = data.get("type", "unknown")
         logger.debug(
             f"[Misskey] 收到未处理事件: type={event_type}, channel={data.get('channel', 'unknown')}",

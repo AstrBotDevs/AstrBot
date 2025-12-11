@@ -46,7 +46,7 @@ class QQOfficialWebhook:
         self.client.api = self.api
         self.client.http = self.http
 
-        async def bot_connect():
+        async def bot_connect() -> None:
             pass
 
         self._connection = ConnectionSession(

@@ -11,7 +11,7 @@ class UmopConfigRouter:
 
         self._load_routing_table()
 
-    def _load_routing_table(self):
+    def _load_routing_table(self) -> None:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
         sp_data = self.sp.get(

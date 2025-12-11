@@ -236,7 +236,7 @@ class DingtalkPlatformAdapter(Platform):
     async def run(self) -> None:
         # await self.client_.start()
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
-        def start_client(loop: asyncio.AbstractEventLoop):
+        def start_client(loop: asyncio.AbstractEventLoop) -> None:
             try:
                 self._shutdown_event = threading.Event()
                 task = loop.create_task(self.client_.start())
@@ -253,7 +253,7 @@ class DingtalkPlatformAdapter(Platform):
         await loop.run_in_executor(None, start_client, loop)
 
     async def terminate(self) -> None:
-        def monkey_patch_close():
+        def monkey_patch_close() -> NoReturn:
             raise KeyboardInterrupt("Graceful shutdown")
 
         if self.client_.websocket is not None:

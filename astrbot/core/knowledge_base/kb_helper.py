@@ -293,7 +293,7 @@ class KBHelper:
                 await progress_callback("chunking", 100, 100)
 
             # 阶段3: 生成向量（带进度回调）
-            async def embedding_progress_callback(current, total):
+            async def embedding_progress_callback(current, total) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 

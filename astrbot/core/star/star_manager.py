@@ -65,7 +65,7 @@ class PluginManager:
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
-    async def _watch_plugins_changes(self):
+    async def _watch_plugins_changes(self) -> None:
         """监视插件文件变化"""
         try:
             async for changes in awatch(
@@ -82,7 +82,7 @@ class PluginManager:
             logger.error(f"插件热重载监视任务异常: {e!s}")
             logger.error(traceback.format_exc())
 
-    async def _handle_file_changes(self, changes):
+    async def _handle_file_changes(self, changes) -> None:
         """处理文件变化"""
         logger.info(f"检测到文件变化: {changes}")
         plugins_to_check = []
@@ -166,7 +166,7 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    async def _check_plugin_dept_update(self, target_plugin: str | None = None):
+    async def _check_plugin_dept_update(self, target_plugin: str | None = None) -> bool | None:
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
@@ -263,7 +263,7 @@ class PluginManager:
         module_patterns: list[str] | None = None,
         root_dir_name: str | None = None,
         is_reserved: bool = False,
-    ):
+    ) -> None:
         """从 sys.modules 中移除指定的模块
 
         可以基于模块名模式或插件目录名移除模块，用于清理插件相关的模块缓存
@@ -774,7 +774,7 @@ class PluginManager:
                     except Exception as e:
                         logger.warning(f"删除插件持久化数据失败 (plugins_data): {e!s}")
 
-    async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):
+    async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str) -> None:
         """解绑并移除一个插件。
 
         Args:
@@ -878,7 +878,7 @@ class PluginManager:
             plugin.activated = False
 
     @staticmethod
-    async def _terminate_plugin(star_metadata: StarMetadata):
+    async def _terminate_plugin(star_metadata: StarMetadata) -> None:
         """终止插件，调用插件的 terminate() 和 __del__() 方法"""
         logger.info(f"正在终止插件 {star_metadata.name} ...")
 

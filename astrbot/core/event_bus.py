@@ -47,7 +47,7 @@ class EventBus:
                 continue
             asyncio.create_task(scheduler.execute(event))
 
-    def _print_event(self, event: AstrMessageEvent, conf_name: str):
+    def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息
 
         Args:

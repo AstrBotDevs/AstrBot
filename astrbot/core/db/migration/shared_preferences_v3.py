@@ -23,7 +23,7 @@ class SharedPreferences:
                 os.remove(self.path)
         return {}
 
-    def _save_preferences(self):
+    def _save_preferences(self) -> None:
         with open(self.path, "w") as f:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
             f.flush()

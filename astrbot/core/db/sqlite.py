@@ -699,7 +699,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 
@@ -722,7 +722,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 
@@ -757,7 +757,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 

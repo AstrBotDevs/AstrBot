@@ -17,7 +17,7 @@ class ProviderCommands:
         provider_capability_type: ProviderType | None,
         err_code: str,
         err_reason: str,
-    ):
+    ) -> None:
         """记录不可达原因到日志。"""
         meta = provider.meta()
         logger.warning(

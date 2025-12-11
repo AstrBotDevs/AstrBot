@@ -62,31 +62,31 @@ class AiocqhttpAdapter(Platform):
         )
 
         @self.bot.on_request()
-        async def request(event: Event):
+        async def request(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_notice()
-        async def notice(event: Event):
+        async def notice(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_message("group")
-        async def group(event: Event):
+        async def group(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_message("private")
-        async def private(event: Event):
+        async def private(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_websocket_connection
-        def on_websocket_connection(_):
+        def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
 
     async def send_by_session(

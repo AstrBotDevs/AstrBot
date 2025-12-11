@@ -183,15 +183,15 @@ async def test_do_update(
     temp_release_dir = tmp_path_factory.mktemp("release")
     release_path = temp_release_dir / "astrbot"
 
-    async def mock_update(*args, **kwargs):
+    async def mock_update(*args, **kwargs) -> None:
         """Mocks the update process by creating a directory in the temp path."""
         os.makedirs(release_path, exist_ok=True)
 
-    async def mock_download_dashboard(*args, **kwargs):
+    async def mock_download_dashboard(*args, **kwargs) -> None:
         """Mocks the dashboard download to prevent network access."""
         return
 
-    async def mock_pip_install(*args, **kwargs):
+    async def mock_pip_install(*args, **kwargs) -> None:
         """Mocks pip install to prevent actual installation."""
         return
 

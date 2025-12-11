@@ -37,7 +37,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         client: WeChatClient,
         message: MessageChain,
         user_name: str,
-    ):
+    ) -> None:
         pass
 
     async def split_plain(self, plain: str) -> list[str]:

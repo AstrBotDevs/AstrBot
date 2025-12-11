@@ -66,7 +66,7 @@ class AstrBotConfig(dict):
         """将 Schema 转换成 Config"""
         conf = {}
 
-        def _parse_schema(schema: dict, conf: dict):
+        def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(

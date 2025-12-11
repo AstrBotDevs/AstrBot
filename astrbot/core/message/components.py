@@ -687,7 +687,7 @@ class File(BaseMessageComponent):
         return ""
 
     @file.setter
-    def file(self, value: str):
+    def file(self, value: str) -> None:
         """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
 
         Args:
@@ -722,7 +722,7 @@ class File(BaseMessageComponent):
 
         return ""
 
-    async def _download_file(self):
+    async def _download_file(self) -> None:
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")

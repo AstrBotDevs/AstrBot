@@ -73,7 +73,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
-    ):
+    ) -> None:
         image_path = None
 
         has_reply = False

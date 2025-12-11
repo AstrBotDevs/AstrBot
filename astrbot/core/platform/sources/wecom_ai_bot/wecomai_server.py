@@ -43,7 +43,7 @@ class WecomAIBotServer:
 
         self.shutdown_event = asyncio.Event()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """设置 Quart 路由"""
         # 使用 Quart 的 add_url_rule 方法添加路由
         self.app.add_url_rule(

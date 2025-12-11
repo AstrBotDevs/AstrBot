@@ -487,7 +487,7 @@ class WeChatPadProAdapter(Platform):
         to_user_name: str,
         content: str,
         push_content: str,
-    ):
+    ) -> bool:
         """判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。"""
         if from_user_name == "weixin":
             return False
@@ -640,7 +640,7 @@ class WeChatPadProAdapter(Platform):
         raw_message: dict,
         msg_type: int,
         content: str,
-    ):
+    ) -> None:
         """根据消息类型处理消息内容，填充 AstrBotMessage 的 message 列表。"""
         if msg_type == 1:  # 文本消息
             abm.message_str = content

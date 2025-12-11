@@ -279,7 +279,7 @@ class EmbeddingProvider(AbstractProvider):
         completed_count = 0
         total_count = len(texts)
 
-        async def process_batch(batch_idx: int, batch_texts: list[str]):
+        async def process_batch(batch_idx: int, batch_texts: list[str]) -> None:
             nonlocal completed_count
             async with semaphore:
                 for attempt in range(max_retries):

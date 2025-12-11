@@ -127,7 +127,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: tuple | None = None):
+    def _exec_sql(self, sql: str, params: tuple | None = None) -> None:
         conn = self.conn
         try:
             c = self.conn.cursor()

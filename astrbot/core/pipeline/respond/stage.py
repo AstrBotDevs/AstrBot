@@ -91,7 +91,7 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
-    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
+    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
         Args:

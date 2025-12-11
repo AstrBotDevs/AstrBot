@@ -149,7 +149,7 @@ class PlatformManager:
             except Exception:
                 logger.error(traceback.format_exc())
 
-    async def _task_wrapper(self, task: asyncio.Task, platform: Platform | None = None):
+    async def _task_wrapper(self, task: asyncio.Task, platform: Platform | None = None) -> None:
         # 设置平台状态为运行中
         if platform:
             platform.status = PlatformStatus.RUNNING

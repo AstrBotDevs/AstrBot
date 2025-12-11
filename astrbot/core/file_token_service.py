@@ -14,7 +14,7 @@ class FileTokenService:
         self.staged_files = {}  # token: (file_path, expire_time)
         self.default_timeout = default_timeout
 
-    async def _cleanup_expired_tokens(self):
+    async def _cleanup_expired_tokens(self) -> None:
         """清理过期的令牌"""
         now = time.time()
         expired_tokens = [

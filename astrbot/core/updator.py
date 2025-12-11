@@ -44,7 +44,7 @@ class AstrBotUpdator(RepoZipUpdator):
         except psutil.NoSuchProcess:
             pass
 
-    def _reboot(self, delay: int = 3):
+    def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序

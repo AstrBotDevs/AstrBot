@@ -66,7 +66,7 @@ def test_azure_tts_signature_uses_secrets() -> None:
         "OTTS_AUTH_TIME": "https://example.com/api/time",
     }
 
-    async def test_nonce_generation():
+    async def test_nonce_generation() -> None:
         async with OTTSProvider(config) as provider:
             # Mock time sync to avoid actual API calls
             provider.time_offset = 0

@@ -71,7 +71,7 @@ class SessionController:
 
         asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
 
-    async def _holding(self, event: asyncio.Event, timeout: float):
+    async def _holding(self, event: asyncio.Event, timeout: float) -> None:
         """等待事件结束或超时"""
         try:
             await asyncio.wait_for(event.wait(), timeout)
@@ -141,7 +141,7 @@ class SessionWaiter:
         finally:
             self._cleanup()
 
-    def _cleanup(self, error: Exception | None = None):
+    def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
         USER_SESSIONS.pop(self.session_id, None)
         try:
@@ -151,7 +151,7 @@ class SessionWaiter:
         self.session_controller.stop(error)
 
     @classmethod
-    async def trigger(cls, session_id: str, event: AstrMessageEvent):
+    async def trigger(cls, session_id: str, event: AstrMessageEvent) -> None:
         """外部输入触发会话处理"""
         session = USER_SESSIONS.get(session_id)
         if not session or session.session_controller.future.done():

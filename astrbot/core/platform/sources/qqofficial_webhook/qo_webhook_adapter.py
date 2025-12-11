@@ -71,7 +71,7 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self._commit(abm)
 
-    def _commit(self, abm: AstrBotMessage):
+    def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.commit_event(
             QQOfficialWebhookMessageEvent(
                 abm.message_str,

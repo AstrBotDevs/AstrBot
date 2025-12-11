@@ -48,7 +48,7 @@ class OTTSProvider:
             await self._client.aclose()
             self._client = None
 
-    async def _sync_time(self):
+    async def _sync_time(self) -> None:
         try:
             response = await self.client.get(self.auth_time_url)
             response.raise_for_status()
@@ -149,7 +149,7 @@ class AzureNativeProvider(TTSProvider):
             await self._client.aclose()
             self._client = None
 
-    async def _refresh_token(self):
+    async def _refresh_token(self) -> None:
         token_url = (
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )

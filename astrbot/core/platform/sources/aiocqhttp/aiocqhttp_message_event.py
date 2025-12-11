@@ -72,7 +72,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         is_group: bool,
         session_id: str | None,
         messages: list[dict],
-    ):
+    ) -> None:
         # session_id 必须是纯数字字符串
         session_id_int = (
             int(session_id) if session_id and session_id.isdigit() else None
@@ -97,7 +97,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         event: Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
-    ):
+    ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
         Args:

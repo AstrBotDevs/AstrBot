@@ -40,7 +40,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         )
         logger.info("Whisper 模型加载完成。")
 
-    async def _is_silk_file(self, file_path):
+    async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
             file_header = f.read(8)

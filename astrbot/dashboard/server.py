@@ -168,7 +168,7 @@ class AstrBotDashboard:
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _init_jwt_secret(self):
+    def _init_jwt_secret(self) -> None:
         if not self.config.get("dashboard", {}).get("jwt_secret", None):
             # 如果没有设置 JWT 密钥，则生成一个新的密钥
             jwt_secret = os.urandom(32).hex()

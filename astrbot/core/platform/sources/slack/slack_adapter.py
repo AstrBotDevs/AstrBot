@@ -288,7 +288,7 @@ class SlackAdapter(Platform):
 
         return message_components
 
-    async def _handle_socket_event(self, req: SocketModeRequest):
+    async def _handle_socket_event(self, req: SocketModeRequest) -> None:
         """处理 Socket Mode 事件"""
         if req.type == "events_api":
             # 事件 API
@@ -377,7 +377,7 @@ class SlackAdapter(Platform):
                 f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'",
             )
 
-    async def _handle_webhook_event(self, event_data: dict):
+    async def _handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件"""
         event = event_data.get("event", {})
 

@@ -66,7 +66,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
 
-    async def _send_image(self, session: aiohttp.ClientSession, comp: Image):
+    async def _send_image(self, session: aiohttp.ClientSession, comp: Image) -> None:
         b64 = await comp.convert_to_base64()
         raw = self._validate_base64(b64)
         b64c = self._compress_image(raw)
@@ -78,7 +78,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         url = f"{self.adapter.base_url}/message/SendImageNewMessage"
         await self._post(session, url, payload)
 
-    async def _send_text(self, session: aiohttp.ClientSession, text: str):
+    async def _send_text(self, session: aiohttp.ClientSession, text: str) -> None:
         if (
             self.message_obj.type == MessageType.GROUP_MESSAGE  # 确保是群聊消息
             and self.adapter.settings.get(
@@ -114,7 +114,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         url = f"{self.adapter.base_url}/message/SendTextMessage"
         await self._post(session, url, payload)
 
-    async def _send_emoji(self, session: aiohttp.ClientSession, comp: WechatEmoji):
+    async def _send_emoji(self, session: aiohttp.ClientSession, comp: WechatEmoji) -> None:
         payload = {
             "EmojiList": [
                 {
@@ -127,7 +127,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         url = f"{self.adapter.base_url}/message/SendEmojiMessage"
         await self._post(session, url, payload)
 
-    async def _send_voice(self, session: aiohttp.ClientSession, comp: Record):
+    async def _send_voice(self, session: aiohttp.ClientSession, comp: Record) -> None:
         record_path = await comp.convert_to_file_path()
         # 默认已经存在 data/temp 中
         b64, duration = await audio_to_tencent_silk_base64(record_path)
@@ -157,7 +157,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         # logger.info("图片处理完成！！！")
         return base64.b64encode(buf.getvalue()).decode()
 
-    async def _post(self, session, url, payload):
+    async def _post(self, session, url, payload) -> None:
         params = {"key": self.adapter.auth_key}
         try:
             async with session.post(url, params=params, json=payload) as resp:

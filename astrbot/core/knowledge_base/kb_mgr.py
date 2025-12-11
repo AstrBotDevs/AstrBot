@@ -58,7 +58,7 @@ class KnowledgeBaseManager:
             logger.error(f"知识库模块初始化失败: {e}")
             logger.error(traceback.format_exc())
 
-    async def _init_kb_database(self):
+    async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
         await self.kb_db.migrate_to_v1()

@@ -74,7 +74,7 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
-    def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
+    def _maybe_inject_xai_search(self, payloads: dict, **kwargs) -> None:
         """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
 
         - 仅在 provider_config.xai_native_search 为 True 时生效

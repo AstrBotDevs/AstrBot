@@ -171,7 +171,7 @@ class Main(star.Star):
             return f"{self.config['sandbox']['docker_mirror']}/{self.config['sandbox']['image']}"
         return self.config["sandbox"]["image"]
 
-    def _save_config(self):
+    def _save_config(self) -> None:
         with open(PATH, "w") as f:
             json.dump(self.config, f)
 

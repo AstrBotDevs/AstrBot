@@ -3,7 +3,7 @@ import json
 import random
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, NoReturn
 
 try:
     import aiohttp
@@ -187,7 +187,7 @@ class StreamingClient:
             except Exception:
                 pass
 
-    async def _handle_message(self, data: dict[str, Any]):
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         message_type = data.get("type")
         body = data.get("body", {})
 
@@ -375,7 +375,7 @@ class MisskeyAPI:
             self._session = aiohttp.ClientSession(headers=headers)
         return self._session
 
-    def _handle_response_status(self, status: int, endpoint: str):
+    def _handle_response_status(self, status: int, endpoint: str) -> NoReturn:
         """处理 HTTP 响应状态码"""
         if status == 400:
             logger.error(f"[Misskey API] 请求参数错误: {endpoint} (HTTP {status})")

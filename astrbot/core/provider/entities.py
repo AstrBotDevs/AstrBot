@@ -279,7 +279,7 @@ class LLMResponse:
         return self._completion_text
 
     @completion_text.setter
-    def completion_text(self, value):
+    def completion_text(self, value) -> None:
         if self.result_chain:
             self.result_chain.chain = [
                 comp

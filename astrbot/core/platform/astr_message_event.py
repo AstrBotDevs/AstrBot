@@ -210,10 +210,10 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def _pre_send(self):
+    async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
-    async def _post_send(self):
+    async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
     def set_result(self, result: MessageEventResult | str) -> None:

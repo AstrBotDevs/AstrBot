@@ -126,7 +126,7 @@ class DiscordPlatformAdapter(Platform):
         """主要运行逻辑"""
 
         # 初始化回调函数
-        async def on_received(message_data):
+        async def on_received(message_data) -> None:
             logger.debug(f"[Discord] 收到消息: {message_data}")
             if self.client_self_id is None:
                 self.client_self_id = message_data.get("bot_id")
@@ -143,7 +143,7 @@ class DiscordPlatformAdapter(Platform):
         self.client = DiscordBotClient(token, proxy)
         self.client.on_message_received = on_received
 
-        async def callback():
+        async def callback() -> None:
             if self.enable_command_register:
                 await self._collect_and_register_commands()
             if self.activity_name:
@@ -362,7 +362,7 @@ class DiscordPlatformAdapter(Platform):
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 
-    async def _collect_and_register_commands(self):
+    async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
         registered_commands = []
@@ -418,7 +418,7 @@ class DiscordPlatformAdapter(Platform):
 
         async def dynamic_callback(
             ctx: discord.ApplicationContext, params: str | None = None
-        ):
+        ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")

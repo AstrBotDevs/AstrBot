@@ -85,7 +85,7 @@ class ProviderGSVTTS(TTSProvider):
                     logger.error(f"[GSV TTS] 请求 {endpoint} 最终失败：{e}")
                     raise
 
-    async def _set_model_weights(self):
+    async def _set_model_weights(self) -> None:
         """设置模型路径"""
         try:
             if self.gpt_weights_path:
