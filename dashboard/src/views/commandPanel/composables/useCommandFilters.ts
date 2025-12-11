@@ -162,16 +162,6 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     return expandedGroups.value.has(cmd.handler_full_name);
   };
 
-  // 导出过滤状态
-  const filterState: FilterState = {
-    searchQuery: searchQuery.value,
-    pluginFilter: pluginFilter.value,
-    permissionFilter: permissionFilter.value,
-    statusFilter: statusFilter.value,
-    typeFilter: typeFilter.value,
-    showSystemPlugins: showSystemPlugins.value
-  };
-
   return {
     // 状态
     searchQuery,
