@@ -27,11 +27,10 @@ class CommandRoute(Route):
 
     async def get_commands(self):
         commands = await list_commands()
-        conflicts = await list_command_conflicts()
         summary = {
             "total": len(commands),
             "disabled": len([cmd for cmd in commands if not cmd["enabled"]]),
-            "conflicts": len(conflicts),
+            "conflicts": len([cmd for cmd in commands if cmd.get("has_conflict")]),
         }
         return Response().ok({"items": commands, "summary": summary}).__dict__
 
