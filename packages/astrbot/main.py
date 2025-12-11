@@ -68,7 +68,7 @@ class Main(star.Star):
 
     @filter.command_group("tool")
     def tool(self):
-        pass
+        """函数工具管理"""
 
     @tool.command("ls")
     async def tool_ls(self, event: AstrMessageEvent):
@@ -92,7 +92,7 @@ class Main(star.Star):
 
     @filter.command_group("plugin")
     def plugin(self):
-        pass
+        """插件管理"""
 
     @plugin.command("ls")
     async def plugin_ls(self, event: AstrMessageEvent):
@@ -238,14 +238,17 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
     async def update_dashboard(self, event: AstrMessageEvent):
+        """更新管理面板"""
         await self.admin_c.update_dashboard(event)
 
     @filter.command("set")
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
+        """设置全局变量"""
         await self.setunset_c.set_variable(event, key, value)
 
     @filter.command("unset")
     async def unset_variable(self, event: AstrMessageEvent, key: str):
+        """删除全局变量"""
         await self.setunset_c.unset_variable(event, key)
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)

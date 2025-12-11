@@ -176,7 +176,7 @@ class Main(star.Star):
 
     @filter.command_group("reminder")
     def reminder(self):
-        """The command group of the reminder."""
+        """待办提醒"""
 
     async def get_upcoming_reminders(self, unified_msg_origin: str):
         """Get upcoming reminders."""

@@ -185,6 +185,7 @@ class Main(star.Star):
 
     @filter.command("websearch")
     async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
+        """网页搜索指令（已废弃）"""
         event.set_result(
             MessageEventResult().message(
                 "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。",

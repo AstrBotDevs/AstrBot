@@ -244,7 +244,7 @@ class Main(star.Star):
 
     @filter.command_group("pi")
     def pi(self):
-        pass
+        """代码执行器配置"""
 
     @pi.command("absdir")
     async def pi_absdir(self, event: AstrMessageEvent, path: str = ""):
