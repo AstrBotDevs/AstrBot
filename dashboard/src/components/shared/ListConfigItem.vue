@@ -25,14 +25,29 @@
         {{ dialogTitle }}
       </v-card-title>
       
+      <!-- Add new item section - moved to top -->
+      <v-card-text class="pa-4 pb-2">
+        <v-text-field 
+          v-model="newItem" 
+          :label="t('core.common.list.addItemPlaceholder')" 
+          @keyup.enter="addItem" 
+          clearable 
+          hide-details
+          variant="outlined" 
+          density="compact"
+          placeholder="输入后按回车添加">
+        </v-text-field>
+      </v-card-text>
+
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
         <v-list v-if="localItems.length > 0" density="compact">
           <v-list-item
             v-for="(item, index) in localItems"
             :key="index"
             rounded="md"
-            class="ma-1">
-            <v-list-item-title v-if="editIndex !== index">
+            class="ma-1 list-item-clickable"
+            @click="startEdit(index, item)">
+            <v-list-item-title v-if="editIndex !== index" class="item-text">
               {{ item }}
             </v-list-item-title>
             <v-text-field 
@@ -43,23 +58,27 @@
               density="compact"
               @keyup.enter="saveEdit" 
               @keyup.esc="cancelEdit"
+              @click.stop
               autofocus
             ></v-text-field>
             
             <template v-slot:append>
-              <div v-if="editIndex !== index" class="d-flex">
-                <v-btn @click="startEdit(index, item)" variant="plain" icon size="small">
-                  <v-icon>mdi-pencil</v-icon>
-                </v-btn>
-                <v-btn @click="removeItem(index)" variant="plain" icon size="small">
-                  <v-icon>mdi-close</v-icon>
-                </v-btn>
-              </div>
-              <div v-else class="d-flex">
-                <v-btn @click="saveEdit" variant="plain" color="success" icon size="small">
+              <div class="d-flex">
+                <v-btn 
+                  v-if="editIndex === index"
+                  @click.stop="saveEdit" 
+                  variant="plain" 
+                  color="success" 
+                  icon 
+                  size="small">
                   <v-icon>mdi-check</v-icon>
                 </v-btn>
-                <v-btn @click="cancelEdit" variant="plain" color="error" icon size="small">
+                <v-btn 
+                  @click.stop="editIndex === index ? cancelEdit() : removeItem(index)" 
+                  variant="plain" 
+                  :color="editIndex === index ? 'error' : 'default'"
+                  icon 
+                  size="small">
                   <v-icon>mdi-close</v-icon>
                 </v-btn>
               </div>
@@ -69,27 +88,7 @@
         
         <div v-else class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-format-list-bulleted</v-icon>
-          <p class="text-grey mt-4">暂无项目</p>
-        </div>
-      </v-card-text>
-
-      <!-- Add new item section -->
-      <v-card-text class="pa-4">
-        <div class="d-flex align-center ga-2">
-          <v-text-field 
-            v-model="newItem" 
-            :label="t('core.common.list.addItemPlaceholder')" 
-            @keyup.enter="addItem" 
-            clearable 
-            hide-details
-            variant="outlined" 
-            density="compact"
-            class="flex-grow-1">
-          </v-text-field>
-          <v-btn @click="addItem" variant="tonal" color="primary">
-            <v-icon>mdi-plus</v-icon>
-            {{ t('core.common.list.addButton') }}
-          </v-btn>
+          <p class="text-grey mt-4">暂无项目，在上方输入框输入后按回车添加</p>
         </div>
       </v-card-text>
 
@@ -206,8 +205,16 @@ function cancelDialog() {
   transition: all 0.2s ease;
 }
 
-.v-list-item:hover {
-  background-color: rgba(var(--v-theme-primary), 0.04);
+.list-item-clickable {
+  cursor: pointer;
+}
+
+.list-item-clickable:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.item-text {
+  user-select: none;
 }
 
 .v-chip {
