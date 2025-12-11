@@ -16,7 +16,6 @@ from ..stage import Stage
 
 class StarRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
-        self.curr_provider = ctx.plugin_manager.context.get_using_provider()
         self.prompt_prefix = ctx.astrbot_config["provider_settings"]["prompt_prefix"]
         self.identifier = ctx.astrbot_config["provider_settings"]["identifier"]
         self.ctx = ctx
