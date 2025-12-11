@@ -16,7 +16,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         client: dingtalk_stream.ChatbotHandler,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
@@ -24,7 +24,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self,
         client: dingtalk_stream.ChatbotHandler,
         message: MessageChain,
-    ):
+    ) -> None:
         for segment in message.chain:
             if isinstance(segment, Comp.Plain):
                 segment.text = segment.text.strip()
@@ -64,7 +64,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     logger.warning(f"钉钉图片处理失败: {e}, 跳过图片发送")
                     continue
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         await self.send_with_client(self.client, message)
         await super().send(message)
 

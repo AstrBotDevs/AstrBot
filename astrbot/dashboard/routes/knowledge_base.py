@@ -76,7 +76,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台上传任务"""
         try:
             # 初始化任务状态
@@ -112,7 +112,7 @@ class KnowledgeBaseRoute(Route):
                     )
 
                     # 创建进度回调函数
-                    async def progress_callback(stage, current, total):
+                    async def progress_callback(stage, current, total) -> None:
                         if task_id in self.upload_progress:
                             self.upload_progress[task_id].update(
                                 {
@@ -1013,7 +1013,7 @@ class KnowledgeBaseRoute(Route):
         max_retries: int,
         enable_cleaning: bool,
         cleaning_provider_id: str | None,
-    ):
+    ) -> None:
         """后台上传URL任务"""
         try:
             # 初始化任务状态
@@ -1033,7 +1033,7 @@ class KnowledgeBaseRoute(Route):
             }
 
             # 创建进度回调函数
-            async def progress_callback(stage, current, total):
+            async def progress_callback(stage, current, total) -> None:
                 if task_id in self.upload_progress:
                     self.upload_progress[task_id].update(
                         {

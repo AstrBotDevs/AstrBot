@@ -406,7 +406,7 @@ def cache_user_info(
     raw_data: dict[str, Any],
     client_self_id: str,
     is_chat: bool = False,
-):
+) -> None:
     """缓存用户信息"""
     if is_chat:
         user_cache_data = {
@@ -432,7 +432,7 @@ def cache_room_info(
     user_cache: dict[str, Any],
     raw_data: dict[str, Any],
     client_self_id: str,
-):
+) -> None:
     """缓存房间信息"""
     room_data = raw_data.get("toRoom")
     room_id = raw_data.get("toRoomId")

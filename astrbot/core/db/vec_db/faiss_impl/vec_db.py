@@ -1,5 +1,6 @@
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 
 import numpy as np
 
@@ -20,7 +21,7 @@ class FaissVecDB(BaseVecDB):
         index_store_path: str,
         embedding_provider: EmbeddingProvider,
         rerank_provider: RerankProvider | None = None,
-    ):
+    ) -> None:
         self.doc_store_path = doc_store_path
         self.index_store_path = index_store_path
         self.embedding_provider = embedding_provider
@@ -32,7 +33,7 @@ class FaissVecDB(BaseVecDB):
         self.embedding_provider = embedding_provider
         self.rerank_provider = rerank_provider
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self.document_storage.initialize()
 
     async def insert(
@@ -63,7 +64,7 @@ class FaissVecDB(BaseVecDB):
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
     ) -> list[int]:
         """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
@@ -165,7 +166,7 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: str):
+    async def delete(self, doc_id: str) -> None:
         """删除一条文档块（chunk）"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
@@ -177,7 +178,7 @@ class FaissVecDB(BaseVecDB):
         await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
 
-    async def close(self):
+    async def close(self) -> None:
         await self.document_storage.close()
 
     async def count_documents(self, metadata_filter: dict | None = None) -> int:
@@ -192,7 +193,7 @@ class FaissVecDB(BaseVecDB):
         )
         return count
 
-    async def delete_documents(self, metadata_filters: dict):
+    async def delete_documents(self, metadata_filters: dict) -> None:
         """根据元数据过滤器删除文档"""
         docs = await self.document_storage.get_documents(
             metadata_filters=metadata_filters,

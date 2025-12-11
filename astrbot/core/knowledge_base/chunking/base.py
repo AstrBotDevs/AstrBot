@@ -4,6 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class BaseChunker(ABC):
@@ -13,7 +14,7 @@ class BaseChunker(ABC):
     """
 
     @abstractmethod
-    async def chunk(self, text: str, **kwargs) -> list[str]:
+    async def chunk(self, text: str, **kwargs: Any) -> list[str]:  # noqa:ANN401
         """将文本分块
 
         Args:

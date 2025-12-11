@@ -1,4 +1,4 @@
-from typing import Generic
+from typing import Any, Generic
 
 from .agent import Agent
 from .run_context import TContext
@@ -12,8 +12,8 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         self,
         agent: Agent[TContext],
         parameters: dict | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,  # noqa: ANN401
+    ) -> None:
         self.agent = agent
         super().__init__(
             name=f"transfer_to_{agent.name}",

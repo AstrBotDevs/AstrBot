@@ -79,7 +79,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield await self.provider.text_chat(**self.req.__dict__)
 
     @override
-    async def step(self):
+    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
         """Process a single step of the agent.
         This method should return the result of the step.
         """

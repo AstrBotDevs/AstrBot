@@ -20,7 +20,7 @@ class GeweDataParser:
         cached_images=None,
         raw_message: dict | None = None,
         downloader=None,
-    ):
+    ) -> None:
         self._xml = None
         self.content = content
         self.is_private_chat = is_private_chat

@@ -51,10 +51,10 @@ class LarkPlatformAdapter(Platform):
         if not self.bot_name:
             logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
-        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1):
+        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             await self.convert_msg(event)
 
-        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1):
+        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             asyncio.create_task(on_msg_event_recv(event))
 
         self.event_handler = (
@@ -79,7 +79,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送消息")
             return
@@ -128,7 +128,7 @@ class LarkPlatformAdapter(Platform):
             support_streaming_message=False,
         )
 
-    async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
+    async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1) -> None:
         if event.event is None:
             logger.debug("[Lark] 收到空事件(event.event is None)")
             return
@@ -284,7 +284,7 @@ class LarkPlatformAdapter(Platform):
         logger.debug(abm)
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage):
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
         event = LarkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
@@ -295,11 +295,11 @@ class LarkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
-    async def run(self):
+    async def run(self) -> None:
         # self.client.start()
         await self.client._connect()
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         await self.client._disconnect()
         logger.info("飞书(Lark) 适配器已被优雅地关闭")
 

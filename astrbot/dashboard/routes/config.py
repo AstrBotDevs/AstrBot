@@ -49,7 +49,7 @@ def try_cast(value: Any, type_: str):
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
-    def validate(data: dict, metadata: dict = schema, path=""):
+    def validate(data: dict, metadata: dict = schema, path="") -> None:
         for key, value in data.items():
             if key not in metadata:
                 continue
@@ -122,7 +122,9 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
-def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
+def save_config(
+    post_config: dict, config: AstrBotConfig, is_core: bool = False
+) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
@@ -677,7 +679,7 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_default_tmpl):
+    async def _register_platform_logo(self, platform, platform_default_tmpl) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
@@ -800,7 +802,7 @@ class ConfigRoute(Route):
 
     async def _save_astrbot_configs(
         self, post_configs: dict, conf_id: str | None = None
-    ):
+    ) -> None:
         try:
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
@@ -816,7 +818,7 @@ class ConfigRoute(Route):
         except Exception as e:
             raise e
 
-    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
+    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str) -> None:
         md = None
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

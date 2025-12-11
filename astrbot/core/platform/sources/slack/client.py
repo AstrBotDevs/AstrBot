@@ -27,7 +27,7 @@ class SlackWebhookClient:
         port: int = 3000,
         path: str = "/slack/events",
         event_handler: Callable | None = None,
-    ):
+    ) -> None:
         self.web_client = web_client
         self.signing_secret = signing_secret
         self.host = host
@@ -44,7 +44,7 @@ class SlackWebhookClient:
 
         self.shutdown_event = asyncio.Event()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """设置路由"""
 
         @self.app.route(self.path, methods=["POST"])
@@ -105,7 +105,7 @@ class SlackWebhookClient:
             logger.error(f"处理 Slack 事件时出错: {e}")
             return Response("Internal Server Error", status=500)
 
-    async def start(self):
+    async def start(self) -> None:
         """启动 Webhook 服务器"""
         logger.info(
             f"Slack Webhook 服务器启动中，监听 {self.host}:{self.port}{self.path}...",
@@ -118,10 +118,10 @@ class SlackWebhookClient:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
-    async def stop(self):
+    async def stop(self) -> None:
         """停止 Webhook 服务器"""
         self.shutdown_event.set()
         logger.info("Slack Webhook 服务器已停止")
@@ -135,7 +135,7 @@ class SlackSocketClient:
         web_client: AsyncWebClient,
         app_token: str,
         event_handler: Callable | None = None,
-    ):
+    ) -> None:
         self.web_client = web_client
         self.app_token = app_token
         self.event_handler = event_handler
@@ -143,7 +143,7 @@ class SlackSocketClient:
 
     async def _handle_events(
         self, _: AsyncBaseSocketModeClient, req: SocketModeRequest
-    ):
+    ) -> None:
         """处理 Socket Mode 事件"""
         try:
             if self.socket_client is None:
@@ -160,7 +160,7 @@ class SlackSocketClient:
         except Exception as e:
             logger.error(f"处理 Socket Mode 事件时出错: {e}")
 
-    async def start(self):
+    async def start(self) -> None:
         """启动 Socket Mode 连接"""
         self.socket_client = SocketModeClient(
             app_token=self.app_token,
@@ -174,7 +174,7 @@ class SlackSocketClient:
         logger.info("Slack Socket Mode 客户端启动中...")
         await self.socket_client.connect()
 
-    async def stop(self):
+    async def stop(self) -> None:
         """停止 Socket Mode 连接"""
         if self.socket_client:
             await self.socket_client.disconnect()
