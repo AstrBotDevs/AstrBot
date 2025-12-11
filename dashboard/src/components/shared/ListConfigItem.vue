@@ -2,7 +2,7 @@
   <div class="d-flex align-center justify-space-between">
     <div>
       <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
-        暂无项目
+        {{ t('core.common.list.noItems') }}
       </span>
       <div v-else class="d-flex flex-wrap ga-2">
         <v-chip v-for="item in displayItems" :key="item" size="x-small" label color="primary">
@@ -14,7 +14,7 @@
       </div>
     </div>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText }}
+      {{ buttonText || t('core.common.list.modifyButton') }}
     </v-btn>
   </div>
 
@@ -22,7 +22,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        {{ dialogTitle }}
+        {{ dialogTitle || t('core.common.list.editTitle') }}
       </v-card-title>
       
       <!-- Add new item section - moved to top -->
@@ -35,8 +35,8 @@
             clearable 
             hide-details
             variant="outlined" 
-            density="compact"
-            placeholder="输入后按回车添加"
+            density="compact" 
+            :placeholder="t('core.common.list.inputPlaceholder')"
             class="flex-grow-1">
           </v-text-field>
           <v-btn 
@@ -45,7 +45,7 @@
             color="primary"
             size="small">
             <v-icon size="small">mdi-import</v-icon>
-            批量导入
+            {{ t('core.common.list.batchImport') }}
           </v-btn>
         </div>
       </v-card-text>
@@ -99,14 +99,14 @@
         
         <div v-else class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-format-list-bulleted</v-icon>
-          <p class="text-grey mt-4">暂无项目，在上方输入框输入后按回车添加</p>
+          <p class="text-grey mt-4">{{ t('core.common.list.noItemsHint') }}</p>
         </div>
       </v-card-text>
 
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelDialog">取消</v-btn>
-        <v-btn color="primary" @click="confirmDialog">确认</v-btn>
+        <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
+        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -115,26 +115,26 @@
   <v-dialog v-model="showBatchImport" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        批量导入
+        {{ t('core.common.list.batchImportTitle') }}
       </v-card-title>
       
       <v-card-text>
         <v-textarea
           v-model="batchImportText"
-          label="每行一个项目"
-          placeholder="例如：&#10;项目1&#10;项目2&#10;项目3&#10;项目4"
+          :label="t('core.common.list.batchImportLabel')"
+          :placeholder="t('core.common.list.batchImportPlaceholder')"
           rows="10"
           variant="outlined"
-          hint="每行将作为一个单独的项目，空行会被自动忽略"
+          :hint="t('core.common.list.batchImportHint')"
           persistent-hint
         ></v-textarea>
       </v-card-text>
 
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelBatchImport">取消</v-btn>
+        <v-btn variant="text" @click="cancelBatchImport">{{ t('core.common.cancel') }}</v-btn>
         <v-btn color="primary" @click="confirmBatchImport">
-          导入 {{ batchImportPreviewCount }} 项
+          {{ t('core.common.list.batchImportButton', { count: batchImportPreviewCount }) }}
         </v-btn>
       </v-card-actions>
     </v-card>
