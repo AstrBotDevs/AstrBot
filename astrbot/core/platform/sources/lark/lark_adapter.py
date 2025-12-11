@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import re
+import time
 import uuid
 from typing import cast
 
@@ -137,7 +138,11 @@ class LarkPlatformAdapter(Platform):
             return
 
         abm = AstrBotMessage()
-        abm.timestamp = cast(int, message.create_time) // 1000
+
+        if message.create_time:
+            abm.timestamp = int(message.create_time) // 1000
+        else:
+            abm.timestamp = int(time.time())
         abm.message = []
         abm.type = (
             MessageType.GROUP_MESSAGE
