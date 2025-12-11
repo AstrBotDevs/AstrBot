@@ -295,6 +295,17 @@ class InternalAgentSubStage(Stage):
         req: ProviderRequest,
         llm_response: LLMResponse | None,
     ):
+        # 读取上下文中的配置
+        config_provider_settings = self.ctx.astrbot_config.get("provider_settings")
+        should_replace, string_replacement = False, "[astrbot.tool_call]"
+        if config_provider_settings:
+            should_replace = config_provider_settings.get(
+                "replace_tool_use_call_blank_string", False
+            )
+            string_replacement = config_provider_settings.get(
+                "replacement_for_tool_use_call_blank_string", "[astrbot.tool_call]"
+            )
+
         if (
             not req
             or not req.conversation
@@ -323,6 +334,15 @@ class InternalAgentSubStage(Stage):
                     messages.extend(tcr.to_openai_messages())
         messages.append({"role": "assistant", "content": llm_response.completion_text})
         messages = list(filter(lambda item: "_no_save" not in item, messages))
+
+        # 对每个 message 的 content 进行针对性检查和更改
+        if should_replace:
+            for message in messages:
+                # 检查是否是特殊的 tool_call string
+                if message.get("content", "") == string_replacement:
+                    message["content"] = ""
+                    logger.warning("reverted tool_call-specific message to blank text")
+
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
             req.conversation.cid,

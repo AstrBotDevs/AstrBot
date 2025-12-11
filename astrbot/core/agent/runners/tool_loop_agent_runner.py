@@ -71,6 +71,40 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        from astrbot.core.astr_agent_context import AstrAgentContext
+        from astrbot.core.star.context import Context
+
+        ctx_run = self.run_context
+        should_replace, string_replacement = False, "[astrbot.tool_call]"
+        if isinstance(ctx_run, ContextWrapper):
+            ctx_2 = ctx_run.context
+            if isinstance(ctx_2, AstrAgentContext):
+                umo = ctx_2.event.unified_msg_origin
+                ctx_3 = ctx_2.context
+                if isinstance(ctx_3, Context):
+                    cfg = ctx_3.get_config(umo).get("provider_settings", {})
+                    should_replace = cfg.get(
+                        "replace_tool_use_call_blank_string", False
+                    )
+                    string_replacement = cfg.get(
+                        "replacement_for_tool_use_call_blank_string",
+                        "[astrbot.tool_call]",
+                    )
+
+        # 无需判断具体 role ，因为 tool_calls_result 不为 None 时一定是 tool_call 了
+        if should_replace and self.req.tool_calls_result:
+            if isinstance(self.req.tool_calls_result, list):
+                for i in self.req.tool_calls_result:
+                    if i.tool_calls_info:
+                        if i.tool_calls_info.content == "":
+                            i.tool_calls_info.content = string_replacement
+                            logger.warning(
+                                "Calling LLM, but blank content found; replaced"
+                            )
+            else:
+                self.req.tool_calls_result.tool_calls_info.content = string_replacement
+                logger.warning("Calling LLM, but blank content found; replaced")
+
         if self.streaming:
             stream = self.provider.text_chat_stream(**self.req.__dict__)
             async for resp in stream:  # type: ignore

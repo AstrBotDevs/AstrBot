@@ -84,6 +84,8 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "replace_tool_use_call_blank_string": False,
+        "replacement_for_tool_use_call_blank_string": "[astrbot.tool_call]",
         "agent_runner_type": "local",
         "dify_agent_runner_provider_id": "",
         "coze_agent_runner_provider_id": "",
@@ -2119,6 +2121,8 @@ CONFIG_METADATA_2 = {
                     "show_tool_use_status": {
                         "type": "bool",
                     },
+                    "replace_tool_use_call_blank_string": {"type": "bool"},
+                    "replacement_for_tool_use_call_blank_string": {"type": "string"},
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
@@ -2616,6 +2620,16 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                    },
+                    "provider_settings.replace_tool_use_call_blank_string": {
+                        "description": "替换 tool_call 请求完毕后二次请求 LLM 时的 content",
+                        "type": "bool",
+                        "hint": "详见 issue #4003 ，默认不需要开启，会造成额外的 token 消耗",
+                    },
+                    "provider_settings.replacement_for_tool_use_call_blank_string": {
+                        "description": "用于替换 tool_call 请求完毕后二次请求 LLM 时的 content 的字符串",
+                        "type": "string",
+                        "hint": "详见 issue #4003 ，默认不需要更改；请勿改为空字符串。",
                     },
                 },
                 "condition": {

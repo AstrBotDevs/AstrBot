@@ -126,3 +126,29 @@ class Main(star.Star):
                     await self.ltm.remove_session(event)
             except Exception as e:
                 logger.error(f"ltm: {e}")
+
+    @filter.on_llm_request(priority=1)
+    async def replace_blank_content_with_toolcall_string(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ):
+        """在请求 LLM 前将空白的 content 更改为指定字符串，防止请求出现问题"""
+        umo = event.unified_msg_origin
+        cfg = self.context.get_config(umo).get("provider_settings", {})
+        should_replace = cfg.get("replace_tool_use_call_blank_string", False)
+        string_replacement = cfg.get(
+            "replacement_for_tool_use_call_blank_string", "[astrbot.tool_call]"
+        )
+        logger.debug(
+            f"Blank content string replace: {should_replace}, {repr(string_replacement)}"
+        )
+
+        if should_replace:
+            for context in req.contexts:
+                if (
+                    context.get("role", "") == "assistant"
+                    and context.get("content", "") == ""
+                ):
+                    context["content"] = string_replacement
+                    logger.warning(
+                        "Context's content is blank string, replaced with specific non-blank string for next request"
+                    )
