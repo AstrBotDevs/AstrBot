@@ -305,7 +305,9 @@ class SQLiteDatabase:
             (title, user_id, cid),
         )
 
-    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str) -> None:
+    def update_conversation_persona_id(
+        self, user_id: str, cid: str, persona_id: str
+    ) -> None:
         self._exec_sql(
             """
             UPDATE webchat_conversation SET persona_id = ? WHERE user_id = ? AND cid = ?

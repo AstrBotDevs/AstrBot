@@ -1,7 +1,6 @@
 import random
 import urllib.parse
 from dataclasses import dataclass
-from typing import NoReturn
 
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup, Tag
@@ -49,7 +48,7 @@ class SearchEngine:
     def _set_selector(self, selector: str) -> str:
         raise NotImplementedError
 
-    def _get_next_page(self, query: str) -> NoReturn:
+    async def _get_next_page(self, query: str) -> str:
         raise NotImplementedError
 
     async def _get_html(self, url: str, data: dict | None = None) -> str:

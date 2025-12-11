@@ -2,6 +2,7 @@ import re
 import time
 import traceback
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from astrbot.core import file_token_service, html_renderer, logger
 from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
@@ -19,6 +20,8 @@ from ..stage import Stage, register_stage, registered_stages
 
 @register_stage
 class ResultDecorateStage(Stage):
+    content_safe_check_stage: ContentSafetyCheckStage | None
+
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.reply_prefix = ctx.astrbot_config["platform_settings"]["reply_prefix"]
@@ -82,7 +85,9 @@ class ResultDecorateStage(Stage):
         if self.content_safe_check_reply:
             for stage_cls in registered_stages:
                 if stage_cls.__name__ == "ContentSafetyCheckStage":
-                    self.content_safe_check_stage = stage_cls()
+                    self.content_safe_check_stage = cast(
+                        ContentSafetyCheckStage, stage_cls()
+                    )
                     await self.content_safe_check_stage.initialize(ctx)
 
     def _split_text_by_words(self, text: str) -> list[str]:

@@ -136,7 +136,7 @@ class RespondStage(Stage):
         raw_chain: list[BaseMessageComponent],
         extract_types: set[ComponentType],
         modify_raw_chain: bool = True,
-    ):
+    ) -> list[BaseMessageComponent]:
         extracted = []
         if modify_raw_chain:
             remaining = []

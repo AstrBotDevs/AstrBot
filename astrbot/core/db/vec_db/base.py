@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 
@@ -31,7 +32,7 @@ class BaseVecDB:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[int, int], Awaitable[None]] | None = None,
     ) -> int:
         """批量插入文本和其对应向量，自动生成 ID 并保持一致性。
 
@@ -70,4 +71,4 @@ class BaseVecDB:
         ...
 
     @abc.abstractmethod
-    async def close(self): ...
+    async def close(self) -> None: ...

@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -46,7 +47,7 @@ class KBSQLiteDatabase:
         )
 
     @asynccontextmanager
-    async def get_db(self):
+    async def get_db(self) -> AsyncGenerator[AsyncSession, None]:
         """获取数据库会话
 
         用法:

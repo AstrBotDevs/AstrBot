@@ -1,5 +1,6 @@
 import json
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -95,7 +96,7 @@ class DocumentStorage:
             )  # type: ignore
 
     @asynccontextmanager
-    async def get_session(self):
+    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Context manager for database sessions."""
         async with self.async_session_maker() as session:  # type: ignore
             yield session
@@ -228,7 +229,7 @@ class DocumentStorage:
             if document:
                 await session.delete(document)
 
-    async def get_document_by_doc_id(self, doc_id: str):
+    async def get_document_by_doc_id(self, doc_id: str) -> dict | None:
         """Retrieve a document by its doc_id.
 
         Args:
@@ -363,7 +364,7 @@ class DocumentStorage:
             else document.updated_at,
         }
 
-    async def tuple_to_dict(self, row):
+    async def tuple_to_dict(self, row: tuple) -> dict:
         """Convert a tuple to a dictionary.
 
         Args:

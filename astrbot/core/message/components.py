@@ -25,6 +25,7 @@ import asyncio
 import base64
 import json
 import os
+import typing as T
 import uuid
 from enum import Enum
 
@@ -69,7 +70,7 @@ class BaseMessageComponent(BaseModel):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def toDict(self):
+    def toDict(self) -> dict:
         data = {}
         for k, v in self.__dict__.items():
             if k == "type" or v is None:
@@ -89,13 +90,13 @@ class Plain(BaseMessageComponent):
     text: str
     convert: bool | None = True
 
-    def __init__(self, text: str, convert: bool = True, **_) -> None:
+    def __init__(self, text: str, convert: bool = True, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(text=text, convert=convert, **_)
 
     def toDict(self):
         return {"type": "text", "data": {"text": self.text.strip()}}
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         return {"type": "text", "data": {"text": self.text}}
 
 
@@ -103,7 +104,7 @@ class Face(BaseMessageComponent):
     type = ComponentType.Face
     id: int
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -118,7 +119,7 @@ class Record(BaseMessageComponent):
     # 额外
     path: str | None
 
-    def __init__(self, file: str | None, **_) -> None:
+    def __init__(self, file: str | None, **_: T.Any) -> None:  # noqa: ANN401
         for k in _:
             if k == "url":
                 pass
@@ -126,17 +127,17 @@ class Record(BaseMessageComponent):
         super().__init__(file=file, **_)
 
     @staticmethod
-    def fromFileSystem(path, **_):
+    def fromFileSystem(path: str, **_: T.Any) -> "Record":  # noqa: ANN401
         return Record(file=f"file:///{os.path.abspath(path)}", path=path, **_)
 
     @staticmethod
-    def fromURL(url: str, **_):
+    def fromURL(url: str, **_: T.Any) -> "Record":  # noqa: ANN401
         if url.startswith("http://") or url.startswith("https://"):
             return Record(file=url, **_)
         raise Exception("not a valid url")
 
     @staticmethod
-    def fromBase64(bs64_data: str, **_):
+    def fromBase64(bs64_data: str, **_: T.Any) -> "Record":  # noqa: ANN401
         return Record(file=f"base64://{bs64_data}", **_)
 
     async def convert_to_file_path(self) -> str:
@@ -221,15 +222,15 @@ class Video(BaseMessageComponent):
     # 额外
     path: str | None = ""
 
-    def __init__(self, file: str, **_) -> None:
+    def __init__(self, file: str, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(file=file, **_)
 
     @staticmethod
-    def fromFileSystem(path, **_):
+    def fromFileSystem(path: str, **_: T.Any) -> "Video":  # noqa: ANN401
         return Video(file=f"file:///{os.path.abspath(path)}", path=path, **_)
 
     @staticmethod
-    def fromURL(url: str, **_):
+    def fromURL(url: str, **_: T.Any) -> "Video":  # noqa: ANN401
         if url.startswith("http://") or url.startswith("https://"):
             return Video(file=url, **_)
         raise Exception("not a valid url")
@@ -278,7 +279,7 @@ class Video(BaseMessageComponent):
 
         return f"{callback_host}/api/file/{token}"
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         """需要和 toDict 区分开，toDict 是同步方法"""
         url_or_path = self.file
         if url_or_path.startswith("http"):
@@ -303,10 +304,10 @@ class At(BaseMessageComponent):
     qq: int | str  # 此处str为all时代表所有人
     name: str | None = ""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
-    def toDict(self):
+    def toDict(self) -> dict:
         return {
             "type": "at",
             "data": {"qq": str(self.qq)},
@@ -316,28 +317,28 @@ class At(BaseMessageComponent):
 class AtAll(At):
     qq: str = "all"
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
 class RPS(BaseMessageComponent):  # TODO
     type = ComponentType.RPS
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
 class Dice(BaseMessageComponent):  # TODO
     type = ComponentType.Dice
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
 class Shake(BaseMessageComponent):  # TODO
     type = ComponentType.Shake
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -348,7 +349,7 @@ class Share(BaseMessageComponent):
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -357,7 +358,7 @@ class Contact(BaseMessageComponent):  # TODO
     _type: str  # type 字段冲突
     id: int | None = 0
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -368,7 +369,7 @@ class Location(BaseMessageComponent):  # TODO
     title: str | None = ""
     content: str | None = ""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -382,7 +383,7 @@ class Music(BaseMessageComponent):
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         # for k in _.keys():
         #     if k == "_type" and _[k] not in ["qq", "163", "xm", "custom"]:
         #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
@@ -402,29 +403,29 @@ class Image(BaseMessageComponent):
     path: str | None = ""
     file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
-    def __init__(self, file: str | None, **_) -> None:
+    def __init__(self, file: str | None, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(file=file, **_)
 
     @staticmethod
-    def fromURL(url: str, **_):
+    def fromURL(url: str, **_: T.Any) -> "Image":  # noqa: ANN401
         if url.startswith("http://") or url.startswith("https://"):
             return Image(file=url, **_)
         raise Exception("not a valid url")
 
     @staticmethod
-    def fromFileSystem(path, **_):
+    def fromFileSystem(path: str, **_: T.Any) -> "Image":  # noqa: ANN401
         return Image(file=f"file:///{os.path.abspath(path)}", path=path, **_)
 
     @staticmethod
-    def fromBase64(base64: str, **_):
+    def fromBase64(base64: str, **_: T.Any) -> "Image":  # noqa: ANN401
         return Image(f"base64://{base64}", **_)
 
     @staticmethod
-    def fromBytes(byte: bytes):
+    def fromBytes(byte: bytes) -> "Image":
         return Image.fromBase64(base64.b64encode(byte).decode())
 
     @staticmethod
-    def fromIO(IO):
+    def fromIO(IO: T.BinaryIO) -> "Image":
         return Image.fromBytes(IO.read())
 
     async def convert_to_file_path(self) -> str:
@@ -525,16 +526,16 @@ class Reply(BaseMessageComponent):
     seq: int | None = 0
     """deprecated"""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
 class Poke(BaseMessageComponent):
-    type: str = ComponentType.Poke
+    type = ComponentType.Poke
     id: int | None = 0
     qq: int | None = 0
 
-    def __init__(self, type: str, **_) -> None:
+    def __init__(self, type: str, **_: T.Any) -> None:  # noqa: ANN401
         type = f"Poke:{type}"
         super().__init__(type=type, **_)
 
@@ -543,7 +544,7 @@ class Forward(BaseMessageComponent):
     type = ComponentType.Forward
     id: str
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 
@@ -558,13 +559,13 @@ class Node(BaseMessageComponent):
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
 
-    def __init__(self, content: list[BaseMessageComponent], **_) -> None:
+    def __init__(self, content: list[BaseMessageComponent], **_: T.Any) -> None:  # noqa: ANN401
         if isinstance(content, Node):
             # back
             content = [content]
         super().__init__(content=content, **_)
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         data_content = []
         for comp in self.content:
             if isinstance(comp, (Image, Record)):
@@ -605,10 +606,10 @@ class Nodes(BaseMessageComponent):
     type = ComponentType.Nodes
     nodes: list[Node]
 
-    def __init__(self, nodes: list[Node], **_) -> None:
+    def __init__(self, nodes: list[Node], **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(nodes=nodes, **_)
 
-    def toDict(self):
+    def toDict(self) -> dict:
         """Deprecated. Use to_dict instead"""
         ret = {
             "messages": [],
@@ -632,7 +633,7 @@ class Json(BaseMessageComponent):
     data: str | dict
     resid: int | None = 0
 
-    def __init__(self, data, **_) -> None:
+    def __init__(self, data: str | dict, **_: T.Any) -> None:  # noqa: ANN401
         if isinstance(data, dict):
             data = json.dumps(data)
         super().__init__(data=data, **_)
@@ -760,7 +761,7 @@ class File(BaseMessageComponent):
 
         return f"{callback_host}/api/file/{token}"
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         """需要和 toDict 区分开，toDict 是同步方法"""
         url_or_path = await self.get_file(allow_return_url=True)
         if url_or_path.startswith("http"):
@@ -787,7 +788,7 @@ class WechatEmoji(BaseMessageComponent):
     md5_len: int | None = 0
     cdnurl: str | None = ""
 
-    def __init__(self, **_) -> None:
+    def __init__(self, **_: T.Any) -> None:  # noqa: ANN401
         super().__init__(**_)
 
 

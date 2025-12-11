@@ -32,7 +32,7 @@ def _get_data_path() -> Path:
 def display_plugins(
     plugins: list[PluginInfo],
     title: str | None = None,
-    color: str | None = None,
+    color: int | tuple[int, int, int] | str | None = None,
 ) -> None:
     if title:
         click.echo(click.style(title, fg=color, bold=True))
@@ -175,7 +175,7 @@ def remove(name: str) -> None:
     plugins = build_plug_list(base_path / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
 
-    if not plugin or not plugin.get("local_path"):
+    if not plugin or not plugin["local_path"]:
         raise click.ClickException(f"插件 {name} 不存在或未安装")
 
     plugin_path = plugin["local_path"]

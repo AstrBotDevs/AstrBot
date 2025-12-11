@@ -3,7 +3,7 @@ import tempfile
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TypedDict
 from zipfile import ZipFile
 
 import click
@@ -27,7 +27,7 @@ class PluginInfo(TypedDict):
     author: str
     repo: str
     status: PluginStatus
-    local_path: Optional[str]
+    local_path: str | None
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
@@ -202,7 +202,7 @@ def build_plug_list(plugins_dir: Path) -> list[PluginInfo]:
 
 
 def manage_plugin(
-    plugin: dict,
+    plugin: PluginInfo,
     plugins_dir: Path,
     is_update: bool = False,
     proxy: str | None = None,
@@ -220,7 +220,7 @@ def manage_plugin(
     repo_url = plugin["repo"]
 
     # 如果是更新且有本地路径，直接使用本地路径
-    if is_update and plugin.get("local_path"):
+    if is_update and plugin["local_path"]:
         target_path = Path(plugin["local_path"])
     else:
         target_path = plugins_dir / plugin_name

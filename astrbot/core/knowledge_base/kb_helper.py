@@ -3,6 +3,7 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import aiofiles
@@ -196,7 +197,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
@@ -293,7 +294,7 @@ class KBHelper:
                 await progress_callback("chunking", 100, 100)
 
             # 阶段3: 生成向量（带进度回调）
-            async def embedding_progress_callback(current, total) -> None:
+            async def embedding_progress_callback(current: int, total: int) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from .base import BaseChunker
 
@@ -39,7 +40,7 @@ class RecursiveCharacterChunker(BaseChunker):
             "",  # 字符
         ]
 
-    async def chunk(self, text: str, **kwargs) -> list[str]:
+    async def chunk(self, text: str, **kwargs: Any) -> list[str]:  # noqa:ANN401
         """递归地将文本分割成块
 
         Args:

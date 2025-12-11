@@ -6,6 +6,7 @@
 
 import json
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
@@ -105,7 +106,9 @@ class ConversationManager:
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
         return conv.conversation_id
 
-    async def switch_conversation(self, unified_msg_origin: str, conversation_id: str) -> None:
+    async def switch_conversation(
+        self, unified_msg_origin: str, conversation_id: str
+    ) -> None:
         """切换会话的对话
 
         Args:
@@ -223,7 +226,7 @@ class ConversationManager:
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs,
+        **kwargs: Any,  # noqa: ANN401
     ) -> tuple[list[Conversation], int]:
         """获取过滤后的对话列表.
 
