@@ -27,16 +27,27 @@
       
       <!-- Add new item section - moved to top -->
       <v-card-text class="pa-4 pb-2">
-        <v-text-field 
-          v-model="newItem" 
-          :label="t('core.common.list.addItemPlaceholder')" 
-          @keyup.enter="addItem" 
-          clearable 
-          hide-details
-          variant="outlined" 
-          density="compact"
-          placeholder="输入后按回车添加">
-        </v-text-field>
+        <div class="d-flex align-center ga-2">
+          <v-text-field 
+            v-model="newItem" 
+            :label="t('core.common.list.addItemPlaceholder')" 
+            @keyup.enter="addItem" 
+            clearable 
+            hide-details
+            variant="outlined" 
+            density="compact"
+            placeholder="输入后按回车添加"
+            class="flex-grow-1">
+          </v-text-field>
+          <v-btn 
+            @click="showBatchImport = true" 
+            variant="tonal" 
+            color="primary"
+            size="small">
+            <v-icon size="small">mdi-import</v-icon>
+            批量导入
+          </v-btn>
+        </div>
       </v-card-text>
 
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
@@ -99,6 +110,35 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- Batch Import Dialog -->
+  <v-dialog v-model="showBatchImport" max-width="600px">
+    <v-card>
+      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+        批量导入
+      </v-card-title>
+      
+      <v-card-text>
+        <v-textarea
+          v-model="batchImportText"
+          label="每行一个项目"
+          placeholder="例如：&#10;项目1&#10;项目2&#10;项目3&#10;项目4"
+          rows="10"
+          variant="outlined"
+          hint="每行将作为一个单独的项目，空行会被自动忽略"
+          persistent-hint
+        ></v-textarea>
+      </v-card-text>
+
+      <v-card-actions class="pa-4">
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="cancelBatchImport">取消</v-btn>
+        <v-btn color="primary" @click="confirmBatchImport">
+          导入 {{ batchImportPreviewCount }} 项
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
@@ -138,10 +178,22 @@ const originalItems = ref([])
 const newItem = ref('')
 const editIndex = ref(-1)
 const editItem = ref('')
+const showBatchImport = ref(false)
+const batchImportText = ref('')
 
 // 计算要显示的项目
 const displayItems = computed(() => {
   return props.modelValue.slice(0, props.maxDisplayItems)
+})
+
+// 计算批量导入的项目数量
+const batchImportPreviewCount = computed(() => {
+  if (!batchImportText.value) return 0
+  return batchImportText.value
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .length
 })
 
 // 监听 modelValue 变化，同步到 localItems
@@ -197,6 +249,24 @@ function cancelDialog() {
   editItem.value = ''
   newItem.value = ''
   dialog.value = false
+}
+
+function confirmBatchImport() {
+  if (batchImportText.value.trim()) {
+    const newItems = batchImportText.value
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+    
+    localItems.value.push(...newItems)
+    batchImportText.value = ''
+    showBatchImport.value = false
+  }
+}
+
+function cancelBatchImport() {
+  batchImportText.value = ''
+  showBatchImport.value = false
 }
 </script>
 
