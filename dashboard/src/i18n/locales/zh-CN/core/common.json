@@ -66,7 +66,18 @@
   },
   "list": {
     "addItemPlaceholder": "添加新项，按回车确认添加",
-    "addButton": "添加"
+    "addButton": "添加",
+    "batchImport": "批量导入",
+    "batchImportTitle": "批量导入",
+    "batchImportLabel": "每行一个项目",
+    "batchImportPlaceholder": "例如：\n项目1\n项目2\n项目3\n项目4",
+    "batchImportHint": "每行将作为一个单独的项目，空行会被自动忽略",
+    "batchImportButton": "导入 {count} 项",
+    "noItems": "暂无项目",
+    "noItemsHint": "暂无项目，在上方输入框输入后按回车添加",
+    "inputPlaceholder": "输入后按回车添加",
+    "editTitle": "修改列表项",
+    "modifyButton": "修改"
   },
   "itemCard": {
     "enabled": "已启用",
