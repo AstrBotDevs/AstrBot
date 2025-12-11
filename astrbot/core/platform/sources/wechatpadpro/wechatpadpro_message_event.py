@@ -114,7 +114,9 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         url = f"{self.adapter.base_url}/message/SendTextMessage"
         await self._post(session, url, payload)
 
-    async def _send_emoji(self, session: aiohttp.ClientSession, comp: WechatEmoji) -> None:
+    async def _send_emoji(
+        self, session: aiohttp.ClientSession, comp: WechatEmoji
+    ) -> None:
         payload = {
             "EmojiList": [
                 {

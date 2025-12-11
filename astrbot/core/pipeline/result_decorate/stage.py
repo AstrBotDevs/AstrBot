@@ -140,7 +140,7 @@ class ResultDecorateStage(Stage):
             if isinstance(self.content_safe_check_stage, ContentSafetyCheckStage):
                 async for _ in self.content_safe_check_stage.process(
                     event,
-                    check_text=text,
+                    check_text=text,  # type:ignore
                 ):
                     yield
 

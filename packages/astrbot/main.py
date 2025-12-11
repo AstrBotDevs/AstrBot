@@ -89,7 +89,9 @@ class Main(star.Star):
                     logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
-    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
+    async def decorate_llm_req(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         await self.proc_llm_req.process_llm_request(event, req)
 
@@ -100,7 +102,9 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.on_llm_response()
-    async def inject_reasoning(self, event: AstrMessageEvent, resp: LLMResponse) -> None:
+    async def inject_reasoning(
+        self, event: AstrMessageEvent, resp: LLMResponse
+    ) -> None:
         """在 LLM 响应后基于配置注入思考过程文本 / 在 LLM 响应后记录对话"""
         umo = event.unified_msg_origin
         cfg = self.context.get_config(umo).get("provider_settings", {})

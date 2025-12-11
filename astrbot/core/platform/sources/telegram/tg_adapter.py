@@ -221,7 +221,9 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def message_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         logger.debug(f"Telegram message: {update.message}")
         abm = await self.convert_message(update, context)
         if abm:

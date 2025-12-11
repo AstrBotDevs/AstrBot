@@ -190,7 +190,9 @@ class Main(star.Star):
         await self.conversation_c.groupnew_conv(message, sid)
 
     @filter.command("switch")
-    async def switch_conv(self, message: AstrMessageEvent, index: int | None = None) -> None:
+    async def switch_conv(
+        self, message: AstrMessageEvent, index: int | None = None
+    ) -> None:
         """通过 /ls 前面的序号切换对话"""
         await self.conversation_c.switch_conv(message, index)
 

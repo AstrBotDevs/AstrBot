@@ -240,7 +240,9 @@ class Main(star.Star):
                     del self.user_waiting[uid]
 
     @filter.on_llm_request()
-    async def on_llm_req(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
+    async def on_llm_req(
+        self, event: AstrMessageEvent, request: ProviderRequest
+    ) -> None:
         if event.get_session_id() in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[event.get_session_id()]
             if not request.prompt:

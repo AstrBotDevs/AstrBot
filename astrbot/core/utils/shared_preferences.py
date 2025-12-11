@@ -188,14 +188,18 @@ class SharedPreferences:
 
         return result
 
-    def put(self, key, value, scope: str | None = None, scope_id: str | None = None) -> None:
+    def put(
+        self, key, value, scope: str | None = None, scope_id: str | None = None
+    ) -> None:
         """设置偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
             self.put_async(scope or "unknown", scope_id or "unknown", key, value),
             self._sync_loop,
         ).result()
 
-    def remove(self, key, scope: str | None = None, scope_id: str | None = None) -> None:
+    def remove(
+        self, key, scope: str | None = None, scope_id: str | None = None
+    ) -> None:
         """删除偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
             self.remove_async(scope or "unknown", scope_id or "unknown", key),
