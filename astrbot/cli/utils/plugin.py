@@ -3,6 +3,7 @@ import tempfile
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
+from typing import Optional, TypedDict
 from zipfile import ZipFile
 
 import click
@@ -17,6 +18,16 @@ class PluginStatus(str, Enum):
     NEED_UPDATE = "需更新"
     NOT_INSTALLED = "未安装"
     NOT_PUBLISHED = "未发布"
+
+
+class PluginInfo(TypedDict):
+    name: str
+    desc: str
+    version: str
+    author: str
+    repo: str
+    status: PluginStatus
+    local_path: Optional[str]
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
@@ -102,18 +113,18 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     return {}
 
 
-def build_plug_list(plugins_dir: Path) -> list:
+def build_plug_list(plugins_dir: Path) -> list[PluginInfo]:
     """构建插件列表，包含本地和在线插件信息
 
     Args:
         plugins_dir (Path): 插件目录路径
 
     Returns:
-        list: 包含插件信息的字典列表
+        list[PluginInfo]: 包含插件信息的字典列表
 
     """
     # 获取本地插件信息
-    result = []
+    result: list[PluginInfo] = []
     if plugins_dir.exists():
         for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
             plugin_dir = plugins_dir / plugin_name
@@ -141,7 +152,7 @@ def build_plug_list(plugins_dir: Path) -> list:
                 )
 
     # 获取在线插件列表
-    online_plugins = []
+    online_plugins: list[PluginInfo] = []
     try:
         with httpx.Client() as client:
             resp = client.get("https://api.soulter.top/astrbot/plugins")
