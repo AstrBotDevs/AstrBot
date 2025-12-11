@@ -12,7 +12,7 @@ from main import check_dashboard_files, check_env
 
 
 class _version_info:
-    def __init__(self, major, minor):
+    def __init__(self, major, minor) -> None:
         self.major = major
         self.minor = minor
 

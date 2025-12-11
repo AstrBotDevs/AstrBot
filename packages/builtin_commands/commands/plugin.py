@@ -8,7 +8,7 @@ from astrbot.core.star.star_manager import PluginManager
 
 
 class PluginCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def plugin_ls(self, event: AstrMessageEvent):

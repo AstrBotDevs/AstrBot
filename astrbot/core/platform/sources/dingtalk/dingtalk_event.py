@@ -16,7 +16,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         client: dingtalk_stream.ChatbotHandler,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 

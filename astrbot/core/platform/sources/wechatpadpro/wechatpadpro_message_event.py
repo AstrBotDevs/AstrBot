@@ -32,7 +32,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         adapter: "WeChatPadProAdapter",  # 传递适配器实例
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.message_obj = message_obj  # Save the full message object
         self.adapter = adapter  # Save the adapter instance

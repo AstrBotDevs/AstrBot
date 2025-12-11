@@ -37,7 +37,7 @@ except ImportError:
 
 
 class PluginManager:
-    def __init__(self, context: Context, config: AstrBotConfig):
+    def __init__(self, context: Context, config: AstrBotConfig) -> None:
         self.updator = PluginUpdator()
 
         self.context = context

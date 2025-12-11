@@ -33,7 +33,7 @@ class AstrBotConfig(dict):
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
         schema: dict | None = None,
-    ):
+    ) -> None:
         super().__init__()
 
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
@@ -162,14 +162,14 @@ class AstrBotConfig(dict):
         except KeyError:
             return None
 
-    def __delattr__(self, key):
+    def __delattr__(self, key) -> None:
         try:
             del self[key]
             self.save_config()
         except KeyError:
             raise AttributeError(f"没有找到 Key: '{key}'")
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key, value) -> None:
         self[key] = value
 
     def check_exist(self) -> bool:

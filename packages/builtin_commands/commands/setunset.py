@@ -3,7 +3,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
 class SetUnsetCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def set_variable(self, event: AstrMessageEvent, key: str, value: str):

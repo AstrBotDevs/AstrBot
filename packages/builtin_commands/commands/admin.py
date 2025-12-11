@@ -5,7 +5,7 @@ from astrbot.core.utils.io import download_dashboard
 
 
 class AdminCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def op(self, event: AstrMessageEvent, admin_id: str = ""):

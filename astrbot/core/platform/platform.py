@@ -34,7 +34,7 @@ class PlatformError:
 
 
 class Platform(abc.ABC):
-    def __init__(self, config: dict, event_queue: Queue):
+    def __init__(self, config: dict, event_queue: Queue) -> None:
         super().__init__()
         # 平台配置
         self.config = config

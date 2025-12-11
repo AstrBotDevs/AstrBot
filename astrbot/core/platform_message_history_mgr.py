@@ -3,7 +3,7 @@ from astrbot.core.db.po import PlatformMessageHistory
 
 
 class PlatformMessageHistoryManager:
-    def __init__(self, db_helper: BaseDatabase):
+    def __init__(self, db_helper: BaseDatabase) -> None:
         self.db = db_helper
 
     async def insert(

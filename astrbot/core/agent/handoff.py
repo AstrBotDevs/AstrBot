@@ -13,7 +13,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         agent: Agent[TContext],
         parameters: dict | None = None,
         **kwargs,
-    ):
+    ) -> None:
         self.agent = agent
         super().__init__(
             name=f"transfer_to_{agent.name}",

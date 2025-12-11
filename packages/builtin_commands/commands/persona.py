@@ -5,7 +5,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
 class PersonaCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def persona(self, message: AstrMessageEvent):

@@ -15,7 +15,7 @@ from .stage import registered_stages
 class PipelineScheduler:
     """管道调度器，负责调度各个阶段的执行"""
 
-    def __init__(self, context: PipelineContext):
+    def __init__(self, context: PipelineContext) -> None:
         registered_stages.sort(
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序

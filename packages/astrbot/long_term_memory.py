@@ -17,7 +17,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 
 class LongTermMemory:
-    def __init__(self, acm: AstrBotConfigManager, context: star.Context):
+    def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
         self.session_chats = defaultdict(list)

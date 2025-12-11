@@ -20,7 +20,7 @@ class FaissVecDB(BaseVecDB):
         index_store_path: str,
         embedding_provider: EmbeddingProvider,
         rerank_provider: RerankProvider | None = None,
-    ):
+    ) -> None:
         self.doc_store_path = doc_store_path
         self.index_store_path = index_store_path
         self.embedding_provider = embedding_provider

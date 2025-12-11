@@ -32,7 +32,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None

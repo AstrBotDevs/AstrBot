@@ -28,7 +28,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         adapter: "SatoriPlatformAdapter",
-    ):
+    ) -> None:
         # 更新平台元数据
         if adapter and hasattr(adapter, "logins") and adapter.logins:
             current_login = adapter.logins[0]

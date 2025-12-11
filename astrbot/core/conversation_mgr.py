@@ -16,7 +16,7 @@ from astrbot.core.db.po import Conversation, ConversationV2
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
-    def __init__(self, db_helper: BaseDatabase):
+    def __init__(self, db_helper: BaseDatabase) -> None:
         self.session_conversations: dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次

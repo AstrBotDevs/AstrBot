@@ -24,7 +24,7 @@ class SlackMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         web_client: AsyncWebClient,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.web_client = web_client
 

@@ -58,7 +58,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     You can ignore it when integrating with other frameworks.
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
@@ -274,17 +274,17 @@ class ToolSet:
         """获取所有工具的名称列表"""
         return [tool.name for tool in self.tools]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tools)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return len(self.tools) > 0
 
     def __iter__(self):
         return iter(self.tools)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ToolSet(tools={self.tools})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ToolSet(tools={self.tools})"

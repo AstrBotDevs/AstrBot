@@ -12,7 +12,7 @@ _VT = TypeVar("_VT")
 
 
 class SharedPreferences:
-    def __init__(self, db_helper: BaseDatabase, json_storage_path=None):
+    def __init__(self, db_helper: BaseDatabase, json_storage_path=None) -> None:
         if json_storage_path is None:
             json_storage_path = os.path.join(
                 get_astrbot_data_path(),

@@ -14,7 +14,7 @@ class TemplateManager:
 
     CORE_TEMPLATES = ["base.html", "astrbot_powershell.html"]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.builtin_template_dir = os.path.join(
             get_astrbot_path(),
             "astrbot",

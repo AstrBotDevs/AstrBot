@@ -37,7 +37,7 @@ class CommandFilter(HandlerFilter):
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
         parent_command_names: list[str] | None = None,
-    ):
+    ) -> None:
         self.command_name = command_name
         self.alias = alias if alias else set()
         self.parent_command_names = (

@@ -18,7 +18,7 @@ FILTERS: list["SessionFilter"] = []  # 存储 SessionFilter 实例
 class SessionController:
     """控制一个 Session 是否已经结束"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.future = asyncio.Future()
         self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
@@ -107,7 +107,7 @@ class SessionWaiter:
         session_filter: SessionFilter,
         session_id: str,
         record_history_chains: bool,
-    ):
+    ) -> None:
         self.session_id = session_id
         self.session_filter = session_filter
         self.handler: (

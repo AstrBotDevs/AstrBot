@@ -10,7 +10,7 @@ class LogPipe(threading.Thread):
         logger: Logger,
         identifier=None,
         callback=None,
-    ):
+    ) -> None:
         threading.Thread.__init__(self)
         self.daemon = True
         self.level = level

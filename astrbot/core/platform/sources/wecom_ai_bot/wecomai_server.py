@@ -23,7 +23,7 @@ class WecomAIBotServer:
         port: int,
         api_client: WecomAIBotAPIClient,
         message_handler: Callable[[dict[str, Any], dict[str, str]], Any] | None = None,
-    ):
+    ) -> None:
         """初始化服务器
 
         Args:

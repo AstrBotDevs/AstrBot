@@ -4,7 +4,7 @@ from astrbot.core.utils.shared_preferences import SharedPreferences
 class UmopConfigRouter:
     """UMOP 配置路由器"""
 
-    def __init__(self, sp: SharedPreferences):
+    def __init__(self, sp: SharedPreferences) -> None:
         self.umop_to_conf_id: dict[str, str] = {}
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp

@@ -35,7 +35,7 @@ class AstrMessageEvent(abc.ABC):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-    ):
+    ) -> None:
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj

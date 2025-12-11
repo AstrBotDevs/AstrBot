@@ -575,10 +575,10 @@ class FunctionToolManager:
         except Exception as e:
             raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.func_list)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.func_list)
 
 

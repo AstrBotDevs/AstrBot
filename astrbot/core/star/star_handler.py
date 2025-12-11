@@ -12,7 +12,7 @@ T = TypeVar("T", bound="StarHandlerMetadata")
 
 
 class StarHandlerRegistry(Generic[T]):
-    def __init__(self):
+    def __init__(self) -> None:
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
 
@@ -165,7 +165,7 @@ class StarHandlerRegistry(Generic[T]):
     def __iter__(self):
         return iter(self._handlers)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._handlers)
 
 

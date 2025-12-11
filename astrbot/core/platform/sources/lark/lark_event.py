@@ -31,7 +31,7 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
 

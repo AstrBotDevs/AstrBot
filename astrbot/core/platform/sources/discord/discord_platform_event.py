@@ -28,7 +28,7 @@ from .components import DiscordEmbed, DiscordView
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
 
-    def __init__(self, view: discord.ui.View):
+    def __init__(self, view: discord.ui.View) -> None:
         self.view = view
 
 
@@ -41,7 +41,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         session_id: str,
         client: DiscordBotClient,
         interaction_followup_webhook: discord.Webhook | None = None,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook

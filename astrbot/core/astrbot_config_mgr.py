@@ -36,7 +36,7 @@ class AstrBotConfigManager:
         default_config: AstrBotConfig,
         ucr: UmopConfigRouter,
         sp: SharedPreferences,
-    ):
+    ) -> None:
         self.sp = sp
         self.ucr = ucr
         self.confs: dict[str, AstrBotConfig] = {}

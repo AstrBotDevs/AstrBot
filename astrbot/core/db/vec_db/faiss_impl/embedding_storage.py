@@ -10,7 +10,7 @@ import numpy as np
 
 
 class EmbeddingStorage:
-    def __init__(self, dimension: int, path: str | None = None):
+    def __init__(self, dimension: int, path: str | None = None) -> None:
         self.dimension = dimension
         self.path = path
         self.index = None

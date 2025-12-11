@@ -14,7 +14,7 @@ imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
 
 
 class WebChatMessageEvent(AstrMessageEvent):
-    def __init__(self, message_str, message_obj, platform_meta, session_id):
+    def __init__(self, message_str, message_obj, platform_meta, session_id) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         os.makedirs(imgs_dir, exist_ok=True)
 

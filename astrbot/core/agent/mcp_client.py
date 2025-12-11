@@ -108,7 +108,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
@@ -365,7 +365,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
 
     def __init__(
         self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
-    ):
+    ) -> None:
         super().__init__(
             name=mcp_tool.name,
             description=mcp_tool.description or "",

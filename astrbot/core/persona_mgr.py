@@ -16,7 +16,7 @@ DEFAULT_PERSONALITY = Personality(
 
 
 class PersonaManager:
-    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager):
+    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
         default_ps = acm.default_conf.get("provider_settings", {})

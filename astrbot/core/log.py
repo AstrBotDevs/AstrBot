@@ -86,7 +86,7 @@ class LogBroker:
     发布-订阅模式
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)  # 环形缓冲区, 保存最近的日志
         self.subscribers: list[Queue] = []  # 订阅者列表
 
@@ -132,7 +132,7 @@ class LogQueueHandler(logging.Handler):
     继承自 logging.Handler
     """
 
-    def __init__(self, log_broker: LogBroker):
+    def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
         self.log_broker = log_broker
 

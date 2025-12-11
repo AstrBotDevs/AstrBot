@@ -8,7 +8,7 @@ from astrbot.core.provider.entities import ProviderType
 
 
 class ProviderCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     def _log_reachability_failure(

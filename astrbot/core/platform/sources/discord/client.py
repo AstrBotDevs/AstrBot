@@ -15,7 +15,7 @@ else:
 class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
-    def __init__(self, token: str, proxy: str | None = None):
+    def __init__(self, token: str, proxy: str | None = None) -> None:
         self.token = token
         self.proxy = proxy
 

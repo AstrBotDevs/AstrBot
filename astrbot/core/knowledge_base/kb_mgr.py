@@ -26,7 +26,7 @@ class KnowledgeBaseManager:
     def __init__(
         self,
         provider_manager: ProviderManager,
-    ):
+    ) -> None:
         Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
         self.provider_manager = provider_manager
         self._session_deleted_callback_registered = False

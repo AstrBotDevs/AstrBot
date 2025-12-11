@@ -43,7 +43,7 @@ class WebSocketError(APIError):
 
 
 class StreamingClient:
-    def __init__(self, instance_url: str, access_token: str):
+    def __init__(self, instance_url: str, access_token: str) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self.websocket: Any | None = None
@@ -334,7 +334,7 @@ class MisskeyAPI:
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
         max_download_bytes: int | None = None,
-    ):
+    ) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self._session: aiohttp.ClientSession | None = None

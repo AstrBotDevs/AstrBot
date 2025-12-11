@@ -14,7 +14,7 @@ for handler in logging.root.handlers[:]:
 
 
 class QQOfficialWebhook:
-    def __init__(self, config: dict, event_queue: asyncio.Queue, botpy_client: Client):
+    def __init__(self, config: dict, event_queue: asyncio.Queue, botpy_client: Client) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
         self.port = config.get("port", 6196)

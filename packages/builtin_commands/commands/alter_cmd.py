@@ -11,7 +11,7 @@ from .utils.rst_scene import RstScene
 
 
 class AlterCmdCommands(CommandParserMixin):
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def update_reset_permission(self, scene_key: str, perm_type: str):

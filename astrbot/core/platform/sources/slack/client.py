@@ -27,7 +27,7 @@ class SlackWebhookClient:
         port: int = 3000,
         path: str = "/slack/events",
         event_handler: Callable | None = None,
-    ):
+    ) -> None:
         self.web_client = web_client
         self.signing_secret = signing_secret
         self.host = host
@@ -135,7 +135,7 @@ class SlackSocketClient:
         web_client: AsyncWebClient,
         app_token: str,
         event_handler: Callable | None = None,
-    ):
+    ) -> None:
         self.web_client = web_client
         self.app_token = app_token
         self.event_handler = event_handler

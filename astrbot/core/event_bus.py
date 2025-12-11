@@ -28,7 +28,7 @@ class EventBus:
         event_queue: Queue,
         pipeline_scheduler_mapping: dict[str, PipelineScheduler],
         astrbot_config_mgr: AstrBotConfigManager,
-    ):
+    ) -> None:
         self.event_queue = event_queue  # 事件队列
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping

@@ -11,7 +11,7 @@ from astrbot.core.provider.func_tool_manager import ToolSet
 
 
 class ProcessLLMRequest:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.ctx = context
         cfg = context.get_config()
         self.timezone = cfg.get("timezone")

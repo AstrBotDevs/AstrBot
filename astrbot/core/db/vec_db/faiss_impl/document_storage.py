@@ -33,7 +33,7 @@ class Document(BaseDocModel, table=True):
 
 
 class DocumentStorage:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.engine: AsyncEngine | None = None

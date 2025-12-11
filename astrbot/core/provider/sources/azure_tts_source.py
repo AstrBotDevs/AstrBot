@@ -21,7 +21,7 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class OTTSProvider:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -103,7 +103,7 @@ class OTTSProvider:
 
 
 class AzureNativeProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get(
             "azure_tts_subscription_key",
@@ -195,7 +195,7 @@ class AzureNativeProvider(TTSProvider):
 
 @register_provider_adapter("azure_tts", "Azure TTS", ProviderType.TEXT_TO_SPEECH)
 class AzureTTSProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)

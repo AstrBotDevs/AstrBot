@@ -17,7 +17,7 @@ from astrbot.core.utils.session_waiter import (
 class Main(Star):
     """会话控制"""
 
-    def __init__(self, context: Context):
+    def __init__(self, context: Context) -> None:
         super().__init__(context)
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)

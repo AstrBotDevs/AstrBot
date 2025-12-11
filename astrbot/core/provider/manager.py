@@ -30,7 +30,7 @@ class ProviderManager:
         acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
         persona_mgr: PersonaManager,
-    ):
+    ) -> None:
         self.reload_lock = asyncio.Lock()
         self.persona_mgr = persona_mgr
         self.acm = acm

@@ -22,7 +22,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         session_id: str,
         api_client: WecomAIBotAPIClient,
         queue_mgr: WecomAIQueueMgr,
-    ):
+    ) -> None:
         """初始化消息事件
 
         Args:

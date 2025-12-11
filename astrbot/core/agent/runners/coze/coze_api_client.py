@@ -10,7 +10,7 @@ from astrbot.core import logger
 
 
 class CozeAPIClient:
-    def __init__(self, api_key: str, api_base: str = "https://api.coze.cn"):
+    def __init__(self, api_key: str, api_base: str = "https://api.coze.cn") -> None:
         self.api_key = api_key
         self.api_base = api_base
         self.session = None

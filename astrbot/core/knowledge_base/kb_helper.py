@@ -31,7 +31,7 @@ from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
 class RateLimiter:
     """一个简单的速率限制器"""
 
-    def __init__(self, max_rpm: int):
+    def __init__(self, max_rpm: int) -> None:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
@@ -116,7 +116,7 @@ class KBHelper:
         provider_manager: ProviderManager,
         kb_root_dir: str,
         chunker: BaseChunker,
-    ):
+    ) -> None:
         self.kb_db = kb_db
         self.kb = kb
         self.prov_mgr = provider_manager
