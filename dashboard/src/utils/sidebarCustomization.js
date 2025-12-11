@@ -41,56 +41,97 @@ export function clearSidebarCustomization() {
 }
 
 /**
- * Apply customization to sidebar items
- * @param {Array} defaultItems - Default sidebar items array
- * @returns {Array} Customized sidebar items array (new array, doesn't mutate input)
+ * 解析侧边栏默认项与用户定制，返回主区/更多区及可选的合并结果
+ * @param {Array} defaultItems - 默认侧边栏结构
+ * @param {Object|null} customization - 用户定制（mainItems/moreItems）
+ * @param {Object} options
+ * @param {boolean} [options.cloneItems=false] - 是否克隆条目以避免外部引用被修改
+ * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
+ * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
  */
-export function applySidebarCustomization(defaultItems) {
-  const customization = getSidebarCustomization();
-  if (!customization) {
-    return defaultItems;
-  }
+export function resolveSidebarItems(defaultItems, customization, options = {}) {
+  const { cloneItems = false, assembleMoreGroup = false } = options;
 
-  const { mainItems = [], moreItems = [] } = customization;
-  
   const all = new Map();
   const defaultMain = [];
   const defaultMore = [];
+
+  // 收集所有条目，按 title 建索引
   defaultItems.forEach(item => {
     if (item.children) {
       item.children.forEach(child => {
-        all.set(child.title, { ...child });
+        all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);
       });
     } else {
-      all.set(item.title, { ...item });
+      all.set(item.title, cloneItems ? { ...item } : item);
       defaultMain.push(item.title);
     }
   });
 
-  const customizedItems = [];
-  const used = new Set([...mainItems, ...moreItems]);
-  
-  // 按用户顺序还原主区
-  mainItems.forEach(title => all.get(title) && customizedItems.push(all.get(title)));
-  // 追加新增的默认主区项
-  defaultMain.forEach(title => !used.has(title) && customizedItems.push(all.get(title)));
+  const hasCustomization = Boolean(customization);
+  const mainKeys = hasCustomization ? customization.mainItems || [] : defaultMain;
+  const moreKeys = hasCustomization ? customization.moreItems || [] : defaultMore;
+  const used = hasCustomization ? new Set([...mainKeys, ...moreKeys]) : new Set(defaultMain.concat(defaultMore));
 
-  // 更多区：用户配置 + 新增默认
-  const mergedMore = [...moreItems];
-  defaultMore.forEach(title => { if (!used.has(title)) mergedMore.push(title); });
+  const mainItems = mainKeys
+    .map(title => all.get(title))
+    .filter(Boolean);
 
-  if (mergedMore.length > 0) {
-    const moreGroup = {
-      title: 'core.navigation.groups.more',
-      icon: 'mdi-dots-horizontal',
-      children: []
-    };
-    
-    mergedMore.forEach(title => all.get(title) && moreGroup.children.push(all.get(title)));
-    
-    customizedItems.push(moreGroup);
+  if (hasCustomization) {
+    // 补充新增默认主区项
+    defaultMain.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) mainItems.push(item);
+      }
+    });
   }
 
-  return customizedItems;
+  const moreItems = moreKeys
+    .map(title => all.get(title))
+    .filter(Boolean);
+
+  if (hasCustomization) {
+    // 补充新增默认更多区项
+    defaultMore.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) moreItems.push(item);
+      }
+    });
+  }
+
+  let merged;
+  if (assembleMoreGroup) {
+    const children = cloneItems ? moreItems.map(item => ({ ...item })) : [...moreItems];
+    if (children.length > 0) {
+      merged = [
+        ...mainItems,
+        {
+          title: 'core.navigation.groups.more',
+          icon: 'mdi-dots-horizontal',
+          children
+        }
+      ];
+    } else {
+      merged = [...mainItems];
+    }
+  }
+
+  return { mainItems, moreItems, merged };
+}
+
+/**
+ * 应用侧边栏定制，返回包含更多分组的完整结构
+ * @param {Array} defaultItems - 默认侧边栏结构
+ * @returns {Array} 自定义后的结构（新数组，不修改入参）
+ */
+export function applySidebarCustomization(defaultItems) {
+  const customization = getSidebarCustomization();
+  const { merged } = resolveSidebarItems(defaultItems, customization, {
+    cloneItems: true,
+    assembleMoreGroup: true
+  });
+  return merged || defaultItems;
 }

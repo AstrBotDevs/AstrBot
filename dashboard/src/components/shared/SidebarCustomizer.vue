@@ -121,7 +121,8 @@ import sidebarItems from '@/layouts/full/vertical-sidebar/sidebarItem';
 import { 
   getSidebarCustomization, 
   setSidebarCustomization, 
-  clearSidebarCustomization 
+  clearSidebarCustomization,
+  resolveSidebarItems
 } from '@/utils/sidebarCustomization';
 
 const { t } = useI18n();
@@ -133,52 +134,12 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  const all = new Map();
-  const defaultMain = [];
-  const defaultMore = [];
-
-  sidebarItems.forEach(item => {
-    if (item.children) {
-      item.children.forEach(child => {
-        all.set(child.title, child);
-        defaultMore.push(child.title);
-      });
-    } else {
-      all.set(item.title, item);
-      defaultMain.push(item.title);
-    }
-  });
-
-  if (customization) {
-    const used = new Set([...(customization.mainItems || []), ...(customization.moreItems || [])]);
-
-    mainItems.value = (customization.mainItems || [])
-      .map(title => all.get(title))
-      .filter(Boolean);
-    // 追加新增默认主区项
-    defaultMain.forEach(title => {
-      if (!used.has(title)) {
-        const item = all.get(title);
-        if (item) mainItems.value.push(item);
-      }
-    });
-
-    moreItems.value = (customization.moreItems || [])
-      .map(title => all.get(title))
-      .filter(Boolean);
-    // 追加新增默认更多区项
-    defaultMore.forEach(title => {
-      if (!used.has(title)) {
-        const item = all.get(title);
-        if (item) moreItems.value.push(item);
-      }
-    });
-  } else {
-    // Load default structure
-    mainItems.value = sidebarItems.filter(item => !item.children);
-    const moreGroup = sidebarItems.find(item => item.title === 'core.navigation.groups.more');
-    moreItems.value = moreGroup ? [...moreGroup.children] : [];
-  }
+  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(
+    sidebarItems,
+    customization
+  );
+  mainItems.value = resolvedMain;
+  moreItems.value = resolvedMore;
 }
 
 function openDialog() {
