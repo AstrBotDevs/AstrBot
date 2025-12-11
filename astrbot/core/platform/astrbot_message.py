@@ -54,7 +54,7 @@ class AstrBotMessage:
     self_id: str  # 机器人的识别id
     session_id: str  # 会话id。取决于 unique_session 的设置。
     message_id: str  # 消息id
-    group: Group  # 群组
+    group: Group | None  # 群组
     sender: MessageMember  # 发送者
     message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
     message_str: str  # 最直观的纯文本消息字符串
@@ -78,7 +78,7 @@ class AstrBotMessage:
         return ""
 
     @group_id.setter
-    def group_id(self, value: str):
+    def group_id(self, value: str | None):
         """设置 group_id"""
         if value:
             if self.group:

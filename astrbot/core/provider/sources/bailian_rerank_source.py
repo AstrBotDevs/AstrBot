@@ -177,6 +177,10 @@ class BailianRerankProvider(RerankProvider):
         Returns:
             重排序结果列表
         """
+        if not self.client:
+            logger.error("百炼 Rerank 客户端会话已关闭，返回空结果")
+            return []
+
         if not documents:
             logger.warning("文档列表为空，返回空结果")
             return []

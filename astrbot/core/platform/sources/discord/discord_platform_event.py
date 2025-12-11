@@ -4,8 +4,10 @@ import binascii
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 
 import discord
+from discord.types.interactions import ComponentInteractionData
 
 from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -85,6 +87,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 channel = await self._get_channel()
                 if not channel:
                     return
+                if not isinstance(channel, discord.abc.Messageable):
+                    logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
+                    return
                 await channel.send(**kwargs)
 
         except Exception as e:
@@ -107,7 +112,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
 
-    async def _get_channel(self) -> discord.abc.Messageable | None:
+    async def _get_channel(
+        self,
+    ) -> discord.Thread | discord.abc.GuildChannel | discord.abc.PrivateChannel | None:
         """获取当前事件对应的频道对象"""
         try:
             channel_id = int(self.session_id)
@@ -121,7 +128,13 @@ class DiscordPlatformEvent(AstrMessageEvent):
     async def _parse_to_discord(
         self,
         message: MessageChain,
-    ) -> tuple[str, list[discord.File], discord.ui.View | None, list[discord.Embed]]:
+    ) -> tuple[
+        str,
+        list[discord.File],
+        discord.ui.View | None,
+        list[discord.Embed],
+        str | int | None,
+    ]:
         """将 MessageChain 解析为 Discord 发送所需的内容"""
         content_parts = []
         files = []
@@ -261,7 +274,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 self.message_obj.raw_message,
                 "add_reaction",
             ):
-                await self.message_obj.raw_message.add_reaction(emoji)
+                await cast(discord.Message, self.message_obj.raw_message).add_reaction(
+                    emoji
+                )
         except Exception as e:
             logger.error(f"[Discord] 添加反应失败: {e}")
 
@@ -270,7 +285,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and self.message_obj.raw_message.type
+            and cast(discord.Interaction, self.message_obj.raw_message).type
             == discord.InteractionType.application_command
         )
 
@@ -279,14 +294,18 @@ class DiscordPlatformEvent(AstrMessageEvent):
         return (
             hasattr(self.message_obj, "raw_message")
             and hasattr(self.message_obj.raw_message, "type")
-            and self.message_obj.raw_message.type == discord.InteractionType.component
+            and cast(discord.Interaction, self.message_obj.raw_message).type
+            == discord.InteractionType.component
         )
 
     def get_interaction_custom_id(self) -> str:
         """获取交互组件的custom_id"""
         if self.is_button_interaction():
             try:
-                return self.message_obj.raw_message.data.get("custom_id", "")
+                return cast(
+                    ComponentInteractionData,
+                    cast(discord.Interaction, self.message_obj.raw_message).data,
+                ).get("custom_id", "")
             except Exception:
                 pass
         return ""
@@ -299,7 +318,9 @@ class DiscordPlatformEvent(AstrMessageEvent):
         ):
             return any(
                 mention.id == int(self.message_obj.self_id)
-                for mention in self.message_obj.raw_message.mentions
+                for mention in cast(
+                    discord.Message, self.message_obj.raw_message
+                ).mentions
             )
         return False
 
@@ -309,5 +330,5 @@ class DiscordPlatformEvent(AstrMessageEvent):
             self.message_obj.raw_message,
             "clean_content",
         ):
-            return self.message_obj.raw_message.clean_content
+            return cast(discord.Message, self.message_obj.raw_message).clean_content
         return self.message_str

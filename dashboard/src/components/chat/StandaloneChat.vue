@@ -110,9 +110,9 @@ function getSessions() {
 }
 
 const {
-    stagedImagesName,
     stagedImagesUrl,
     stagedAudioUrl,
+    stagedFiles,
     getMediaFile,
     processAndUploadImage,
     handlePaste,
@@ -164,7 +164,7 @@ async function handleFileSelect(files: FileList) {
 }
 
 async function handleSendMessage() {
-    if (!prompt.value.trim() && stagedImagesName.value.length === 0 && !stagedAudioUrl.value) {
+    if (!prompt.value.trim() && stagedFiles.value.length === 0 && !stagedAudioUrl.value) {
         return;
     }
 
@@ -174,8 +174,13 @@ async function handleSendMessage() {
         }
 
         const promptToSend = prompt.value.trim();
-        const imageNamesToSend = [...stagedImagesName.value];
         const audioNameToSend = stagedAudioUrl.value;
+        const filesToSend = stagedFiles.value.map(f => ({
+            attachment_id: f.attachment_id,
+            url: f.url,
+            original_name: f.original_name,
+            type: f.type
+        }));
 
         // 清空输入和附件
         prompt.value = '';
@@ -188,7 +193,7 @@ async function handleSendMessage() {
 
         await sendMsg(
             promptToSend,
-            imageNamesToSend,
+            filesToSend,
             audioNameToSend,
             selectedProviderId,
             selectedModelName

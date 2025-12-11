@@ -1,0 +1,58 @@
+name: Smoke Test
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'README*.md'
+      - 'changelogs/**'
+      - 'dashboard/**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Run smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      
+      - name: Install UV package manager
+        run: |
+          pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv sync
+        timeout-minutes: 15
+
+      - name: Run smoke tests
+        run: |
+          uv run main.py &
+          APP_PID=$!
+
+          echo "Waiting for application to start..."
+          for i in {1..60}; do
+            if curl -f http://localhost:6185 > /dev/null 2>&1; then
+              echo "Application started successfully!"
+              kill $APP_PID
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Application failed to start within 30 seconds"
+          kill $APP_PID 2>/dev/null || true
+          exit 1
+        timeout-minutes: 2

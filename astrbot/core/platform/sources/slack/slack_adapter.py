@@ -3,8 +3,7 @@ import base64
 import re
 import time
 import uuid
-from collections.abc import Awaitable
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
@@ -21,6 +20,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
@@ -39,9 +39,7 @@ class SlackAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.unique_session = platform_settings.get("unique_session", False)
 
@@ -49,6 +47,7 @@ class SlackAdapter(Platform):
         self.app_token = platform_config.get("app_token")
         self.signing_secret = platform_config.get("signing_secret")
         self.connection_mode = platform_config.get("slack_connection_mode", "socket")
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
@@ -68,7 +67,7 @@ class SlackAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="slack",
             description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
             support_streaming_message=False,
         )
 
@@ -118,13 +117,13 @@ class SlackAdapter(Platform):
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
-        abm.self_id = self.bot_self_id
+        abm.self_id = cast(str, self.bot_self_id)
 
         # 获取用户信息
         user_id = event.get("user", "")
         try:
             user_info = await self.web_client.users_info(user=user_id)
-            user_data = user_info["user"]
+            user_data = cast(dict, user_info["user"])
             user_name = user_data.get("real_name") or user_data.get("name", user_id)
         except Exception:
             user_name = user_id
@@ -135,7 +134,7 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = channel_info["channel"]["is_im"]
+            is_im = cast(dict, channel_info["channel"])["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -178,7 +177,7 @@ class SlackAdapter(Platform):
                 for mention in mentions:
                     try:
                         mentioned_user = await self.web_client.users_info(user=mention)
-                        user_data = mentioned_user["user"]
+                        user_data = cast(dict, mentioned_user["user"])
                         user_name = user_data.get("real_name") or user_data.get(
                             "name",
                             mention,
@@ -329,7 +328,7 @@ class SlackAdapter(Platform):
                 )
                 raise Exception(f"下载文件失败: {resp.status}")
 
-    async def run(self) -> Awaitable[Any]:
+    async def run(self) -> None:
         self.bot_self_id = await self.get_bot_user_id()
         logger.info(f"Slack auth test OK. Bot ID: {self.bot_self_id}")
 
@@ -361,10 +360,17 @@ class SlackAdapter(Platform):
                 self._handle_webhook_event,
             )
 
-            logger.info(
-                f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
-            )
-            await self.webhook_client.start()
+            # 如果启用统一 webhook 模式，则不启动独立服务器
+            webhook_uuid = self.config.get("webhook_uuid")
+            if self.unified_webhook_mode and webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(Slack)", webhook_uuid)
+                # 保持运行状态，等待 shutdown
+                await self.webhook_client.shutdown_event.wait()
+            else:
+                logger.info(
+                    f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
+                )
+                await self.webhook_client.start()
 
         else:
             raise ValueError(
@@ -390,6 +396,13 @@ class SlackAdapter(Platform):
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        if self.connection_mode != "webhook" or not self.webhook_client:
+            return {"error": "Slack adapter is not in webhook mode"}, 400
+
+        return await self.webhook_client.handle_callback(request)
 
     async def terminate(self):
         if self.socket_client:

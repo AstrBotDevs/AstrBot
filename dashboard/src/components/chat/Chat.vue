@@ -71,6 +71,7 @@
 
                     <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
                         :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
+                        @replyMessage="handleReplyMessage"
                         ref="messageList" />
                     <div class="welcome-container fade-in" v-else>
                         <div class="welcome-title">
@@ -84,19 +85,23 @@
                         v-model:prompt="prompt"
                         :stagedImagesUrl="stagedImagesUrl"
                         :stagedAudioUrl="stagedAudioUrl"
+                        :stagedFiles="stagedNonImageFiles"
                         :disabled="isStreaming"
                         :enableStreaming="enableStreaming"
                         :isRecording="isRecording"
                         :session-id="currSessionId || null"
                         :current-session="getCurrentSession"
+                        :replyTo="replyTo"
                         @send="handleSendMessage"
                         @toggleStreaming="toggleStreaming"
                         @removeImage="removeImage"
                         @removeAudio="removeAudio"
+                        @removeFile="removeFile"
                         @startRecording="handleStartRecording"
                         @stopRecording="handleStopRecording"
                         @pasteImage="handlePaste"
                         @fileSelect="handleFileSelect"
+                        @clearReply="clearReply"
                         ref="chatInputRef"
                     />
                 </div>
@@ -189,14 +194,17 @@ const {
 } = useSessions(props.chatboxMode);
 
 const {
-    stagedImagesName,
     stagedImagesUrl,
     stagedAudioUrl,
+    stagedFiles,
+    stagedNonImageFiles,
     getMediaFile,
     processAndUploadImage,
+    processAndUploadFile,
     handlePaste,
     removeImage,
     removeAudio,
+    removeFile,
     clearStaged,
     cleanupMediaCache
 } = useMediaHandling();
@@ -219,6 +227,13 @@ const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 
 // 输入状态
 const prompt = ref('');
+
+// 引用消息状态
+interface ReplyInfo {
+    messageId: number;  // PlatformSessionHistoryMessage 的 id
+    messageContent: string;  // 用于显示的消息内容
+}
+const replyTo = ref<ReplyInfo | null>(null);
 
 const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
 
@@ -250,6 +265,41 @@ function openImagePreview(imageUrl: string) {
     imagePreviewDialog.value = true;
 }
 
+function handleReplyMessage(msg: any, index: number) {
+    // 从消息中获取 id (PlatformSessionHistoryMessage 的 id)
+    const messageId = msg.id;
+    if (!messageId) {
+        console.warn('Message does not have an id');
+        return;
+    }
+    
+    // 获取消息内容用于显示
+    let messageContent = '';
+    if (typeof msg.content.message === 'string') {
+        messageContent = msg.content.message;
+    } else if (Array.isArray(msg.content.message)) {
+        // 从消息段数组中提取纯文本
+        const textParts = msg.content.message
+            .filter((part: any) => part.type === 'plain' && part.text)
+            .map((part: any) => part.text);
+        messageContent = textParts.join('');
+    }
+    
+    // 截断过长的内容
+    if (messageContent.length > 100) {
+        messageContent = messageContent.substring(0, 100) + '...';
+    }
+    
+    replyTo.value = {
+        messageId,
+        messageContent: messageContent || '[媒体内容]'
+    };
+}
+
+function clearReply() {
+    replyTo.value = null;
+}
+
 async function handleSelectConversation(sessionIds: string[]) {
     if (!sessionIds[0]) return;
 
@@ -265,6 +315,9 @@ async function handleSelectConversation(sessionIds: string[]) {
         closeMobileSidebar();
     }
 
+    // 清除引用状态
+    clearReply();
+
     currSessionId.value = sessionIds[0];
     selectedSessions.value = [sessionIds[0]];
     
@@ -278,6 +331,7 @@ async function handleSelectConversation(sessionIds: string[]) {
 function handleNewChat() {
     newChat(closeMobileSidebar);
     messages.value = [];
+    clearReply();
 }
 
 async function handleDeleteConversation(sessionId: string) {
@@ -295,13 +349,19 @@ async function handleStopRecording() {
 }
 
 async function handleFileSelect(files: FileList) {
+    const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     for (const file of files) {
-        await processAndUploadImage(file);
+        if (imageTypes.includes(file.type)) {
+            await processAndUploadImage(file);
+        } else {
+            await processAndUploadFile(file);
+        }
     }
 }
 
 async function handleSendMessage() {
-    if (!prompt.value.trim() && stagedImagesName.value.length === 0 && !stagedAudioUrl.value) {
+    // 只有引用不能发送，必须有输入内容
+    if (!prompt.value.trim() && stagedFiles.value.length === 0 && !stagedAudioUrl.value) {
         return;
     }
 
@@ -310,12 +370,19 @@ async function handleSendMessage() {
     }
 
     const promptToSend = prompt.value.trim();
-    const imageNamesToSend = [...stagedImagesName.value];
     const audioNameToSend = stagedAudioUrl.value;
+    const filesToSend = stagedFiles.value.map(f => ({
+        attachment_id: f.attachment_id,
+        url: f.url,
+        original_name: f.original_name,
+        type: f.type
+    }));
+    const replyToSend = replyTo.value ? { ...replyTo.value } : null;
 
-    // 清空输入和附件
+    // 清空输入和附件和引用
     prompt.value = '';
     clearStaged();
+    clearReply();
 
     // 获取选择的提供商和模型
     const selection = chatInputRef.value?.getCurrentSelection();
@@ -324,10 +391,11 @@ async function handleSendMessage() {
 
     await sendMsg(
         promptToSend,
-        imageNamesToSend,
+        filesToSend,
         audioNameToSend,
         selectedProviderId,
-        selectedModelName
+        selectedModelName,
+        replyToSend
     );
 }
 

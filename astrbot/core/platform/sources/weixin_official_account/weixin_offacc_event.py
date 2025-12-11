@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from typing import cast
 
 from wechatpy import WeChatClient
 from wechatpy.replies import ImageReply, TextReply, VoiceReply
@@ -13,7 +14,7 @@ try:
     import pydub
 except Exception:
     logger.warning(
-        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 控制台 -> 安装 Pip 库安装 pydub。",
+        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 平台日志 -> 安装 Pip 库安装 pydub。",
     )
 
 
@@ -85,7 +86,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain):
         message_obj = self.message_obj
-        active_send_mode = message_obj.raw_message.get("active_send_mode", False)
+        active_send_mode = cast(dict, message_obj.raw_message).get(
+            "active_send_mode", False
+        )
         for comp in message.chain:
             if isinstance(comp, Plain):
                 # Split long text messages if needed
@@ -96,10 +99,10 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = TextReply(
                             content=chunk,
-                            message=self.message_obj.raw_message["message"],
+                            message=cast(dict, self.message_obj.raw_message)["message"],
                         )
                         xml = reply.render()
-                        future = self.message_obj.raw_message["future"]
+                        future = cast(dict, self.message_obj.raw_message)["future"]
                         assert isinstance(future, asyncio.Future)
                         future.set_result(xml)
                     await asyncio.sleep(0.5)  # Avoid sending too fast
@@ -125,10 +128,10 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = ImageReply(
                             media_id=response["media_id"],
-                            message=self.message_obj.raw_message["message"],
+                            message=cast(dict, self.message_obj.raw_message)["message"],
                         )
                         xml = reply.render()
-                        future = self.message_obj.raw_message["future"]
+                        future = cast(dict, self.message_obj.raw_message)["future"]
                         assert isinstance(future, asyncio.Future)
                         future.set_result(xml)
 
@@ -160,10 +163,10 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     else:
                         reply = VoiceReply(
                             media_id=response["media_id"],
-                            message=self.message_obj.raw_message["message"],
+                            message=cast(dict, self.message_obj.raw_message)["message"],
                         )
                         xml = reply.render()
-                        future = self.message_obj.raw_message["future"]
+                        future = cast(dict, self.message_obj.raw_message)["future"]
                         assert isinstance(future, asyncio.Future)
                         future.set_result(xml)
 

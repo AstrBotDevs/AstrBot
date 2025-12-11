@@ -1,14 +1,17 @@
 import asyncio
+import hashlib
 import json
 import os
 import ssl
 import traceback
+from dataclasses import dataclass
 from datetime import datetime
 
 import aiohttp
 import certifi
 from quart import request
 
+from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star.filter.command import CommandFilter
@@ -23,6 +26,13 @@ from .route import Response, Route, RouteContext
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+
+
+@dataclass
+class RegistrySource:
+    urls: list[str]
+    cache_file: str
+    md5_url: str | None  # None means "no remote MD5, always treat cache as stale"
 
 
 class PluginRoute(Route):
@@ -45,6 +55,8 @@ class PluginRoute(Route):
             "/plugin/on": ("POST", self.on_plugin),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
+            "/plugin/source/get": ("GET", self.get_custom_source),
+            "/plugin/source/save": ("POST", self.save_custom_source),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -84,22 +96,15 @@ class PluginRoute(Route):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
 
-        cache_file = "data/plugins.json"
-
-        if custom:
-            urls = [custom]
-        else:
-            urls = [
-                "https://api.soulter.top/astrbot/plugins",
-                "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
-            ]
+        # 构建注册表源信息
+        source = self._build_registry_source(custom)
 
         # 如果不是强制刷新，先检查缓存是否有效
         cached_data = None
         if not force_refresh:
             # 先检查MD5是否匹配，如果匹配则使用缓存
-            if await self._is_cache_valid(cache_file):
-                cached_data = self._load_plugin_cache(cache_file)
+            if await self._is_cache_valid(source):
+                cached_data = self._load_plugin_cache(source.cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
                     return Response().ok(cached_data).__dict__
@@ -109,7 +114,7 @@ class PluginRoute(Route):
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-        for url in urls:
+        for url in source.urls:
             try:
                 async with (
                     aiohttp.ClientSession(
@@ -128,11 +133,13 @@ class PluginRoute(Route):
                             logger.warning(f"远程插件市场数据为空: {url}")
                             continue  # 继续尝试其他URL或使用缓存
 
-                        logger.info("成功获取远程插件市场数据")
+                        logger.info(
+                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                        )
                         # 获取最新的MD5并保存到缓存
-                        current_md5 = await self._get_remote_md5()
+                        current_md5 = await self._fetch_remote_md5(source.md5_url)
                         self._save_plugin_cache(
-                            cache_file,
+                            source.cache_file,
                             remote_data,
                             current_md5,
                         )
@@ -143,7 +150,7 @@ class PluginRoute(Route):
 
         # 如果远程获取失败，尝试使用缓存数据
         if not cached_data:
-            cached_data = self._load_plugin_cache(cache_file)
+            cached_data = self._load_plugin_cache(source.cache_file)
 
         if cached_data:
             logger.warning("远程插件市场数据获取失败，使用缓存数据")
@@ -151,24 +158,75 @@ class PluginRoute(Route):
 
         return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
 
-    async def _is_cache_valid(self, cache_file: str) -> bool:
-        """检查缓存是否有效（基于MD5）"""
-        try:
-            if not os.path.exists(cache_file):
-                return False
+    def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
+        """构建注册表源信息"""
+        if custom_url:
+            # 对自定义URL生成一个安全的文件名
+            url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
+            cache_file = f"data/plugins_custom_{url_hash}.json"
 
-            # 加载缓存文件
+            # 更安全的后缀处理方式
+            if custom_url.endswith(".json"):
+                md5_url = custom_url[:-5] + "-md5.json"
+            else:
+                md5_url = custom_url + "-md5.json"
+
+            urls = [custom_url]
+        else:
+            cache_file = "data/plugins.json"
+            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
+            urls = [
+                "https://api.soulter.top/astrbot/plugins",
+                "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
+            ]
+        return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
+
+    def _load_cached_md5(self, cache_file: str) -> str | None:
+        """从缓存文件中加载MD5"""
+        if not os.path.exists(cache_file):
+            return None
+
+        try:
             with open(cache_file, encoding="utf-8") as f:
                 cache_data = json.load(f)
+            return cache_data.get("md5")
+        except Exception as e:
+            logger.warning(f"加载缓存MD5失败: {e}")
+            return None
 
-            cached_md5 = cache_data.get("md5")
+    async def _fetch_remote_md5(self, md5_url: str | None) -> str | None:
+        """获取远程MD5"""
+        if not md5_url:
+            return None
+
+        try:
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(md5_url) as response,
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("md5", "")
+        except Exception as e:
+            logger.debug(f"获取远程MD5失败: {e}")
+        return None
+
+    async def _is_cache_valid(self, source: RegistrySource) -> bool:
+        """检查缓存是否有效（基于MD5）"""
+        try:
+            cached_md5 = self._load_cached_md5(source.cache_file)
             if not cached_md5:
                 logger.debug("缓存文件中没有MD5信息")
                 return False
 
-            # 获取远程MD5
-            remote_md5 = await self._get_remote_md5()
-            if not remote_md5:
+            remote_md5 = await self._fetch_remote_md5(source.md5_url)
+            if remote_md5 is None:
                 logger.warning("无法获取远程MD5，将使用缓存")
                 return True  # 如果无法获取远程MD5，认为缓存有效
 
@@ -181,30 +239,6 @@ class PluginRoute(Route):
         except Exception as e:
             logger.warning(f"检查缓存有效性失败: {e}")
             return False
-
-    async def _get_remote_md5(self) -> str:
-        """获取远程插件数据的MD5"""
-        try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-
-            async with (
-                aiohttp.ClientSession(
-                    trust_env=True,
-                    connector=connector,
-                ) as session,
-                session.get(
-                    "https://api.soulter.top/astrbot/plugins-md5",
-                ) as response,
-            ):
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("md5", "")
-                logger.error(f"获取MD5失败，状态码：{response.status}")
-                return ""
-        except Exception as e:
-            logger.error(f"获取远程MD5失败: {e}")
-            return ""
 
     def _load_plugin_cache(self, cache_file: str):
         """加载本地缓存的插件市场数据"""
@@ -545,9 +579,13 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
+        if not plugin_obj.root_dir_name:
+            logger.warning(f"插件 {plugin_name} 目录不存在")
+            return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
+
         plugin_dir = os.path.join(
             self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name,
+            plugin_obj.root_dir_name or "",
         )
 
         if not os.path.isdir(plugin_dir):
@@ -572,3 +610,22 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {e!s}").__dict__
+
+    async def get_custom_source(self):
+        """获取自定义插件源"""
+        sources = await sp.global_get("custom_plugin_sources", [])
+        return Response().ok(sources).__dict__
+
+    async def save_custom_source(self):
+        """保存自定义插件源"""
+        try:
+            data = await request.get_json()
+            sources = data.get("sources", [])
+            if not isinstance(sources, list):
+                return Response().error("sources fields must be a list").__dict__
+
+            await sp.global_put("custom_plugin_sources", sources)
+            return Response().ok(None, "保存成功").__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/source/save: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__

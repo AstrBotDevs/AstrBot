@@ -5,8 +5,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from deprecated import deprecated
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
     Attachment,
@@ -34,7 +33,7 @@ class BaseDatabase(abc.ABC):
             echo=False,
             future=True,
         )
-        self.AsyncSessionLocal = sessionmaker(
+        self.AsyncSessionLocal = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
             expire_on_commit=False,
@@ -175,7 +174,7 @@ class BaseDatabase(abc.ABC):
         content: dict,
         sender_id: str | None = None,
         sender_name: str | None = None,
-    ) -> None:
+    ) -> PlatformMessageHistory:
         """Insert a new platform message history record."""
         ...
 
@@ -201,6 +200,14 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_platform_message_history_by_id(
+        self,
+        message_id: int,
+    ) -> PlatformMessageHistory | None:
+        """Get a platform message history record by its ID."""
+        ...
+
+    @abc.abstractmethod
     async def insert_attachment(
         self,
         path: str,
@@ -213,6 +220,27 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_attachment_by_id(self, attachment_id: str) -> Attachment:
         """Get an attachment by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def get_attachments(self, attachment_ids: list[str]) -> list[Attachment]:
+        """Get multiple attachments by their IDs."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_attachment(self, attachment_id: str) -> bool:
+        """Delete an attachment by its ID.
+
+        Returns True if the attachment was deleted, False if it was not found.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def delete_attachments(self, attachment_ids: list[str]) -> int:
+        """Delete multiple attachments by their IDs.
+
+        Returns the number of attachments deleted.
+        """
         ...
 
     @abc.abstractmethod

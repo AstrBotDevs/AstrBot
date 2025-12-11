@@ -20,16 +20,16 @@ class SessionController:
 
     def __init__(self):
         self.future = asyncio.Future()
-        self.current_event: asyncio.Event = None
+        self.current_event: asyncio.Event | None = None
         """当前正在等待的所用的异步事件"""
-        self.ts: float = None
+        self.ts: float | None = None
         """上次保持(keep)开始时的时间"""
-        self.timeout: float | int = None
+        self.timeout: float | int | None = None
         """上次保持(keep)开始时的超时时间"""
 
         self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
-    def stop(self, error: Exception = None):
+    def stop(self, error: Exception | None = None):
         """立即结束这个会话"""
         if not self.future.done():
             if error:
@@ -53,6 +53,8 @@ class SessionController:
                 self.stop()
                 return
         else:
+            assert self.timeout is not None
+            assert self.ts is not None
             left_timeout = self.timeout - (new_ts - self.ts)
             timeout = left_timeout + timeout
             if timeout <= 0:
@@ -69,7 +71,7 @@ class SessionController:
 
         asyncio.create_task(self._holding(new_event, timeout))  # 开始新的 keep
 
-    async def _holding(self, event: asyncio.Event, timeout: int):
+    async def _holding(self, event: asyncio.Event, timeout: float):
         """等待事件结束或超时"""
         try:
             await asyncio.wait_for(event.wait(), timeout)
@@ -108,7 +110,9 @@ class SessionWaiter:
     ):
         self.session_id = session_id
         self.session_filter = session_filter
-        self.handler: Callable[[str], Awaitable[Any]] | None = None  # 处理函数
+        self.handler: (
+            Callable[[SessionController, AstrMessageEvent], Awaitable[Any]] | None
+        ) = None  # 处理函数
 
         self.session_controller = SessionController()
         self.record_history_chains = record_history_chains
@@ -119,7 +123,7 @@ class SessionWaiter:
 
     async def register_wait(
         self,
-        handler: Callable[[str], Awaitable[Any]],
+        handler: Callable[[SessionController, AstrMessageEvent], Awaitable[Any]],
         timeout: int = 30,
     ) -> Any:
         """等待外部输入并处理"""
@@ -137,7 +141,7 @@ class SessionWaiter:
         finally:
             self._cleanup()
 
-    def _cleanup(self, error: Exception = None):
+    def _cleanup(self, error: Exception | None = None):
         """清理会话"""
         USER_SESSIONS.pop(self.session_id, None)
         try:
@@ -161,6 +165,7 @@ class SessionWaiter:
                     )
                 try:
                     # TODO: 这里使用 create_task，跟踪 task，防止超时后这里 handler 仍然在执行
+                    assert session.handler is not None
                     await session.handler(session.session_controller, event)
                 except Exception as e:
                     session.session_controller.stop(e)
@@ -173,11 +178,13 @@ def session_waiter(timeout: int = 30, record_history_chains: bool = False):
     :param record_history_chain: 是否自动记录历史消息链。可以通过 controller.get_history_chains() 获取。深拷贝。
     """
 
-    def decorator(func: Callable[[str], Awaitable[Any]]):
+    def decorator(
+        func: Callable[[SessionController, AstrMessageEvent], Awaitable[Any]],
+    ):
         @functools.wraps(func)
         async def wrapper(
             event: AstrMessageEvent,
-            session_filter: SessionFilter = None,
+            session_filter: SessionFilter | None = None,
             *args,
             **kwargs,
         ):

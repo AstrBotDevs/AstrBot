@@ -1,6 +1,8 @@
 import asyncio
 import sys
 import uuid
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 import quart
 from requests import Response
@@ -22,6 +24,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
 
@@ -31,10 +34,10 @@ else:
     from typing_extensions import override
 
 
-class WecomServer:
+class WeixinOfficialAccountServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
-        self.port = int(config.get("port"))
+        self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
@@ -53,13 +56,25 @@ class WecomServer:
 
         self.event_queue = event_queue
 
-        self.callback = None
+        self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
     async def verify(self):
-        logger.info(f"验证请求有效性: {quart.request.args}")
+        """内部服务器的 GET 验证入口"""
+        return await self.handle_verify(quart.request)
 
-        args = quart.request.args
+    async def handle_verify(self, request) -> str:
+        """处理验证请求，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            验证响应
+        """
+        logger.info(f"验证请求有效性: {request.args}")
+
+        args = request.args
         if not args.get("signature", None):
             logger.error("未知的响应，请检查回调地址是否填写正确。")
             return "err"
@@ -77,10 +92,22 @@ class WecomServer:
             return "err"
 
     async def callback_command(self):
-        data = await quart.request.get_data()
-        msg_signature = quart.request.args.get("msg_signature")
-        timestamp = quart.request.args.get("timestamp")
-        nonce = quart.request.args.get("nonce")
+        """内部服务器的 POST 回调入口"""
+        return await self.handle_callback(quart.request)
+
+    async def handle_callback(self, request) -> str:
+        """处理回调请求，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            响应内容
+        """
+        data = await request.get_data()
+        msg_signature = request.args.get("msg_signature")
+        timestamp = request.args.get("timestamp")
+        nonce = request.args.get("nonce")
         try:
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
@@ -88,6 +115,9 @@ class WecomServer:
             raise
         else:
             msg = parse_message(xml)
+            if not msg:
+                logger.error("解析失败。msg为None。")
+                raise
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -123,8 +153,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
@@ -132,6 +161,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             "https://api.weixin.qq.com/cgi-bin/",
         )
         self.active_send_mode = self.config.get("active_send_mode", False)
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
 
         if not self.api_base_url:
             self.api_base_url = "https://api.weixin.qq.com/cgi-bin/"
@@ -143,14 +173,14 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         if not self.api_base_url.endswith("/"):
             self.api_base_url += "/"
 
-        self.server = WecomServer(self._event_queue, self.config)
+        self.server = WeixinOfficialAccountServer(self._event_queue, self.config)
 
         self.client = WeChatClient(
             self.config["appid"].strip(),
             self.config["secret"].strip(),
         )
 
-        self.client.API_BASE_URL = self.api_base_url
+        self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
         # 微信公众号必须 5 秒内进行回复，否则会重试 3 次，我们需要对其进行消息排重
         # msgid -> Future
@@ -162,11 +192,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                     await self.convert_message(msg, None)
                 else:
                     if msg.id in self.wexin_event_workers:
-                        future = self.wexin_event_workers[msg.id]
+                        future = self.wexin_event_workers[str(cast(str | int, msg.id))]
                         logger.debug(f"duplicate message id checked: {msg.id}")
                     else:
                         future = asyncio.get_event_loop().create_future()
-                        self.wexin_event_workers[msg.id] = future
+                        self.wexin_event_workers[str(cast(str | int, msg.id))] = future
                         await self.convert_message(msg, future)
                     # I love shield so much!
                     result = await asyncio.wait_for(
@@ -174,7 +204,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                         60,
                     )  # wait for 60s
                     logger.debug(f"Got future result: {result}")
-                    self.wexin_event_workers.pop(msg.id, None)
+                    self.wexin_event_workers.pop(str(cast(str | int, msg.id)), None)
                     return result  # xml. see weixin_offacc_event.py
             except asyncio.TimeoutError:
                 pass
@@ -202,38 +232,53 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
 
     @override
     async def run(self):
-        await self.server.start_polling()
+        # 如果启用统一 webhook 模式，则不启动独立服务器
+        webhook_uuid = self.config.get("webhook_uuid")
+        if self.unified_webhook_mode and webhook_uuid:
+            log_webhook_info(f"{self.meta().id}(微信公众平台)", webhook_uuid)
+            # 保持运行状态，等待 shutdown
+            await self.server.shutdown_event.wait()
+        else:
+            await self.server.start_polling()
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        # 根据请求方法分发到不同的处理函数
+        if request.method == "GET":
+            return await self.server.handle_verify(request)
+        else:
+            return await self.server.handle_callback(request)
 
     async def convert_message(
         self,
         msg,
-        future: asyncio.Future = None,
+        future: asyncio.Future | None = None,
     ) -> AstrBotMessage | None:
         abm = AstrBotMessage()
         if isinstance(msg, TextMessage):
-            abm.message_str = msg.content
+            abm.message_str = cast(str, msg.content)
             abm.self_id = str(msg.target)
-            abm.message = [Plain(msg.content)]
+            abm.message = [Plain(cast(str, msg.content))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "image":
             assert isinstance(msg, ImageMessage)
             abm.message_str = "[图片]"
             abm.self_id = str(msg.target)
-            abm.message = [Image(file=msg.image, url=msg.image)]
+            abm.message = [Image(file=cast(str, msg.image), url=cast(str, msg.image))]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
@@ -265,15 +310,16 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                msg.source,
-                msg.source,
+                cast(str, msg.source),
+                cast(str, msg.source),
             )
-            abm.message_id = msg.id
-            abm.timestamp = msg.time
+            abm.message_id = str(cast(str | int, msg.id))
+            abm.timestamp = cast(int, msg.time)
             abm.session_id = abm.sender.user_id
         else:
             logger.warning(f"暂未实现的事件: {msg.type}")
-            future.set_result(None)
+            if future:
+                future.set_result(None)
             return
         # 很不优雅 :(
         abm.raw_message = {

@@ -221,6 +221,10 @@
       },
       "wake_prefix": {
         "description": "Wake Word"
+      },
+      "disable_builtin_commands": {
+        "description": "Disable Built-in Commands",
+        "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
       }
     },
     "whitelist": {
@@ -378,8 +382,16 @@
           "words_count_threshold": {
             "description": "Segmented Reply Word Count Threshold"
           },
+          "split_mode": {
+            "description": "Split Mode",
+            "labels": ["Regex", "Words List"]
+          },
           "regex": {
             "description": "Segmentation Regular Expression"
+          },
+          "split_words": {
+            "description": "Split Word List",
+            "hint": "Split when any word in the list is detected"
           },
           "content_cleanup_rule": {
             "description": "Content Filtering Regular Expression",

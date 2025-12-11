@@ -1,7 +1,6 @@
 import asyncio
 import os
 import random
-from collections.abc import Awaitable
 from typing import Any
 
 import astrbot.api.message_components as Comp
@@ -55,8 +54,7 @@ class MisskeyPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config or {}
+        super().__init__(platform_config or {}, event_queue)
         self.settings = platform_settings or {}
         self.instance_url = self.config.get("misskey_instance_url", "")
         self.access_token = self.config.get("misskey_token", "")
@@ -204,7 +202,7 @@ class MisskeyPlatformAdapter(Platform):
             if not isinstance(message.raw_message, dict):
                 message.raw_message = {}
             message.raw_message["poll"] = poll
-            message.poll = poll
+            message.__setattr__("poll", poll)
         except Exception:
             pass
 
@@ -373,7 +371,7 @@ class MisskeyPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
-    ) -> Awaitable[Any]:
+    ) -> None:
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
             return await super().send_by_session(session, message_chain)

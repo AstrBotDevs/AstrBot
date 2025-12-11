@@ -33,7 +33,8 @@
     "back": "返回",
     "selectFile": "选择文件",
     "refresh": "刷新",
-    "updateAll": "更新全部插件"
+    "updateAll": "更新全部插件",
+    "deleteSource": "删除源"
   },
   "status": {
     "enabled": "启用",
@@ -78,7 +79,27 @@
     "allPlugins": "📦 全部插件",
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
-    "submitRepo": "提交插件仓库"
+    "submitRepo": "提交插件仓库",
+    "customSource": "自定义插件源",
+    "source": "插件源",
+    "availableSources": "可用源",
+    "sourceManagement": "插件源管理",
+    "addSource": "添加插件源",
+    "sourceName": "源名称",
+    "sourceUrl": "源地址",
+    "defaultSource": "官方插件源",
+    "removeSource": "删除插件源",
+    "confirmRemoveSource": "确定要删除此插件源吗？",
+    "sourceAdded": "插件源添加成功",
+    "sourceRemoved": "插件源删除成功",
+    "sourceError": "操作失败",
+    "selectSource": "选择插件源",
+    "currentSource": "当前插件源",
+    "editSource": "编辑插件源",
+    "sourceUpdated": "插件源更新成功",
+    "defaultOfficialSource": "默认官方源",
+    "sourceExists": "该插件源已存在",
+    "installPlugin": "安装插件"
   },
   "sort": {
     "default": "默认排序",
@@ -94,7 +115,7 @@
   "dialogs": {
     "error": {
       "title": "错误信息",
-      "checkConsole": "详情请检查控制台"
+      "checkConsole": "详情请检查平台日志"
     },
     "config": {
       "title": "插件配置",
@@ -144,7 +165,10 @@
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
     "supportedFormats": "支持 .zip 格式的插件文件",
     "updateAllSuccess": "所有可更新的插件都已更新！",
-    "updateAllFailed": "有 {failed}/{total} 个插件更新失败:"
+    "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
+    "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
+    "invalidUrl": "请输入有效的URL地址",
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
   },
   "upload": {
     "fromFile": "从文件安装",

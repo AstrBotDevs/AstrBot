@@ -4,8 +4,16 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.7.4"
+VERSION = "4.8.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+
+WEBHOOK_SUPPORTED_PLATFORMS = [
+    "qq_official_webhook",
+    "weixin_official_account",
+    "wecom",
+    "wecom_ai_bot",
+    "slack",
+]
 
 # 默认配置
 DEFAULT_CONFIG = {
@@ -34,7 +42,15 @@ DEFAULT_CONFIG = {
             "interval": "1.5,3.5",
             "log_base": 2.6,
             "words_count_threshold": 150,
+            "split_mode": "regex",  # regex 或 words
             "regex": ".*?[。？！~…]+|.+$",
+            "split_words": [
+                "。",
+                "？",
+                "！",
+                "~",
+                "…",
+            ],  # 当 split_mode 为 words 时使用
             "content_cleanup_rule": "",
         },
         "no_permission_reply": True,
@@ -149,6 +165,7 @@ DEFAULT_CONFIG = {
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
+    "disable_builtin_commands": False,
 }
 
 
@@ -185,6 +202,8 @@ CONFIG_METADATA_2 = {
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
@@ -215,6 +234,8 @@ CONFIG_METADATA_2 = {
                         "token": "",
                         "encoding_aes_key": "",
                         "api_base_url": "https://api.weixin.qq.com/cgi-bin/",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6194,
                         "active_send_mode": False,
@@ -229,6 +250,8 @@ CONFIG_METADATA_2 = {
                         "encoding_aes_key": "",
                         "kf_name": "",
                         "api_base_url": "https://qyapi.weixin.qq.com/cgi-bin/",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6195,
                     },
@@ -241,6 +264,8 @@ CONFIG_METADATA_2 = {
                         "wecom_ai_bot_name": "",
                         "token": "",
                         "encoding_aes_key": "",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
                         "port": 6198,
                     },
@@ -308,6 +333,8 @@ CONFIG_METADATA_2 = {
                         "app_token": "",
                         "signing_secret": "",
                         "slack_connection_mode": "socket",  # webhook, socket
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
                         "slack_webhook_host": "0.0.0.0",
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
@@ -387,16 +414,28 @@ CONFIG_METADATA_2 = {
                         "description": "Slack Webhook Host",
                         "type": "string",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "slack_webhook_port": {
                         "description": "Slack Webhook Port",
                         "type": "int",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "slack_webhook_path": {
                         "description": "Slack Webhook Path",
                         "type": "string",
                         "hint": "Only valid when Slack connection mode is `webhook`.",
+                        "condition": {
+                            "slack_connection_mode": "webhook",
+                            "unified_webhook_mode": False,
+                        },
                     },
                     "active_send_mode": {
                         "description": "是否换用主动发送接口",
@@ -586,6 +625,33 @@ CONFIG_METADATA_2 = {
                         "description": "Discord 活动名称",
                         "type": "string",
                         "hint": "可选的 Discord 活动名称。留空则不设置活动。",
+                    },
+                    "port": {
+                        "description": "回调服务器端口",
+                        "type": "int",
+                        "hint": "回调服务器端口。留空则不启用回调服务器。",
+                        "condition": {
+                            "unified_webhook_mode": False,
+                        },
+                    },
+                    "callback_server_host": {
+                        "description": "回调服务器主机",
+                        "type": "string",
+                        "hint": "回调服务器主机。留空则不启用回调服务器。",
+                        "condition": {
+                            "unified_webhook_mode": False,
+                        },
+                    },
+                    "unified_webhook_mode": {
+                        "description": "统一 Webhook 模式",
+                        "type": "bool",
+                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
+                    },
+                    "webhook_uuid": {
+                        "invisible": True,
+                        "description": "Webhook UUID",
+                        "type": "string",
+                        "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。",
                     },
                 },
             },
@@ -2604,6 +2670,11 @@ CONFIG_METADATA_3 = {
                         "description": "只 @ 机器人是否触发等待",
                         "type": "bool",
                     },
+                    "disable_builtin_commands": {
+                        "description": "禁用自带指令",
+                        "type": "bool",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                    },
                 },
             },
             "whitelist": {
@@ -2818,9 +2889,26 @@ CONFIG_METADATA_3 = {
                         "description": "分段回复字数阈值",
                         "type": "int",
                     },
+                    "platform_settings.segmented_reply.split_mode": {
+                        "description": "分段模式",
+                        "type": "string",
+                        "options": ["regex", "words"],
+                        "labels": ["正则表达式", "分段词列表"],
+                    },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",
                         "type": "string",
+                        "condition": {
+                            "platform_settings.segmented_reply.split_mode": "regex",
+                        },
+                    },
+                    "platform_settings.segmented_reply.split_words": {
+                        "description": "分段词列表",
+                        "type": "list",
+                        "hint": "检测到列表中的任意词时进行分段，如：。、？、！等",
+                        "condition": {
+                            "platform_settings.segmented_reply.split_mode": "words",
+                        },
                     },
                     "platform_settings.segmented_reply.content_cleanup_rule": {
                         "description": "内容过滤正则表达式",

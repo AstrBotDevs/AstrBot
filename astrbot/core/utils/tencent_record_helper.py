@@ -36,7 +36,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->控制台->安装pip库 安装 pilk 这个库",
+            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
         )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())
@@ -68,7 +68,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         from pyffmpeg import FFmpeg
 
         ff = FFmpeg()
-        ff.convert(input=input_path, output=output_path)
+        ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
         logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
 

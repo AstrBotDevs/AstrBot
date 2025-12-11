@@ -2,6 +2,8 @@ import asyncio
 import inspect
 import os
 import traceback
+import uuid
+from typing import Any
 
 from quart import request
 
@@ -13,6 +15,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
+    WEBHOOK_SUPPORTED_PLATFORMS,
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -24,7 +27,7 @@ from astrbot.core.star.star import star_registry
 from .route import Response, Route, RouteContext
 
 
-def try_cast(value: str, type_: str):
+def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
             return int(value)
@@ -503,9 +506,9 @@ class ConfigRoute(Route):
             if not isinstance(inst, EmbeddingProvider):
                 return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
 
-            # 初始化
-            if getattr(inst, "initialize", None):
-                await inst.initialize()
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
 
             # 获取嵌入向量维度
             vec = await inst.get_embedding("echo")
@@ -555,6 +558,15 @@ class ConfigRoute(Route):
 
     async def post_new_platform(self):
         new_platform_config = await request.json
+
+        # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，自动生成 webhook_uuid
+        platform_type = new_platform_config.get("type", "")
+        if platform_type in WEBHOOK_SUPPORTED_PLATFORMS:
+            if new_platform_config.get("unified_webhook_mode", False):
+                # 如果没有 webhook_uuid 或为空，自动生成
+                if not new_platform_config.get("webhook_uuid"):
+                    new_platform_config["webhook_uuid"] = uuid.uuid4().hex[:16]
+
         self.config["platform"].append(new_platform_config)
         try:
             save_config(self.config, self.config, is_core=True)
@@ -583,6 +595,14 @@ class ConfigRoute(Route):
         new_config = update_platform_config.get("config", None)
         if not platform_id or not new_config:
             return Response().error("参数错误").__dict__
+
+        # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
+        platform_type = new_config.get("type", "")
+        if platform_type in WEBHOOK_SUPPORTED_PLATFORMS:
+            if new_config.get("unified_webhook_mode", False):
+                # 如果没有 webhook_uuid 或为空，自动生成
+                if not new_config.get("webhook_uuid"):
+                    new_config["webhook_uuid"] = uuid.uuid4().hex
 
         for i, platform in enumerate(self.config["platform"]):
             if platform["id"] == platform_id:
@@ -758,7 +778,7 @@ class ConfigRoute(Route):
         return {"metadata": CONFIG_METADATA_2, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

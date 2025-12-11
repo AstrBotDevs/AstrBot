@@ -11,7 +11,7 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 async def call_handler(
     event: AstrMessageEvent,
-    handler: T.Callable[..., T.Awaitable[T.Any]],
+    handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
     *args,
     **kwargs,
 ) -> T.AsyncGenerator[T.Any, None]:
@@ -91,6 +91,7 @@ async def call_event_hook(
     )
     for handler in handlers:
         try:
+            assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )

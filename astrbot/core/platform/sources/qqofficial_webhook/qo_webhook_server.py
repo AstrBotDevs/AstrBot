@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
@@ -78,7 +79,19 @@ class QQOfficialWebhook:
         return response
 
     async def callback(self):
-        msg: dict = await quart.request.json
+        """内部服务器的回调入口"""
+        return await self.handle_callback(quart.request)
+
+    async def handle_callback(self, request) -> dict:
+        """处理 webhook 回调，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            响应数据
+        """
+        msg: dict = await request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
 
         event = msg.get("t")
@@ -87,7 +100,7 @@ class QQOfficialWebhook:
 
         if opcode == 13:
             # validation
-            signed = await self.webhook_validation(data)
+            signed = await self.webhook_validation(cast(dict, data))
             print(signed)
             return signed
 

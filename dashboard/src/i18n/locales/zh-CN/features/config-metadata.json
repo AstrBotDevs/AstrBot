@@ -229,6 +229,10 @@
       },
       "wake_prefix": {
         "description": "唤醒词"
+      },
+      "disable_builtin_commands": {
+        "description": "禁用自带指令",
+        "hint": "禁用所有 AstrBot 自带指令,如 help, provider, model 等"
       }
     },
     "whitelist": {
@@ -386,8 +390,19 @@
           "words_count_threshold": {
             "description": "分段回复字数阈值"
           },
+          "split_mode": {
+            "description": "分段模式",
+            "labels": [
+              "正则表达式",
+              "分段词列表"
+            ]
+          },
           "regex": {
             "description": "分段正则表达式"
+          },
+          "split_words": {
+            "description": "分段词列表",
+            "hint": "检测到列表中的任意词时进行分段"
           },
           "content_cleanup_rule": {
             "description": "内容过滤正则表达式",

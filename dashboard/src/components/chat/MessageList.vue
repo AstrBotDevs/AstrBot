@@ -7,6 +7,11 @@
                 <div v-if="msg.content.type == 'user'" class="user-message">
                     <div class="message-bubble user-bubble" :class="{ 'has-audio': msg.content.audio_url }"
                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
+                        <!-- 引用消息 -->
+                        <div v-if="msg.content.reply_to" class="reply-quote" @click="scrollToMessage(msg.content.reply_to.message_id)">
+                            <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
+                            <span class="reply-quote-text">{{ getReplyContent(msg.content.reply_to.message_id) }}</span>
+                        </div>
                         <pre
                             style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
 
@@ -23,6 +28,22 @@
                                 <source :src="msg.content.audio_url" type="audio/wav">
                                 {{ t('messages.errors.browser.audioNotSupported') }}
                             </audio>
+                        </div>
+
+                        <!-- 文件附件 -->
+                        <div class="file-attachments" v-if="msg.content.file_url && msg.content.file_url.length > 0">
+                            <div v-for="(file, fileIdx) in msg.content.file_url" :key="fileIdx" class="file-attachment">
+                                <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
+                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                    <span class="file-name">{{ file.filename }}</span>
+                                </a>
+                                <a v-else @click="downloadFile(file)" class="file-link file-link-download">
+                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                    <span class="file-name">{{ file.filename }}</span>
+                                    <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                    <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -77,12 +98,33 @@
                                         {{ t('messages.errors.browser.audioNotSupported') }}
                                     </audio>
                                 </div>
+
+                                <!-- Files -->
+                                <div class="embedded-files"
+                                    v-if="msg.content.embedded_files && msg.content.embedded_files.length > 0">
+                                    <div v-for="(file, fileIndex) in msg.content.embedded_files" :key="fileIndex"
+                                        class="embedded-file">
+                                        <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
+                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                            <span class="file-name">{{ file.filename }}</span>
+                                        </a>
+                                        <a v-else @click="downloadFile(file)" class="file-link file-link-download">
+                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                            <span class="file-name">{{ file.filename }}</span>
+                                            <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                            <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                        </a>
+                                    </div>
+                                </div>
                             </template>
                         </div>
-                        <div class="message-actions" v-if="!msg.content.isLoading">
-                            <v-btn :icon="getCopyIcon(index)" size="small" variant="text" class="copy-message-btn"
+                        <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
+                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at) }}</span>
+                            <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
+                            <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
+                                @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
                         </div>
                     </div>
                 </div>
@@ -96,6 +138,7 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import axios from 'axios';
 
 const md = new MarkdownIt({
     html: false,
@@ -129,7 +172,7 @@ export default {
             default: false
         }
     },
-    emits: ['openImagePreview'],
+    emits: ['openImagePreview', 'replyMessage'],
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
@@ -147,6 +190,7 @@ export default {
             scrollThreshold: 1,
             scrollTimer: null,
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
+            downloadingFiles: new Set(), // Track which files are being downloaded
         };
     },
     mounted() {
@@ -163,6 +207,45 @@ export default {
         }
     },
     methods: {
+        // 获取被引用消息的内容
+        getReplyContent(messageId) {
+            const replyMsg = this.messages.find(m => m.id === messageId);
+            if (!replyMsg) {
+                return this.tm('reply.notFound');
+            }
+            let content = '';
+            if (typeof replyMsg.content.message === 'string') {
+                content = replyMsg.content.message;
+            } else if (Array.isArray(replyMsg.content.message)) {
+                const textParts = replyMsg.content.message
+                    .filter(part => part.type === 'plain' && part.text)
+                    .map(part => part.text);
+                content = textParts.join('');
+            }
+            // 截断过长内容
+            if (content.length > 50) {
+                content = content.substring(0, 50) + '...';
+            }
+            return content || '[媒体内容]';
+        },
+
+        // 滚动到指定消息
+        scrollToMessage(messageId) {
+            const msgIndex = this.messages.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return;
+            
+            const container = this.$refs.messageContainer;
+            const messageItems = container?.querySelectorAll('.message-item');
+            if (messageItems && messageItems[msgIndex]) {
+                messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 高亮一下
+                messageItems[msgIndex].classList.add('highlight-message');
+                setTimeout(() => {
+                    messageItems[msgIndex].classList.remove('highlight-message');
+                }, 2000);
+            }
+        },
+
         // Toggle reasoning expansion state
         toggleReasoning(messageIndex) {
             if (this.expandedReasoning.has(messageIndex)) {
@@ -177,6 +260,35 @@ export default {
         // Check if reasoning is expanded
         isReasoningExpanded(messageIndex) {
             return this.expandedReasoning.has(messageIndex);
+        },
+
+        // 下载文件
+        async downloadFile(file) {
+            if (!file.attachment_id) return;
+            
+            // 标记为下载中
+            this.downloadingFiles.add(file.attachment_id);
+            this.downloadingFiles = new Set(this.downloadingFiles);
+            
+            try {
+                const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+                    responseType: 'blob'
+                });
+                
+                const url = URL.createObjectURL(response.data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.filename || 'file';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+            } catch (err) {
+                console.error('Download file failed:', err);
+            } finally {
+                this.downloadingFiles.delete(file.attachment_id);
+                this.downloadingFiles = new Set(this.downloadingFiles);
+            }
         },
 
         // 复制代码到剪贴板
@@ -375,6 +487,37 @@ export default {
                 clearTimeout(this.scrollTimer);
                 this.scrollTimer = null;
             }
+        },
+
+        // 格式化消息时间，支持别名显示
+        formatMessageTime(dateStr) {
+            if (!dateStr) return '';
+            
+            const date = new Date(dateStr);
+            const now = new Date();
+            
+            // 获取本地时间的日期部分
+            const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterdayDay = new Date(todayDay);
+            yesterdayDay.setDate(yesterdayDay.getDate() - 1);
+            
+            // 格式化时间 HH:MM
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const timeStr = `${hours}:${minutes}`;
+            
+            // 判断是今天、昨天还是更早
+            if (dateDay.getTime() === todayDay.getTime()) {
+                return `${this.tm('time.today')} ${timeStr}`;
+            } else if (dateDay.getTime() === yesterdayDay.getTime()) {
+                return `${this.tm('time.yesterday')} ${timeStr}`;
+            } else {
+                // 更早的日期显示完整格式
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                return `${month}-${day} ${timeStr}`;
+            }
         }
     }
 }
@@ -413,7 +556,7 @@ export default {
 }
 
 .message-item {
-    margin-bottom: 24px;
+    margin-bottom: 12px;
     animation: fadeIn 0.3s ease-out;
 }
 
@@ -441,10 +584,23 @@ export default {
 
 .message-actions {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     opacity: 0;
     transition: opacity 0.2s ease;
-    margin-left: 8px;
+    margin-left: 16px;
+}
+
+/* 最后一条消息始终显示操作按钮 */
+.message-item:last-child .message-actions {
+    opacity: 1;
+}
+
+.message-time {
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    white-space: nowrap;
 }
 
 .bot-message:hover .message-actions {
@@ -470,6 +626,62 @@ export default {
 .copy-message-btn.copy-success:hover {
     color: #4caf50;
     background-color: rgba(76, 175, 80, 0.1);
+}
+
+.reply-message-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    color: var(--v-theme-secondary);
+}
+
+.reply-message-btn:hover {
+    opacity: 1;
+    background-color: rgba(103, 58, 183, 0.1);
+}
+
+/* 引用消息显示样式 */
+.reply-quote {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    background-color: rgba(103, 58, 183, 0.08);
+    border-left: 3px solid var(--v-theme-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.reply-quote:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reply-quote-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.reply-quote-text {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 消息高亮动画 */
+.highlight-message {
+    animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+    0% {
+        background-color: rgba(103, 58, 183, 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
 }
 
 .message-bubble {
@@ -553,7 +765,6 @@ export default {
     width: auto;
     height: auto;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     transition: transform 0.2s ease;
 }
@@ -566,6 +777,71 @@ export default {
 .embedded-audio .audio-player {
     width: 100%;
     max-width: 300px;
+}
+
+/* 文件附件样式 */
+.file-attachments,
+.embedded-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.file-attachment,
+.embedded-file {
+    display: flex;
+    align-items: center;
+}
+
+.file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: rgba(var(--v-theme-primary), 0.08);
+    border: 1px solid rgba(var(--v-theme-primary), 0.2);
+    border-radius: 8px;
+    color: rgb(var(--v-theme-primary));
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    max-width: 300px;
+}
+
+.file-link-download {
+    cursor: pointer;
+}
+
+.download-icon {
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+.file-icon {
+    flex-shrink: 0;
+    color: rgb(var(--v-theme-primary));
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v-theme--dark .file-link {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--v-theme-secondary);
+}
+
+.v-theme--dark .file-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.v-theme--dark .file-icon {
+    color: var(--v-theme-secondary);
 }
 
 /* 动画类 */
