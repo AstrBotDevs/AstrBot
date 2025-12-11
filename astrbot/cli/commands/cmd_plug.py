@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from ..utils import (
+    PluginInfo,
     PluginStatus,
     build_plug_list,
     check_astrbot_root,
@@ -28,7 +29,11 @@ def _get_data_path() -> Path:
     return (base / "data").resolve()
 
 
-def display_plugins(plugins, title=None, color=None) -> None:
+def display_plugins(
+    plugins: list[PluginInfo],
+    title: str | None = None,
+    color: str | None = None,
+) -> None:
     if title:
         click.echo(click.style(title, fg=color, bold=True))
 
