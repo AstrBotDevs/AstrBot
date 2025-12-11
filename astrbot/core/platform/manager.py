@@ -25,7 +25,7 @@ class PlatformManager:
         约定整个项目中对 unique_session 的引用都从 default 的配置中获取"""
         self.event_queue = event_queue
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
             try:
@@ -43,7 +43,7 @@ class PlatformManager:
             ),
         )
 
-    async def load_platform(self, platform_config: dict):
+    async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
         # 动态导入
         try:
@@ -171,7 +171,7 @@ class PlatformManager:
             if platform:
                 platform.record_error(error_msg, tb_str)
 
-    async def reload(self, platform_config: dict):
+    async def reload(self, platform_config: dict) -> None:
         await self.terminate_platform(platform_config["id"])
         if platform_config["enable"]:
             await self.load_platform(platform_config)
@@ -182,7 +182,7 @@ class PlatformManager:
             if key not in config_ids:
                 await self.terminate_platform(key)
 
-    async def terminate_platform(self, platform_id: str):
+    async def terminate_platform(self, platform_id: str) -> None:
         if platform_id in self._inst_map:
             logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
 
@@ -204,7 +204,7 @@ class PlatformManager:
             if getattr(inst, "terminate", None):
                 await inst.terminate()
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         for inst in self.platform_insts:
             if getattr(inst, "terminate", None):
                 await inst.terminate()

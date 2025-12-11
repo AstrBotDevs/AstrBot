@@ -178,7 +178,7 @@ class Main(star.Star):
         )
 
     @filter.command_group("reminder")
-    def reminder(self):
+    def reminder(self) -> None:
         """The command group of the reminder."""
 
     async def get_upcoming_reminders(self, unified_msg_origin: str):
@@ -260,7 +260,7 @@ class Main(star.Star):
             ),
         )
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.scheduler.shutdown()
         await self._save_data()
         logger.info("Reminder plugin terminated.")

@@ -24,7 +24,7 @@ class LogPipe(threading.Thread):
     def fileno(self):
         return self.fd_write
 
-    def run(self):
+    def run(self) -> None:
         for line in iter(self.reader.readline, ""):
             if self.callback:
                 self.callback(line.strip())
@@ -32,5 +32,5 @@ class LogPipe(threading.Thread):
 
         self.reader.close()
 
-    def close(self):
+    def close(self) -> None:
         os.close(self.fd_write)

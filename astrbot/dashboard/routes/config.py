@@ -122,7 +122,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
-def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
+def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")

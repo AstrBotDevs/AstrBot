@@ -15,7 +15,7 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
-    ):
+    ) -> None:
         args = ["install"]
         if package_name:
             args.append(package_name)

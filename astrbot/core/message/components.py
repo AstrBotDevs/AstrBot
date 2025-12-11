@@ -255,7 +255,7 @@ class Video(BaseMessageComponent):
             return os.path.abspath(url)
         raise Exception(f"not a valid file: {url}")
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
 
         Returns:
@@ -737,7 +737,7 @@ class File(BaseMessageComponent):
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。
 
         Returns:

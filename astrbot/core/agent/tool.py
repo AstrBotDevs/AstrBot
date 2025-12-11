@@ -82,7 +82,7 @@ class ToolSet:
         """Check if the tool set is empty."""
         return len(self.tools) == 0
 
-    def add_tool(self, tool: FunctionTool):
+    def add_tool(self, tool: FunctionTool) -> None:
         """Add a tool to the set."""
         # 检查是否已存在同名工具
         for i, existing_tool in enumerate(self.tools):
@@ -91,7 +91,7 @@ class ToolSet:
                 return
         self.tools.append(tool)
 
-    def remove_tool(self, name: str):
+    def remove_tool(self, name: str) -> None:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
@@ -109,7 +109,7 @@ class ToolSet:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any]],
-    ):
+    ) -> None:
         """Add a function tool to the set."""
         params = {
             "type": "object",  # hard-coded here
@@ -129,7 +129,7 @@ class ToolSet:
         self.add_tool(_func)
 
     @deprecated(reason="Use remove_tool() instead", version="4.0.0")
-    def remove_func(self, name: str):
+    def remove_func(self, name: str) -> None:
         """Remove a function tool by its name."""
         self.remove_tool(name)
 

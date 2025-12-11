@@ -20,7 +20,7 @@ class WebChatQueueMgr:
             self.back_queues[conversation_id] = asyncio.Queue()
         return self.back_queues[conversation_id]
 
-    def remove_queues(self, conversation_id: str):
+    def remove_queues(self, conversation_id: str) -> None:
         """Remove queues for the given conversation ID"""
         if conversation_id in self.queues:
             del self.queues[conversation_id]

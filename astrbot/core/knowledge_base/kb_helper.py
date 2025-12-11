@@ -130,7 +130,7 @@ class KBHelper:
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self._ensure_vec_db()
 
     async def get_ep(self) -> EmbeddingProvider:
@@ -174,7 +174,7 @@ class KBHelper:
         self.vec_db = vec_db
         return vec_db
 
-    async def delete_vec_db(self):
+    async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
         import shutil
 
@@ -182,7 +182,7 @@ class KBHelper:
         if self.kb_dir.exists():
             shutil.rmtree(self.kb_dir)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         if self.vec_db:
             await self.vec_db.close()
 
@@ -360,7 +360,7 @@ class KBHelper:
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
 
-    async def delete_document(self, doc_id: str):
+    async def delete_document(self, doc_id: str) -> None:
         """删除单个文档及其相关数据"""
         await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
@@ -372,7 +372,7 @@ class KBHelper:
         )
         await self.refresh_kb()
 
-    async def delete_chunk(self, chunk_id: str, doc_id: str):
+    async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         await vec_db.delete(chunk_id)
@@ -383,7 +383,7 @@ class KBHelper:
         await self.refresh_kb()
         await self.refresh_document(doc_id)
 
-    async def refresh_kb(self):
+    async def refresh_kb(self) -> None:
         if self.kb:
             kb = await self.kb_db.get_kb_by_id(self.kb.kb_id)
             if kb:

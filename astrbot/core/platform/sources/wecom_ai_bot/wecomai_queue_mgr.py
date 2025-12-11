@@ -52,7 +52,7 @@ class WecomAIQueueMgr:
             logger.debug(f"[WecomAI] 创建输出队列: {session_id}")
         return self.back_queues[session_id]
 
-    def remove_queues(self, session_id: str):
+    def remove_queues(self, session_id: str) -> None:
         """移除指定会话的所有队列
 
         Args:
@@ -95,7 +95,7 @@ class WecomAIQueueMgr:
         """
         return session_id in self.back_queues
 
-    def set_pending_response(self, session_id: str, callback_params: dict[str, str]):
+    def set_pending_response(self, session_id: str, callback_params: dict[str, str]) -> None:
         """设置待处理的响应参数
 
         Args:
@@ -121,7 +121,7 @@ class WecomAIQueueMgr:
         """
         return self.pending_responses.get(session_id)
 
-    def cleanup_expired_responses(self, max_age_seconds: int = 300):
+    def cleanup_expired_responses(self, max_age_seconds: int = 300) -> None:
         """清理过期的待处理响应
 
         Args:

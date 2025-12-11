@@ -39,7 +39,7 @@ class ProviderGSVTTS(TTSProvider):
         self.timeout = provider_config.get("timeout", 60)
         self._session: aiohttp.ClientSession | None = None
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """异步初始化：在 ProviderManager 中被调用"""
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.timeout),
@@ -144,7 +144,7 @@ class ProviderGSVTTS(TTSProvider):
         # TODO: 在此处添加情绪分析，例如 params["emotion"] = detect_emotion(text)
         return params
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止释放资源：在 ProviderManager 中被调用"""
         if self._session and not self._session.closed:
             await self._session.close()

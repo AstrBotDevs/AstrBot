@@ -37,7 +37,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.bot = bot
         self.send_buffer = None
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
         await self._post_send()
 

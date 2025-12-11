@@ -105,7 +105,7 @@ class ConversationManager:
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)
         return conv.conversation_id
 
-    async def switch_conversation(self, unified_msg_origin: str, conversation_id: str):
+    async def switch_conversation(self, unified_msg_origin: str, conversation_id: str) -> None:
         """切换会话的对话
 
         Args:
@@ -120,7 +120,7 @@ class ConversationManager:
         self,
         unified_msg_origin: str,
         conversation_id: str | None = None,
-    ):
+    ) -> None:
         """删除会话的对话，当 conversation_id 为 None 时删除会话当前的对话
 
         Args:
@@ -137,7 +137,7 @@ class ConversationManager:
                 self.session_conversations.pop(unified_msg_origin, None)
                 await sp.session_remove(unified_msg_origin, "sel_conv_id")
 
-    async def delete_conversations_by_user_id(self, unified_msg_origin: str):
+    async def delete_conversations_by_user_id(self, unified_msg_origin: str) -> None:
         """删除会话的所有对话
 
         Args:

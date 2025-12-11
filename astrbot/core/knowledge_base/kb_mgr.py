@@ -33,7 +33,7 @@ class KnowledgeBaseManager:
 
         self.kb_insts: dict[str, KBHelper] = {}
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
             logger.info("正在初始化知识库模块...")
@@ -64,7 +64,7 @@ class KnowledgeBaseManager:
         await self.kb_db.migrate_to_v1()
         logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
-    async def load_kbs(self):
+    async def load_kbs(self) -> None:
         """加载所有知识库实例"""
         kb_records = await self.kb_db.list_kbs()
         for record in kb_records:
@@ -268,7 +268,7 @@ class KnowledgeBaseManager:
 
         return "\n".join(lines)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止所有知识库实例,关闭数据库连接"""
         for kb_id, kb_helper in self.kb_insts.items():
             try:

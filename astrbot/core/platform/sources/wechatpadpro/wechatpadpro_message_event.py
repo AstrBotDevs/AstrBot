@@ -37,7 +37,7 @@ class WeChatPadProMessageEvent(AstrMessageEvent):
         self.message_obj = message_obj  # Save the full message object
         self.adapter = adapter  # Save the adapter instance
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         async with aiohttp.ClientSession() as session:
             for comp in message.chain:
                 await asyncio.sleep(1)

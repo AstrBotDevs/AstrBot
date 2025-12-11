@@ -119,7 +119,7 @@ class ProviderRequest:
     def __str__(self) -> str:
         return self.__repr__()
 
-    def append_tool_calls_result(self, tool_calls_result: ToolCallsResult):
+    def append_tool_calls_result(self, tool_calls_result: ToolCallsResult) -> None:
         """添加工具调用结果到请求中"""
         if not self.tool_calls_result:
             self.tool_calls_result = []

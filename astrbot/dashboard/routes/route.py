@@ -18,7 +18,7 @@ class Route:
         self.app = context.app
         self.config = context.config
 
-    def register_routes(self):
+    def register_routes(self) -> None:
         def _add_rule(path, method, func):
             # 统一添加 /api 前缀
             full_path = f"/api{path}"

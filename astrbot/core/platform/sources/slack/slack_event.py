@@ -126,7 +126,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
         return blocks, "" if blocks else text_content
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,

@@ -110,7 +110,7 @@ class LarkMessageEvent(AstrMessageEvent):
             ret.append(_stage)
         return ret
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         res = await LarkMessageEvent._convert_to_lark(message, self.bot)
         wrapped = {
             "zh_cn": {
@@ -144,7 +144,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return

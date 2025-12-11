@@ -157,7 +157,7 @@ class AstrMessageEvent(abc.ABC):
             return self.message_obj.sender.nickname
         return ""
 
-    def set_extra(self, key, value):
+    def set_extra(self, key, value) -> None:
         """设置额外的信息。"""
         self._extras[key] = value
 
@@ -167,7 +167,7 @@ class AstrMessageEvent(abc.ABC):
             return self._extras
         return self._extras.get(key, default)
 
-    def clear_extra(self):
+    def clear_extra(self) -> None:
         """清除额外的信息。"""
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
@@ -200,7 +200,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ):
+    ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
@@ -216,7 +216,7 @@ class AstrMessageEvent(abc.ABC):
     async def _post_send(self):
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
-    def set_result(self, result: MessageEventResult | str):
+    def set_result(self, result: MessageEventResult | str) -> None:
         """设置消息事件的结果。
 
         Note:
@@ -245,14 +245,14 @@ class AstrMessageEvent(abc.ABC):
             result.chain = []
         self._result = result
 
-    def stop_event(self):
+    def stop_event(self) -> None:
         """终止事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
             self._result.stop_event()
 
-    def continue_event(self):
+    def continue_event(self) -> None:
         """继续事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
@@ -265,7 +265,7 @@ class AstrMessageEvent(abc.ABC):
             return False  # 默认是继续传播
         return self._result.is_stopped()
 
-    def should_call_llm(self, call_llm: bool):
+    def should_call_llm(self, call_llm: bool) -> None:
         """是否在此消息事件中禁止默认的 LLM 请求。
 
         只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
@@ -276,7 +276,7 @@ class AstrMessageEvent(abc.ABC):
         """获取消息事件的结果。"""
         return self._result
 
-    def clear_result(self):
+    def clear_result(self) -> None:
         """清除消息事件的结果。"""
         self._result = None
 
@@ -368,7 +368,7 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息到消息平台。
 
         Args:
@@ -387,7 +387,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         """对消息添加表情回应。
 
         默认实现为发送一条包含该表情的消息。

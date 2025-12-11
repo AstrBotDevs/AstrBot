@@ -101,7 +101,7 @@ class LogBroker:
         self.subscribers.append(q)
         return q
 
-    def unregister(self, q: Queue):
+    def unregister(self, q: Queue) -> None:
         """取消订阅
 
         Args:
@@ -110,7 +110,7 @@ class LogBroker:
         """
         self.subscribers.remove(q)
 
-    def publish(self, log_entry: dict):
+    def publish(self, log_entry: dict) -> None:
         """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
 
         Args:
@@ -136,7 +136,7 @@ class LogQueueHandler(logging.Handler):
         super().__init__()
         self.log_broker = log_broker
 
-    def emit(self, record):
+    def emit(self, record) -> None:
         """日志处理的入口方法, 接受一个日志记录, 转换为字符串后由 LogBroker 发布
         这个方法会在每次日志记录时被调用
 

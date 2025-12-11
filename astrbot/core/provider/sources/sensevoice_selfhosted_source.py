@@ -37,7 +37,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行

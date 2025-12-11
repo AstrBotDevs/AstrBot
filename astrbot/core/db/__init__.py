@@ -37,7 +37,7 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化数据库连接"""
 
     @asynccontextmanager

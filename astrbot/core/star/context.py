@@ -398,7 +398,7 @@ class Context:
         view_handler: Awaitable,
         methods: list,
         desc: str,
-    ):
+    ) -> None:
         for idx, api in enumerate(self.registered_web_apis):
             if api[0] == route and methods == api[2]:
                 self.registered_web_apis[idx] = (route, view_handler, methods, desc)
@@ -448,7 +448,7 @@ class Context:
         """获取 AstrBot 数据库。"""
         return self._db
 
-    def register_provider(self, provider: Provider):
+    def register_provider(self, provider: Provider) -> None:
         """注册一个 LLM Provider(Chat_Completion 类型)。"""
         self.provider_manager.provider_insts.append(provider)
 
@@ -493,7 +493,7 @@ class Context:
         awaitable: Callable[..., Awaitable[Any]],
         use_regex=False,
         ignore_prefix=False,
-    ):
+    ) -> None:
         """注册一个命令。
 
         [Deprecated] 推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
@@ -522,6 +522,6 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable, desc: str):
+    def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。"""
         self._register_tasks.append(task)

@@ -37,7 +37,7 @@ class ProviderXinferenceSTT(STTProvider):
         self.client = None
         self.model_uid = None
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         if self.api_key:
             logger.info("Xinference STT: Using API key for authentication.")
             self.client = Client(self.base_url, api_key=self.api_key)

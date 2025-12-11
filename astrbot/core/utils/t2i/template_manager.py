@@ -80,7 +80,7 @@ class TemplateManager:
 
         raise FileNotFoundError("模板不存在。")
 
-    def create_template(self, name: str, content: str):
+    def create_template(self, name: str, content: str) -> None:
         """在用户目录中创建一个新的模板文件。"""
         path = self._get_user_template_path(name)
         if os.path.exists(path):
@@ -88,7 +88,7 @@ class TemplateManager:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-    def update_template(self, name: str, content: str):
+    def update_template(self, name: str, content: str) -> None:
         """更新一个模板。此操作始终写入用户目录。
         如果更新的是一个内置模板，此操作实际上会在用户目录中创建一个修改后的副本，
         从而实现对内置模板的“覆盖”。
@@ -97,7 +97,7 @@ class TemplateManager:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-    def delete_template(self, name: str):
+    def delete_template(self, name: str) -> None:
         """仅删除用户目录中的模板文件。
         如果删除的是一个覆盖了内置模板的用户模板，这将有效地“恢复”到内置版本。
         """
@@ -106,6 +106,6 @@ class TemplateManager:
             raise FileNotFoundError("用户模板不存在，无法删除。")
         os.remove(path)
 
-    def reset_default_template(self):
+    def reset_default_template(self) -> None:
         """将核心模板从内置目录强制重置到用户目录。"""
         self._copy_core_templates(overwrite=True)

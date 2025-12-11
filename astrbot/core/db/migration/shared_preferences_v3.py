@@ -31,16 +31,16 @@ class SharedPreferences:
     def get(self, key, default: _VT = None) -> _VT:
         return self._data.get(key, default)
 
-    def put(self, key, value):
+    def put(self, key, value) -> None:
         self._data[key] = value
         self._save_preferences()
 
-    def remove(self, key):
+    def remove(self, key) -> None:
         if key in self._data:
             del self._data[key]
             self._save_preferences()
 
-    def clear(self):
+    def clear(self) -> None:
         self._data.clear()
         self._save_preferences()
 

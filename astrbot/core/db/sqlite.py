@@ -257,7 +257,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(query)
         return await self.get_conversation_by_id(cid)
 
-    async def delete_conversation(self, cid):
+    async def delete_conversation(self, cid) -> None:
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -413,7 +413,7 @@ class SQLiteDatabase(BaseDatabase):
         platform_id,
         user_id,
         offset_sec=86400,
-    ):
+    ) -> None:
         """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -586,7 +586,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(query)
         return await self.get_persona_by_id(persona_id)
 
-    async def delete_persona(self, persona_id):
+    async def delete_persona(self, persona_id) -> None:
         """Delete a persona by its ID."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -643,7 +643,7 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalars().all()
 
-    async def remove_preference(self, scope, scope_id, key):
+    async def remove_preference(self, scope, scope_id, key) -> None:
         """Remove a preference by scope ID and key."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -657,7 +657,7 @@ class SQLiteDatabase(BaseDatabase):
                 )
             await session.commit()
 
-    async def clear_preferences(self, scope, scope_id):
+    async def clear_preferences(self, scope, scope_id) -> None:
         """Clear all preferences for a specific scope ID."""
         async with self.get_db() as session:
             session: AsyncSession

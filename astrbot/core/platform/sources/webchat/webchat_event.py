@@ -101,11 +101,11 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain | None):
+    async def send(self, message: MessageChain | None) -> None:
         await WebChatMessageEvent._send(message, session_id=self.session_id)
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
         final_data = ""
         reasoning_content = ""
         cid = self.session_id.split("!")[-1]

@@ -51,10 +51,10 @@ class Star(CommandParserMixin):
             options=options,
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """当插件被激活时会调用这个方法"""
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """当插件被禁用、重载插件时会调用这个方法"""
 
     def __del__(self) -> None:

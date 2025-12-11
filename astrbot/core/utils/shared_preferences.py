@@ -118,7 +118,7 @@ class SharedPreferences:
             return await self.range_get_async("global", "global", key)
         return await self.get_async("global", "global", key, default)
 
-    async def put_async(self, scope: str, scope_id: str, key: str, value: Any):
+    async def put_async(self, scope: str, scope_id: str, key: str, value: Any) -> None:
         """设置指定范围和键的偏好设置"""
         await self.db_helper.insert_preference_or_update(
             scope,
@@ -127,24 +127,24 @@ class SharedPreferences:
             {"val": value},
         )
 
-    async def session_put(self, umo: str, key: str, value: Any):
+    async def session_put(self, umo: str, key: str, value: Any) -> None:
         await self.put_async("umo", umo, key, value)
 
-    async def global_put(self, key: str, value: Any):
+    async def global_put(self, key: str, value: Any) -> None:
         await self.put_async("global", "global", key, value)
 
-    async def remove_async(self, scope: str, scope_id: str, key: str):
+    async def remove_async(self, scope: str, scope_id: str, key: str) -> None:
         """删除指定范围和键的偏好设置"""
         await self.db_helper.remove_preference(scope, scope_id, key)
 
-    async def session_remove(self, umo: str, key: str):
+    async def session_remove(self, umo: str, key: str) -> None:
         await self.remove_async("umo", umo, key)
 
-    async def global_remove(self, key: str):
+    async def global_remove(self, key: str) -> None:
         """删除全局偏好设置"""
         await self.remove_async("global", "global", key)
 
-    async def clear_async(self, scope: str, scope_id: str):
+    async def clear_async(self, scope: str, scope_id: str) -> None:
         """清空指定范围的所有偏好设置"""
         await self.db_helper.clear_preferences(scope, scope_id)
 
@@ -188,21 +188,21 @@ class SharedPreferences:
 
         return result
 
-    def put(self, key, value, scope: str | None = None, scope_id: str | None = None):
+    def put(self, key, value, scope: str | None = None, scope_id: str | None = None) -> None:
         """设置偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
             self.put_async(scope or "unknown", scope_id or "unknown", key, value),
             self._sync_loop,
         ).result()
 
-    def remove(self, key, scope: str | None = None, scope_id: str | None = None):
+    def remove(self, key, scope: str | None = None, scope_id: str | None = None) -> None:
         """删除偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
             self.remove_async(scope or "unknown", scope_id or "unknown", key),
             self._sync_loop,
         ).result()
 
-    def clear(self, scope: str | None = None, scope_id: str | None = None):
+    def clear(self, scope: str | None = None, scope_id: str | None = None) -> None:
         """清空偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
             self.clear_async(scope or "unknown", scope_id or "unknown"),

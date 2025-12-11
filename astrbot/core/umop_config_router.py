@@ -47,7 +47,7 @@ class UmopConfigRouter:
                 return conf_id
         return None
 
-    async def update_routing_data(self, new_routing: dict[str, str]):
+    async def update_routing_data(self, new_routing: dict[str, str]) -> None:
         """更新路由表
 
         Args:
@@ -67,7 +67,7 @@ class UmopConfigRouter:
         self.umop_to_conf_id = new_routing
         await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
 
-    async def update_route(self, umo: str, conf_id: str):
+    async def update_route(self, umo: str, conf_id: str) -> None:
         """更新一条路由
 
         Args:
@@ -86,7 +86,7 @@ class UmopConfigRouter:
         self.umop_to_conf_id[umo] = conf_id
         await self.sp.global_put("umop_config_routing", self.umop_to_conf_id)
 
-    async def delete_route(self, umo: str):
+    async def delete_route(self, umo: str) -> None:
         """删除一条路由
 
         Args:

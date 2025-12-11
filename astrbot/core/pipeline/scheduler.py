@@ -22,7 +22,7 @@ class PipelineScheduler:
         self.ctx = context  # 上下文对象
         self.stages = []  # 存储阶段实例
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
         for stage_cls in registered_stages:
             stage_instance = stage_cls()  # 创建实例
@@ -72,7 +72,7 @@ class PipelineScheduler:
                     logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
                     break
 
-    async def execute(self, event: AstrMessageEvent):
+    async def execute(self, event: AstrMessageEvent) -> None:
         """执行 pipeline
 
         Args:

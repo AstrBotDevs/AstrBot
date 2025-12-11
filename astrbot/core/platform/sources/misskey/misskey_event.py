@@ -40,7 +40,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
 
         return any(message_trimmed.startswith(prefix) for prefix in system_prefixes)
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息，使用适配器的完整上传和发送逻辑"""
         try:
             logger.debug(

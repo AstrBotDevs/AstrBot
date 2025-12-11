@@ -123,7 +123,7 @@ class MisskeyPlatformAdapter(Platform):
             support_streaming_message=False,
         )
 
-    async def run(self):
+    async def run(self) -> None:
         if not self.instance_url or not self.access_token:
             logger.error("[Misskey] 配置不完整，无法启动")
             return
@@ -759,7 +759,7 @@ class MisskeyPlatformAdapter(Platform):
         )
         return message
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self._running = False
         if self.api:
             await self.api.close()

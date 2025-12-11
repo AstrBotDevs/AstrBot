@@ -29,7 +29,7 @@ class SessionController:
 
         self.history_chains: list[list[Comp.BaseMessageComponent]] = []
 
-    def stop(self, error: Exception | None = None):
+    def stop(self, error: Exception | None = None) -> None:
         """立即结束这个会话"""
         if not self.future.done():
             if error:
@@ -37,7 +37,7 @@ class SessionController:
             else:
                 self.future.set_result(None)
 
-    def keep(self, timeout: float = 0, reset_timeout=False):
+    def keep(self, timeout: float = 0, reset_timeout=False) -> None:
         """保持这个会话
 
         Args:

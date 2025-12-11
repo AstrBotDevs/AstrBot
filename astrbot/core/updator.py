@@ -23,7 +23,7 @@ class AstrBotUpdator(RepoZipUpdator):
         self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
 
-    def terminate_child_processes(self):
+    def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
         使用 psutil 库获取当前进程的所有子进程，并尝试终止它们
         """
@@ -85,7 +85,7 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def update(self, reboot=False, latest=True, version=None, proxy=""):
+    async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 

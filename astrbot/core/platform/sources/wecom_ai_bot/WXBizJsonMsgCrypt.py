@@ -18,6 +18,7 @@ import time
 from Crypto.Cipher import AES
 
 from . import ierror
+from typing import NoReturn
 
 """
 关于Crypto.Cipher模块，ImportError: No module named 'Crypto'解决方案
@@ -30,7 +31,7 @@ class FormatException(Exception):
     pass
 
 
-def throw_exception(message, exception_class=FormatException):
+def throw_exception(message, exception_class=FormatException) -> NoReturn:
     """My define raise exception function"""
     raise exception_class(message)
 

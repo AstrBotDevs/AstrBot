@@ -123,7 +123,7 @@ class WecomServer:
 
         return "success"
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。",
         )
@@ -133,7 +133,7 @@ class WecomServer:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
 
@@ -214,7 +214,7 @@ class WecomPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         await super().send_by_session(session, message_chain)
 
     @override
@@ -227,7 +227,7 @@ class WecomPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         loop = asyncio.get_event_loop()
         if self.kf_name:
             try:
@@ -403,7 +403,7 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -416,7 +416,7 @@ class WecomPlatformAdapter(Platform):
     def get_client(self) -> WeChatClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()

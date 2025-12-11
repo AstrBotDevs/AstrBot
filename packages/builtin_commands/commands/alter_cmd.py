@@ -14,7 +14,7 @@ class AlterCmdCommands(CommandParserMixin):
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def update_reset_permission(self, scene_key: str, perm_type: str):
+    async def update_reset_permission(self, scene_key: str, perm_type: str) -> None:
         """更新reset命令在特定场景下的权限设置"""
         from astrbot.api import sp
 
@@ -26,7 +26,7 @@ class AlterCmdCommands(CommandParserMixin):
         alter_cmd_cfg["astrbot"] = plugin_cfg
         await sp.global_put("alter_cmd", alter_cmd_cfg)
 
-    async def alter_cmd(self, event: AstrMessageEvent):
+    async def alter_cmd(self, event: AstrMessageEvent) -> None:
         token = self.parse_commands(event.message_str)
         if token.len < 3:
             await event.send(

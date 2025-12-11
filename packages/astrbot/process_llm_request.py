@@ -115,7 +115,7 @@ class ProcessLLMRequest:
             f"Cannot get image caption because provider `{provider_id}` is not exist.",
         )
 
-    async def process_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
+    async def process_llm_request(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         cfg: dict = self.ctx.get_config(umo=event.unified_msg_origin)[
             "provider_settings"

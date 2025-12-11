@@ -17,7 +17,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ConversationV2, PlatformMessageHistory, PlatformSession
 
 
-async def migrate_webchat_session(db_helper: BaseDatabase):
+async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
     """Create PlatformSession records from platform_message_history.
 
     This migration extracts all unique user_ids from platform_message_history

@@ -35,7 +35,7 @@ class RespondStage(Stage):
         Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
     }
 
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
         self.platform_settings: dict = self.config.get("platform_settings", {})

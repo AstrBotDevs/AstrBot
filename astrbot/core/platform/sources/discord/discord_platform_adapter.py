@@ -60,7 +60,7 @@ class DiscordPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
@@ -122,7 +122,7 @@ class DiscordPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         """主要运行逻辑"""
 
         # 初始化回调函数
@@ -251,7 +251,7 @@ class DiscordPlatformAdapter(Platform):
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         return self._convert_message_to_abm(data)
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None):
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""
         message_event = DiscordPlatformEvent(
             message_str=message.message_str,
@@ -323,7 +323,7 @@ class DiscordPlatformAdapter(Platform):
         self.commit_event(message_event)
 
     @override
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止适配器"""
         logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
         self.shutdown_event.set()
@@ -358,7 +358,7 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 客户端关闭异常: {e}")
         logger.info("[Discord] 适配器已终止。")
 
-    def register_handler(self, handler_info):
+    def register_handler(self, handler_info) -> None:
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 

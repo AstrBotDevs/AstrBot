@@ -155,7 +155,7 @@ class DifyAPIClient:
                 raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
             return await resp.json()  # {"id": "xxx", ...}
 
-    async def close(self):
+    async def close(self) -> None:
         await self.session.close()
 
     async def get_chat_convs(self, user: str, limit: int = 20):

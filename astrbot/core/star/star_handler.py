@@ -16,7 +16,7 @@ class StarHandlerRegistry(Generic[T]):
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
 
-    def append(self, handler: StarHandlerMetadata):
+    def append(self, handler: StarHandlerMetadata) -> None:
         """添加一个 Handler，并保持按优先级有序"""
         if "priority" not in handler.extras_configs:
             handler.extras_configs["priority"] = 0
@@ -154,11 +154,11 @@ class StarHandlerRegistry(Generic[T]):
             if handler.handler_module_path == module_name
         ]
 
-    def clear(self):
+    def clear(self) -> None:
         self.star_handlers_map.clear()
         self._handlers.clear()
 
-    def remove(self, handler: StarHandlerMetadata):
+    def remove(self, handler: StarHandlerMetadata) -> None:
         self.star_handlers_map.pop(handler.handler_full_name, None)
         self._handlers = [h for h in self._handlers if h != handler]
 

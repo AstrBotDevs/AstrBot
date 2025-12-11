@@ -21,7 +21,7 @@ class HelpCommand:
         except BaseException:
             return ""
 
-    async def help(self, event: AstrMessageEvent):
+    async def help(self, event: AstrMessageEvent) -> None:
         """查看帮助"""
         notice = ""
         try:

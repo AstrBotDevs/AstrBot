@@ -2,7 +2,7 @@ import asyncio
 import os
 import threading
 import uuid
-from typing import cast
+from typing import cast, NoReturn
 
 import aiohttp
 import dingtalk_stream
@@ -90,7 +90,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> NoReturn:
         raise NotImplementedError("钉钉机器人适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
@@ -222,7 +222,7 @@ class DingtalkPlatformAdapter(Platform):
                     return ""
                 return (await resp.json())["data"]["accessToken"]
 
-    async def handle_msg(self, abm: AstrBotMessage):
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
         event = DingtalkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
@@ -233,7 +233,7 @@ class DingtalkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
-    async def run(self):
+    async def run(self) -> None:
         # await self.client_.start()
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
         def start_client(loop: asyncio.AbstractEventLoop):
@@ -252,7 +252,7 @@ class DingtalkPlatformAdapter(Platform):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, start_client, loop)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         def monkey_patch_close():
             raise KeyboardInterrupt("Graceful shutdown")
 

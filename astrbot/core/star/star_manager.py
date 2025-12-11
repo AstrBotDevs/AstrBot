@@ -685,7 +685,7 @@ class PluginManager:
         plugin_name: str,
         delete_config: bool = False,
         delete_data: bool = False,
-    ):
+    ) -> None:
         """卸载指定的插件。
 
         Args:
@@ -825,7 +825,7 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy=""):
+    async def update_plugin(self, plugin_name: str, proxy="") -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -836,7 +836,7 @@ class PluginManager:
         await self.updator.update(plugin, proxy=proxy)
         await self.reload(plugin_name)
 
-    async def turn_off_plugin(self, plugin_name: str):
+    async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。
         调用插件的 terminate() 方法，
         将插件的 module_path 加入到 data/shared_preferences.json 的 inactivated_plugins 列表中。
@@ -898,7 +898,7 @@ class PluginManager:
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
 
-    async def turn_on_plugin(self, plugin_name: str):
+    async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")

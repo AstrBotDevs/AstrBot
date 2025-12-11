@@ -11,7 +11,7 @@ from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
-    async def on_agent_done(self, run_context, llm_response):
+    async def on_agent_done(self, run_context, llm_response) -> None:
         # 执行事件钩子
         await call_event_hook(
             run_context.context.event,
@@ -25,7 +25,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         tool: FunctionTool[Any],
         tool_args: dict | None,
         tool_result: CallToolResult | None,
-    ):
+    ) -> None:
         run_context.context.event.clear_result()
 
 

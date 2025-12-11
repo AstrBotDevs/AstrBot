@@ -124,7 +124,7 @@ class Main(star.Star):
             with open(PATH) as f:
                 self.config = json.load(f)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         ok = await self.is_docker_available()
         if not ok:
             logger.info(
@@ -240,7 +240,7 @@ class Main(star.Star):
                     del self.user_waiting[uid]
 
     @filter.on_llm_request()
-    async def on_llm_req(self, event: AstrMessageEvent, request: ProviderRequest):
+    async def on_llm_req(self, event: AstrMessageEvent, request: ProviderRequest) -> None:
         if event.get_session_id() in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[event.get_session_id()]
             if not request.prompt:
@@ -248,7 +248,7 @@ class Main(star.Star):
             request.prompt += f"\nUser provided files: {files}"
 
     @filter.command_group("pi")
-    def pi(self):
+    def pi(self) -> None:
         pass
 
     @pi.command("absdir")

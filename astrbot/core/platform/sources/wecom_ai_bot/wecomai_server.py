@@ -162,7 +162,7 @@ class WecomAIBotServer:
             logger.error("处理消息时发生异常: %s", e)
             return "内部服务器错误", 500
 
-    async def start_server(self):
+    async def start_server(self) -> None:
         """启动服务器"""
         logger.info("启动企业微信智能机器人服务器，监听 %s:%d", self.host, self.port)
 
@@ -176,11 +176,11 @@ class WecomAIBotServer:
             logger.error("服务器运行异常: %s", e)
             raise
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         """关闭触发器"""
         await self.shutdown_event.wait()
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """关闭服务器"""
         logger.info("企业微信智能机器人服务器正在关闭...")
         self.shutdown_event.set()

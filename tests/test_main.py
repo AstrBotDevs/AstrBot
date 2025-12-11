@@ -17,7 +17,7 @@ class _version_info:
         self.minor = minor
 
 
-def test_check_env(monkeypatch):
+def test_check_env(monkeypatch) -> None:
     version_info_correct = _version_info(3, 10)
     version_info_wrong = _version_info(3, 9)
     monkeypatch.setattr(sys, "version_info", version_info_correct)
@@ -33,7 +33,7 @@ def test_check_env(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_not_exists(monkeypatch):
+async def test_check_dashboard_files_not_exists(monkeypatch) -> None:
     """Tests dashboard download when files do not exist."""
     monkeypatch.setattr(os.path, "exists", lambda x: False)
 
@@ -43,7 +43,7 @@ async def test_check_dashboard_files_not_exists(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_exists_and_version_match(monkeypatch):
+async def test_check_dashboard_files_exists_and_version_match(monkeypatch) -> None:
     """Tests that dashboard is not downloaded when it exists and version matches."""
     # Mock os.path.exists to return True
     monkeypatch.setattr(os.path, "exists", lambda x: True)
@@ -62,7 +62,7 @@ async def test_check_dashboard_files_exists_and_version_match(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch):
+async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch) -> None:
     """Tests that a warning is logged when dashboard version mismatches."""
     monkeypatch.setattr(os.path, "exists", lambda x: True)
 
@@ -77,7 +77,7 @@ async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
+async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch) -> None:
     """Tests that providing a valid webui_dir skips all checks."""
     valid_dir = "/tmp/my-custom-webui"
     monkeypatch.setattr(os.path, "exists", lambda path: path == valid_dir)

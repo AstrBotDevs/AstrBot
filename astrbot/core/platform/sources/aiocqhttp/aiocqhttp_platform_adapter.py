@@ -93,7 +93,7 @@ class AiocqhttpAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
             session_id = session.session_id.split("_")[-1]
@@ -416,17 +416,17 @@ class AiocqhttpAdapter(Platform):
         self.shutdown_event = asyncio.Event()
         return coro
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.shutdown_event.set()
 
-    async def shutdown_trigger_placeholder(self):
+    async def shutdown_trigger_placeholder(self) -> None:
         await self.shutdown_event.wait()
         logger.info("aiocqhttp 适配器已被优雅地关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,

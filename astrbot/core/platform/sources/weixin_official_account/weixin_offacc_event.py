@@ -84,7 +84,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
         active_send_mode = cast(dict, message_obj.raw_message).get(
             "active_send_mode", False

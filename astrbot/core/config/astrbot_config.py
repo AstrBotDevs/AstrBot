@@ -146,7 +146,7 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None):
+    def save_config(self, replace_config: dict | None = None) -> None:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config

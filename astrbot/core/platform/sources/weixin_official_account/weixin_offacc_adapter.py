@@ -129,7 +129,7 @@ class WeixinOfficialAccountServer:
 
         return "success"
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。",
         )
@@ -139,7 +139,7 @@ class WeixinOfficialAccountServer:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
 
@@ -218,7 +218,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         await super().send_by_session(session, message_chain)
 
     @override
@@ -231,7 +231,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         # 如果启用统一 webhook 模式，则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
@@ -330,7 +330,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -343,7 +343,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     def get_client(self) -> WeChatClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()

@@ -90,7 +90,7 @@ class StreamingClient:
             self.is_connected = False
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         self._running = False
         if self.websocket:
             await self.websocket.close()
@@ -116,7 +116,7 @@ class StreamingClient:
         self.channels[channel_id] = channel_type
         return channel_id
 
-    async def unsubscribe_channel(self, channel_id: str):
+    async def unsubscribe_channel(self, channel_id: str) -> None:
         if (
             not self.is_connected
             or not self.websocket
@@ -136,10 +136,10 @@ class StreamingClient:
         self,
         event_type: str,
         handler: Callable[[dict], Awaitable[None]],
-    ):
+    ) -> None:
         self.message_handlers[event_type] = handler
 
-    async def listen(self):
+    async def listen(self) -> None:
         if not self.is_connected or not self.websocket:
             raise WebSocketError("WebSocket 未连接")
 

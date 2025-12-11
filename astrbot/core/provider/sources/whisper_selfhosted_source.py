@@ -30,7 +30,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         self.set_model(provider_config["model"])
         self.model = None
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         loop = asyncio.get_event_loop()
         logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(

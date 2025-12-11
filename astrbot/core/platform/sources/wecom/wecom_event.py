@@ -86,7 +86,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
 
         is_wechat_kf = hasattr(self.client, "kf_message")

@@ -28,10 +28,10 @@ class CommandGroupFilter(HandlerFilter):
     def add_sub_command_filter(
         self,
         sub_command_filter: CommandFilter | CommandGroupFilter,
-    ):
+    ) -> None:
         self.sub_command_filters.append(sub_command_filter)
 
-    def add_custom_filter(self, custom_filter: CustomFilter):
+    def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
 
     def get_complete_command_names(self) -> list[str]:

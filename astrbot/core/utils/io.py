@@ -19,7 +19,7 @@ from .astrbot_path import get_astrbot_data_path
 logger = logging.getLogger("astrbot")
 
 
-def on_error(func, path, exc_info):
+def on_error(func, path, exc_info) -> None:
     """A callback of the rmtree function."""
     import stat
 
@@ -37,7 +37,7 @@ def remove_dir(file_path: str) -> bool:
     return True
 
 
-def port_checker(port: int, host: str = "localhost"):
+def port_checker(port: int, host: str = "localhost") -> bool | None:
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
     try:
@@ -134,7 +134,7 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False):
+async def download_file(url: str, path: str, show_progress: bool = False) -> None:
     """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(

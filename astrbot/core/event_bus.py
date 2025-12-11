@@ -34,7 +34,7 @@ class EventBus:
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
 
-    async def dispatch(self):
+    async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)

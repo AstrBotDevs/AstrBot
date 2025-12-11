@@ -88,7 +88,7 @@ class ProviderManager:
         provider_id: str,
         provider_type: ProviderType,
         umo: str | None = None,
-    ):
+    ) -> None:
         """设置提供商。
 
         Args:
@@ -187,7 +187,7 @@ class ProviderManager:
                 raise ValueError(f"Unknown provider type: {provider_type}")
         return provider
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         # 逐个初始化提供商
         for provider_config in self.providers_config:
             try:
@@ -251,7 +251,7 @@ class ProviderManager:
         # 初始化 MCP Client 连接
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
-    async def load_provider(self, provider_config: dict):
+    async def load_provider(self, provider_config: dict) -> None:
         if not provider_config["enable"]:
             logger.info(f"Provider {provider_config['id']} is disabled, skipping")
             return
@@ -491,7 +491,7 @@ class ProviderManager:
                 f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
             )
 
-    async def reload(self, provider_config: dict):
+    async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:
             await self.terminate_provider(provider_config["id"])
             if provider_config["enable"]:
@@ -536,7 +536,7 @@ class ProviderManager:
     def get_insts(self):
         return self.provider_insts
 
-    async def terminate_provider(self, provider_id: str):
+    async def terminate_provider(self, provider_id: str) -> None:
         if provider_id in self.inst_map:
             logger.info(
                 f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
@@ -570,7 +570,7 @@ class ProviderManager:
             )
             del self.inst_map[provider_id]
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()  # type: ignore

@@ -126,7 +126,7 @@ class MCPClient:
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
 
-    async def connect_to_server(self, mcp_server_config: dict, name: str):
+    async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
 
         If `url` parameter exists:
@@ -343,7 +343,7 @@ class MCPClient:
 
         return await _call_with_retry()
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources including old exit stacks from reconnections"""
         # Close current exit stack
         try:

@@ -32,7 +32,7 @@ class FaissVecDB(BaseVecDB):
         self.embedding_provider = embedding_provider
         self.rerank_provider = rerank_provider
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self.document_storage.initialize()
 
     async def insert(
@@ -165,7 +165,7 @@ class FaissVecDB(BaseVecDB):
 
         return top_k_results
 
-    async def delete(self, doc_id: str):
+    async def delete(self, doc_id: str) -> None:
         """删除一条文档块（chunk）"""
         # 获得对应的 int id
         result = await self.document_storage.get_document_by_doc_id(doc_id)
@@ -177,7 +177,7 @@ class FaissVecDB(BaseVecDB):
         await self.document_storage.delete_document_by_doc_id(doc_id)
         await self.embedding_storage.delete([int_id])
 
-    async def close(self):
+    async def close(self) -> None:
         await self.document_storage.close()
 
     async def count_documents(self, metadata_filter: dict | None = None) -> int:
@@ -192,7 +192,7 @@ class FaissVecDB(BaseVecDB):
         )
         return count
 
-    async def delete_documents(self, metadata_filters: dict):
+    async def delete_documents(self, metadata_filters: dict) -> None:
         """根据元数据过滤器删除文档"""
         docs = await self.document_storage.get_documents(
             metadata_filters=metadata_filters,

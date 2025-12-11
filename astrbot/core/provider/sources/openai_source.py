@@ -602,7 +602,7 @@ class ProviderOpenAIOfficial(Provider):
     def get_keys(self) -> list[str]:
         return self.api_keys
 
-    def set_key(self, key):
+    def set_key(self, key) -> None:
         self.client.api_key = key
 
     async def assemble_context(
