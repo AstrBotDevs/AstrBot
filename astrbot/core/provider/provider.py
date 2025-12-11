@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union, NoReturn
+from typing import NoReturn, TypeAlias, Union
 
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet

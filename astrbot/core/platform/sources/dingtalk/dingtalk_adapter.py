@@ -2,7 +2,7 @@ import asyncio
 import os
 import threading
 import uuid
-from typing import cast, NoReturn
+from typing import NoReturn, cast
 
 import aiohttp
 import dingtalk_stream

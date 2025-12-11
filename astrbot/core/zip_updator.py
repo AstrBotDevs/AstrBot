@@ -3,6 +3,7 @@ import re
 import shutil
 import ssl
 import zipfile
+from typing import NoReturn
 
 import aiohttp
 import certifi
@@ -10,7 +11,6 @@ import certifi
 from astrbot.core import logger
 from astrbot.core.utils.io import download_file, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
-from typing import NoReturn
 
 
 class ReleaseInfo:

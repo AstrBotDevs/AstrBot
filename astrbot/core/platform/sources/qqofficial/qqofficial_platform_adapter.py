@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import cast, NoReturn
+from typing import NoReturn, cast
 
 import botpy
 import botpy.message

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, cast, NoReturn
+from typing import Any, NoReturn, cast
 
 import botpy
 import botpy.message

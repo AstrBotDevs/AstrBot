@@ -14,11 +14,11 @@ import secrets
 import socket
 import struct
 import time
+from typing import NoReturn
 
 from Crypto.Cipher import AES
 
 from . import ierror
-from typing import NoReturn
 
 """
 关于Crypto.Cipher模块，ImportError: No module named 'Crypto'解决方案
