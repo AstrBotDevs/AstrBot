@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import hmac
 from typing import Any, cast
 
 from astrbot import logger
@@ -92,6 +94,12 @@ class GitHubWebhookPlatformAdapter(Platform):
             # 获取请求数据
             payload = await request.json
 
+            # 验证 webhook 签名（如果配置了 secret）
+            if self.webhook_secret:
+                if not await self._verify_signature(request, payload):
+                    logger.warning("GitHub webhook 签名验证失败")
+                    return {"error": "Invalid signature"}, 401
+
             logger.debug(f"收到 GitHub Webhook 事件: {event_type}")
 
             # 处理不同类型的事件
@@ -112,6 +120,47 @@ class GitHubWebhookPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"处理 GitHub webhook 回调时发生错误: {e}", exc_info=True)
             return {"error": str(e)}, 500
+
+    async def _verify_signature(self, request: Any, payload: dict) -> bool:
+        """验证 GitHub webhook 签名
+
+        Args:
+            request: Quart 请求对象
+            payload: 请求负载数据
+
+        Returns:
+            签名是否有效
+        """
+        signature_header = request.headers.get("X-Hub-Signature-256", "")
+        if not signature_header:
+            # 如果没有签名头，检查是否有旧版本的签名
+            signature_header = request.headers.get("X-Hub-Signature", "")
+            if not signature_header:
+                return False
+
+        # 获取原始请求体
+        body = await request.get_data()
+
+        # 计算 HMAC
+        if signature_header.startswith("sha256="):
+            expected_signature = hmac.new(
+                self.webhook_secret.encode("utf-8"),
+                body,
+                hashlib.sha256,
+            ).hexdigest()
+            received_signature = signature_header.replace("sha256=", "")
+        elif signature_header.startswith("sha1="):
+            expected_signature = hmac.new(
+                self.webhook_secret.encode("utf-8"),
+                body,
+                hashlib.sha1,
+            ).hexdigest()
+            received_signature = signature_header.replace("sha1=", "")
+        else:
+            return False
+
+        # 使用 hmac.compare_digest 防止时序攻击
+        return hmac.compare_digest(expected_signature, received_signature)
 
     async def _handle_issue_event(self, payload: dict):
         """处理 issue 事件"""

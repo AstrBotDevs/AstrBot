@@ -1,6 +1,8 @@
 """Test GitHub webhook platform adapter"""
 
 import asyncio
+import hashlib
+import hmac
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,7 +27,7 @@ def platform_config():
         "id": "test_github_webhook",
         "unified_webhook_mode": True,
         "webhook_uuid": "test-uuid-123",
-        "webhook_secret": "test-secret",
+        "webhook_secret": "",  # No secret by default for easier testing
     }
 
 
@@ -47,7 +49,7 @@ class TestGitHubWebhookAdapter:
     def test_adapter_initialization(self, adapter):
         """Test adapter is initialized correctly"""
         assert adapter.unified_webhook_mode is True
-        assert adapter.webhook_secret == "test-secret"
+        assert adapter.webhook_secret == ""
         assert adapter.meta().name == "github_webhook"
         assert adapter.meta().description == "GitHub Webhook 适配器"
 
@@ -199,3 +201,79 @@ class TestGitHubWebhookAdapter:
 
         # Verify no event was queued
         assert event_queue.empty()
+
+    @pytest.mark.asyncio
+    async def test_signature_verification(self, platform_settings, event_queue):
+        """Test webhook signature verification"""
+        # Create adapter with webhook secret
+        config_with_secret = {
+            "type": "github_webhook",
+            "enable": True,
+            "id": "test_github_webhook",
+            "unified_webhook_mode": True,
+            "webhook_uuid": "test-uuid-123",
+            "webhook_secret": "test-secret",
+        }
+        adapter = GitHubWebhookPlatformAdapter(
+            config_with_secret, platform_settings, event_queue
+        )
+
+        # Create a valid signature
+        body = b'{"action": "opened"}'
+        signature = hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+
+        # Mock request with valid signature
+        request = MagicMock()
+        request.headers.get = lambda key, default="": {
+            "X-GitHub-Event": "ping",
+            "X-Hub-Signature-256": f"sha256={signature}",
+        }.get(key, default)
+
+        async def mock_get_data():
+            return body
+
+        request.get_data = mock_get_data
+
+        async def mock_json():
+            return {"action": "opened"}
+
+        request.json = mock_json()
+
+        response = await adapter.webhook_callback(request)
+        assert response == {"message": "pong"}
+
+    @pytest.mark.asyncio
+    async def test_invalid_signature(self, platform_settings, event_queue):
+        """Test webhook with invalid signature is rejected"""
+        # Create adapter with webhook secret
+        config_with_secret = {
+            "type": "github_webhook",
+            "enable": True,
+            "id": "test_github_webhook",
+            "unified_webhook_mode": True,
+            "webhook_uuid": "test-uuid-123",
+            "webhook_secret": "test-secret",
+        }
+        adapter = GitHubWebhookPlatformAdapter(
+            config_with_secret, platform_settings, event_queue
+        )
+
+        # Mock request with invalid signature
+        request = MagicMock()
+        request.headers.get = lambda key, default="": {
+            "X-GitHub-Event": "ping",
+            "X-Hub-Signature-256": "sha256=invalidsignature",
+        }.get(key, default)
+
+        async def mock_get_data():
+            return b'{"action": "opened"}'
+
+        request.get_data = mock_get_data
+
+        async def mock_json():
+            return {"action": "opened"}
+
+        request.json = mock_json()
+
+        response = await adapter.webhook_callback(request)
+        assert response == ({"error": "Invalid signature"}, 401)
