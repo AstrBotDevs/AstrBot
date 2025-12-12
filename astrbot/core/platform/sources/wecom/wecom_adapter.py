@@ -422,4 +422,4 @@ class WecomPlatformAdapter(Platform):
             await self.server.server.shutdown()
         except Exception as _:
             pass
-        logger.info("企业微信 适配器已被优雅地关闭")
+        logger.info("企业微信 适配器已被关闭")

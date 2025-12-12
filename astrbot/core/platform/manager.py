@@ -5,6 +5,7 @@ from asyncio import Queue
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
@@ -18,6 +19,7 @@ class PlatformManager:
 
         self._inst_map: dict[str, dict] = {}
 
+        self.astrbot_config = config
         self.platforms_config = config["platform"]
         self.settings = config["platform_settings"]
         """NOTE: 这里是 default 的配置文件，以保证最大的兼容性；
@@ -29,6 +31,8 @@ class PlatformManager:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
             try:
+                if ensure_platform_webhook_config(platform):
+                    self.astrbot_config.save_config()
                 await self.load_platform(platform)
             except Exception as e:
                 logger.error(f"初始化 {platform} 平台适配器失败: {e}")

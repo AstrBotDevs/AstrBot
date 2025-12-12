@@ -421,7 +421,7 @@ class AiocqhttpAdapter(Platform):
 
     async def shutdown_trigger_placeholder(self):
         await self.shutdown_event.wait()
-        logger.info("aiocqhttp 适配器已被优雅地关闭")
+        logger.info("aiocqhttp 适配器已被关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata

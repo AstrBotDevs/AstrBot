@@ -13,6 +13,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "wecom",
     "wecom_ai_bot",
     "slack",
+    "lark",
 ]
 
 # 默认配置
@@ -277,6 +278,10 @@ CONFIG_METADATA_2 = {
                         "app_id": "",
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
+                        "lark_connection_mode": "socket",  # webhook, socket
+                        "webhook_uuid": "",
+                        "lark_encrypt_key": "",
+                        "lark_verification_token": "",
                     },
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
@@ -370,6 +375,28 @@ CONFIG_METADATA_2 = {
                     #     "type": "string",
                     #     "options": ["fullscreen", "embedded"],
                     # },
+                    "lark_connection_mode": {
+                        "description": "订阅方式",
+                        "type": "string",
+                        "options": ["socket", "webhook"],
+                        "labels": ["长连接模式", "推送至服务器模式"],
+                    },
+                    "lark_encrypt_key": {
+                        "description": "Encrypt Key",
+                        "type": "string",
+                        "hint": "用于解密飞书回调数据的加密密钥",
+                        "condition": {
+                            "lark_connection_mode": "webhook",
+                        },
+                    },
+                    "lark_verification_token": {
+                        "description": "Verification Token",
+                        "type": "string",
+                        "hint": "用于验证飞书回调请求的令牌",
+                        "condition": {
+                            "lark_connection_mode": "webhook",
+                        },
+                    },
                     "is_sandbox": {
                         "description": "沙箱模式",
                         "type": "bool",

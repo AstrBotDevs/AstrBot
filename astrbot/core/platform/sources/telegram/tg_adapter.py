@@ -424,6 +424,6 @@ class TelegramPlatformAdapter(Platform):
             if self.application.updater is not None:
                 await self.application.updater.stop()
 
-            logger.info("Telegram 适配器已被优雅地关闭")
+            logger.info("Telegram 适配器已被关闭")
         except Exception as e:
             logger.error(f"Telegram 适配器关闭时出错: {e}")

@@ -349,4 +349,4 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             await self.server.server.shutdown()
         except Exception as _:
             pass
-        logger.info("微信公众平台 适配器已被优雅地关闭")
+        logger.info("微信公众平台 适配器已被关闭")

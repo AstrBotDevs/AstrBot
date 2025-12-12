@@ -245,7 +245,7 @@ class DingtalkPlatformAdapter(Platform):
                     task.result()
             except Exception as e:
                 if "Graceful shutdown" in str(e):
-                    logger.info("钉钉适配器已被优雅地关闭")
+                    logger.info("钉钉适配器已被关闭")
                     return
                 logger.error(f"钉钉机器人启动失败: {e}")
 
