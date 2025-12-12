@@ -40,7 +40,7 @@ class RecursiveCharacterChunker(BaseChunker):
             "",  # 字符
         ]
 
-    async def chunk(self, text: str, **kwargs: Any) -> list[str]:  # noqa:ANN401
+    async def chunk(self, text: str, **kwargs: object) -> list[str]:
         """递归地将文本分割成块
 
         Args:

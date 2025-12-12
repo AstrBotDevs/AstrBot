@@ -369,7 +369,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         mcp_tool: mcp.Tool,
         mcp_client: MCPClient,
         mcp_server_name: str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> None:
         super().__init__(
             name=mcp_tool.name,
@@ -383,7 +383,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
     async def call(
         self,
         context: ContextWrapper[TContext],
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> mcp.types.CallToolResult:
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,

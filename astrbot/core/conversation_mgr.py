@@ -226,7 +226,7 @@ class ConversationManager:
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> tuple[list[Conversation], int]:
         """获取过滤后的对话列表.
 

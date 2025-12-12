@@ -25,7 +25,7 @@ class BaseAgentRunner(T.Generic[TContext]):
         self,
         run_context: ContextWrapper[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
-        **kwargs: T.Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> None:
         """Reset the agent to its initial state.
         This method should be called before starting a new run.

@@ -12,7 +12,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         self,
         agent: Agent[TContext],
         parameters: dict | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> None:
         self.agent = agent
         super().__init__(

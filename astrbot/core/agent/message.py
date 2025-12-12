@@ -15,7 +15,7 @@ class ContentPart(BaseModel):
 
     type: str
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:  # noqa:ANN401
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
 
         invalid_subclass_error_msg = f"ContentPart subclass {cls.__name__} must have a `type` field of type `str`"
@@ -123,7 +123,7 @@ class ToolCall(BaseModel):
     extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:  # noqa:ANN401
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
         if self.extra_content is None:
             kwargs.setdefault("exclude", set()).add("extra_content")
         return super().model_dump(**kwargs)

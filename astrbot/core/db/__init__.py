@@ -123,7 +123,7 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs: T.Any,  # noqa: ANN401
+        **kwargs: object,
     ) -> tuple[list[ConversationV2], int]:
         """Get conversations filtered by platform IDs and search query."""
         ...

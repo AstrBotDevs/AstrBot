@@ -25,7 +25,7 @@ class FixedSizeChunker(BaseChunker):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    async def chunk(self, text: str, **kwargs: Any) -> list[str]:  # noqa:ANN401
+    async def chunk(self, text: str, **kwargs: object) -> list[str]:
         """固定大小分块
 
         Args:

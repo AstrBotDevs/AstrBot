@@ -36,10 +36,10 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         query = kwargs.get("query", "")
         if not query:
             return "error: Query parameter is empty."
-        
+
         # 显式转换为 str，解决类型检查报错 "object cannot be assigned to str"
         query_str = str(query)
-        
+
         result = await retrieve_knowledge_base(
             query=query_str,
             umo=context.context.event.unified_msg_origin,
