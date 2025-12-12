@@ -1,6 +1,7 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
+import builtins
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
@@ -14,7 +15,7 @@ class ContentPart(BaseModel):
 
     type: str
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, **kwargs: Any) -> None:  # noqa:ANN401
         super().__init_subclass__(**kwargs)
 
         invalid_subclass_error_msg = f"ContentPart subclass {cls.__name__} must have a `type` field of type `str`"
@@ -27,15 +28,15 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, source_type: builtins.type[BaseModel], handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
 
-            def validate_content_part(value: Any) -> Any:
+            def validate_content_part(value: object) -> "ContentPart":
                 # if it's already an instance of a ContentPart subclass, return it
                 if hasattr(value, "__class__") and issubclass(value.__class__, cls):
-                    return value
+                    return cast("ContentPart", value)
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
                 if isinstance(value, dict) and "type" in value:
@@ -122,7 +123,7 @@ class ToolCall(BaseModel):
     extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:  # noqa:ANN401
         if self.extra_content is None:
             kwargs.setdefault("exclude", set()).add("extra_content")
         return super().model_dump(**kwargs)
@@ -155,7 +156,7 @@ class Message(BaseModel):
     """The ID of the tool call."""
 
     @model_validator(mode="after")
-    def check_content_required(self):
+    def check_content_required(self) -> "Message":
         # assistant + tool_calls is not None: allow content to be None
         if self.role == "assistant" and self.tool_calls is not None:
             return self
