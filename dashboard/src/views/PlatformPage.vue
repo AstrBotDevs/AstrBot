@@ -57,7 +57,7 @@
                     {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
                   </v-chip>
                 </div>
-                <div v-if="item.unified_webhook_mode && item.webhook_uuid" class="webhook-info">
+                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
                   <v-chip
                     size="small"
                     color="primary"
