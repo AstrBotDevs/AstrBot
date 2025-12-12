@@ -31,13 +31,17 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     )
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self, context: ContextWrapper[AstrAgentContext], **kwargs: object
     ) -> ToolExecResult:
         query = kwargs.get("query", "")
         if not query:
             return "error: Query parameter is empty."
+        
+        # 显式转换为 str，解决类型检查报错 "object cannot be assigned to str"
+        query_str = str(query)
+        
         result = await retrieve_knowledge_base(
-            query=kwargs.get("query", ""),
+            query=query_str,
             umo=context.context.event.unified_msg_origin,
             context=context.context.context,
         )
