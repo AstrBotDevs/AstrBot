@@ -77,7 +77,7 @@ class DifyAPIClient:
         response_mode: str = "streaming",
         files: list[dict[str, Any]] | None = None,
         timeout: float = 60,
-    ):
+    ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
@@ -158,7 +158,7 @@ class DifyAPIClient:
     async def close(self) -> None:
         await self.session.close()
 
-    async def get_chat_convs(self, user: str, limit: int = 20):
+    async def get_chat_convs(self, user: str, limit: int = 20) -> dict:
         # conversations. GET
         url = f"{self.api_base}/conversations"
         payload = {
@@ -168,7 +168,7 @@ class DifyAPIClient:
         async with self.session.get(url, params=payload, headers=self.headers) as resp:
             return await resp.json()
 
-    async def delete_chat_conv(self, user: str, conversation_id: str):
+    async def delete_chat_conv(self, user: str, conversation_id: str) -> dict:
         # conversation. DELETE
         url = f"{self.api_base}/conversations/{conversation_id}"
         payload = {
@@ -183,7 +183,7 @@ class DifyAPIClient:
         name: str,
         user: str,
         auto_generate: bool = False,
-    ):
+    ) -> dict:
         # /conversations/:conversation_id/name
         url = f"{self.api_base}/conversations/{conversation_id}/name"
         payload = {

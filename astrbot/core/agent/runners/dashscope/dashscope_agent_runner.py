@@ -82,7 +82,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         return False
 
     @override
-    async def step(self):
+    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
         """
         执行 Dashscope Agent 的一个步骤
         """
@@ -124,7 +124,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 yield resp
 
     def _consume_sync_generator(
-        self, response: T.Any, response_queue: queue.Queue
+        self, response: T.Iterable[object], response_queue: queue.Queue
     ) -> None:
         """在线程中消费同步generator,将结果放入队列
 
@@ -278,7 +278,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             return payload
 
     async def _handle_streaming_response(
-        self, response: T.Any, session_id: str
+        self, response: object, session_id: str
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """处理流式响应
 
@@ -292,7 +292,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         response_queue = queue.Queue()
         consumer_thread = threading.Thread(
             target=self._consume_sync_generator,
-            args=(response, response_queue),
+            args=(T.cast(T.Iterable[object], response), response_queue),
             daemon=True,
         )
         consumer_thread.start()
@@ -319,14 +319,14 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
                 (
                     output_text,
                     chunk_doc_refs,
-                    response,
+                    response_obj,
                 ) = await self._process_stream_chunk(chunk, output_text)
 
-                if response:
-                    if response.type == "err":
-                        yield response
+                if response_obj:
+                    if response_obj.type == "err":
+                        yield response_obj
                         return
-                    yield response
+                    yield response_obj
 
                 if chunk_doc_refs:
                     doc_references = chunk_doc_refs
@@ -366,7 +366,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=chain),
         )
 
-    async def _execute_dashscope_request(self):
+    async def _execute_dashscope_request(self) -> T.AsyncGenerator[AgentResponse, None]:
         """执行 Dashscope 请求的核心逻辑"""
         prompt = self.req.prompt or ""
         session_id = self.req.session_id or "unknown"

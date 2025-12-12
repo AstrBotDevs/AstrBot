@@ -61,7 +61,9 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: object
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
