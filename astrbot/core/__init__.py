@@ -1,8 +1,10 @@
 import os
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
-from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.db.sqlite import BaseDatabase
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.utils.pip_installer import PipInstaller
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -14,13 +16,44 @@ from .utils.astrbot_path import get_astrbot_data_path
 # 初始化数据存储文件夹
 os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
+
+class AstrBotMySQLSettings(BaseSettings):
+    host: str = "localhost"
+    port: int = 3306
+    user: str = "root"
+    password: str = ""
+    database: str = "astrbot"
+    charset: str = "utf8mb4"
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="ASTR_MYSQL_")
+
+
+def get_db_helper() -> BaseDatabase:
+    db_type = os.getenv("ASTR_DB_TYPE", "sqlite")
+    match db_type:
+        case "sqlite":
+            from astrbot.core.db.sqlite import SQLiteDatabase
+
+            return SQLiteDatabase(DB_PATH)
+        case "mysql":
+            from astrbot.core.db.mysql import MySQLDatabase
+
+            mysql_settings = AstrBotMySQLSettings()
+
+            return MySQLDatabase(**mysql_settings.model_dump())
+        case _:
+            from astrbot.core.db.sqlite import SQLiteDatabase
+
+            return SQLiteDatabase(DB_PATH)
+
+
 DEMO_MODE = os.getenv("DEMO_MODE", False)
 
 astrbot_config = AstrBotConfig()
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")
 html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")
-db_helper = SQLiteDatabase(DB_PATH)
+db_helper = get_db_helper()
 # 简单的偏好设置存储, 这里后续应该存储到数据库中, 一些部分可以存储到配置中
 sp = SharedPreferences(db_helper=db_helper)
 # 文件令牌服务

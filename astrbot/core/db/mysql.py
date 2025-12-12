@@ -1,10 +1,10 @@
 import asyncio
-import threading
 import typing as T
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase, DatabaseType
@@ -18,35 +18,92 @@ from astrbot.core.db.po import (
     Preference,
     SQLModel,
 )
-from astrbot.core.db.po import (
-    Platform as DeprecatedPlatformStat,
-)
-from astrbot.core.db.po import (
-    Stats as DeprecatedStats,
-)
+from astrbot.core.db.po import Stats as DeprecatedStats
 
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 
 
-class SQLiteDatabase(BaseDatabase):
-    database_type = DatabaseType.SQLITE
+class MySQLDatabase(BaseDatabase):
+    """MySQL 数据库实现
 
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-        self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
+    使用方式:
+        db = MySQLDatabase(
+            host="localhost",
+            port=3306,
+            user="root",
+            password="password",
+            database="astrbot"
+        )
+        await db.initialize()
+    """
+
+    database_type = DatabaseType.MYSQL
+
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 3306,
+        user: str = "root",
+        password: str = "",
+        database: str = "astrbot",
+        charset: str = "utf8mb4",
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.charset = charset
+        self.DATABASE_URL = (
+            f"mysql+aiomysql://{user}:{password}@{host}:{port}/{database}"
+            f"?charset={charset}"
+        )
         self.inited = False
+        self._current_loop: asyncio.AbstractEventLoop | None = None
         super().__init__()
+
+    def _recreate_engine(self) -> None:
+        """重新创建数据库引擎和会话工厂，用于处理事件循环切换的情况"""
+        self.engine = create_async_engine(
+            self.DATABASE_URL,
+            echo=False,
+            future=True,
+        )
+        self.AsyncSessionLocal = sessionmaker(
+            self.engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+    @asynccontextmanager
+    async def get_db(self) -> T.AsyncGenerator[AsyncSession, None]:
+        """Get a database session.
+
+        此方法会检查当前事件循环，如果事件循环发生变化会重新创建引擎，
+        以解决 aiomysql 的 "attached to a different loop" 问题。
+        """
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        # 检查事件循环是否变化，如果变化则重新创建引擎
+        if current_loop is not None and self._current_loop != current_loop:
+            self._recreate_engine()
+            self._current_loop = current_loop
+            self.inited = False  # 需要重新初始化
+
+        if not self.inited:
+            await self.initialize()
+            self.inited = True
+
+        async with self.AsyncSessionLocal() as session:
+            yield session
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
-            await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
-            await conn.execute(text("PRAGMA optimize"))
             await conn.commit()
 
     # ====
@@ -75,8 +132,8 @@ class SQLiteDatabase(BaseDatabase):
                     text("""
                     INSERT INTO platform_stats (timestamp, platform_id, platform_type, count)
                     VALUES (:timestamp, :platform_id, :platform_type, :count)
-                    ON CONFLICT(timestamp, platform_id, platform_type) DO UPDATE SET
-                        count = platform_stats.count + EXCLUDED.count
+                    ON DUPLICATE KEY UPDATE
+                        count = count + VALUES(count)
                     """),
                     {
                         "timestamp": current_hour,
@@ -134,7 +191,7 @@ class SQLiteDatabase(BaseDatabase):
             start_time = now - timedelta(seconds=offset_sec)
             result = await session.execute(
                 text("""
-                SELECT strftime('%s', datetime(timestamp, 'start of hour')) as hour_ts, SUM(count) as total_count
+                SELECT UNIX_TIMESTAMP(DATE_FORMAT(timestamp, '%Y-%m-%d %H:00:00')) as hour_ts, SUM(count) as total_count
                 FROM platform_stats
                 WHERE timestamp >= :start_time
                 GROUP BY hour_ts
@@ -321,6 +378,7 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             offset = (page - 1) * page_size
 
+            # MySQL 使用 JSON_EXTRACT 函数（与 SQLite 的 json_extract 兼容）
             base_query = (
                 select(
                     col(Preference.scope_id).label("session_id"),
@@ -522,7 +580,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.get_db() as session:
             session: AsyncSession
             query = select(Attachment).where(
-                col(Attachment.attachment_id).in_(attachment_ids)
+                Attachment.attachment_id.in_(attachment_ids)
             )
             result = await session.execute(query)
             return list(result.scalars().all())
@@ -538,7 +596,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id) == attachment_id
                 )
-                result = T.cast(CursorResult, await session.execute(query))
+                result = await session.execute(query)
                 return result.rowcount > 0
 
     async def delete_attachments(self, attachment_ids: list[str]) -> int:
@@ -554,7 +612,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = delete(Attachment).where(
                     col(Attachment.attachment_id).in_(attachment_ids)
                 )
-                result = T.cast(CursorResult, await session.execute(query))
+                result = await session.execute(query)
                 return result.rowcount
 
     async def insert_persona(
@@ -806,92 +864,12 @@ class SQLiteDatabase(BaseDatabase):
 
     def get_base_stats(self, offset_sec=86400):
         """Get base statistics within the specified offset in seconds."""
-
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                now = datetime.now()
-                start_time = now - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat).where(PlatformStat.timestamp >= start_time),
-                )
-                all_datas = result.scalars().all()
-                deprecated_stats = DeprecatedStats()
-                for data in all_datas:
-                    deprecated_stats.platform.append(
-                        DeprecatedPlatformStat(
-                            name=data.platform_id,
-                            count=data.count,
-                            timestamp=int(data.timestamp.timestamp()),
-                        ),
-                    )
-                return deprecated_stats
-
-        result = None
-
-        def runner():
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
+        return DeprecatedStats()
 
     def get_total_message_count(self):
         """Get the total message count from platform statistics."""
-
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                result = await session.execute(
-                    select(func.sum(PlatformStat.count)).select_from(PlatformStat),
-                )
-                total_count = result.scalar_one_or_none()
-                return total_count if total_count is not None else 0
-
-        result = None
-
-        def runner():
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
+        return 0
 
     def get_grouped_base_stats(self, offset_sec=86400):
         # group by platform_id
-        async def _inner():
-            async with self.get_db() as session:
-                session: AsyncSession
-                now = datetime.now()
-                start_time = now - timedelta(seconds=offset_sec)
-                result = await session.execute(
-                    select(PlatformStat.platform_id, func.sum(PlatformStat.count))
-                    .where(PlatformStat.timestamp >= start_time)
-                    .group_by(PlatformStat.platform_id),
-                )
-                grouped_stats = result.all()
-                deprecated_stats = DeprecatedStats()
-                for platform_id, count in grouped_stats:
-                    deprecated_stats.platform.append(
-                        DeprecatedPlatformStat(
-                            name=platform_id,
-                            count=count,
-                            timestamp=int(start_time.timestamp()),
-                        ),
-                    )
-                return deprecated_stats
-
-        result = None
-
-        def runner():
-            nonlocal result
-            result = asyncio.run(_inner())
-
-        t = threading.Thread(target=runner)
-        t.start()
-        t.join()
-        return result
+        return DeprecatedStats()

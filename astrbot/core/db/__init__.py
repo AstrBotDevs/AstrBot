@@ -3,6 +3,7 @@ import datetime
 import typing as T
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from enum import Enum
 
 from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -19,11 +20,17 @@ from astrbot.core.db.po import (
 )
 
 
+class DatabaseType(Enum):
+    SQLITE = "sqlite"
+    MYSQL = "mysql"
+
+
 @dataclass
 class BaseDatabase(abc.ABC):
     """数据库基类"""
 
     DATABASE_URL = ""
+    database_type: DatabaseType
 
     def __init__(self) -> None:
         self.engine = create_async_engine(
@@ -82,12 +89,22 @@ class BaseDatabase(abc.ABC):
 
     @abc.abstractmethod
     async def count_platform_stats(self) -> int:
-        """Count the number of platform statistics records."""
+        """Sum the count of platform statistics records."""
         ...
 
     @abc.abstractmethod
     async def get_platform_stats(self, offset_sec: int = 86400) -> list[PlatformStat]:
         """Get platform statistics within the specified offset in seconds and group by platform_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_platform_stats_time_series(
+        self, offset_sec: int = 86400
+    ) -> list[tuple[int, int]]:
+        """Get platform statistics time series data grouped by hour.
+
+        Returns a list of tuples (hour_timestamp, count) sorted by timestamp ascending.
+        """
         ...
 
     @abc.abstractmethod
