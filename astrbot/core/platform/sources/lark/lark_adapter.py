@@ -89,6 +89,34 @@ class LarkPlatformAdapter(Platform):
             self.webhook_server = LarkWebhookServer(platform_config, event_queue)
             self.webhook_server.set_callback(self.handle_webhook_event)
 
+        self.event_id_timestamps: dict[str, float] = {}
+
+    def _clean_expired_events(self):
+        """清理超过 30 分钟的事件记录"""
+        current_time = time.time()
+        expired_keys = [
+            event_id
+            for event_id, timestamp in self.event_id_timestamps.items()
+            if current_time - timestamp > 1800
+        ]
+        for event_id in expired_keys:
+            del self.event_id_timestamps[event_id]
+
+    def _is_duplicate_event(self, event_id: str) -> bool:
+        """检查事件是否重复
+
+        Args:
+            event_id: 事件ID
+
+        Returns:
+            True 表示重复事件，False 表示新事件
+        """
+        self._clean_expired_events()
+        if event_id in self.event_id_timestamps:
+            return True
+        self.event_id_timestamps[event_id] = time.time()
+        return False
+
     async def send_by_session(
         self,
         session: MessageSesion,
@@ -316,7 +344,12 @@ class LarkPlatformAdapter(Platform):
             event_data: Webhook 事件数据
         """
         try:
-            event_type = event_data.get("header", {}).get("event_type", "")
+            header = event_data.get("header", {})
+            event_id = header.get("event_id", "")
+            if event_id and self._is_duplicate_event(event_id):
+                logger.debug(f"[Lark Webhook] 跳过重复事件: {event_id}")
+                return
+            event_type = header.get("event_type", "")
             if event_type == "im.message.receive_v1":
                 processor = P2ImMessageReceiveV1Processor(self.do_v2_msg_event)
                 data = (processor.type())(event_data)
