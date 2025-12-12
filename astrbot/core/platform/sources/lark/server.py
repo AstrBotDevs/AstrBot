@@ -126,14 +126,6 @@ class LarkWebhookServer:
         challenge = event_data.get("challenge", "")
         logger.info(f"[Lark Webhook] 收到 challenge 验证请求: {challenge}")
 
-        # 验证 token
-        if self.verification_token:
-            token = event_data.get("token", "")
-            if token != self.verification_token:
-                logger.warning(
-                    f"[Lark Webhook] Verification Token 不匹配: {token} != {self.verification_token}"
-                )
-
         return {"challenge": challenge}
 
     async def handle_callback(self, request) -> tuple[dict, int] | dict:
@@ -179,6 +171,17 @@ class LarkWebhookServer:
             except Exception as e:
                 logger.error(f"[Lark Webhook] 解密事件失败: {e}")
                 return {"error": "Decryption failed"}, 400
+
+        # 验证 token
+        if self.verification_token:
+            header = event_data.get("header", {})
+            if header:
+                token = header.get("token", "")
+            else:
+                token = event_data.get("token", "")
+            if token != self.verification_token:
+                logger.error("[Lark Webhook] Verification Token 不匹配。")
+                return {"error": "Invalid verification token"}, 401
 
         # 处理 URL 验证 (challenge)
         if event_data.get("type") == "url_verification":
