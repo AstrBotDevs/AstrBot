@@ -16,21 +16,6 @@ export const useCommonStore = defineStore({
   }),
   actions: {
     async createEventSource() {
-
-      const fetchLogHistory = async () => {
-        try {
-          const res = await axios.get('/api/log-history');
-          if (res.data.data.logs) {
-            this.log_cache.push(...res.data.data.logs);
-          } else {
-            this.log_cache = [];
-          }
-        } catch (err) {
-          console.error('Failed to fetch log history:', err);
-        }
-      };
-      await fetchLogHistory();
-
       if (this.eventSource) {
         return
       }
@@ -54,25 +39,9 @@ export const useCommonStore = defineStore({
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-
-        let incompleteLine = ""; // 用于存储不完整的行
-
-        const handleIncompleteLine = (line) => {
-          incompleteLine += line;
-          // if can parse as JSON, return it
-          try {
-            const data_json = JSON.parse(incompleteLine);
-            incompleteLine = ""; // 清空不完整行
-            return data_json;
-          } catch (e) {
-            return null;
-          }
-        }
+        let bufferedText = '';
 
         const processStream = ({ done, value }) => {
-          // get bytes length
-          const bytesLength = value ? value.byteLength : 0;
-          console.log(`Received ${bytesLength} bytes from live log`);
           if (done) {
             console.log('SSE stream closed');
             setTimeout(() => {
@@ -82,44 +51,41 @@ export const useCommonStore = defineStore({
             return;
           }
 
-          const text = decoder.decode(value);
-          const lines = text.split('\n\n');
-          lines.forEach(line => {
-            if (!line.trim()) {
+          // Accumulate partial chunks; SSE data may split JSON across reads.
+          const text = decoder.decode(value, { stream: true });
+          bufferedText += text;
+
+          // Split completed events; keep the trailing partial in buffer.
+          const segments = bufferedText.split('\n\n');
+          bufferedText = segments.pop() || '';
+
+          segments.forEach(segment => {
+            const line = segment.trim();
+            if (!line.startsWith('data: ')) {
               return;
             }
-            if (line.startsWith('data:')) {
-              const data = line.substring(5).trim();
-              // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
-              let data_json = {}
-              try {
-                data_json = JSON.parse(data);
-              } catch (e) {
-                console.warn('Invalid JSON:', data);
-                // 尝试处理不完整的行
-                const parsedData = handleIncompleteLine(data);
-                if (parsedData) {
-                  data_json = parsedData;
-                } else {
-                  return; // 如果无法解析，跳过当前行
-                }
+
+            const logLine = line.replace('data: ', '').trim();
+            if (!logLine) {
+              return;
+            }
+
+            try {
+              const logObject = JSON.parse(logLine);
+              // give a uuid if not exists
+              if (!logObject.uuid) {
+                logObject.uuid = crypto.randomUUID();
               }
-              if (data_json.type === 'log') {
-                this.log_cache.push(data_json);
-                if (this.log_cache.length > this.log_cache_max_len) {
-                  this.log_cache.shift();
-                }
+              this.log_cache.push(logObject);
+              // Limit log cache size
+              if (this.log_cache.length > this.log_cache_max_len) {
+                this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
               }
-            } else {
-              const parsedData = handleIncompleteLine(line);
-              if (parsedData && parsedData.type === 'log') {
-                this.log_cache.push(parsedData);
-                if (this.log_cache.length > this.log_cache_max_len) {
-                  this.log_cache.shift();
-                }
-              }
+            } catch (err) {
+              console.warn('Failed to parse SSE log line, skipping:', err, logLine);
             }
           });
+          
           return reader.read().then(processStream);
         };
 

@@ -24,6 +24,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from asyncio import Queue
 from collections import deque
 
@@ -148,7 +149,7 @@ class LogQueueHandler(logging.Handler):
         self.log_broker.publish(
             {
                 "level": record.levelname,
-                "time": record.asctime,
+                "time": time.time(),
                 "data": log_entry,
             },
         )
