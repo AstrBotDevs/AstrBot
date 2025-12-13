@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import os
-import re
 import ssl
 import traceback
 from dataclasses import dataclass
@@ -74,22 +73,6 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
-    async def _safe_response_json(self, response: aiohttp.ClientResponse):
-        """安全解析 HTTP 响应的 JSON。
-
-        优先使用 response.json()（aiohttp 的解析器），如果抛出
-        aiohttp.ContentTypeError（例如 Content-Type 不是 application/json），
-        则回退为先读取 text() 再用 json.loads 解析。
-        """
-        try:
-            return await response.json()
-        except aiohttp.ContentTypeError:
-            text = await response.text()
-            try:
-                return json.loads(text)
-            except (json.JSONDecodeError, ValueError):
-                raise
-
     async def reload_plugins(self):
         if DEMO_MODE:
             return (
@@ -112,80 +95,64 @@ class PluginRoute(Route):
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+
+        # 构建注册表源信息
         source = self._build_registry_source(custom)
+
+        # 如果不是强制刷新，先检查缓存是否有效
         cached_data = None
         if not force_refresh:
+            # 先检查MD5是否匹配，如果匹配则使用缓存
             if await self._is_cache_valid(source):
                 cached_data = self._load_plugin_cache(source.cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
                     return Response().ok(cached_data).__dict__
 
+        # 尝试获取远程数据
         remote_data = None
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
-        headers = {"Accept": "application/json"}
 
-        if not source.urls:
-            logger.debug(
-                "没有配置任何插件源 URL，尝试使用本地缓存或提示用户配置自定义源"
-            )
-        else:
+        for url in source.urls:
             try:
-                async with aiohttp.ClientSession(
-                    trust_env=True, connector=connector, headers=headers
-                ) as session:
-                    for url in source.urls:
+                async with (
+                    aiohttp.ClientSession(
+                        trust_env=True,
+                        connector=connector,
+                    ) as session,
+                    session.get(url) as response,
+                ):
+                    if response.status == 200:
                         try:
-                            async with session.get(url) as response:
-                                content_type = response.headers.get("Content-Type", "")
+                            remote_data = await response.json()
+                        except aiohttp.ContentTypeError:
+                            remote_text = await response.text()
+                            remote_data = json.loads(remote_text)
 
-                                if response.status != 200:
-                                    logger.error(
-                                        f"请求 {url} 失败，状态码：{response.status}, content-type={content_type}"
-                                    )
-                                    continue
+                        # 检查远程数据是否为空
+                        if not remote_data or (
+                            isinstance(remote_data, dict) and len(remote_data) == 0
+                        ):
+                            logger.warning(f"远程插件市场数据为空: {url}")
+                            continue  # 继续尝试其他URL或使用缓存
 
-                                try:
-                                    remote_data = await self._safe_response_json(
-                                        response
-                                    )
-                                except Exception as e:
-                                    logger.warning(
-                                        f"解析远程 JSON 失败 (url={url}, content-type={content_type}): {e}"
-                                    )
-                                    continue
-
-                                if not remote_data or (
-                                    isinstance(remote_data, dict)
-                                    and len(remote_data) == 0
-                                ):
-                                    logger.warning(f"远程插件市场数据为空: {url}")
-                                    continue
-
-                                count = (
-                                    len(remote_data)
-                                    if hasattr(remote_data, "__len__")
-                                    else "?"
-                                )
-                                logger.info(
-                                    f"成功获取远程插件市场数据，包含 {count} 个插件"
-                                )
-
-                                current_md5 = await self._fetch_remote_md5(
-                                    source.md5_url
-                                )
-                                self._save_plugin_cache(
-                                    source.cache_file,
-                                    remote_data,
-                                    current_md5,
-                                )
-                                return Response().ok(remote_data).__dict__
-                        except Exception as e:
-                            logger.error(f"请求 {url} 失败，错误：{e}")
+                        logger.info(
+                            f"成功获取远程插件市场数据，包含 {len(remote_data)} 个插件"
+                        )
+                        # 获取最新的MD5并保存到缓存
+                        current_md5 = await self._fetch_remote_md5(source.md5_url)
+                        self._save_plugin_cache(
+                            source.cache_file,
+                            remote_data,
+                            current_md5,
+                        )
+                        return Response().ok(remote_data).__dict__
+                    logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
-                logger.error(f"创建 HTTP ClientSession 失败: {e}")
+                logger.error(f"请求 {url} 失败，错误：{e}")
 
+        # 如果远程获取失败，尝试使用缓存数据
         if not cached_data:
             cached_data = self._load_plugin_cache(source.cache_file)
 
@@ -196,11 +163,13 @@ class PluginRoute(Route):
         return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
-        """构建注册表源信息 — 保留一个可信默认 URL，默认不提供远程 md5"""
+        """构建注册表源信息"""
         if custom_url:
+            # 对自定义URL生成一个安全的文件名
             url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
             cache_file = f"data/plugins_custom_{url_hash}.json"
 
+            # 更安全的后缀处理方式
             if custom_url.endswith(".json"):
                 md5_url = custom_url[:-5] + "-md5.json"
             else:
@@ -209,9 +178,10 @@ class PluginRoute(Route):
             urls = [custom_url]
         else:
             cache_file = "data/plugins.json"
-            md5_url = None
+            md5_url = "https://api.soulter.top/astrbot/plugins-md5"
             urls = [
                 "https://api.soulter.top/astrbot/plugins",
+                "https://github.com/AstrBotDevs/AstrBot_Plugins_Collection/raw/refs/heads/main/plugin_cache_original.json",
             ]
         return RegistrySource(urls=urls, cache_file=cache_file, md5_url=md5_url)
 
@@ -229,72 +199,40 @@ class PluginRoute(Route):
             return None
 
     async def _fetch_remote_md5(self, md5_url: str | None) -> str | None:
-        """获取远程MD5，兼容返回 JSON 或者裸文本 md5 的情况"""
+        """获取远程MD5"""
         if not md5_url:
             return None
 
         try:
             ssl_context = ssl.create_default_context(cafile=certifi.where())
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            headers = {"Accept": "application/json"}
 
-            async with aiohttp.ClientSession(
-                trust_env=True, connector=connector, headers=headers
-            ) as session:
-                async with session.get(md5_url) as response:
-                    content_type = response.headers.get("Content-Type", "")
-
-                    if response.status != 200:
-                        logger.debug(
-                            f"获取远程MD5失败，url={md5_url}, status={response.status}, content-type={content_type}"
-                        )
-                        return None
-
-                    try:
-                        try:
-                            data = await response.json()
-                        except aiohttp.ContentTypeError:
-                            text = await response.text()
-                            try:
-                                data = json.loads(text)
-                            except (json.JSONDecodeError, ValueError):
-                                data = None
-
-                        if isinstance(data, dict):
-                            return data.get("md5", "") or None
-                    except Exception:
-                        pass
-
-                    text = await response.text()
-                    md5_candidate = text.strip()
-                    if re.fullmatch(r"[0-9a-fA-F]{32}", md5_candidate):
-                        return md5_candidate
-
-                    logger.debug(f"远程 MD5 内容无法识别: {md5_candidate!r}")
+            async with (
+                aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                ) as session,
+                session.get(md5_url) as response,
+            ):
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("md5", "")
         except Exception as e:
             logger.debug(f"获取远程MD5失败: {e}")
         return None
 
     async def _is_cache_valid(self, source: RegistrySource) -> bool:
-        """检查缓存是否有效（基于MD5）。
-        - 若本地没有 md5，则认为缓存无效。
-        - 若未配置远程 md5_url，则认为需要尝试拉取远程（返回 False）。
-        - 若配置了 md5_url，但无法访问远程 md5，则把缓存作为降级方案（返回 True）。
-        """
+        """检查缓存是否有效（基于MD5）"""
         try:
             cached_md5 = self._load_cached_md5(source.cache_file)
             if not cached_md5:
                 logger.debug("缓存文件中没有MD5信息")
                 return False
 
-            if not source.md5_url:
-                logger.debug("远程 MD5 未配置，强制更新缓存")
-                return False
-
             remote_md5 = await self._fetch_remote_md5(source.md5_url)
             if remote_md5 is None:
-                logger.warning("无法获取远程MD5，将使用缓存作为降级方案")
-                return True
+                logger.warning("无法获取远程MD5，将使用缓存")
+                return True  # 如果无法获取远程MD5，认为缓存有效
 
             is_valid = cached_md5 == remote_md5
             logger.debug(
@@ -312,6 +250,7 @@ class PluginRoute(Route):
             if os.path.exists(cache_file):
                 with open(cache_file, encoding="utf-8") as f:
                     cache_data = json.load(f)
+                    # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
                             f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}",
@@ -324,7 +263,9 @@ class PluginRoute(Route):
     def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
         """保存插件市场数据到本地缓存"""
         try:
+            # 确保目录存在
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
             cache_data = {
                 "timestamp": datetime.now().isoformat(),
                 "data": data,
