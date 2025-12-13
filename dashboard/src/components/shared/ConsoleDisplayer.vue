@@ -1,6 +1,7 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
 import { storeToRefs } from 'pinia';
+import axios from 'axios';
 </script>
 
 <template>
@@ -46,7 +47,8 @@ export default {
         'ERROR': 'red',
         'CRITICAL': 'purple'
       },
-      lastLogLength: 0, // 记录上次处理的日志数量
+      lastProcessedTime: 0, // 记录最后处理的日志时间戳
+      localLogCache: [], // 本地日志缓存
     }
   },
   computed: {
@@ -70,17 +72,34 @@ export default {
   watch: {
     logCache: {
       handler(newVal) {
-        // 只处理新增的日志
-        if (newVal && newVal.length > this.lastLogLength) {
-          const newLogs = newVal.slice(this.lastLogLength);
-          
-          newLogs.forEach(logItem => {
-            if (this.isLevelSelected(logItem.level)) {
-              this.printLog(logItem.data);
+        // 基于 timestamp 处理新增的日志
+        if (newVal && newVal.length > 0) {
+          // 确保 DOM 已经准备好
+          this.$nextTick(() => {
+            // 合并到本地缓存并按时间排序
+            const newLogs = newVal.filter(log => log.time > this.lastProcessedTime);
+            
+            if (newLogs.length > 0) {
+              this.localLogCache.push(...newLogs);
+              // 按时间戳排序
+              this.localLogCache.sort((a, b) => a.time - b.time);
+              
+              // 只保留最新的 log_cache_max_len 条
+              if (this.localLogCache.length > this.commonStore.log_cache_max_len) {
+                this.localLogCache.splice(0, this.localLogCache.length - this.commonStore.log_cache_max_len);
+              }
+              
+              // 显示新日志
+              newLogs.forEach(logItem => {
+                if (this.isLevelSelected(logItem.level)) {
+                  this.printLog(logItem.data);
+                }
+              });
+              
+              // 更新最后处理时间
+              this.lastProcessedTime = Math.max(...newLogs.map(log => log.time));
             }
           });
-          
-          this.lastLogLength = newVal.length;
         }
       },
       deep: true,
@@ -93,12 +112,37 @@ export default {
       deep: true
     }
   },
-  mounted() {
-    // 初始化时显示所有历史日志
-    this.refreshDisplay();
-    this.lastLogLength = this.logCache ? this.logCache.length : 0;
+  async mounted() {
+    // 请求历史日志
+    await this.fetchLogHistory();
+    
+    // 等待 DOM 准备好后，显示历史日志
+    this.$nextTick(() => {
+      if (this.localLogCache.length > 0) {
+        this.localLogCache.forEach(logItem => {
+          if (this.isLevelSelected(logItem.level)) {
+            this.printLog(logItem.data);
+          }
+        });
+        // 更新最后处理时间
+        this.lastProcessedTime = Math.max(...this.localLogCache.map(log => log.time));
+      }
+    });
   },
   methods: {
+    async fetchLogHistory() {
+      try {
+        const res = await axios.get('/api/log-history');
+        if (res.data.data.logs && res.data.data.logs.length > 0) {
+          this.localLogCache = [...res.data.data.logs];
+          // 按时间戳排序
+          this.localLogCache.sort((a, b) => a.time - b.time);
+        }
+      } catch (err) {
+        console.error('Failed to fetch log history:', err);
+      }
+    },
+    
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -119,8 +163,8 @@ export default {
         termElement.innerHTML = '';
         
         // 重新显示所有符合筛选条件的日志
-        if (this.logCache && this.logCache.length > 0) {
-          this.logCache.forEach(logItem => {
+        if (this.localLogCache && this.localLogCache.length > 0) {
+          this.localLogCache.forEach(logItem => {
             if (this.isLevelSelected(logItem.level)) {
               this.printLog(logItem.data);
             }
@@ -137,6 +181,11 @@ export default {
     printLog(log) {
       // append 一个 span 标签到 term，block 的方式
       let ele = document.getElementById('term')
+      if (!ele) {
+        console.warn('term element not found, skipping log print');
+        return;
+      }
+      
       let span = document.createElement('pre')
       let style = this.logColorAnsiMap['default']
       for (let key in this.logColorAnsiMap) {

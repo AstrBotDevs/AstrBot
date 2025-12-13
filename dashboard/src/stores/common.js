@@ -16,21 +16,6 @@ export const useCommonStore = defineStore({
   }),
   actions: {
     async createEventSource() {
-
-      const fetchLogHistory = async () => {
-        try {
-          const res = await axios.get('/api/log-history');
-          if (res.data.data.logs) {
-            this.log_cache.push(...res.data.data.logs);
-          } else {
-            this.log_cache = [];
-          }
-        } catch (err) {
-          console.error('Failed to fetch log history:', err);
-        }
-      };
-      await fetchLogHistory();
-
       if (this.eventSource) {
         return
       }
