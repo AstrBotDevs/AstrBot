@@ -24,8 +24,6 @@ import { storeToRefs } from 'pinia';
 export default {
   name: 'ConsoleDisplayer',
   data() {
-    const commonStore = useCommonStore();
-    const { log_cache } = storeToRefs(commonStore);
     return {
       autoScroll: true,  // 默认开启自动滚动
       logColorAnsiMap: {
@@ -38,7 +36,6 @@ export default {
         '\u001b[32m': 'color: #00FF00;',  // green
         'default': 'color: #FFFFFF;'
       },
-      logCache: log_cache,
       historyNum_: -1,
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4], // 默认选中所有级别
@@ -48,7 +45,16 @@ export default {
         'WARNING': 'amber',
         'ERROR': 'red',
         'CRITICAL': 'purple'
-      }
+      },
+      lastLogLength: 0, // 记录上次处理的日志数量
+    }
+  },
+  computed: {
+    commonStore() {
+      return useCommonStore();
+    },
+    logCache() {
+      return this.commonStore.log_cache;
     }
   },
   props: {
@@ -63,13 +69,25 @@ export default {
   },
   watch: {
     logCache: {
-      handler(val) {
-        const lastLog = val[this.logCache.length - 1];
-        if (lastLog && this.isLevelSelected(lastLog.level)) {
-          this.printLog(lastLog.data);
+      handler(newVal) {
+        // 只处理新增的日志
+        console.log('logCache changed, length:', newVal?.length, 'lastLength:', this.lastLogLength);
+        if (newVal && newVal.length > this.lastLogLength) {
+          const newLogs = newVal.slice(this.lastLogLength);
+          console.log('Processing new logs:', newLogs);
+          
+          newLogs.forEach(logItem => {
+            console.log('Log item:', logItem, 'Level selected:', this.isLevelSelected(logItem.level));
+            if (this.isLevelSelected(logItem.level)) {
+              this.printLog(logItem.data);
+            }
+          });
+          
+          this.lastLogLength = newVal.length;
         }
       },
-      deep: true
+      deep: true,
+      immediate: false
     },
     selectedLevels: {
       handler() {
@@ -79,11 +97,10 @@ export default {
     }
   },
   mounted() {
-    if (this.logCache.length === 0) {
-      this.delayInit()
-    } else {
-      this.init()
-    }
+    // 初始化时显示所有历史日志
+    console.log('ConsoleDisplayer mounted, logCache length:', this.logCache?.length);
+    this.refreshDisplay();
+    this.lastLogLength = this.logCache ? this.logCache.length : 0;
   },
   methods: {
     getLevelColor(level) {
@@ -101,40 +118,24 @@ export default {
     },
 
     refreshDisplay() {
-      // 清空现有的显示
       const termElement = document.getElementById('term');
+      console.log('refreshDisplay called, termElement:', termElement, 'logCache length:', this.logCache?.length);
       if (termElement) {
         termElement.innerHTML = '';
-      }
-
-      // 重新显示符合筛选条件的日志
-      this.init();
-    },
-
-    delayInit() {
-      if (this.logCache.length === 0) {
-        setTimeout(() => {
-          this.delayInit()
-        }, 500)
-      } else {
-        this.init()
-      }
-    },
-
-    init() {
-      this.historyNum_ = parseInt(this.historyNum)
-      let i = 0
-      for (let log of this.logCache) {
-        if (this.isLevelSelected(log.level)) { // 只显示选中级别的日志
-          if (this.historyNum_ != -1 && i >= this.logCache.length - this.historyNum_) {
-            this.printLog(log.data)
-            ++i
-          } else if (this.historyNum_ == -1) {
-            this.printLog(log.data)
-          }
+        
+        // 重新显示所有符合筛选条件的日志
+        if (this.logCache && this.logCache.length > 0) {
+          console.log('Displaying', this.logCache.length, 'logs');
+          this.logCache.forEach(logItem => {
+            console.log('Processing log item:', logItem);
+            if (this.isLevelSelected(logItem.level)) {
+              this.printLog(logItem.data);
+            }
+          });
         }
       }
     },
+
 
     toggleAutoScroll() {
       this.autoScroll = !this.autoScroll;
