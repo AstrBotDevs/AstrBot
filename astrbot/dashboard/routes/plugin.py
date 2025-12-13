@@ -124,7 +124,11 @@ class PluginRoute(Route):
                     session.get(url) as response,
                 ):
                     if response.status == 200:
-                        remote_data = await response.json()
+                        try:
+                            remote_data = await response.json()
+                        except aiohttp.ContentTypeError:
+                            remote_text = await response.text()
+                            remote_data = json.loads(remote_text)
 
                         # 检查远程数据是否为空
                         if not remote_data or (
