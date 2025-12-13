@@ -179,6 +179,14 @@
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
+        },
+        "replace_tool_use_call_blank_string":{
+          "description": "Replace content in tool_call msg",
+          "hint": "See issue #4003 for more. Normally this isn't needed and may consume extra tokens."
+        },
+        "replacement_for_tool_use_call_blank_string":{
+          "description": "Replacement for content in tool_call msg",
+          "hint": "See issue #4003. Normally you don't need to change this. PLEASE DO NOT LEAVE THIS BLANK."
         }
       },
       "provider_tts_settings": {

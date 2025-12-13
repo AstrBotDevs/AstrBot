@@ -35,6 +35,16 @@ from ...stage import Stage
 from ...utils import KNOWLEDGE_BASE_QUERY_TOOL, retrieve_knowledge_base
 
 
+def _get_tool_call_placeholder_settings(ctx: PipelineContext) -> tuple[bool, str]:
+    config_provider_settings = ctx.astrbot_config.get("provider_settings") or {}
+    return (
+        config_provider_settings.get("replace_tool_use_call_blank_string", False),
+        config_provider_settings.get(
+            "replacement_for_tool_use_call_blank_string", "[astrbot.tool_call]"
+        ),
+    )
+
+
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -323,6 +333,19 @@ class InternalAgentSubStage(Stage):
                     messages.extend(tcr.to_openai_messages())
         messages.append({"role": "assistant", "content": llm_response.completion_text})
         messages = list(filter(lambda item: "_no_save" not in item, messages))
+
+        # 对每个 message 的 content 进行针对性检查和更改
+        # 读取上下文中的配置
+        should_replace, string_replacement = _get_tool_call_placeholder_settings(
+            self.ctx
+        )
+        if should_replace:
+            for message in messages:
+                # 检查是否是特殊的 tool_call string
+                if message.get("content", "") == string_replacement:
+                    message["content"] = ""
+                    logger.warning("reverted tool_call-specific message to blank text")
+
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
             req.conversation.cid,

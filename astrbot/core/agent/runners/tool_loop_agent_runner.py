@@ -35,6 +35,32 @@ else:
     from typing_extensions import override
 
 
+def _get_tool_blank_replacement_settings(run_context) -> tuple[bool, str]:
+    from astrbot.core.astr_agent_context import AstrAgentContext
+    from astrbot.core.star.context import Context
+
+    should_replace = False
+    string_replacement = "[astrbot.tool_call]"
+
+    if not isinstance(run_context, ContextWrapper):
+        return should_replace, string_replacement
+
+    ctx_2 = run_context.context
+    if not isinstance(ctx_2, AstrAgentContext):
+        return should_replace, string_replacement
+
+    umo = ctx_2.event.unified_msg_origin
+    ctx_3 = ctx_2.context
+    if not isinstance(ctx_3, Context):
+        return should_replace, string_replacement
+
+    cfg = ctx_3.get_config(umo).get("provider_settings", {})
+    return (
+        cfg.get("replace_tool_use_call_blank_string", False),
+        cfg.get("replacement_for_tool_use_call_blank_string", "[astrbot.tool_call]"),
+    )
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
@@ -71,6 +97,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        # 将空白 content 替换为相应字符串
+        should_replace, string_replacement = _get_tool_blank_replacement_settings(
+            self.run_context
+        )
+        if should_replace and self.req.tool_calls_result:
+            # 无需判断具体 role ，因为 tool_calls_result 不为 None 时一定是 tool_call 了
+            if isinstance(self.req.tool_calls_result, list):
+                for i in self.req.tool_calls_result:
+                    if i.tool_calls_info:
+                        if i.tool_calls_info.content == "":
+                            i.tool_calls_info.content = string_replacement
+                            logger.warning(
+                                "Calling LLM, but blank content found; replaced"
+                            )
+            else:
+                info = self.req.tool_calls_result.tool_calls_info
+                if info.content == "":
+                    info.content = string_replacement
+                    logger.warning("Calling LLM, but blank content found; replaced")
+
         if self.streaming:
             stream = self.provider.text_chat_stream(**self.req.__dict__)
             async for resp in stream:  # type: ignore

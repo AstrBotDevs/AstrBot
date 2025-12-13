@@ -187,6 +187,14 @@
         "reachability_check": {
           "description": "提供商可达性检测",
           "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
+        },
+        "replace_tool_use_call_blank_string":{
+          "description": "工具调用消息内容不置空",
+          "hint": "详见 issue #4003 ，默认不需要开启，会造成额外的 token 消耗"
+        },
+        "replacement_for_tool_use_call_blank_string":{
+          "description": "工具调用消息内容替换值",
+          "hint": "详见 issue #4003 ，默认不需要更改；请勿改为空字符串。"
         }
       },
       "provider_tts_settings": {
