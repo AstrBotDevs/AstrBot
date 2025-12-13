@@ -6,7 +6,7 @@ from typing import Any
 
 from quart import request
 
-from astrbot.core import file_token_service, logger
+from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -179,12 +179,28 @@ class ConfigRoute(Route):
             "/config/provider/new": ("POST", self.post_new_provider),
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
+            "/config/provider/template": ("GET", self.get_provider_template),
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
+            "/config/provider_sources/<provider_source_id>/models": (
+                "GET",
+                self.get_provider_source_models,
+            ),
         }
         self.register_routes()
+
+    async def get_provider_template(self):
+        provider_config = astrbot_config["provider"]
+        config_schema = {
+            "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+        }
+        data = {
+            "config_schema": config_schema,
+            "providers": provider_config,
+        }
+        return Response().ok(data=data).__dict__
 
     async def get_uc_table(self):
         """获取 UMOP 配置路由表"""
@@ -521,6 +537,81 @@ class ConfigRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
+
+    async def get_provider_source_models(self, provider_source_id: str):
+        """获取指定 provider_source 支持的模型列表
+
+        本质上会临时初始化一个 Provider 实例，调用 get_models() 获取模型列表，然后销毁实例
+        """
+        try:
+            from astrbot.core.provider.register import provider_cls_map
+
+            # 从配置中查找对应的 provider_source
+            provider_sources = self.config.get("provider_sources", [])
+            provider_source = None
+            for ps in provider_sources:
+                if ps.get("id") == provider_source_id:
+                    provider_source = ps
+                    break
+
+            if not provider_source:
+                return (
+                    Response()
+                    .error(f"未找到 ID 为 {provider_source_id} 的 provider_source")
+                    .__dict__
+                )
+
+            # 获取 provider 类型
+            provider_type = provider_source.get("type", None)
+            if not provider_type:
+                return Response().error("provider_source 缺少 type 字段").__dict__
+
+            # 获取对应的 provider 类
+            if provider_type not in provider_cls_map:
+                return (
+                    Response()
+                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .__dict__
+                )
+
+            provider_metadata = provider_cls_map[provider_type]
+            cls_type = provider_metadata.cls_type
+
+            if not cls_type:
+                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+
+            # 检查是否是 Provider 类型
+            if not issubclass(cls_type, Provider):
+                return (
+                    Response()
+                    .error(f"提供商 {provider_type} 不支持获取模型列表")
+                    .__dict__
+                )
+
+            # 临时实例化 provider
+            inst = cls_type(provider_source, {})
+
+            # 如果有 initialize 方法，调用它
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
+
+            # 获取模型列表
+            models = await inst.get_models()
+
+            # 销毁实例（如果有 terminate 方法）
+            terminate_fn = getattr(inst, "terminate", None)
+            if inspect.iscoroutinefunction(terminate_fn):
+                await terminate_fn()
+
+            logger.info(
+                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
+            )
+
+            return Response().ok({"models": models}).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取模型列表失败: {e!s}").__dict__
 
     async def get_platform_list(self):
         """获取所有平台的列表"""

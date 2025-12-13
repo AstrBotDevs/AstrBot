@@ -508,6 +508,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
   font-size: 0.85em;
   opacity: 0.7;
   font-weight: normal;
+  display: none;
 }
 
 .important-hint {

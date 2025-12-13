@@ -36,6 +36,7 @@ class ProviderManager:
         self.acm = acm
         config = acm.confs["default"]
         self.providers_config: list = config["provider"]
+        self.provider_sources_config: list = config.get("provider_sources", [])
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
@@ -252,6 +253,23 @@ class ProviderManager:
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
     async def load_provider(self, provider_config: dict):
+
+        # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
+        provider_source_id = provider_config.get("provider_source_id", "")
+        if provider_source_id:
+            provider_source = None
+            for ps in self.provider_sources_config:
+                if ps.get("id") == provider_source_id:
+                    provider_source = ps
+                    break
+
+            if provider_source:
+                # 合并配置，provider 的配置优先级更高
+                merged_config = {**provider_source, **provider_config}
+                # 保持 id 为 provider 的 id，而不是 source 的 id
+                merged_config["id"] = provider_config["id"]
+                provider_config = merged_config
+
         if not provider_config["enable"]:
             logger.info(f"Provider {provider_config['id']} is disabled, skipping")
             return
@@ -499,6 +517,7 @@ class ProviderManager:
 
             # 和配置文件保持同步
             self.providers_config = astrbot_config["provider"]
+            self.provider_sources_config = astrbot_config.get("provider_sources", [])
             config_ids = [provider["id"] for provider in self.providers_config]
             logger.info(f"providers in user's config: {config_ids}")
             for key in list(self.inst_map.keys()):

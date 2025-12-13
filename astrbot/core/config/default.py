@@ -1,6 +1,7 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -61,7 +62,8 @@ DEFAULT_CONFIG = {
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
     },
-    "provider": [],
+    "provider_sources": [],  # provider sources
+    "provider": [],  # models from provider_sources
     "provider_settings": {
         "enable": True,
         "default_provider_id": "",
@@ -169,6 +171,22 @@ DEFAULT_CONFIG = {
     "disable_builtin_commands": False,
 }
 
+
+class ChatProviderTemplate(TypedDict):
+    id: str
+    provider_source_id: str
+    model: str
+    modalities: list
+    custom_extra_body: dict[str, Any]
+
+
+CHAT_PROVIDER_TEMPLATE = {
+    "id": "",
+    "provide_source_id": "",
+    "model": "",
+    "modalities": [],
+    "custom_extra_body": {},
+}
 
 """
 AstrBot v3 时代的配置元数据，目前仅承担以下功能：
@@ -843,6 +861,7 @@ CONFIG_METADATA_2 = {
         "metadata": {
             "provider": {
                 "type": "list",
+                # provider sources templates
                 "config_template": {
                     "OpenAI": {
                         "id": "openai",
@@ -853,10 +872,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
-                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                         "hint": "也兼容所有与 OpenAI API 兼容的服务。",
                     },
                     "Azure OpenAI": {
@@ -869,10 +885,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "",
                         "timeout": 120,
-                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "xAI": {
                         "id": "xai",
@@ -883,11 +896,8 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
-                        "model_config": {"model": "grok-2-latest", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
                         "xai_native_search": False,
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Anthropic": {
                         "hint": "注意Claude系列模型的温度调节范围为0到1.0，超出可能导致报错",
@@ -899,12 +909,6 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "claude-3-5-sonnet-latest",
-                            "max_tokens": 4096,
-                            "temperature": 0.2,
-                        },
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Ollama": {
                         "hint": "启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
@@ -915,10 +919,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://localhost:11434/v1",
-                        "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -928,12 +929,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://localhost:1234/v1",
-                        "model_config": {
-                            "model": "llama-3.1-8b",
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini(OpenAI兼容)": {
                         "id": "gemini_default",
@@ -944,13 +940,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gemini-1.5-flash",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Gemini": {
                         "id": "gemini_default",
@@ -961,10 +951,6 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gemini-2.0-flash-exp",
-                            "temperature": 0.4,
-                        },
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
                         "gm_native_coderunner": False,
@@ -978,7 +964,6 @@ CONFIG_METADATA_2 = {
                         "gm_thinking_config": {
                             "budget": 0,
                         },
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "DeepSeek": {
                         "id": "deepseek_default",
@@ -989,10 +974,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
-                        "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "tool_use"],
                     },
                     "Groq": {
                         "id": "groq_default",
@@ -1003,13 +985,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.groq.com/openai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "openai/gpt-oss-20b",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "tool_use"],
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -1020,10 +996,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "硅基流动": {
                         "id": "siliconflow",
@@ -1034,13 +1007,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
-                        "model_config": {
-                            "model": "deepseek-ai/DeepSeek-V3",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "PPIO派欧云": {
                         "id": "ppio",
@@ -1051,12 +1018,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "deepseek/deepseek-r1",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
                     },
                     "小马算力": {
                         "id": "tokenpony",
@@ -1067,12 +1029,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.tokenpony.cn/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "kimi-k2-instruct-0905",
-                            "temperature": 0.7,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
                     },
                     "优云智算": {
                         "id": "compshare",
@@ -1083,12 +1040,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.modelverse.cn/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "moonshotai/Kimi-K2-Instruct",
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Kimi": {
                         "id": "moonshot",
@@ -1099,10 +1051,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
-                        "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "智谱 AI": {
                         "id": "zhipu_default",
@@ -1113,12 +1062,18 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
-                        "model_config": {
-                            "model": "glm-4-flash",
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
+                    },
+                    "ModelScope": {
+                        "id": "modelscope",
+                        "provider": "modelscope",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api-inference.modelscope.cn/v1",
+                        "custom_headers": {},
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -1163,20 +1118,6 @@ CONFIG_METADATA_2 = {
                         },
                         "variables": {},
                         "timeout": 60,
-                    },
-                    "ModelScope": {
-                        "id": "modelscope",
-                        "provider": "modelscope",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "timeout": 120,
-                        "api_base": "https://api-inference.modelscope.cn/v1",
-                        "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "FastGPT": {
                         "id": "fastgpt",
@@ -1448,6 +1389,10 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "provider_source_id": {
+                        "invisible": True,
+                        "type": "string",
+                    },
                     "xai_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
@@ -2005,7 +1950,6 @@ CONFIG_METADATA_2 = {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "模型提供商名字。",
                     },
                     "type": {
                         "description": "模型提供商种类",
@@ -2025,12 +1969,10 @@ CONFIG_METADATA_2 = {
                         "description": "API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "提供商 API Key。",
                     },
                     "api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                        "hint": "API Base URL 请在模型提供商处获得。如出现 404 报错，尝试在地址末尾加上 /v1",
                     },
                     "model_config": {
                         "description": "模型配置",

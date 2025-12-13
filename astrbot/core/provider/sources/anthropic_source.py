@@ -112,7 +112,11 @@ class ProviderAnthropic(Provider):
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
 
-        completion = await self.client.messages.create(**payloads, stream=False)
+        extra_body = self.provider_config.get("custom_extra_body", {})
+
+        completion = await self.client.messages.create(
+            **payloads, stream=False, extra_body=extra_body
+        )
 
         assert isinstance(completion, Message)
         logger.debug(f"completion: {completion}")
@@ -152,7 +156,11 @@ class ProviderAnthropic(Provider):
         final_text = ""
         final_tool_calls = []
 
-        async with self.client.messages.stream(**payloads) as stream:
+        extra_body = self.provider_config.get("custom_extra_body", {})
+
+        async with self.client.messages.stream(
+            **payloads, extra_body=extra_body
+        ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
                 if event.type == "content_block_start":
