@@ -161,6 +161,34 @@ async def test_plugins(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_commands_api(app: Quart, authenticated_header: dict):
+    """Tests the command management API endpoints."""
+    test_client = app.test_client()
+
+    # GET /api/commands - list commands
+    response = await test_client.get("/api/commands", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert "items" in data["data"]
+    assert "summary" in data["data"]
+    summary = data["data"]["summary"]
+    assert "total" in summary
+    assert "disabled" in summary
+    assert "conflicts" in summary
+
+    # GET /api/commands/conflicts - list conflicts
+    response = await test_client.get(
+        "/api/commands/conflicts", headers=authenticated_header
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    # conflicts is a list
+    assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
 async def test_check_update(app: Quart, authenticated_header: dict):
     test_client = app.test_client()
     response = await test_client.get("/api/update/check", headers=authenticated_header)
