@@ -71,13 +71,10 @@ export default {
     logCache: {
       handler(newVal) {
         // 只处理新增的日志
-        console.log('logCache changed, length:', newVal?.length, 'lastLength:', this.lastLogLength);
         if (newVal && newVal.length > this.lastLogLength) {
           const newLogs = newVal.slice(this.lastLogLength);
-          console.log('Processing new logs:', newLogs);
           
           newLogs.forEach(logItem => {
-            console.log('Log item:', logItem, 'Level selected:', this.isLevelSelected(logItem.level));
             if (this.isLevelSelected(logItem.level)) {
               this.printLog(logItem.data);
             }
@@ -98,7 +95,6 @@ export default {
   },
   mounted() {
     // 初始化时显示所有历史日志
-    console.log('ConsoleDisplayer mounted, logCache length:', this.logCache?.length);
     this.refreshDisplay();
     this.lastLogLength = this.logCache ? this.logCache.length : 0;
   },
@@ -119,15 +115,12 @@ export default {
 
     refreshDisplay() {
       const termElement = document.getElementById('term');
-      console.log('refreshDisplay called, termElement:', termElement, 'logCache length:', this.logCache?.length);
       if (termElement) {
         termElement.innerHTML = '';
         
         // 重新显示所有符合筛选条件的日志
         if (this.logCache && this.logCache.length > 0) {
-          console.log('Displaying', this.logCache.length, 'logs');
           this.logCache.forEach(logItem => {
-            console.log('Processing log item:', logItem);
             if (this.isLevelSelected(logItem.level)) {
               this.printLog(logItem.data);
             }

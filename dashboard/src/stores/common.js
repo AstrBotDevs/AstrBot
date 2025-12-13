@@ -54,10 +54,9 @@ export const useCommonStore = defineStore({
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let bufferedText = '';
 
         const processStream = ({ done, value }) => {
-          // get bytes length
-          
           if (done) {
             console.log('SSE stream closed');
             setTimeout(() => {
@@ -67,25 +66,38 @@ export const useCommonStore = defineStore({
             return;
           }
 
-          const text = decoder.decode(value);
-          
-          const lines = text.split('\n\n');
-          lines.forEach(line => {
-            if (line.startsWith('data: ')) {
-              const logLine = line.replace('data: ', '').trim();
-              if (logLine) {
-                let logObject = JSON.parse(logLine);
-                // give a uuid if not exists
-                if (!logObject.uuid) {
-                  logObject.uuid = crypto.randomUUID();
-                }
-                console.log('Parsed log object:', logObject);
-                this.log_cache.push(logObject);
-                // Limit log cache size
-                if (this.log_cache.length > this.log_cache_max_len) {
-                  this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
-                }
+          // Accumulate partial chunks; SSE data may split JSON across reads.
+          const text = decoder.decode(value, { stream: true });
+          bufferedText += text;
+
+          // Split completed events; keep the trailing partial in buffer.
+          const segments = bufferedText.split('\n\n');
+          bufferedText = segments.pop() || '';
+
+          segments.forEach(segment => {
+            const line = segment.trim();
+            if (!line.startsWith('data: ')) {
+              return;
+            }
+
+            const logLine = line.replace('data: ', '').trim();
+            if (!logLine) {
+              return;
+            }
+
+            try {
+              const logObject = JSON.parse(logLine);
+              // give a uuid if not exists
+              if (!logObject.uuid) {
+                logObject.uuid = crypto.randomUUID();
               }
+              this.log_cache.push(logObject);
+              // Limit log cache size
+              if (this.log_cache.length > this.log_cache_max_len) {
+                this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
+              }
+            } catch (err) {
+              console.warn('Failed to parse SSE log line, skipping:', err, logLine);
             }
           });
           
