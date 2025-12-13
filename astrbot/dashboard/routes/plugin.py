@@ -74,6 +74,22 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
+    async def _safe_response_json(self, response: aiohttp.ClientResponse):
+        """安全解析 HTTP 响应的 JSON。
+
+        优先使用 response.json()（aiohttp 的解析器），如果抛出
+        aiohttp.ContentTypeError（例如 Content-Type 不是 application/json），
+        则回退为先读取 text() 再用 json.loads 解析。
+        """
+        try:
+            return await response.json()
+        except aiohttp.ContentTypeError:
+            text = await response.text()
+            try:
+                return json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                raise
+
     async def reload_plugins(self):
         if DEMO_MODE:
             return (
@@ -96,31 +112,25 @@ class PluginRoute(Route):
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
-
-        # 构建注册表源信息
         source = self._build_registry_source(custom)
-
-        # 如果不是强制刷新，先检查缓存是否有效
         cached_data = None
         if not force_refresh:
-            # 先检查MD5是否匹配，如果匹配则使用缓存
             if await self._is_cache_valid(source):
                 cached_data = self._load_plugin_cache(source.cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
                     return Response().ok(cached_data).__dict__
 
-        # 尝试获取远程数据
         remote_data = None
         ssl_context = ssl.create_default_context(cafile=certifi.where())
         connector = aiohttp.TCPConnector(ssl=ssl_context)
         headers = {"Accept": "application/json"}
 
-        # 如果没有任何远程 URL，直接尝试使用缓存或报错
         if not source.urls:
-            logger.debug("没有配置任何插件源 URL，尝试使用本地缓存或提示用户配置自定义源")
+            logger.debug(
+                "没有配置任何插件源 URL，尝试使用本地缓存或提示用户配置自定义源"
+            )
         else:
-            # Reuse one ClientSession for all URLs to reduce connection overhead
             try:
                 async with aiohttp.ClientSession(
                     trust_env=True, connector=connector, headers=headers
@@ -129,7 +139,6 @@ class PluginRoute(Route):
                         try:
                             async with session.get(url) as response:
                                 content_type = response.headers.get("Content-Type", "")
-                                text = await response.text()
 
                                 if response.status != 200:
                                     logger.error(
@@ -137,28 +146,35 @@ class PluginRoute(Route):
                                     )
                                     continue
 
-                                # 尝试解析 JSON（许多 raw.githubusercontent.com 返回 text/plain）
                                 try:
-                                    remote_data = json.loads(text)
-                                except (json.JSONDecodeError, ValueError) as e:
+                                    remote_data = await self._safe_response_json(
+                                        response
+                                    )
+                                except Exception as e:
                                     logger.warning(
                                         f"解析远程 JSON 失败 (url={url}, content-type={content_type}): {e}"
                                     )
                                     continue
 
-                                # 检查远程数据是否为空
                                 if not remote_data or (
-                                    isinstance(remote_data, dict) and len(remote_data) == 0
+                                    isinstance(remote_data, dict)
+                                    and len(remote_data) == 0
                                 ):
                                     logger.warning(f"远程插件市场数据为空: {url}")
-                                    continue  # 继续尝试其他URL或使用缓存
+                                    continue
 
-                                count = len(remote_data) if hasattr(remote_data, "__len__") else "?"
+                                count = (
+                                    len(remote_data)
+                                    if hasattr(remote_data, "__len__")
+                                    else "?"
+                                )
                                 logger.info(
                                     f"成功获取远程插件市场数据，包含 {count} 个插件"
                                 )
-                                # 获取最新的MD5并保存到缓存（如果配置了 md5_url）
-                                current_md5 = await self._fetch_remote_md5(source.md5_url)
+
+                                current_md5 = await self._fetch_remote_md5(
+                                    source.md5_url
+                                )
                                 self._save_plugin_cache(
                                     source.cache_file,
                                     remote_data,
@@ -170,7 +186,6 @@ class PluginRoute(Route):
             except Exception as e:
                 logger.error(f"创建 HTTP ClientSession 失败: {e}")
 
-        # 如果远程获取失败，尝试使用缓存数据
         if not cached_data:
             cached_data = self._load_plugin_cache(source.cache_file)
 
@@ -183,11 +198,9 @@ class PluginRoute(Route):
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息 — 保留一个可信默认 URL，默认不提供远程 md5"""
         if custom_url:
-            # 对自定义URL生成一个安全的文件名
             url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
             cache_file = f"data/plugins_custom_{url_hash}.json"
 
-            # 更安全的后缀处理方式
             if custom_url.endswith(".json"):
                 md5_url = custom_url[:-5] + "-md5.json"
             else:
@@ -196,9 +209,7 @@ class PluginRoute(Route):
             urls = [custom_url]
         else:
             cache_file = "data/plugins.json"
-            # 不假设第三方 md5 接口存在，默认不提供 md5_url
             md5_url = None
-            # 保留一个可信的默认在线源（如可用），用户仍可自定义更多源
             urls = [
                 "https://api.soulter.top/astrbot/plugins",
             ]
@@ -231,7 +242,6 @@ class PluginRoute(Route):
                 trust_env=True, connector=connector, headers=headers
             ) as session:
                 async with session.get(md5_url) as response:
-                    text = await response.text()
                     content_type = response.headers.get("Content-Type", "")
 
                     if response.status != 200:
@@ -240,16 +250,22 @@ class PluginRoute(Route):
                         )
                         return None
 
-                    # 先尝试解析成 JSON 格式 { "md5": "..." }
                     try:
-                        data = json.loads(text)
+                        try:
+                            data = await response.json()
+                        except aiohttp.ContentTypeError:
+                            text = await response.text()
+                            try:
+                                data = json.loads(text)
+                            except (json.JSONDecodeError, ValueError):
+                                data = None
+
                         if isinstance(data, dict):
                             return data.get("md5", "") or None
-                    except (json.JSONDecodeError, ValueError):
-                        # 不是 JSON，继续尝试作为纯文本 MD5
+                    except Exception:
                         pass
 
-                    # 作为裸文本处理（有时服务只返回纯 md5 字符串）
+                    text = await response.text()
                     md5_candidate = text.strip()
                     if re.fullmatch(r"[0-9a-fA-F]{32}", md5_candidate):
                         return md5_candidate
@@ -272,7 +288,6 @@ class PluginRoute(Route):
                 return False
 
             if not source.md5_url:
-                # 没有远程 md5 可用 -> 强制去拉取远端（缓存不能被默认为有效）
                 logger.debug("远程 MD5 未配置，强制更新缓存")
                 return False
 
@@ -297,7 +312,6 @@ class PluginRoute(Route):
             if os.path.exists(cache_file):
                 with open(cache_file, encoding="utf-8") as f:
                     cache_data = json.load(f)
-                    # 检查缓存是否有效
                     if "data" in cache_data and "timestamp" in cache_data:
                         logger.debug(
                             f"加载缓存文件: {cache_file}, 缓存时间: {cache_data['timestamp']}",
@@ -310,9 +324,7 @@ class PluginRoute(Route):
     def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
         """保存插件市场数据到本地缓存"""
         try:
-            # 确保目录存在
             os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-
             cache_data = {
                 "timestamp": datetime.now().isoformat(),
                 "data": data,
