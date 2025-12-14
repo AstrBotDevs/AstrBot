@@ -42,6 +42,17 @@
                     </v-btn>
                     <v-btn 
                         v-if="selectedItems.length > 0" 
+                        color="success" 
+                        prepend-icon="mdi-download"
+                        variant="tonal" 
+                        @click="exportConversations" 
+                        :disabled="loading"
+                        size="small"
+                        class="mr-2">
+                        {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
+                    </v-btn>
+                    <v-btn 
+                        v-if="selectedItems.length > 0" 
                         color="error" 
                         prepend-icon="mdi-delete"
                         variant="tonal" 
@@ -905,6 +916,59 @@ export default {
             } catch (error) {
                 console.error('批量删除对话出错:', error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.batchDeleteError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 导出选中的对话
+        async exportConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelectedForExport'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备导出的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/export', {
+                    conversations: conversations
+                }, {
+                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
+                });
+
+                // 创建一个下载链接
+                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // 从响应头获取文件名，如果没有则使用默认文件名
+                const contentDisposition = response.headers['content-disposition'];
+                let filename = 'conversations_export.jsonl';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                
+                this.showSuccessMessage(this.tm('messages.exportSuccess'));
+            } catch (error) {
+                console.error('导出对话出错:', error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
             } finally {
                 this.loading = false;
             }

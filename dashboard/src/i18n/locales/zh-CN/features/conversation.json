@@ -13,7 +13,8 @@
     "refresh": "刷新"
   },
   "batch": {
-    "deleteSelected": "删除选中 ({count})"
+    "deleteSelected": "删除选中 ({count})",
+    "exportSelected": "导出选中 ({count})"
   },
   "pagination": {
     "itemsPerPage": "每页",
@@ -76,7 +77,8 @@
       "message": "确定要删除选中的 {count} 个对话吗？此操作不可恢复，请谨慎操作！",
       "andMore": "等 {count} 个",
       "cancel": "取消",
-      "confirm": "批量删除"
+      "confirm": "批量删除",
+      "warning": "警告：此操作不可撤销！"
     }
   },
   "messages": {
@@ -92,6 +94,9 @@
     "noItemSelected": "请先选择要删除的对话",
     "batchDeleteSuccess": "成功删除 {count} 个对话",
     "batchDeleteError": "批量删除失败",
-    "batchDeletePartial": "删除完成：成功 {deleted} 个，失败 {failed} 个"
+    "batchDeletePartial": "删除完成：成功 {deleted} 个，失败 {failed} 个",
+    "exportSuccess": "导出成功",
+    "exportError": "导出失败",
+    "noItemSelectedForExport": "请先选择要导出的对话"
   }
 } 
