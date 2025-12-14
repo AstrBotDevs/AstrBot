@@ -80,6 +80,13 @@ class Platform(abc.ABC):
         if self._status == PlatformStatus.ERROR:
             self._status = PlatformStatus.RUNNING
 
+    def unified_webhook(self) -> bool:
+        """是否正在使用统一 Webhook 模式"""
+        return bool(
+            self.config.get("unified_webhook_mode", False)
+            and self.config.get("webhook_uuid")
+        )
+
     def get_stats(self) -> dict:
         """获取平台统计信息"""
         meta = self.meta()
@@ -97,6 +104,7 @@ class Platform(abc.ABC):
             }
             if self.last_error
             else None,
+            "unified_webhook": self.unified_webhook(),
         }
 
     @abc.abstractmethod

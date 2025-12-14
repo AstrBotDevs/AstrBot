@@ -1504,7 +1504,7 @@ watch(marketSearch, (newVal) => {
   <v-dialog v-model="loadingDialog.show" width="700" persistent>
     <v-card>
       <v-card-title class="text-h5">{{ loadingDialog.title }}</v-card-title>
-      <v-card-text>
+      <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto;">
         <v-progress-linear v-if="loadingDialog.statusCode === 0" indeterminate color="primary"
           class="mb-4"></v-progress-linear>
 

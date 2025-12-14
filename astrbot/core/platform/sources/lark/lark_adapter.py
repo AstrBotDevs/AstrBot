@@ -2,8 +2,9 @@ import asyncio
 import base64
 import json
 import re
+import time
 import uuid
-from typing import cast
+from typing import Any, cast
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -11,6 +12,7 @@ from lark_oapi.api.im.v1 import (
     CreateMessageRequestBody,
     GetMessageResourceRequest,
 )
+from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
@@ -23,9 +25,11 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .lark_event import LarkMessageEvent
+from .server import LarkWebhookServer
 
 
 @register_platform_adapter(
@@ -47,9 +51,13 @@ class LarkPlatformAdapter(Platform):
         self.domain = platform_config.get("domain", lark.FEISHU_DOMAIN)
         self.bot_name = platform_config.get("lark_bot_name", "astrbot")
 
+        # socket or webhook
+        self.connection_mode = platform_config.get("lark_connection_mode", "socket")
+
         if not self.bot_name:
             logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
+        # 初始化 WebSocket 长连接相关配置
         async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1):
             await self.convert_msg(event)
 
@@ -62,6 +70,8 @@ class LarkPlatformAdapter(Platform):
             .build()
         )
 
+        self.do_v2_msg_event = do_v2_msg_event
+
         self.client = lark.ws.Client(
             app_id=self.appid,
             app_secret=self.appsecret,
@@ -71,8 +81,46 @@ class LarkPlatformAdapter(Platform):
         )
 
         self.lark_api = (
-            lark.Client.builder().app_id(self.appid).app_secret(self.appsecret).build()
+            lark.Client.builder()
+            .app_id(self.appid)
+            .app_secret(self.appsecret)
+            .log_level(lark.LogLevel.ERROR)
+            .domain(self.domain)
+            .build()
         )
+
+        self.webhook_server = None
+        if self.connection_mode == "webhook":
+            self.webhook_server = LarkWebhookServer(platform_config, event_queue)
+            self.webhook_server.set_callback(self.handle_webhook_event)
+
+        self.event_id_timestamps: dict[str, float] = {}
+
+    def _clean_expired_events(self):
+        """清理超过 30 分钟的事件记录"""
+        current_time = time.time()
+        expired_keys = [
+            event_id
+            for event_id, timestamp in self.event_id_timestamps.items()
+            if current_time - timestamp > 1800
+        ]
+        for event_id in expired_keys:
+            del self.event_id_timestamps[event_id]
+
+    def _is_duplicate_event(self, event_id: str) -> bool:
+        """检查事件是否重复
+
+        Args:
+            event_id: 事件ID
+
+        Returns:
+            True 表示重复事件，False 表示新事件
+        """
+        self._clean_expired_events()
+        if event_id in self.event_id_timestamps:
+            return True
+        self.event_id_timestamps[event_id] = time.time()
+        return False
 
     async def send_by_session(
         self,
@@ -137,7 +185,11 @@ class LarkPlatformAdapter(Platform):
             return
 
         abm = AstrBotMessage()
-        abm.timestamp = cast(int, message.create_time) // 1000
+
+        if message.create_time:
+            abm.timestamp = int(message.create_time) // 1000
+        else:
+            abm.timestamp = int(time.time())
         abm.message = []
         abm.type = (
             MessageType.GROUP_MESSAGE
@@ -290,13 +342,61 @@ class LarkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
+    async def handle_webhook_event(self, event_data: dict):
+        """处理 Webhook 事件
+
+        Args:
+            event_data: Webhook 事件数据
+        """
+        try:
+            header = event_data.get("header", {})
+            event_id = header.get("event_id", "")
+            if event_id and self._is_duplicate_event(event_id):
+                logger.debug(f"[Lark Webhook] 跳过重复事件: {event_id}")
+                return
+            event_type = header.get("event_type", "")
+            if event_type == "im.message.receive_v1":
+                processor = P2ImMessageReceiveV1Processor(self.do_v2_msg_event)
+                data = (processor.type())(event_data)
+                processor.do(data)
+            else:
+                logger.debug(f"[Lark Webhook] 未处理的事件类型: {event_type}")
+        except Exception as e:
+            logger.error(f"[Lark Webhook] 处理事件失败: {e}", exc_info=True)
+
     async def run(self):
-        # self.client.start()
-        await self.client._connect()
+        if self.connection_mode == "webhook":
+            # Webhook 模式
+            if self.webhook_server is None:
+                logger.error("[Lark] Webhook 模式已启用，但 webhook_server 未初始化")
+                return
+
+            webhook_uuid = self.config.get("webhook_uuid")
+            if webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(飞书 Webhook)", webhook_uuid)
+            else:
+                logger.warning("[Lark] Webhook 模式已启用，但未配置 webhook_uuid")
+        else:
+            # 长连接模式
+            await self.client._connect()
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        if not self.webhook_server:
+            return {"error": "Webhook server not initialized"}, 500
+
+        return await self.webhook_server.handle_callback(request)
 
     async def terminate(self):
-        await self.client._disconnect()
-        logger.info("飞书(Lark) 适配器已被优雅地关闭")
+        if self.connection_mode == "socket":
+            await self.client._disconnect()
+        logger.info("飞书(Lark) 适配器已关闭")
 
     def get_client(self) -> lark.ws.Client:
         return self.client
+
+    def unified_webhook(self) -> bool:
+        return bool(
+            self.config.get("lark_connection_mode", "") == "webhook"
+            and self.config.get("webhook_uuid")
+        )
