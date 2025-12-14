@@ -943,19 +943,13 @@ export default {
                 });
 
                 // 创建一个下载链接
-                const url = window.URL.createObjectURL(new Blob([response.data]));
+                const url = window.URL.createObjectURL(response.data);
                 const link = document.createElement('a');
                 link.href = url;
                 
-                // 从响应头获取文件名，如果没有则使用默认文件名
-                const contentDisposition = response.headers['content-disposition'];
-                let filename = 'conversations_export.jsonl';
-                if (contentDisposition) {
-                    const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-                    if (filenameMatch && filenameMatch[1]) {
-                        filename = filenameMatch[1];
-                    }
-                }
+                // 生成文件名（使用时间戳）
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `conversations_export_${timestamp}.jsonl`;
                 
                 link.setAttribute('download', filename);
                 document.body.appendChild(link);
