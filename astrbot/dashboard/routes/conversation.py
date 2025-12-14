@@ -1,5 +1,6 @@
 import json
 import traceback
+from datetime import datetime
 from io import BytesIO
 
 from quart import request, send_file
@@ -322,12 +323,8 @@ class ConversationRoute(Route):
                         )
                         continue
 
-                    # 解析对话内容
-                    content = (
-                        json.loads(conversation.history)
-                        if isinstance(conversation.history, str)
-                        else conversation.history
-                    )
+                    # 解析对话内容 (history is always a JSON string from _convert_conv_from_v2_to_v1)
+                    content = json.loads(conversation.history)
 
                     # 创建导出记录
                     export_record = {
@@ -362,8 +359,6 @@ class ConversationRoute(Route):
             file_obj.seek(0)
 
             # 生成文件名
-            from datetime import datetime
-
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"conversations_export_{timestamp}.jsonl"
 

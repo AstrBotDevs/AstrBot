@@ -967,7 +967,7 @@ export default {
                 
                 this.showSuccessMessage(this.tm('messages.exportSuccess'));
             } catch (error) {
-                console.error('导出对话出错:', error);
+                console.error(this.tm('messages.exportError'), error);
                 this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
             } finally {
                 this.loading = false;
