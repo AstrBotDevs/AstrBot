@@ -360,7 +360,7 @@ class ConversationRoute(Route):
 
             # 生成文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"conversations_export_{timestamp}.jsonl"
+            filename = f"astrbot_conversations_export_{timestamp}.jsonl"
 
             # 返回文件流
             return await send_file(
