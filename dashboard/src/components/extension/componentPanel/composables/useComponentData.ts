@@ -3,11 +3,13 @@
  */
 import { ref, reactive } from 'vue';
 import axios from 'axios';
-import type { CommandItem, CommandSummary, SnackbarState } from '../types';
+import type { CommandItem, CommandSummary, SnackbarState, ToolItem } from '../types';
 
-export function useCommandData() {
+export function useComponentData() {
   const loading = ref(false);
   const commands = ref<CommandItem[]>([]);
+  const tools = ref<ToolItem[]>([]);
+  const toolsLoading = ref(false);
   const summary = reactive<CommandSummary>({
     disabled: 0,
     conflicts: 0
@@ -50,13 +52,32 @@ export function useCommandData() {
     }
   };
 
+  const fetchTools = async (errorMessage: string) => {
+    toolsLoading.value = true;
+    try {
+      const res = await axios.get('/api/tools/list');
+      if (res.data.status === 'ok') {
+        tools.value = res.data.data || [];
+      } else {
+        toast(res.data.message || errorMessage, 'error');
+      }
+    } catch (err: any) {
+      toast(err?.message || errorMessage, 'error');
+    } finally {
+      toolsLoading.value = false;
+    }
+  };
+
   return {
     loading,
     commands,
+    tools,
+    toolsLoading,
     summary,
     snackbar,
     toast,
-    fetchCommands
+    fetchCommands,
+    fetchTools
   };
 }
 

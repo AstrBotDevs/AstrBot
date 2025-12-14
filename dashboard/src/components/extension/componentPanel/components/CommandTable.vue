@@ -9,6 +9,7 @@ const { tm } = useModuleI18n('features/command');
 const props = defineProps<{
   items: CommandItem[];
   expandedGroups: Set<string>;
+  loading?: boolean;
 }>();
 
 // Emits
@@ -98,6 +99,7 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       item-key="handler_full_name"
       hover
       :row-props="getRowProps"
+      :loading="props.loading"
     >
       <template v-slot:item.effective_command="{ item }">
         <div class="d-flex align-center py-2">

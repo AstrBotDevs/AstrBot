@@ -2,7 +2,9 @@
   "title": "Extension Management",
   "subtitle": "Manage and configure system extensions",
   "tabs": {
-    "installed": "Installed",
+    "installedPlugins": "Installed Plugins",
+    "installedMcpServers": "Installed MCP Servers",
+    "handlersOperation": "Manage Components",
     "market": "Extension Market"
   },
   "search": {

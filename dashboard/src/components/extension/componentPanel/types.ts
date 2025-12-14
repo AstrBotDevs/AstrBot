@@ -82,3 +82,21 @@ export interface StatusInfo {
   variant: 'flat' | 'outlined' | 'text' | 'elevated' | 'tonal' | 'plain';
 }
 
+/** MCP/函数工具参数定义 */
+export interface ToolParameter {
+  type?: string;
+  description?: string;
+}
+
+/** MCP/函数工具对象 */
+export interface ToolItem {
+  name: string;
+  description: string;
+  active: boolean;
+  parameters?: {
+    properties?: Record<string, ToolParameter>;
+  };
+  origin?: string;
+  origin_name?: string;
+}
+

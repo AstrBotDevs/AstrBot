@@ -5,6 +5,8 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import UninstallConfirmDialog from '@/components/shared/UninstallConfirmDialog.vue';
+import McpServersSection from '@/components/extension/McpServersSection.vue';
+import ComponentPanel from '@/components/extension/componentPanel/index.vue';
 import axios from 'axios';
 import { pinyin } from 'pinyin-pro';
 import { useCommonStore } from '@/stores/common';
@@ -39,7 +41,7 @@ const checkAndPromptConflicts = async () => {
   }
 };
 const handleConflictConfirm = () => {
-  router.push('/commands');
+  activeTab.value = 'commands';
 };
 
 const fileInput = ref(null);
@@ -931,21 +933,29 @@ watch(marketSearch, (newVal) => {
             <v-tabs v-model="activeTab" color="primary">
               <v-tab value="installed">
                 <v-icon class="mr-2">mdi-puzzle</v-icon>
-                {{ tm('tabs.installed') }}
+                {{ tm('tabs.installedPlugins') }}
+              </v-tab>
+              <v-tab value="mcp">
+                <v-icon class="mr-2">mdi-server-network</v-icon>
+                {{ tm('tabs.installedMcpServers') }}
               </v-tab>
               <v-tab value="market">
                 <v-icon class="mr-2">mdi-store</v-icon>
                 {{ tm('tabs.market') }}
               </v-tab>
+              <v-tab value="components">
+                <v-icon class="mr-2">mdi-wrench</v-icon>
+                {{ tm('tabs.handlersOperation') }}
+              </v-tab>
             </v-tabs>
 
             <!-- 搜索栏 - 在移动端时独占一行 -->
             <div style="flex-grow: 1; min-width: 250px; max-width: 400px; margin-left: auto; margin-top: 8px;">
-              <v-text-field v-if="activeTab == 'market'" v-model="marketSearch" density="compact"
+              <v-text-field v-if="activeTab === 'market'" v-model="marketSearch" density="compact"
                 :label="tm('search.marketPlaceholder')" prepend-inner-icon="mdi-magnify" variant="solo-filled" flat
                 hide-details single-line>
               </v-text-field>
-              <v-text-field v-else v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
+              <v-text-field v-else-if="activeTab === 'installed'" v-model="pluginSearch" density="compact" :label="tm('search.placeholder')"
                 prepend-inner-icon="mdi-magnify" variant="solo-filled" flat hide-details single-line>
               </v-text-field>
             </div>
@@ -1147,6 +1157,24 @@ watch(marketSearch, (newVal) => {
                 </v-row>
               </div>
             </v-fade-transition>
+          </v-tab-item>
+
+          <!-- 指令面板标签页内容 -->
+          <v-tab-item v-show="activeTab === 'components'">
+            <v-card class="rounded-lg" variant="flat" style="background-color: transparent;">
+              <v-card-text class="pa-0">
+                <ComponentPanel :active="activeTab === 'components'" />
+              </v-card-text>
+            </v-card>
+          </v-tab-item>
+
+          <!-- 已安装的 MCP 服务器标签页内容 -->
+          <v-tab-item v-show="activeTab === 'mcp'">
+            <v-card class="rounded-lg" variant="flat" style="background-color: transparent;">
+              <v-card-text class="pa-0">
+                <McpServersSection />
+              </v-card-text>
+            </v-card>
           </v-tab-item>
 
           <!-- 插件市场标签页内容 -->

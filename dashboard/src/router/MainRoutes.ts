@@ -17,11 +17,6 @@ const MainRoutes = {
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
-      name: 'Commands',
-      path: '/commands',
-      component: () => import('@/views/commandPanel/index.vue')
-    },
-    {
       name: 'ExtensionMarketplace',
       path: '/extension-marketplace',
       component: () => import('@/views/ExtensionPage.vue')
@@ -35,11 +30,6 @@ const MainRoutes = {
       name: 'Providers',
       path: '/providers',
       component: () => import('@/views/ProviderPage.vue')
-    },
-    {
-      name: 'ToolUsePage',
-      path: '/tool-use',
-      component: () => import('@/views/ToolUsePage.vue')
     },
     {
       name: 'Configs',

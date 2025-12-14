@@ -34,19 +34,9 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
-    title: 'core.navigation.toolUse',
-    icon: 'mdi-function-variant',
-    to: '/tool-use'
-  },
-  {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
-  },
-  {
-    title: 'core.navigation.commands',
-    icon: 'mdi-console-line',
-    to: '/commands'
   },
   {
     title: 'core.navigation.knowledgeBase',

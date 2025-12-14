@@ -2,7 +2,9 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installed": "已安装",
+    "installedPlugins": "已安装的插件",
+    "installedMcpServers": "已安装的 MCP 服务器",
+    "handlersOperation": "管理组件",
     "market": "插件市场"
   },
   "search": {
