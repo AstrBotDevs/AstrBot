@@ -2,14 +2,18 @@ from astrbot.core import html_renderer
 from astrbot.core.provider import Provider
 from astrbot.core.star.star_tools import StarTools
 from astrbot.core.utils.command_parser import CommandParserMixin
+from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .context import Context
 from .star import StarMetadata, star_map, star_registry
 from .star_manager import PluginManager
 
 
-class Star(CommandParserMixin):
+class Star(CommandParserMixin, PluginKVStoreMixin):
     """所有插件（Star）的父类，所有插件都应该继承于这个类"""
+
+    author: str
+    name: str
 
     def __init__(self, context: Context, config: dict | None = None):
         StarTools.initialize(context)
