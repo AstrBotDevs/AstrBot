@@ -259,12 +259,9 @@ class ResultDecorateStage(Stage):
                 and result.is_llm_result()
                 and SessionServiceManager.should_process_tts_request(event)
             ):
-                should_tts = (
-                    self.tts_trigger_probability >= 1.0
-                    or (
-                        self.tts_trigger_probability > 0.0
-                        and random.random() <= self.tts_trigger_probability
-                    )
+                should_tts = self.tts_trigger_probability >= 1.0 or (
+                    self.tts_trigger_probability > 0.0
+                    and random.random() <= self.tts_trigger_probability
                 )
 
                 if not should_tts:
