@@ -1,3 +1,4 @@
+import random
 import re
 import time
 import traceback
@@ -41,6 +42,18 @@ class ResultDecorateStage(Stage):
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
             "forward_threshold"
         ]
+
+        trigger_probability = ctx.astrbot_config["provider_tts_settings"].get(
+            "trigger_probability",
+            1,
+        )
+        try:
+            self.tts_trigger_probability = max(
+                0.0,
+                min(float(trigger_probability), 1.0),
+            )
+        except (TypeError, ValueError):
+            self.tts_trigger_probability = 1.0
 
         # 分段回复
         self.words_count_threshold = int(
@@ -246,7 +259,17 @@ class ResultDecorateStage(Stage):
                 and result.is_llm_result()
                 and SessionServiceManager.should_process_tts_request(event)
             ):
-                if not tts_provider:
+                should_tts = (
+                    self.tts_trigger_probability >= 1.0
+                    or (
+                        self.tts_trigger_probability > 0.0
+                        and random.random() <= self.tts_trigger_probability
+                    )
+                )
+
+                if not should_tts:
+                    logger.debug("跳过 TTS：触发概率未命中。")
+                elif not tts_provider:
                     logger.warning(
                         f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
                     )

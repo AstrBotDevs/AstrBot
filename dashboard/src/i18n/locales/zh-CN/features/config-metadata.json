@@ -62,6 +62,9 @@
         },
         "provider_id": {
           "description": "默认文本转语音模型"
+        },
+        "trigger_probability": {
+          "description": "TTS 触发概率"
         }
       }
     },
