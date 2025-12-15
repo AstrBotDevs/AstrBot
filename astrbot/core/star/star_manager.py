@@ -467,6 +467,18 @@ class PluginManager:
                             metadata.star_cls = metadata.star_cls_type(
                                 context=self.context,
                             )
+
+                        p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                        p_author = (
+                            (metadata.author or "unknown").lower().replace("/", "_")
+                        )
+                        setattr(metadata.star_cls, "name", p_name)
+                        setattr(metadata.star_cls, "author", p_author)
+                        setattr(
+                            metadata.star_cls,
+                            "plugin_id",
+                            f"{p_author}/{p_name}",
+                        )
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
