@@ -158,7 +158,11 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        if event.get_extra("_streaming_finished", False):
+            # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
+            return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            event.set_extra("_streaming_finished", True)
             return
 
         logger.info(
