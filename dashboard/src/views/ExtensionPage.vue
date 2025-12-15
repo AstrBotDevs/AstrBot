@@ -1568,7 +1568,7 @@ watch(marketSearch, (newVal) => {
 
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
-    <div class="v-card v-theme--PurpleThemeDark v-card--density-default rounded-lg v-card--variant-elevated">
+    <div class="v-card v-card--density-default rounded-lg v-card--variant-elevated">
       <div class="v-card__loader">
         <v-progress-linear :indeterminate="loading_" color="primary" height="2" :active="loading_"></v-progress-linear>
       </div>

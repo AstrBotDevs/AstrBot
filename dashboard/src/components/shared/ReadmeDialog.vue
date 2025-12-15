@@ -115,7 +115,7 @@ const _show = computed({
 </script>
 
 <template>
-  <v-dialog v-model="_show" width="800" persistent>
+  <v-dialog v-model="_show" width="800">
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h5">{{ t('core.common.readme.title') }}</span>
