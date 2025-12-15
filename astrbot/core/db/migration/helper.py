@@ -2,7 +2,7 @@ import os
 
 from astrbot.api import logger, sp
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db import BaseDatabase, DatabaseType
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .migra_3_to_4 import (
@@ -24,6 +24,10 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
 
     if not os.path.exists(data_v3_db):
         return False
+
+    if db_helper.database_type == DatabaseType.MYSQL:
+        return False
+
     migration_done = await db_helper.get_preference(
         "global",
         "global",
