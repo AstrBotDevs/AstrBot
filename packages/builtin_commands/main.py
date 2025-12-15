@@ -36,10 +36,6 @@ class Main(star.Star):
         self.tts_c = TTSCommand(self.context)
         self.sid_c = SIDCommand(self.context)
 
-    async def initialize(self):
-        await self.put_kv_data("initialized", True)
-        print("initialized: ", await self.get_kv_data("initialized", False))
-
     @filter.command("help")
     async def help(self, event: AstrMessageEvent):
         """查看帮助"""

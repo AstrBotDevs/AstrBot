@@ -11,6 +11,7 @@ from .star_manager import PluginManager
 
 class Star(CommandParserMixin, PluginKVStoreMixin):
     """所有插件（Star）的父类，所有插件都应该继承于这个类"""
+
     author: str
     name: str
 
