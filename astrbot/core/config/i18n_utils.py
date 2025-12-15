@@ -79,6 +79,7 @@ class ConfigMetadataI18n:
                             "_special",
                             "invisible",
                             "options",
+                            "slider",
                         ]:
                             if attr in field_data:
                                 field_result[attr] = field_data[attr]

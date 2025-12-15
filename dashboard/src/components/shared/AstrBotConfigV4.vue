@@ -245,10 +245,29 @@ function getSpecialSubtype(value) {
                 <v-text-field v-else-if="itemMeta?.type === 'string'" v-model="createSelectorModel(itemKey).value"
                   density="compact" variant="outlined" class="config-field" hide-details></v-text-field>
 
-                <!-- Numeric input for JSON selector -->
-                <v-text-field v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-                  v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined" class="config-field"
-                  type="number" hide-details></v-text-field>
+                <!-- Numeric input with optional slider for JSON selector -->
+                <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
+                  <v-slider
+                    v-if="itemMeta?.slider"
+                    v-model.number="createSelectorModel(itemKey).value"
+                    :min="itemMeta?.slider?.min ?? 0"
+                    :max="itemMeta?.slider?.max ?? 100"
+                    :step="itemMeta?.slider?.step ?? 1"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    style="flex: 3"
+                  ></v-slider>
+                  <v-text-field
+                    v-model.number="createSelectorModel(itemKey).value"
+                    density="compact"
+                    variant="outlined"
+                    class="config-field"
+                    style="flex: 2"
+                    type="number"
+                    hide-details
+                  ></v-text-field>
+                </div>
 
                 <!-- Text area for JSON selector -->
                 <v-textarea v-else-if="itemMeta?.type === 'text'" v-model="createSelectorModel(itemKey).value"

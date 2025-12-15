@@ -57,6 +57,9 @@
         },
         "provider_id": {
           "description": "Default Text-to-Speech Model"
+        },
+        "trigger_probability": {
+          "description": "TTS Trigger Probability"
         }
       }
     },
