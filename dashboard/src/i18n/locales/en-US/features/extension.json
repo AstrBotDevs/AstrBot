@@ -4,7 +4,7 @@
   "tabs": {
     "installedPlugins": "Installed Plugins",
     "installedMcpServers": "Installed MCP Servers",
-    "handlersOperation": "Manage Components",
+    "handlersOperation": "Manage Handlers",
     "market": "Extension Market"
   },
   "search": {

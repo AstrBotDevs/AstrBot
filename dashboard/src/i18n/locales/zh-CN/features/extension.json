@@ -4,7 +4,7 @@
   "tabs": {
     "installedPlugins": "已安装的插件",
     "installedMcpServers": "已安装的 MCP 服务器",
-    "handlersOperation": "管理组件",
+    "handlersOperation": "管理行为",
     "market": "插件市场"
   },
   "search": {
