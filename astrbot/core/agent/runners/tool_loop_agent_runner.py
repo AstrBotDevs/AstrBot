@@ -188,7 +188,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
                 elif isinstance(result, MessageChain):
-                    result.type = "tool_call_result"
+                    if result.type is None:
+                        result.type = "tool_call_result"
                     yield AgentResponse(
                         type="tool_call_result",
                         data=AgentResponseData(chain=result),
