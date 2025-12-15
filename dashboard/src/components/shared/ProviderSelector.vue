@@ -51,7 +51,7 @@
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
             <v-list-item-subtitle>
               {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
-              <span v-if="provider.model_config?.model">- {{ provider.model_config.model }}</span>
+              <span v-if="provider.model">- {{ provider.model }}</span>
             </v-list-item-subtitle>
             
             <template v-slot:append>

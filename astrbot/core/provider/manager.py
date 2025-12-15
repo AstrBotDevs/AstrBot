@@ -37,6 +37,8 @@ class ProviderManager:
         config = acm.confs["default"]
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
+        self.merged_provider_config: dict = {}
+        """合并 provider 和 provider_sources 配置后的结果"""
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
@@ -269,6 +271,8 @@ class ProviderManager:
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = provider_config["id"]
                 provider_config = merged_config
+
+        self.merged_provider_config[provider_config["id"]] = provider_config
 
         if not provider_config["enable"]:
             logger.info(f"Provider {provider_config['id']} is disabled, skipping")

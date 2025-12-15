@@ -45,7 +45,7 @@ class ProviderAnthropic(Provider):
             base_url=self.base_url,
         )
 
-        self.set_model(provider_config["model_config"]["model"])
+        self.set_model(provider_config.get("model", "unknown"))
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -285,10 +285,9 @@ class ProviderAnthropic(Provider):
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": new_messages, **model_config}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -298,7 +297,6 @@ class ProviderAnthropic(Provider):
         try:
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
-            # logger.error(f"发生了错误。Provider 配置如下: {model_config}")
             raise e
 
         return llm_response
@@ -340,10 +338,9 @@ class ProviderAnthropic(Provider):
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": new_messages, **model_config}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:

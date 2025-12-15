@@ -188,8 +188,79 @@ class ConfigRoute(Route):
                 "GET",
                 self.get_provider_source_models,
             ),
+            "/config/provider_sources/<provider_source_id>/update": (
+                "POST",
+                self.update_provider_source,
+            ),
         }
         self.register_routes()
+
+    async def update_provider_source(self, provider_source_id: str):
+        """更新或新增 provider_source，并重载关联的 providers"""
+
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        new_source_config = post_data.get("config") or post_data
+        original_id = post_data.get("original_id") or provider_source_id
+
+        if not isinstance(new_source_config, dict):
+            return Response().error("缺少或错误的配置数据").__dict__
+
+        # 确保配置中有 id 字段
+        if not new_source_config.get("id"):
+            new_source_config["id"] = original_id
+
+        provider_sources = self.config.get("provider_sources", [])
+
+        # 查找旧的 provider_source，若不存在则追加为新配置
+        target_idx = next(
+            (i for i, ps in enumerate(provider_sources) if ps.get("id") == original_id),
+            -1,
+        )
+
+        old_id = original_id
+        if target_idx == -1:
+            provider_sources.append(new_source_config)
+        else:
+            old_id = provider_sources[target_idx].get("id")
+            provider_sources[target_idx] = new_source_config
+
+        # 更新引用了该 provider_source 的 providers
+        affected_providers = []
+        for provider in self.config.get("provider", []):
+            if provider.get("provider_source_id") == old_id:
+                provider["provider_source_id"] = new_source_config["id"]
+                affected_providers.append(provider)
+
+        # 写回配置
+        self.config["provider_sources"] = provider_sources
+
+        try:
+            save_config(self.config, self.config, is_core=True)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+        # 重载受影响的 providers，使新的 source 配置生效
+        reload_errors = []
+        prov_mgr = self.core_lifecycle.provider_manager
+        for provider in affected_providers:
+            try:
+                await prov_mgr.reload(provider)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                reload_errors.append(f"{provider.get('id')}: {e}")
+
+        if reload_errors:
+            return (
+                Response()
+                .error("更新成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+                .__dict__
+            )
+
+        return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
         provider_config = astrbot_config["provider"]
@@ -449,8 +520,8 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_type").__dict__
         provider_type_ls = provider_type.split(",")
         provider_list = []
-        astrbot_config = self.core_lifecycle.astrbot_config
-        for provider in astrbot_config["provider"]:
+        pc = self.core_lifecycle.provider_manager.merged_provider_config
+        for provider in pc.values():
             if provider.get("provider_type", None) in provider_type_ls:
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__

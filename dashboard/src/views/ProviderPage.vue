@@ -100,14 +100,6 @@
                 <!-- Provider Source 配置 -->
                 <v-card-title class="pa-4 pb-2 d-flex align-center justify-space-between">
                   <span class="text-h4 font-weight-bold">{{ selectedProviderSource.id }}</span>
-                  <v-switch
-                    v-model="selectedProviderSource.enable"
-                    density="compact"
-                    hide-details
-                    inset
-                    color="primary"
-                    @change="isSourceModified = true">
-                  </v-switch>
                 </v-card-title>
                 
                 <v-card-text class="pa-4">
@@ -195,7 +187,7 @@
                             <div class="d-flex align-center justify-space-between" style="width: 100%;">
                               <div>
                                 <strong>{{ provider.id }}</strong>
-                                <span class="text-caption text-grey ml-2">{{ provider.model_config?.model }}</span>
+                                <span class="text-caption text-grey ml-2">{{ provider.model }}</span>
                               </div>
                               <div class="d-flex align-center" @click.stop>
                                 <v-switch
@@ -212,6 +204,15 @@
                                   color="info"
                                   :loading="testingProviders.includes(provider.id)"
                                   @click.stop="testProvider(provider)"
+                                  class="mr-1">
+                                </v-btn>
+                                <v-btn
+                                  icon="mdi-content-save"
+                                  size="small"
+                                  variant="text"
+                                  color="success"
+                                  :loading="savingProviders.includes(provider.id)"
+                                  @click.stop="saveSingleProvider(provider)"
                                   class="mr-1">
                                 </v-btn>
                                 <v-btn
@@ -359,7 +360,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -378,10 +379,13 @@ const providerSources = ref([])
 const providers = ref([])
 const selectedProviderType = ref('chat_completion')
 const selectedProviderSource = ref(null)
+const selectedProviderSourceOriginalId = ref(null)
+const editableProviderSource = ref(null)
 const availableModels = ref([])
 const loadingModels = ref(false)
 const savingSource = ref(false)
 const testingProviders = ref([])
+const savingProviders = ref([])
 const isSourceModified = ref(false)
 const configSchema = ref({})
 const providerTemplates = ref({})
@@ -395,6 +399,8 @@ const updatingMode = ref(false)
 const loading = ref(false)
 const providerStatuses = ref([])
 const showAgentRunnerDialog = ref(false)
+
+let suppressSourceWatch = false
 
 const snackbar = ref({
   show: false,
@@ -452,33 +458,46 @@ const sourceProviders = computed(() => {
 
 // 基础配置：只包含常用字段
 const basicSourceConfig = computed(() => {
-  if (!selectedProviderSource.value) return null
-  
-  const basicFields = ['id', 'key', 'api_base']
+  if (!editableProviderSource.value) return null
+
+  const fields = ['id', 'key', 'api_base']
   const basic = {}
-  
-  for (const [key, value] of Object.entries(selectedProviderSource.value)) {
-    if (basicFields.includes(key)) {
-      basic[key] = value
-    }
-  }
-  
+
+  fields.forEach(field => {
+    Object.defineProperty(basic, field, {
+      get() {
+        return editableProviderSource.value[field]
+      },
+      set(val) {
+        editableProviderSource.value[field] = val
+      },
+      enumerable: true
+    })
+  })
+
   return basic
 })
 
 // 高级配置：过滤掉基础字段
 const advancedSourceConfig = computed(() => {
-  if (!selectedProviderSource.value) return null
-  
-  const basicFields = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type']
+  if (!editableProviderSource.value) return null
+
+  const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type']
   const advanced = {}
-  
-  for (const [key, value] of Object.entries(selectedProviderSource.value)) {
-    if (!basicFields.includes(key)) {
-      advanced[key] = value
-    }
+
+  for (const key of Object.keys(editableProviderSource.value)) {
+    if (excluded.includes(key)) continue
+    Object.defineProperty(advanced, key, {
+      get() {
+        return editableProviderSource.value[key]
+      },
+      set(val) {
+        editableProviderSource.value[key] = val
+      },
+      enumerable: true
+    })
   }
-  
+
   return advanced
 })
 
@@ -524,11 +543,19 @@ function showMessage(message, color = 'success') {
 function selectProviderType(type) {
   selectedProviderType.value = type
   selectedProviderSource.value = null
+  selectedProviderSourceOriginalId.value = null
+  editableProviderSource.value = null
   availableModels.value = []
 }
 
 function selectProviderSource(source) {
   selectedProviderSource.value = source
+  selectedProviderSourceOriginalId.value = source?.id || null
+  suppressSourceWatch = true
+  editableProviderSource.value = source ? JSON.parse(JSON.stringify(source)) : null
+  nextTick(() => {
+    suppressSourceWatch = false
+  })
   availableModels.value = []
   isSourceModified.value = false
 }
@@ -549,12 +576,14 @@ function addProviderSource(templateKey) {
     type: template.type,
     provider_type: template.provider_type,
     enable: true,
-    // 复制模板中的字段（排除 id, enable, type, provider_type, model_config 等 provider 特有字段）
+    // 复制模板中的字段（排除 id, enable, type, provider_type 等 provider 特有字段）
     ...extractSourceFieldsFromTemplate(template)
   }
   
   providerSources.value.push(newSource)
   selectedProviderSource.value = newSource
+  selectedProviderSourceOriginalId.value = newId
+  editableProviderSource.value = JSON.parse(JSON.stringify(newSource))
   isSourceModified.value = true
 }
 
@@ -562,7 +591,7 @@ function extractSourceFieldsFromTemplate(template) {
   // 从模板中提取 source 相关的字段
   const sourceFields = {}
   const excludeKeys = [
-    'id', 'enable', 'type', 'provider_type', 'model_config', 'model', 
+    'id', 'enable', 'type', 'provider_type', 'model', 
     'provider_source_id', 'provider', 'hint', 'modalities', 
     'custom_extra_body', 'custom_headers'
   ]
@@ -587,6 +616,8 @@ async function deleteProviderSource(source) {
     
     if (selectedProviderSource.value?.id === source.id) {
       selectedProviderSource.value = null
+      selectedProviderSourceOriginalId.value = null
+      editableProviderSource.value = null
     }
     
     await saveConfig()
@@ -600,12 +631,49 @@ async function saveProviderSource() {
   if (!selectedProviderSource.value) return
   
   savingSource.value = true
+  const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id
   try {
-    await saveConfig()
+    const response = await axios.post(
+      `/api/config/provider_sources/${originalId}/update`,
+      {
+        config: editableProviderSource.value,
+        original_id: originalId
+      }
+    )
+
+    if (response.data.status !== 'ok') {
+      throw new Error(response.data.message)
+    }
+
+    if (editableProviderSource.value.id !== originalId) {
+      providers.value = providers.value.map(p =>
+        p.provider_source_id === originalId
+          ? { ...p, provider_source_id: editableProviderSource.value.id }
+          : p
+      )
+      selectedProviderSourceOriginalId.value = editableProviderSource.value.id
+    }
+
+    // 同步列表中的当前 source，并保持选中
+    const idx = providerSources.value.findIndex(ps => ps.id === originalId)
+    if (idx !== -1) {
+      providerSources.value[idx] = JSON.parse(JSON.stringify(editableProviderSource.value))
+      selectedProviderSource.value = providerSources.value[idx]
+    }
+
+    // 重新建立可编辑副本
+    suppressSourceWatch = true
+    editableProviderSource.value = selectedProviderSource.value
+    nextTick(() => {
+      suppressSourceWatch = false
+    })
+
     isSourceModified.value = false
-    showMessage(tm('providerSources.saveSuccess'))
+    showMessage(response.data.message || tm('providerSources.saveSuccess'))
+    return true
   } catch (error) {
-    showMessage(error.message || tm('providerSources.saveError'), 'error')
+    showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+    return false
   } finally {
     savingSource.value = false
   }
@@ -617,13 +685,17 @@ async function fetchAvailableModels() {
   
   // 如果配置被修改，先保存
   if (isSourceModified.value) {
-    await saveProviderSource()
+    const saved = await saveProviderSource()
+    if (!saved) {
+      return
+    }
   }
   
   loadingModels.value = true
   try {
+    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
     const response = await axios.get(
-      `/api/config/provider_sources/${selectedProviderSource.value.id}/models`
+      `/api/config/provider_sources/${sourceId}/models`
     )
     if (response.data.status === 'ok') {
       availableModels.value = response.data.data.models || []
@@ -643,10 +715,11 @@ async function fetchAvailableModels() {
 function addModelProvider(modelName) {
   if (!selectedProviderSource.value) return
   
-  const newId = `${selectedProviderSource.value.id}_${modelName}_${Date.now()}`
+  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
+  const newId = `${sourceId}/${modelName}`
   const newProvider = {
     id: newId,
-    provider_source_id: selectedProviderSource.value.id,
+    provider_source_id: sourceId,
     model: modelName,
     modalities: [],
     custom_extra_body: {}
@@ -661,8 +734,8 @@ async function deleteProvider(provider) {
   if (!confirm(tm('models.deleteConfirm', { id: provider.id }))) return
   
   try {
+    await axios.post('/api/config/provider/delete', { id: provider.id })
     providers.value = providers.value.filter(p => p.id !== provider.id)
-    await saveConfig()
     showMessage(tm('models.deleteSuccess'))
   } catch (error) {
     showMessage(error.message || tm('models.deleteError'), 'error')
@@ -673,7 +746,7 @@ async function testProvider(provider) {
   testingProviders.value.push(provider.id)
   try {
     const response = await axios.get('/api/config/provider/check_one', {
-      params: { provider_id: provider.id }
+      params: { id: provider.id }
     })
     if (response.data.status === 'ok') {
       showMessage(tm('models.testSuccess', { id: provider.id }))
@@ -684,6 +757,27 @@ async function testProvider(provider) {
     showMessage(error.response?.data?.message || error.message || tm('models.testError'), 'error')
   } finally {
     testingProviders.value = testingProviders.value.filter(id => id !== provider.id)
+  }
+}
+
+async function saveSingleProvider(provider) {
+  if (!provider) return
+
+  const exists = (config.value.provider || []).some(p => p.id === provider.id)
+  savingProviders.value.push(provider.id)
+  try {
+    const url = exists ? '/api/config/provider/update' : '/api/config/provider/new'
+    const payload = exists ? { id: provider.id, config: provider } : provider
+    const res = await axios.post(url, payload)
+    if (res.data.status === 'error') {
+      throw new Error(res.data.message)
+    }
+    showMessage(res.data.message || tm('providerSources.saveSuccess'))
+    await loadConfig()
+  } catch (err) {
+    showMessage(err.response?.data?.message || err.message || tm('providerSources.saveError'), 'error')
+  } finally {
+    savingProviders.value = savingProviders.value.filter(id => id !== provider.id)
   }
 }
 
@@ -736,6 +830,13 @@ onMounted(async () => {
   await loadProviderTemplate()
   await loadMetadata()
 })
+
+// 跟踪编辑中的 provider source 是否被修改
+watch(editableProviderSource, () => {
+  if (suppressSourceWatch) return
+  if (!editableProviderSource.value) return
+  isSourceModified.value = true
+}, { deep: true })
 
 // ===== 非 chat 类型的方法 =====
 function getProviderType(provider) {

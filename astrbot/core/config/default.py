@@ -1974,22 +1974,10 @@ CONFIG_METADATA_2 = {
                         "description": "API Base URL",
                         "type": "string",
                     },
-                    "model_config": {
-                        "description": "模型配置",
-                        "type": "object",
-                        "items": {
-                            "model": {
-                                "description": "模型名称",
-                                "type": "string",
-                                "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
-                            },
-                            "max_tokens": {
-                                "description": "模型最大输出长度（tokens）",
-                                "type": "int",
-                            },
-                            "temperature": {"description": "温度", "type": "float"},
-                            "top_p": {"description": "Top P值", "type": "float"},
-                        },
+                    "model": {
+                        "description": "模型 ID",
+                        "type": "string",
+                        "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
                     },
                     "dify_api_key": {
                         "description": "API Key",

@@ -51,6 +51,7 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         "model",
         "modalities",
         "custom_extra_body",
+        "enable",
     }
 
     # Fields that should not go to source
