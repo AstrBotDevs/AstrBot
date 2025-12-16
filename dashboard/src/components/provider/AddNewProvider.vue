@@ -3,10 +3,6 @@
         <v-card :title="tm('dialogs.addProvider.title')">
             <v-card-text style="overflow-y: auto;">
                 <v-tabs v-model="activeProviderTab" grow>
-                    <v-tab value="chat_completion" class="font-weight-medium px-3">
-                        <v-icon start>mdi-message-text</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.basic') }}
-                    </v-tab>
                     <v-tab value="agent_runner" class="font-weight-medium px-3">
                         <v-icon start>mdi-cogs</v-icon>
                         {{ tm('dialogs.addProvider.tabs.agentRunner') }}

@@ -169,7 +169,7 @@
                                   <v-tooltip location="top" max-width="300">
                                     {{ tm('availability.test') }}
                                     <template v-slot:activator="{ props }">
-                                      <v-btn icon="mdi-wrench" size="small" variant="text"
+                                      <v-btn icon="mdi-wrench" size="small" variant="text" :disabled="!entry.provider.enable"
                                         :loading="testingProviders.includes(entry.provider.id)" v-bind="props"
                                         @click.stop="testProvider(entry.provider)"></v-btn>
                                     </template>
