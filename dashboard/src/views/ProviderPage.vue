@@ -97,8 +97,7 @@
 
                   <div class="d-flex align-center ga-2" v-if="selectedProviderSource">
                     <v-btn color="success" prepend-icon="mdi-check" :loading="savingSource"
-                      :disabled="!isSourceModified"
-                      @click="saveProviderSource" variant="flat">
+                      :disabled="!isSourceModified" @click="saveProviderSource" variant="flat">
                       {{ tm('providerSources.save') }}
                     </v-btn>
                   </div>
@@ -127,7 +126,8 @@
                       <div class="d-flex align-center ga-2 mb-2">
                         <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
                         <!-- <v-chip color="success" variant="tonal" size="small">{{ displayedChatProviders.length }}</v-chip> -->
-                        <small style="color: grey;" v-if="availableModels.length">{{ tm('models.available') }} {{ availableModels.length }}</small>
+                        <small style="color: grey;" v-if="availableModels.length">{{ tm('models.available') }} {{
+                          availableModels.length }}</small>
                         <v-spacer></v-spacer>
                         <v-btn color="primary" prepend-icon="mdi-download" :loading="loadingModels"
                           @click="fetchAvailableModels" variant="tonal" size="small">
@@ -139,14 +139,27 @@
                       <v-list density="compact" class="rounded-lg border"
                         style="max-height: 520px; overflow-y: auto; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;">
                         <template v-if="mergedModelEntries.length > 0">
-                          <template v-for="entry in mergedModelEntries" :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
+                          <template v-for="entry in mergedModelEntries"
+                            :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
                             <v-list-item v-if="entry.type === 'configured'" class="provider-compact-item"
                               @click="openProviderEdit(entry.provider)">
                               <v-list-item-title class="font-weight-medium text-truncate">
                                 {{ entry.provider.id }}
                               </v-list-item-title>
-                              <v-list-item-subtitle class="text-caption text-grey text-truncate">
-                                {{ entry.provider.model }}
+                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
+                                <span>{{ entry.provider.model }}</span>
+                                <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
+                                  mdi-eye-outline
+                                </v-icon>
+                                <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
+                                  mdi-wrench
+                                </v-icon>
+                                <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
+                                  mdi-brain
+                                </v-icon>
+                                <span v-if="formatContextLimit(entry.metadata)">
+                                  {{ formatContextLimit(entry.metadata) }}
+                                </span>
                               </v-list-item-subtitle>
                               <template #append>
                                 <div class="d-flex align-center ga-1" @click.stop>
@@ -168,9 +181,23 @@
                               </template>
                             </v-list-item>
 
-                            <v-list-item v-else class="cursor-pointer"
-                              @click="addModelProvider(entry.model)">
+                            <v-list-item v-else class="cursor-pointer" @click="addModelProvider(entry.model)">
                               <v-list-item-title>{{ entry.model }}</v-list-item-title>
+                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
+                                <span>{{ entry.model }}</span>
+                                <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
+                                  mdi-eye-outline
+                                </v-icon>
+                                <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
+                                  mdi-wrench
+                                </v-icon>
+                                <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
+                                  mdi-brain
+                                </v-icon>
+                                <span v-if="formatContextLimit(entry.metadata)">
+                                  {{ formatContextLimit(entry.metadata) }}
+                                </span>
+                              </v-list-item-subtitle>
                               <template v-slot:append>
                                 <v-btn icon="mdi-plus" size="small" variant="text" color="primary"></v-btn>
                               </template>
@@ -344,6 +371,7 @@ const selectedProviderSource = ref(null)
 const selectedProviderSourceOriginalId = ref(null)
 const editableProviderSource = ref(null)
 const availableModels = ref([])
+const modelMetadata = ref({})
 const loadingModels = ref(false)
 const savingSource = ref(false)
 const testingProviders = ref([])
@@ -453,8 +481,10 @@ const existingModelsForSelectedSource = computed(() => {
 const sortedAvailableModels = computed(() => {
   const existing = existingModelsForSelectedSource.value
   return [...(availableModels.value || [])].sort((a, b) => {
-    const aExists = existing.has(a)
-    const bExists = existing.has(b)
+    const aName = typeof a === 'string' ? a : a?.name
+    const bName = typeof b === 'string' ? b : b?.name
+    const aExists = existing.has(aName)
+    const bExists = existing.has(bName)
     if (aExists && !bExists) return -1
     if (!aExists && bExists) return 1
     return 0
@@ -464,15 +494,23 @@ const sortedAvailableModels = computed(() => {
 const mergedModelEntries = computed(() => {
   const configuredEntries = (sourceProviders.value || []).map(provider => ({
     type: 'configured',
-    provider
+    provider,
+    metadata: getModelMetadata(provider.model)
   }))
 
   const availableEntries = (sortedAvailableModels.value || [])
-    .filter(model => !existingModelsForSelectedSource.value.has(model))
-    .map(model => ({
-      type: 'available',
-      model
-    }))
+    .filter(item => {
+      const name = typeof item === 'string' ? item : item?.name
+      return !existingModelsForSelectedSource.value.has(name)
+    })
+    .map(item => {
+      const name = typeof item === 'string' ? item : item?.name
+      return {
+        type: 'available',
+        model: name,
+        metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name)
+      }
+    })
 
   return [...configuredEntries, ...availableEntries]
 })
@@ -548,6 +586,32 @@ function resolveSourceIcon(source) {
   return getProviderIcon(source.provider) || ''
 }
 
+function getModelMetadata(modelName) {
+  if (!modelName) return null
+  return modelMetadata.value?.[modelName] || null
+}
+
+function supportsImageInput(meta) {
+  const inputs = meta?.modalities?.input || []
+  return inputs.includes('image')
+}
+
+function supportsToolCall(meta) {
+  return Boolean(meta?.tool_call)
+}
+
+function supportsReasoning(meta) {
+  return Boolean(meta?.reasoning)
+}
+
+function formatContextLimit(meta) {
+  const ctx = meta?.limit?.context
+  if (!ctx || typeof ctx !== 'number') return ''
+  if (ctx >= 1_000_000) return `${Math.round(ctx / 1_000_000)}M`
+  if (ctx >= 1_000) return `${Math.round(ctx / 1_000)}K`
+  return `${ctx}`
+}
+
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
   showProviderEditDialog.value = true
@@ -567,6 +631,7 @@ function selectProviderSource(source) {
     suppressSourceWatch = false
   })
   availableModels.value = []
+  modelMetadata.value = {}
   isSourceModified.value = false
   sourceProviderPanels.value = null
 }
@@ -582,13 +647,13 @@ function addProviderSource(templateKey) {
   // 使用模板中的默认 ID
   const newId = template.id
   const newSource = {
+    // 复制模板中的字段（排除 id, enable 等 provider 特有字段）
+    ...extractSourceFieldsFromTemplate(template),
     id: newId,
     type: template.type,
     provider_type: template.provider_type,
     provider: template.provider,
     enable: true,
-    // 复制模板中的字段（排除 id, enable, type, provider_type 等 provider 特有字段）
-    ...extractSourceFieldsFromTemplate(template)
   }
 
   providerSources.value.push(newSource)
@@ -602,9 +667,9 @@ function extractSourceFieldsFromTemplate(template) {
   // 从模板中提取 source 相关的字段
   const sourceFields = {}
   const excludeKeys = [
-    'id', 'enable', 'type', 'provider_type', 'model',
-    'provider_source_id', 'provider', 'hint', 'modalities',
-    'custom_extra_body', 'custom_headers'
+    'id', 'enable', 'model',
+    'provider_source_id', 'modalities',
+    'custom_extra_body'
   ]
 
   for (const [key, value] of Object.entries(template)) {
@@ -710,7 +775,12 @@ async function fetchAvailableModels() {
       `/api/config/provider_sources/${sourceId}/models`
     )
     if (response.data.status === 'ok') {
-      availableModels.value = response.data.data.models || []
+      const metadataMap = response.data.data.model_metadata || {}
+      modelMetadata.value = metadataMap
+      availableModels.value = (response.data.data.models || []).map(model => ({
+        name: model,
+        metadata: metadataMap?.[model] || null
+      }))
       if (availableModels.value.length === 0) {
         showMessage(tm('models.noModelsFound'), 'info')
       }
@@ -718,6 +788,7 @@ async function fetchAvailableModels() {
       throw new Error(response.data.message)
     }
   } catch (error) {
+    modelMetadata.value = {}
     showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
   } finally {
     loadingModels.value = false
@@ -729,12 +800,21 @@ async function addModelProvider(modelName) {
 
   const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
   const newId = `${sourceId}/${modelName}`
+
+  let modalities = ["text"]
+  if (supportsImageInput(getModelMetadata(modelName))) {
+    modalities.push("image")
+  }
+  if (supportsToolCall(getModelMetadata(modelName))) {
+    modalities.push("tool_use")
+  }
+
   const newProvider = {
     id: newId,
     enable: false,
     provider_source_id: sourceId,
     model: modelName,
-    modalities: [],
+    modalities: modalities,
     custom_extra_body: {}
   }
 
@@ -743,16 +823,12 @@ async function addModelProvider(modelName) {
     if (res.data.status === 'error') {
       throw new Error(res.data.message)
     }
-
-    if (Array.isArray(config.value.provider)) {
-      config.value.provider.push(newProvider)
-    } else {
-      config.value.provider = [newProvider]
-    }
-
+    config.value.provider.push(newProvider)
     showMessage(res.data.message || tm('models.addSuccess', { model: modelName }))
   } catch (error) {
     showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+  } finally {
+    await loadConfig()
   }
 }
 
@@ -790,27 +866,6 @@ async function testProvider(provider) {
   }
 }
 
-async function saveSingleProvider(provider) {
-  if (!provider) return
-
-  const exists = (config.value.provider || []).some(p => p.id === provider.id)
-  savingProviders.value.push(provider.id)
-  try {
-    const url = exists ? '/api/config/provider/update' : '/api/config/provider/new'
-    const payload = exists ? { id: provider.id, config: provider } : provider
-    const res = await axios.post(url, payload)
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
-    }
-    showMessage(res.data.message || tm('providerSources.saveSuccess'))
-    await loadConfig()
-  } catch (err) {
-    showMessage(err.response?.data?.message || err.message || tm('providerSources.saveError'), 'error')
-  } finally {
-    savingProviders.value = savingProviders.value.filter(id => id !== provider.id)
-  }
-}
-
 async function saveConfig() {
   try {
     config.value.provider_sources = providerSources.value
@@ -832,6 +887,7 @@ async function loadConfig() {
       config.value = response.data.data.config
       providerSources.value = config.value.provider_sources || []
       providers.value = config.value.provider || []
+      metadata.value = response.data.data.metadata
     }
   } catch (error) {
     showMessage(error.message || 'Failed to load config', 'error')
@@ -858,7 +914,6 @@ async function loadProviderTemplate() {
 onMounted(async () => {
   await loadConfig()
   await loadProviderTemplate()
-  await loadMetadata()
 })
 
 // 跟踪编辑中的 provider source 是否被修改
@@ -1178,17 +1233,6 @@ function getStatusText(status) {
     pending: tm('availability.pending')
   }
   return messages[status] || status
-}
-
-async function loadMetadata() {
-  try {
-    const response = await axios.get('/api/config/get')
-    if (response.data.status === 'ok') {
-      metadata.value = response.data.data.metadata
-    }
-  } catch (error) {
-    console.error('Failed to load metadata:', error)
-  }
 }
 
 function goToConfigPage() {

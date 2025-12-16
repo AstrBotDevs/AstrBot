@@ -20,6 +20,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
+from astrbot.core.utils.llm_metadata import LLM_METADATAS, update_llm_metadata
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
@@ -545,9 +546,18 @@ class ConfigRoute(Route):
 
         try:
             models = await provider.get_models()
+            models = models or []
+
+            metadata_map = {}
+            for model_id in models:
+                meta = LLM_METADATAS.get(model_id)
+                if meta:
+                    metadata_map[model_id] = meta
+
             ret = {
                 "models": models,
                 "provider_id": provider_id,
+                "model_metadata": metadata_map,
             }
             return Response().ok(ret).__dict__
         except Exception as e:
@@ -669,6 +679,13 @@ class ConfigRoute(Route):
 
             # 获取模型列表
             models = await inst.get_models()
+            models = models or []
+
+            metadata_map = {}
+            for model_id in models:
+                meta = LLM_METADATAS.get(model_id)
+                if meta:
+                    metadata_map[model_id] = meta
 
             # 销毁实例（如果有 terminate 方法）
             terminate_fn = getattr(inst, "terminate", None)
@@ -679,7 +696,11 @@ class ConfigRoute(Route):
                 f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
             )
 
-            return Response().ok({"models": models}).__dict__
+            return (
+                Response()
+                .ok({"models": models, "model_metadata": metadata_map})
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"获取模型列表失败: {e!s}").__dict__
@@ -735,6 +756,19 @@ class ConfigRoute(Route):
 
     async def post_new_provider(self):
         new_provider_config = await request.json
+
+        # check id uniqueness
+        npid = new_provider_config.get("id", None)
+        if not npid:
+            return Response().error("服务提供商配置缺少 id 字段").__dict__
+        for provider in self.config["provider"]:
+            if provider.get("id", None) == npid:
+                return (
+                    Response()
+                    .error(f"provider with ID '{npid}' already exists")
+                    .__dict__
+                )
+
         self.config["provider"].append(new_provider_config)
         try:
             save_config(self.config, self.config, is_core=True)

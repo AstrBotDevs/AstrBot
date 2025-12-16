@@ -50,12 +50,22 @@
 
                                 <v-text-field v-model="tempSelectedModelName" placeholder="自定义模型" hide-details solo variant="outlined" density="compact" class="mb-2 mx-2"></v-text-field>
 
-                                <v-list-item v-for="model in modelList" :key="model" :value="model"
-                                    @click="selectModel(model)" :active="tempSelectedModelName === model" rounded="lg"
+                                <v-list-item v-for="model in modelList" :key="model.name" :value="model.name"
+                                    @click="selectModel(model.name)" :active="tempSelectedModelName === model.name" rounded="lg"
                                     class="model-item">
-                                    <v-list-item-title>{{ model }}</v-list-item-title>
-                                    <v-list-item-subtitle v-if="model.description">{{ model.description
-                                        }}</v-list-item-subtitle>
+                                    <v-list-item-title>{{ model.name }}</v-list-item-title>
+                                    <v-list-item-subtitle v-if="model.metadata" class="text-caption text-grey metadata-line">
+                                        <v-icon v-if="supportsImageInput(model.metadata)" size="14" color="grey">
+                                            mdi-eye-outline
+                                        </v-icon>
+                                        <v-icon v-if="supportsToolCall(model.metadata)" size="14" color="grey">
+                                            mdi-wrench
+                                        </v-icon>
+                                        <v-icon v-if="supportsReasoning(model.metadata)" size="14" color="grey">
+                                            mdi-brain
+                                        </v-icon>
+                                        <span v-if="formatContextLimit(model.metadata)">{{ formatContextLimit(model.metadata) }}</span>
+                                    </v-list-item-subtitle>
                                 </v-list-item>
                             </v-list>
                             <div v-else class="empty-state">
@@ -104,6 +114,7 @@ export default {
             showDialog: false,
             providerConfigs: [],
             modelList: [],
+            modelMetadata: {},
             selectedProviderId: '',
             selectedModelName: '',
             // 临时选择状态，用于对话框内的选择
@@ -182,15 +193,22 @@ export default {
             })
                 .then(response => {
                     if (response.data.status === 'ok') {
-                        this.modelList = response.data.data.models || [];
+                        const metadataMap = response.data.data.model_metadata || {};
+                        this.modelMetadata = metadataMap;
+                        this.modelList = (response.data.data.models || []).map(name => ({
+                            name,
+                            metadata: metadataMap[name] || null
+                        }));
                     } else {
                         console.error('获取模型列表失败:', response.data.message);
                         this.modelList = [];
+                        this.modelMetadata = {};
                     }
                 })
                 .catch(error => {
                     console.error('获取模型列表失败:', error);
                     this.modelList = [];
+                    this.modelMetadata = {};
                 })
                 .finally(() => {
                     this.loadingModels = false;
@@ -202,6 +220,7 @@ export default {
             this.tempSelectedProviderId = provider.id;
             this.tempSelectedModelName = ''; // 清空已选择的模型
             this.modelList = []; // 清空模型列表
+            this.modelMetadata = {};
             this.getProviderModels(provider.id); // 获取该提供商的模型列表
         },
 
@@ -258,6 +277,27 @@ export default {
         openDialog() {
             this.resetTempSelection();
             this.showDialog = true;
+        },
+
+        supportsImageInput(meta) {
+            const inputs = meta?.modalities?.input || [];
+            return inputs.includes('image');
+        },
+
+        supportsToolCall(meta) {
+            return Boolean(meta?.tool_call);
+        },
+
+        supportsReasoning(meta) {
+            return Boolean(meta?.reasoning);
+        },
+
+        formatContextLimit(meta) {
+            const ctx = meta?.limit?.context;
+            if (!ctx || typeof ctx !== 'number') return '';
+            if (ctx >= 1_000_000) return `${Math.round(ctx / 1_000_000)}M`;
+            if (ctx >= 1_000) return `${Math.round(ctx / 1_000)}K`;
+            return `${ctx}`;
         },
 
         // 公开方法：获取当前选择
@@ -355,5 +395,11 @@ export default {
 .empty-text {
     font-size: 14px;
     color: var(--v-theme-secondaryText);
+}
+
+.metadata-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 </style>
