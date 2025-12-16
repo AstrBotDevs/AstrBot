@@ -521,9 +521,25 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_type").__dict__
         provider_type_ls = provider_type.split(",")
         provider_list = []
-        pc = self.core_lifecycle.provider_manager.merged_provider_config
-        for provider in pc.values():
-            if provider.get("provider_type", None) in provider_type_ls:
+        ps = self.core_lifecycle.provider_manager.providers_config
+        p_source_pt = {
+            psrc["id"]: psrc["provider_type"]
+            for psrc in self.core_lifecycle.provider_manager.provider_sources_config
+        }
+        for provider in ps:
+            ps_id = provider.get("provider_source_id", None)
+            if (
+                ps_id
+                and ps_id in p_source_pt
+                and p_source_pt[ps_id] in provider_type_ls
+            ):
+                # chat
+                prov = self.core_lifecycle.provider_manager.get_merged_provider_config(
+                    provider
+                )
+                provider_list.append(prov)
+            elif not ps_id and provider.get("provider_type", None) in provider_type_ls:
+                # agent runner, embedding, etc
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 
@@ -646,6 +662,14 @@ class ConfigRoute(Route):
             provider_type = provider_source.get("type", None)
             if not provider_type:
                 return Response().error("provider_source 缺少 type 字段").__dict__
+
+            try:
+                self.core_lifecycle.provider_manager.dynamic_import_provider(
+                    provider_type
+                )
+            except ImportError as e:
+                logger.error(traceback.format_exc())
+                return Response().error(f"动态导入提供商适配器失败: {e!s}").__dict__
 
             # 获取对应的 provider 类
             if provider_type not in provider_cls_map:
@@ -842,7 +866,7 @@ class ConfigRoute(Route):
 
     async def post_delete_provider(self):
         provider_id = await request.json
-        provider_id = provider_id.get("id")
+        provider_id = provider_id.get("id", "")
         for i, provider in enumerate(self.config["provider"]):
             if provider["id"] == provider_id:
                 del self.config["provider"][i]

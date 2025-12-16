@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import traceback
 from typing import Protocol, runtime_checkable
 
@@ -37,8 +38,6 @@ class ProviderManager:
         config = acm.confs["default"]
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
-        self.merged_provider_config: dict = {}
-        """合并 provider 和 provider_sources 配置后的结果"""
         self.provider_settings: dict = config["provider_settings"]
         self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
         self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
@@ -254,9 +253,117 @@ class ProviderManager:
         # 初始化 MCP Client 连接
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
-    async def load_provider(self, provider_config: dict):
-        # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
-        provider_source_id = provider_config.get("provider_source_id", "")
+    def dynamic_import_provider(self, type: str):
+        """动态导入提供商适配器模块
+
+        Args:
+            type (str): 提供商请求类型。
+
+        Raises:
+            ImportError: 如果提供商类型未知或无法导入对应模块，则抛出异常。
+        """
+        match type:
+            case "openai_chat_completion":
+                from .sources.openai_source import (
+                    ProviderOpenAIOfficial as ProviderOpenAIOfficial,
+                )
+            case "zhipu_chat_completion":
+                from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
+            case "groq_chat_completion":
+                from .sources.groq_source import ProviderGroq as ProviderGroq
+            case "anthropic_chat_completion":
+                from .sources.anthropic_source import (
+                    ProviderAnthropic as ProviderAnthropic,
+                )
+            case "googlegenai_chat_completion":
+                from .sources.gemini_source import (
+                    ProviderGoogleGenAI as ProviderGoogleGenAI,
+                )
+            case "sensevoice_stt_selfhost":
+                from .sources.sensevoice_selfhosted_source import (
+                    ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
+                )
+            case "openai_whisper_api":
+                from .sources.whisper_api_source import (
+                    ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
+                )
+            case "openai_whisper_selfhost":
+                from .sources.whisper_selfhosted_source import (
+                    ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
+                )
+            case "xinference_stt":
+                from .sources.xinference_stt_provider import (
+                    ProviderXinferenceSTT as ProviderXinferenceSTT,
+                )
+            case "openai_tts_api":
+                from .sources.openai_tts_api_source import (
+                    ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
+                )
+            case "edge_tts":
+                from .sources.edge_tts_source import (
+                    ProviderEdgeTTS as ProviderEdgeTTS,
+                )
+            case "gsv_tts_selfhost":
+                from .sources.gsv_selfhosted_source import (
+                    ProviderGSVTTS as ProviderGSVTTS,
+                )
+            case "gsvi_tts_api":
+                from .sources.gsvi_tts_source import (
+                    ProviderGSVITTS as ProviderGSVITTS,
+                )
+            case "fishaudio_tts_api":
+                from .sources.fishaudio_tts_api_source import (
+                    ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI,
+                )
+            case "dashscope_tts":
+                from .sources.dashscope_tts import (
+                    ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
+                )
+            case "azure_tts":
+                from .sources.azure_tts_source import (
+                    AzureTTSProvider as AzureTTSProvider,
+                )
+            case "minimax_tts_api":
+                from .sources.minimax_tts_api_source import (
+                    ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
+                )
+            case "volcengine_tts":
+                from .sources.volcengine_tts import (
+                    ProviderVolcengineTTS as ProviderVolcengineTTS,
+                )
+            case "gemini_tts":
+                from .sources.gemini_tts_source import (
+                    ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
+                )
+            case "openai_embedding":
+                from .sources.openai_embedding_source import (
+                    OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
+                )
+            case "gemini_embedding":
+                from .sources.gemini_embedding_source import (
+                    GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                )
+            case "vllm_rerank":
+                from .sources.vllm_rerank_source import (
+                    VLLMRerankProvider as VLLMRerankProvider,
+                )
+            case "xinference_rerank":
+                from .sources.xinference_rerank_source import (
+                    XinferenceRerankProvider as XinferenceRerankProvider,
+                )
+            case "bailian_rerank":
+                from .sources.bailian_rerank_source import (
+                    BailianRerankProvider as BailianRerankProvider,
+                )
+
+    def get_merged_provider_config(self, provider_config: dict) -> dict:
+        """获取 provider 配置和 provider_source 配置合并后的结果
+
+        Returns:
+            dict: 合并后的 provider 配置，key 为 provider id，value 为合并后的配置字典
+        """
+        pc = copy.deepcopy(provider_config)
+        provider_source_id = pc.get("provider_source_id", "")
         if provider_source_id:
             provider_source = None
             for ps in self.provider_sources_config:
@@ -266,12 +373,15 @@ class ProviderManager:
 
             if provider_source:
                 # 合并配置，provider 的配置优先级更高
-                merged_config = {**provider_source, **provider_config}
+                merged_config = {**provider_source, **pc}
                 # 保持 id 为 provider 的 id，而不是 source 的 id
-                merged_config["id"] = provider_config["id"]
-                provider_config = merged_config
+                merged_config["id"] = pc["id"]
+                pc = merged_config
+        return pc
 
-        self.merged_provider_config[provider_config["id"]] = provider_config
+    async def load_provider(self, provider_config: dict):
+        # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
+        provider_config = self.get_merged_provider_config(provider_config)
 
         if not provider_config["enable"]:
             logger.info(f"Provider {provider_config['id']} is disabled, skipping")
@@ -285,99 +395,7 @@ class ProviderManager:
 
         # 动态导入
         try:
-            match provider_config["type"]:
-                case "openai_chat_completion":
-                    from .sources.openai_source import (
-                        ProviderOpenAIOfficial as ProviderOpenAIOfficial,
-                    )
-                case "zhipu_chat_completion":
-                    from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
-                case "groq_chat_completion":
-                    from .sources.groq_source import ProviderGroq as ProviderGroq
-                case "anthropic_chat_completion":
-                    from .sources.anthropic_source import (
-                        ProviderAnthropic as ProviderAnthropic,
-                    )
-                case "googlegenai_chat_completion":
-                    from .sources.gemini_source import (
-                        ProviderGoogleGenAI as ProviderGoogleGenAI,
-                    )
-                case "sensevoice_stt_selfhost":
-                    from .sources.sensevoice_selfhosted_source import (
-                        ProviderSenseVoiceSTTSelfHost as ProviderSenseVoiceSTTSelfHost,
-                    )
-                case "openai_whisper_api":
-                    from .sources.whisper_api_source import (
-                        ProviderOpenAIWhisperAPI as ProviderOpenAIWhisperAPI,
-                    )
-                case "openai_whisper_selfhost":
-                    from .sources.whisper_selfhosted_source import (
-                        ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
-                    )
-                case "xinference_stt":
-                    from .sources.xinference_stt_provider import (
-                        ProviderXinferenceSTT as ProviderXinferenceSTT,
-                    )
-                case "openai_tts_api":
-                    from .sources.openai_tts_api_source import (
-                        ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
-                    )
-                case "edge_tts":
-                    from .sources.edge_tts_source import (
-                        ProviderEdgeTTS as ProviderEdgeTTS,
-                    )
-                case "gsv_tts_selfhost":
-                    from .sources.gsv_selfhosted_source import (
-                        ProviderGSVTTS as ProviderGSVTTS,
-                    )
-                case "gsvi_tts_api":
-                    from .sources.gsvi_tts_source import (
-                        ProviderGSVITTS as ProviderGSVITTS,
-                    )
-                case "fishaudio_tts_api":
-                    from .sources.fishaudio_tts_api_source import (
-                        ProviderFishAudioTTSAPI as ProviderFishAudioTTSAPI,
-                    )
-                case "dashscope_tts":
-                    from .sources.dashscope_tts import (
-                        ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
-                    )
-                case "azure_tts":
-                    from .sources.azure_tts_source import (
-                        AzureTTSProvider as AzureTTSProvider,
-                    )
-                case "minimax_tts_api":
-                    from .sources.minimax_tts_api_source import (
-                        ProviderMiniMaxTTSAPI as ProviderMiniMaxTTSAPI,
-                    )
-                case "volcengine_tts":
-                    from .sources.volcengine_tts import (
-                        ProviderVolcengineTTS as ProviderVolcengineTTS,
-                    )
-                case "gemini_tts":
-                    from .sources.gemini_tts_source import (
-                        ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
-                    )
-                case "openai_embedding":
-                    from .sources.openai_embedding_source import (
-                        OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
-                    )
-                case "gemini_embedding":
-                    from .sources.gemini_embedding_source import (
-                        GeminiEmbeddingProvider as GeminiEmbeddingProvider,
-                    )
-                case "vllm_rerank":
-                    from .sources.vllm_rerank_source import (
-                        VLLMRerankProvider as VLLMRerankProvider,
-                    )
-                case "xinference_rerank":
-                    from .sources.xinference_rerank_source import (
-                        XinferenceRerankProvider as XinferenceRerankProvider,
-                    )
-                case "bailian_rerank":
-                    from .sources.bailian_rerank_source import (
-                        BailianRerankProvider as BailianRerankProvider,
-                    )
+            self.dynamic_import_provider(provider_config["type"])
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",

@@ -29,14 +29,14 @@
         </v-tabs>
 
         <!-- Chat Completion: 左侧列表 + 右侧上下卡片布局 -->
-        <div v-if="selectedProviderType === 'chat_completion'">
-          <v-row class="mt-2">
+        <div v-if="selectedProviderType === 'chat_completion'" class="d-flex align-center justify-center">
+          <v-row style="max-width: 1500px; ">
             <v-col cols="12" md="4" lg="3" class="pr-md-4">
               <v-card class="provider-sources-panel h-100" elevation="0">
                 <div class="d-flex align-center justify-space-between px-4 pt-4 pb-2">
                   <div class="d-flex align-center ga-2">
                     <h3 class="mb-0">{{ tm('providerSources.title') }}</h3>
-                    <v-chip size="x-small" color="primary" variant="tonal">{{ filteredProviderSources.length }}</v-chip>
+                    <v-chip size="x-small" color="primary" variant="tonal">{{ displayedProviderSources.length }}</v-chip>
                   </div>
                   <v-menu>
                     <template v-slot:activator="{ props }">
@@ -54,11 +54,12 @@
                   </v-menu>
                 </div>
 
-                <div v-if="filteredProviderSources.length > 0">
+                <div v-if="displayedProviderSources.length > 0">
                   <v-list class="provider-source-list" nav density="compact" lines="two">
-                    <v-list-item v-for="source in filteredProviderSources" :key="source.id" :value="source.id"
-                      :active="selectedProviderSource?.id === source.id"
-                      :class="['provider-source-list-item', { 'provider-source-list-item--active': selectedProviderSource?.id === source.id }]"
+                    <v-list-item v-for="source in displayedProviderSources"
+                      :key="source.isPlaceholder ? `template-${source.templateKey}` : source.id" :value="source.id"
+                      :active="!source.isPlaceholder && selectedProviderSource?.id === source.id"
+                      :class="['provider-source-list-item', { 'provider-source-list-item--active': !source.isPlaceholder && selectedProviderSource?.id === source.id }]"
                       rounded="lg" @click="selectProviderSource(source)">
                       <template #prepend>
                         <v-avatar size="32" class="bg-grey-lighten-4" rounded="0">
@@ -66,12 +67,12 @@
                           <v-icon v-else size="32">mdi-creation</v-icon>
                         </v-avatar>
                       </template>
-                      <v-list-item-title class="font-weight-bold">{{ source.id }}</v-list-item-title>
+                      <v-list-item-title class="font-weight-bold">{{ getSourceDisplayName(source) }}</v-list-item-title>
                       <v-list-item-subtitle class="text-truncate">{{ source.api_base || 'N/A' }}</v-list-item-subtitle>
                       <template #append>
                         <div class="d-flex align-center ga-1">
-                          <v-btn icon="mdi-delete" variant="text" size="x-small" color="error"
-                            @click.stop="deleteProviderSource(source)"></v-btn>
+                          <v-btn v-if="!source.isPlaceholder" icon="mdi-delete" variant="text" size="x-small"
+                            color="error" @click.stop="deleteProviderSource(source)"></v-btn>
                         </div>
                       </template>
                     </v-list-item>
@@ -84,8 +85,8 @@
               </v-card>
             </v-col>
 
-            <v-col cols="12" md="8" lg="9" class="pl-md-2">
-              <v-card class="provider-config-card h-100" elevation="0">
+            <v-col cols="12" md="8" lg="9">
+              <v-card class="provider-config-card h-100" elevation="0" style="overflow-y: auto;">
                 <v-card-title class="d-flex align-center justify-space-between flex-wrap ga-3 pt-4 pl-5">
                   <div class="d-flex align-center ga-3" v-if="selectedProviderSource">
                     <div>
@@ -146,7 +147,7 @@
                               <v-list-item-title class="font-weight-medium text-truncate">
                                 {{ entry.provider.id }}
                               </v-list-item-title>
-                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
+                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1" style="font-family: monospace;">
                                 <span>{{ entry.provider.model }}</span>
                                 <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
                                   mdi-eye-outline
@@ -441,6 +442,32 @@ const filteredProviderSources = computed(() => {
   )
 })
 
+const displayedProviderSources = computed(() => {
+  const existing = filteredProviderSources.value || []
+  const existingProviders = new Set(existing.map(src => src.provider).filter(Boolean))
+  const placeholders = []
+
+  if (providerTemplates.value && Object.keys(providerTemplates.value).length > 0) {
+    for (const [templateKey, template] of Object.entries(providerTemplates.value)) {
+      if (template.provider_type !== selectedProviderType.value) continue
+      if (!template.provider) continue
+      if (existingProviders.has(template.provider)) continue
+
+      placeholders.push({
+        id: template.id || templateKey,
+        provider: template.provider,
+        provider_type: template.provider_type,
+        type: template.type,
+        api_base: template.api_base || '',
+        templateKey,
+        isPlaceholder: true
+      })
+    }
+  }
+
+  return [...existing, ...placeholders]
+})
+
 const sourceProviders = computed(() => {
   if (!selectedProviderSource.value || !providers.value) return []
 
@@ -586,6 +613,12 @@ function resolveSourceIcon(source) {
   return getProviderIcon(source.provider) || ''
 }
 
+function getSourceDisplayName(source) {
+  if (!source) return ''
+  if (source.isPlaceholder) return source.templateKey || source.id || ''
+  return source.id
+}
+
 function getModelMetadata(modelName) {
   if (!modelName) return null
   return modelMetadata.value?.[modelName] || null
@@ -623,6 +656,11 @@ function showMessage(message, color = 'success') {
 }
 
 function selectProviderSource(source) {
+  if (source?.isPlaceholder && source.templateKey) {
+    addProviderSource(source.templateKey)
+    return
+  }
+
   selectedProviderSource.value = source
   selectedProviderSourceOriginalId.value = source?.id || null
   suppressSourceWatch = true
@@ -660,6 +698,9 @@ function addProviderSource(templateKey) {
   selectedProviderSource.value = newSource
   selectedProviderSourceOriginalId.value = newId
   editableProviderSource.value = JSON.parse(JSON.stringify(newSource))
+  availableModels.value = []
+  modelMetadata.value = {}
+  sourceProviderPanels.value = null
   isSourceModified.value = true
 }
 
@@ -845,6 +886,8 @@ async function deleteProvider(provider) {
     showMessage(tm('models.deleteSuccess'))
   } catch (error) {
     showMessage(error.message || tm('models.deleteError'), 'error')
+  } finally {
+    await loadConfig()
   }
 }
 
@@ -854,10 +897,10 @@ async function testProvider(provider) {
     const response = await axios.get('/api/config/provider/check_one', {
       params: { id: provider.id }
     })
-    if (response.data.status === 'ok') {
+    if (response.data.status === 'ok' && response.data.data.error === null) {
       showMessage(tm('models.testSuccess', { id: provider.id }))
     } else {
-      throw new Error(response.data.message)
+      throw new Error(response.data.data.error || tm('models.testError'))
     }
   } catch (error) {
     showMessage(error.response?.data?.message || error.message || tm('models.testError'), 'error')
@@ -1254,7 +1297,7 @@ function goToConfigPage() {
 }
 
 .provider-source-list {
-  max-height: 620px;
+  max-height: calc(100vh - 335px);
   overflow-y: auto;
   padding: 6px 8px;
 }
@@ -1268,8 +1311,7 @@ function goToConfigPage() {
   border: 1px solid rgba(var(--v-theme-primary), 0.25);
 }
 
-.provider-config-card,
-.provider-models-card {
+.provider-config-card {
   min-height: 280px;
 }
 
@@ -1287,8 +1329,7 @@ function goToConfigPage() {
   }
 
   .provider-sources-panel,
-  .provider-config-card,
-  .provider-models-card {
+  .provider-config-card {
     min-height: auto;
   }
 }
