@@ -1,10 +1,10 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
+
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
 from pydantic_core import core_schema
-from typing_extensions import override
 
 
 class ContentPart(BaseModel):
@@ -166,12 +166,6 @@ class Message(BaseModel):
                 "content is required unless role='assistant' and tool_calls is not None"
             )
         return self
-
-    @override
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        if self.tool_calls is not None and not self.content:
-            kwargs.setdefault("exclude", set()).add("content")
-        return super().model_dump(**kwargs)
 
 
 class AssistantMessageSegment(Message):
