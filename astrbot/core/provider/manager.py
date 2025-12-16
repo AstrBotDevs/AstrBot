@@ -255,7 +255,6 @@ class ProviderManager:
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
     async def load_provider(self, provider_config: dict):
-
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_source_id = provider_config.get("provider_source_id", "")
         if provider_source_id:

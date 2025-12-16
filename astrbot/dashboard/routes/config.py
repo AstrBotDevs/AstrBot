@@ -20,8 +20,8 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
-from astrbot.core.utils.llm_metadata import LLM_METADATAS, update_llm_metadata
 from astrbot.core.star.star import star_registry
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext

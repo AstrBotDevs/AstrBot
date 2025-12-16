@@ -67,7 +67,7 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         if provider_type != "chat_completion":
             # For old types without provider_type, check type field
             old_type = provider.get("type", "")
-            if not ("chat_completion" in old_type):
+            if "chat_completion" not in old_type:
                 continue
 
         migrated = True
