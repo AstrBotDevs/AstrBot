@@ -42,7 +42,10 @@
       "paramName": "Parameter Name",
       "type": "Type",
       "description": "Description",
-      "required": "Required"
+      "required": "Required",
+      "origin": "Origin",
+      "originName": "Origin Name",
+      "actions": "Actions"
     }
   },
   "marketplace": {

@@ -121,7 +121,8 @@ import sidebarItems from '@/layouts/full/vertical-sidebar/sidebarItem';
 import { 
   getSidebarCustomization, 
   setSidebarCustomization, 
-  clearSidebarCustomization 
+  clearSidebarCustomization,
+  resolveSidebarItems
 } from '@/utils/sidebarCustomization';
 
 const { t } = useI18n();
@@ -133,35 +134,12 @@ const draggedItem = ref(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
-  
-  if (customization) {
-    // Load from customization
-    const allItemsMap = new Map();
-    
-    sidebarItems.forEach(item => {
-      if (item.children) {
-        item.children.forEach(child => {
-          allItemsMap.set(child.title, child);
-        });
-      } else {
-        allItemsMap.set(item.title, item);
-      }
-    });
-    
-    mainItems.value = customization.mainItems
-      .map(title => allItemsMap.get(title))
-      .filter(item => item);
-    
-    moreItems.value = customization.moreItems
-      .map(title => allItemsMap.get(title))
-      .filter(item => item);
-  } else {
-    // Load default structure
-    mainItems.value = sidebarItems.filter(item => !item.children);
-    
-    const moreGroup = sidebarItems.find(item => item.title === 'core.navigation.groups.more');
-    moreItems.value = moreGroup ? [...moreGroup.children] : [];
-  }
+  const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(
+    sidebarItems,
+    customization
+  );
+  mainItems.value = resolvedMain;
+  moreItems.value = resolvedMore;
 }
 
 function openDialog() {
