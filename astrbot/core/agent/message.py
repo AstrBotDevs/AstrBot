@@ -173,6 +173,7 @@ class Message(BaseModel):
             kwargs.setdefault("exclude", set()).add("content")
         return super().model_dump(**kwargs)
 
+
 class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
