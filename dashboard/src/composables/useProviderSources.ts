@@ -234,11 +234,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   })
 
   const filteredProviders = computed(() => {
-    if (!config.value.provider || selectedProviderType.value === 'chat_completion') {
+    if (!providers.value || selectedProviderType.value === 'chat_completion') {
       return []
     }
 
-    return config.value.provider.filter((provider: any) => getProviderType(provider) === selectedProviderType.value)
+    return providers.value.filter((provider: any) => getProviderType(provider) === selectedProviderType.value)
   })
 
   // ===== Watches =====
@@ -528,7 +528,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       if (res.data.status === 'error') {
         throw new Error(res.data.message)
       }
-      config.value.provider.push(newProvider)
+      providers.value.push(newProvider)
       showMessage(res.data.message || tm('models.addSuccess', { model: modelName }))
     } catch (error: any) {
       showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
@@ -572,17 +572,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    try {
-      const response = await axios.get('/api/config/get')
-      if (response.data.status === 'ok') {
-        config.value = response.data.data.config
-        providerSources.value = config.value.provider_sources || []
-        providers.value = config.value.provider || []
-        metadata.value = response.data.data.metadata
-      }
-    } catch (error: any) {
-      showMessage(error.message || 'Failed to load config', 'error')
-    }
+    loadProviderTemplate()
   }
 
   async function loadProviderTemplate() {
@@ -593,6 +583,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         if (configSchema.value.provider?.config_template) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
+        providerSources.value = response.data.data.provider_sources || []
+        providers.value = response.data.data.providers || []
       }
     } catch (error) {
       console.error('Failed to load provider template:', error)
@@ -604,7 +596,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   onMounted(async () => {
-    await loadConfig()
     await loadProviderTemplate()
   })
 

@@ -112,7 +112,7 @@ export default {
 
         // 按提供商类型获取模板列表
         getTemplatesByType(type) {
-            const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
+            const templates = this.metadata.provider.config_template || {};
             const filtered = {};
 
             for (const [name, template] of Object.entries(templates)) {

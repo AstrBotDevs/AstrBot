@@ -303,13 +303,13 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
-        provider_config = astrbot_config["provider"]
         config_schema = {
             "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
         }
         data = {
             "config_schema": config_schema,
-            "providers": provider_config,
+            "providers": astrbot_config["provider"],
+            "provider_sources": astrbot_config["provider_sources"],
         }
         return Response().ok(data=data).__dict__
 

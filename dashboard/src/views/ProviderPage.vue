@@ -125,7 +125,7 @@
           <v-row v-else>
             <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
               <item-card :item="provider" title-field="id" enabled-field="enable"
-                :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+                :loading="isProviderTesting(provider.id)" @toggle-enabled="toggleProviderEnable(provider, !provider.enable)"
                 :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
                 @copy="copyProvider" :show-copy-button="true">
 
@@ -162,7 +162,7 @@
     </v-container>
 
     <!-- 添加提供商对话框 -->
-    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="metadata"
+    <AddNewProvider v-model:show="showAddProviderDialog" :metadata="configSchema"
       @select-template="selectProviderTemplate" />
 
     <!-- 手动添加模型对话框 -->
@@ -186,7 +186,7 @@
       <v-card
         :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')">
         <v-card-text class="py-4">
-          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="metadata['provider_group']?.metadata"
+          <AstrBotConfig :iterable="newSelectedProviderConfig" :metadata="configSchema"
             metadataKey="provider" :is-editing="updatingMode" />
         </v-card-text>
 
@@ -289,8 +289,7 @@ function showMessage(message, color = 'success') {
 }
 
 const {
-  config,
-  metadata,
+  providers,
   selectedProviderType,
   selectedProviderSource,
   availableModels,
@@ -397,7 +396,7 @@ function selectProviderTemplate(name) {
   showProviderCfg.value = true
   updatingMode.value = false
   newSelectedProviderConfig.value = JSON.parse(JSON.stringify(
-    metadata.value['provider_group']?.metadata?.provider?.config_template[name] || {}
+    configSchema.value.provider.config_template[name] || {}
   ))
 }
 
@@ -407,7 +406,7 @@ function configExistingProvider(provider) {
   newSelectedProviderConfig.value = {}
 
   // 比对默认配置模版，看看是否有更新
-  let templates = metadata.value['provider_group']?.metadata?.provider?.config_template || {}
+  let templates = configSchema.value.provider.config_template || {}
   let defaultConfig = {}
   for (let key in templates) {
     if (templates[key]?.type === provider.type) {
@@ -523,7 +522,7 @@ async function copyProvider(providerToCopy) {
   const generateUniqueId = (baseId) => {
     let newId = `${baseId}_copy`
     let counter = 1
-    const existingIds = config.value.provider.map(p => p.id)
+    const existingIds = providers.value.map(p => p.id)
     while (existingIds.includes(newId)) {
       newId = `${baseId}_copy_${counter}`
       counter++
@@ -545,25 +544,6 @@ async function copyProvider(providerToCopy) {
   }
 }
 
-function providerStatusChange(provider) {
-  provider.enable = !provider.enable
-
-  axios.post('/api/config/provider/update', {
-    id: provider.id,
-    config: provider
-  }).then((res) => {
-    if (res.data.status === 'error') {
-      showMessage(res.data.message, 'error')
-      return
-    }
-    loadConfig()
-    showMessage(res.data.message || tm('messages.success.statusUpdate'))
-  }).catch((err) => {
-    provider.enable = !provider.enable
-    showMessage(err.response?.data?.message || err.message, 'error')
-  })
-}
-
 async function toggleProviderEnable(provider, value) {
   provider.enable = value
 
@@ -576,11 +556,11 @@ async function toggleProviderEnable(provider, value) {
     if (res.data.status === 'error') {
       throw new Error(res.data.message)
     }
-
     showMessage(res.data.message || tm('messages.success.statusUpdate'))
   } catch (error) {
-    provider.enable = !value
     showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
+  } finally {
+    await loadConfig()
   }
 }
 
