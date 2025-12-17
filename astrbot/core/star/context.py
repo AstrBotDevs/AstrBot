@@ -89,7 +89,7 @@ class Context:
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> LLMResponse:
         """Call the LLM to generate a response. The method will not automatically execute tool calls. If you want to use tool calls, please use `tool_loop_agent()`.
 
@@ -133,7 +133,7 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
         If you do not pass the agent_context parameter, the method will recreate a new agent context.
@@ -491,8 +491,8 @@ class Context:
         desc: str,
         priority: int,
         awaitable: Callable[..., Awaitable[Any]],
-        use_regex=False,
-        ignore_prefix=False,
+        use_regex: bool = False,
+        ignore_prefix: bool = False,
     ) -> None:
         """注册一个命令。
 
