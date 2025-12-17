@@ -6,6 +6,8 @@ from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
 from pydantic_core import core_schema
+from typing_extensions import Unpack
+from pydantic.config import ConfigDict
 
 
 class ContentPart(BaseModel):
@@ -15,7 +17,7 @@ class ContentPart(BaseModel):
 
     type: str
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
+    def __init_subclass__(cls, **kwargs: Unpack[ConfigDict]) -> None:
         super().__init_subclass__(**kwargs)
 
         invalid_subclass_error_msg = f"ContentPart subclass {cls.__name__} must have a `type` field of type `str`"
