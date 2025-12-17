@@ -178,7 +178,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_mcp(
         cls,
-        tool: FunctionTool[object],
+        tool: FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args: object,
     ) -> T.AsyncGenerator[mcp.types.CallToolResult, None]:
