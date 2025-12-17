@@ -515,15 +515,15 @@ class PluginManager:
                             need_apply = [func_tool]
 
                         for ft in need_apply:
-                            if (
-                                ft.handler
-                                and ft.handler.__module__ == metadata.module_path
-                            ):
+                            if ft.handler:
+                                if ft.handler.__module__ == metadata.module_path:
+                                    ft.handler_module_path = metadata.module_path
+                                    ft.handler = functools.partial(
+                                        ft.handler,
+                                        metadata.star_cls,  # type: ignore
+                                    )
+                            elif ft.__module__ == metadata.module_path:
                                 ft.handler_module_path = metadata.module_path
-                                ft.handler = functools.partial(
-                                    ft.handler,
-                                    metadata.star_cls,  # type: ignore
-                                )
                             if ft.name in inactivated_llm_tools:
                                 ft.active = False
 
