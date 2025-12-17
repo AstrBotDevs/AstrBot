@@ -6,6 +6,7 @@ from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
 from pydantic.config import ConfigDict
+from pydantic.main import IncEx
 from pydantic_core import core_schema
 from typing_extensions import Unpack
 
@@ -125,10 +126,35 @@ class ToolCall(BaseModel):
     extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+    def model_dump(
+        self,
+        *,
+        mode: Literal["json", "python"] | str = "python",
+        include: IncEx | None = None,
+        exclude: IncEx | None = None,
+        by_alias: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        round_trip: bool = False,
+        warnings: bool | Literal["none", "warn", "error"] = True,
+        serialize_as_any: bool = False,
+    ) -> dict[str, Any]:
+        data = super().model_dump(
+            mode=mode,
+            include=include,
+            exclude=exclude,
+            by_alias=by_alias,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+            exclude_none=exclude_none,
+            round_trip=round_trip,
+            warnings=warnings,
+            serialize_as_any=serialize_as_any,
+        )
         if self.extra_content is None:
-            kwargs.setdefault("exclude", set()).add("extra_content")
-        return super().model_dump(**kwargs)
+            data.pop("extra_content", None)
+        return data
 
 
 class ToolCallPart(BaseModel):
