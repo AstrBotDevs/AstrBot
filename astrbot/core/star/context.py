@@ -1,7 +1,7 @@
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from deprecated import deprecated
 
@@ -117,7 +117,7 @@ class Context:
             func_tool=tools,
             contexts=contexts,
             system_prompt=system_prompt,
-            **kwargs,
+            **cast(dict[str, Any], kwargs),
         )
         return llm_resp
 
@@ -170,8 +170,18 @@ class Context:
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
 
-        agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
-        agent_context = kwargs.get("agent_context")
+        _kw = cast(dict[str, Any], kwargs)
+        agent_hooks_obj = _kw.get("agent_hooks")
+        if isinstance(agent_hooks_obj, BaseAgentRunHooks):
+            agent_hooks = cast(BaseAgentRunHooks[Any], agent_hooks_obj)
+        else:
+            agent_hooks = BaseAgentRunHooks[AstrAgentContext]()
+
+        agent_context_obj = _kw.get("agent_context")
+        if isinstance(agent_context_obj, AstrAgentContext):
+            agent_context = agent_context_obj
+        else:
+            agent_context = None
 
         context_ = []
         for msg in contexts or []:
@@ -203,7 +213,7 @@ class Context:
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
-            streaming=kwargs.get("stream", False),
+            streaming=bool(_kw.get("stream", False)),
         )
         async for _ in agent_runner.step_until_done(max_steps):
             pass

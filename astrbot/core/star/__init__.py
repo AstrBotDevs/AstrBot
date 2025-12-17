@@ -1,5 +1,3 @@
-from typing import Any
-
 from astrbot.core import html_renderer
 from astrbot.core.provider import Provider
 from astrbot.core.star.star_tools import StarTools
@@ -21,7 +19,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         StarTools.initialize(context)
         self.context = context
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         if not star_map.get(cls.__module__):
             metadata = StarMetadata(
