@@ -1,6 +1,11 @@
 import asyncio
 import threading
 import typing as T
+
+try:
+    from typing import Unpack  # type: ignore[attr-defined]
+except ImportError:
+    from typing_extensions import Unpack
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
@@ -172,7 +177,7 @@ class SQLiteDatabase(BaseDatabase):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs: T.Unpack[FilterKwargs],
+        **kwargs: Unpack[FilterKwargs],
     ) -> tuple[list[ConversationV2], int]:
         async with self.get_db() as session:
             session: AsyncSession
