@@ -119,7 +119,7 @@ class RespondStage(Stage):
 
         if (result := event.get_result()) is None:
             return False
-        if self.only_llm_result and result.is_llm_result():
+        if self.only_llm_result and not result.is_llm_result():
             return False
 
         if event.get_platform_name() in [
