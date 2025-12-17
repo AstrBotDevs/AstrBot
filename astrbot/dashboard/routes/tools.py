@@ -3,6 +3,7 @@ import traceback
 from quart import request
 
 from astrbot.core import logger
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 
@@ -296,15 +297,30 @@ class ToolsRoute(Route):
         """获取所有注册的工具列表"""
         try:
             tools = self.tool_mgr.func_list
-            tools_dict = [
-                {
+            tools_dict = []
+            for tool in tools:
+                if isinstance(tool, MCPTool):
+                    origin = "mcp"
+                    origin_name = tool.mcp_server_name
+                elif tool.handler_module_path and star_map.get(
+                    tool.handler_module_path
+                ):
+                    star = star_map[tool.handler_module_path]
+                    origin = "plugin"
+                    origin_name = star.name
+                else:
+                    origin = "unknown"
+                    origin_name = "unknown"
+
+                tool_info = {
                     "name": tool.name,
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,
+                    "origin": origin,
+                    "origin_name": origin_name,
                 }
-                for tool in tools
-            ]
+                tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())

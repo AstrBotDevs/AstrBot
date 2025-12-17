@@ -304,16 +304,32 @@ function hasVisibleItemsAfter(items, currentIndex) {
                   hide-details
                 ></v-text-field>
 
-                <!-- Numeric input -->
-                <v-text-field
+                <!-- Numeric input with optional slider -->
+                <div
                   v-else-if="(metadata[metadataKey].items[key]?.type === 'int' || metadata[metadataKey].items[key]?.type === 'float') && !metadata[metadataKey]?.invisible"
-                  v-model="iterable[key]"
-                  density="compact"
-                  variant="outlined"
-                  class="config-field"
-                  type="number"
-                  hide-details
-                ></v-text-field>
+                  class="d-flex align-center gap-3"
+                >
+                  <v-slider
+                    v-if="metadata[metadataKey].items[key]?.slider"
+                    v-model.number="iterable[key]"
+                    :min="metadata[metadataKey].items[key]?.slider?.min ?? 0"
+                    :max="metadata[metadataKey].items[key]?.slider?.max ?? 100"
+                    :step="metadata[metadataKey].items[key]?.slider?.step ?? 1"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    class="flex-grow-1"
+                  ></v-slider>
+                  <v-text-field
+                    v-model.number="iterable[key]"
+                    density="compact"
+                    variant="outlined"
+                    class="config-field"
+                    type="number"
+                    hide-details
+                    style="max-width: 140px;"
+                  ></v-text-field>
+                </div>
 
                 <!-- Text area -->
                 <v-textarea
@@ -413,16 +429,32 @@ function hasVisibleItemsAfter(items, currentIndex) {
               hide-details
             ></v-text-field>
 
-            <!-- Numeric input -->
-            <v-text-field
+            <!-- Numeric input with optional slider -->
+            <div
               v-else-if="(metadata[metadataKey]?.type === 'int' || metadata[metadataKey]?.type === 'float') && !metadata[metadataKey]?.invisible"
-              v-model="iterable[metadataKey]"
-              density="compact"
-              variant="outlined"
-              class="config-field"
-              type="number"
-              hide-details
-            ></v-text-field>
+              class="d-flex align-center gap-3"
+            >
+              <v-slider
+                v-if="metadata[metadataKey]?.slider"
+                v-model.number="iterable[metadataKey]"
+                :min="metadata[metadataKey]?.slider?.min ?? 0"
+                :max="metadata[metadataKey]?.slider?.max ?? 100"
+                :step="metadata[metadataKey]?.slider?.step ?? 1"
+                color="primary"
+                density="compact"
+                hide-details
+                class="flex-grow-1"
+              ></v-slider>
+              <v-text-field
+                v-model.number="iterable[metadataKey]"
+                density="compact"
+                variant="outlined"
+                class="config-field"
+                type="number"
+                hide-details
+                style="max-width: 140px;"
+              ></v-text-field>
+            </div>
 
             <!-- Text area -->
             <v-textarea

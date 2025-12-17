@@ -71,6 +71,7 @@ class AdminCommands:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
 
     async def update_dashboard(self, event: AstrMessageEvent):
+        """更新管理面板"""
         await event.send(MessageChain().message("正在尝试更新管理面板..."))
         await download_dashboard(version=f"v{VERSION}", latest=False)
         await event.send(MessageChain().message("管理面板更新完成。"))

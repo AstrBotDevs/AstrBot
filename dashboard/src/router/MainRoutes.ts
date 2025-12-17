@@ -32,11 +32,6 @@ const MainRoutes = {
       component: () => import('@/views/ProviderPage.vue')
     },
     {
-      name: 'ToolUsePage',
-      path: '/tool-use',
-      component: () => import('@/views/ToolUsePage.vue')
-    },
-    {
       name: 'Configs',
       path: '/config',
       component: () => import('@/views/ConfigPage.vue')

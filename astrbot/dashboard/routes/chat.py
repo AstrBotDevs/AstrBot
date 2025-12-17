@@ -338,8 +338,10 @@ class ChatRoute(Route):
                             chain_type = result.get("chain_type", "normal")
                             if chain_type == "reasoning":
                                 accumulated_reasoning += result_text
-                            else:
+                            elif streaming:
                                 accumulated_text += result_text
+                            else:
+                                accumulated_text = result_text
                         elif msg_type == "image":
                             filename = result_text.replace("[IMAGE]", "")
                             part = await self._create_attachment_from_file(

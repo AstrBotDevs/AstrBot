@@ -81,7 +81,12 @@ class LarkPlatformAdapter(Platform):
         )
 
         self.lark_api = (
-            lark.Client.builder().app_id(self.appid).app_secret(self.appsecret).build()
+            lark.Client.builder()
+            .app_id(self.appid)
+            .app_secret(self.appsecret)
+            .log_level(lark.LogLevel.ERROR)
+            .domain(self.domain)
+            .build()
         )
 
         self.webhook_server = None

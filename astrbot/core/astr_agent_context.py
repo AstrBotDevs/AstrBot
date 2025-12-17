@@ -6,8 +6,10 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.context import Context
 
 
-@dataclass(config={"arbitrary_types_allowed": True})
+@dataclass
 class AstrAgentContext:
+    __pydantic_config__ = {"arbitrary_types_allowed": True}
+
     context: Context
     """The star context instance"""
     event: AstrMessageEvent

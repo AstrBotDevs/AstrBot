@@ -1,7 +1,9 @@
 import json
 import traceback
+from datetime import datetime
+from io import BytesIO
 
-from quart import request
+from quart import request, send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -30,6 +32,7 @@ class ConversationRoute(Route):
                 "POST",
                 self.update_history,
             ),
+            "/conversation/export": ("POST", self.export_conversations),
         }
         self.db_helper = db_helper
         self.conv_mgr = core_lifecycle.conversation_manager
@@ -283,3 +286,90 @@ class ConversationRoute(Route):
         except Exception as e:
             logger.error(f"更新对话历史失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新对话历史失败: {e!s}").__dict__
+
+    async def export_conversations(self):
+        """批量导出对话为 JSONL 格式"""
+        try:
+            data = await request.get_json()
+            conversations_to_export = data.get("conversations", [])
+
+            if not conversations_to_export:
+                return Response().error("导出列表不能为空").__dict__
+
+            # 收集所有对话的内容
+            jsonl_lines = []
+            exported_count = 0
+            failed_items = []
+
+            for conv_info in conversations_to_export:
+                user_id = conv_info.get("user_id")
+                cid = conv_info.get("cid")
+
+                if not user_id or not cid:
+                    failed_items.append(
+                        f"user_id:{user_id}, cid:{cid} - 缺少必要参数",
+                    )
+                    continue
+
+                try:
+                    conversation = await self.conv_mgr.get_conversation(
+                        unified_msg_origin=user_id,
+                        conversation_id=cid,
+                    )
+
+                    if not conversation:
+                        failed_items.append(
+                            f"user_id:{user_id}, cid:{cid} - 对话不存在"
+                        )
+                        continue
+
+                    # 解析对话内容 (history is always a JSON string from _convert_conv_from_v2_to_v1)
+                    content = json.loads(conversation.history)
+
+                    # 创建导出记录
+                    export_record = {
+                        "cid": cid,
+                        "user_id": user_id,
+                        "platform_id": conversation.platform_id,
+                        "title": conversation.title,
+                        "persona_id": conversation.persona_id,
+                        "created_at": conversation.created_at,
+                        "updated_at": conversation.updated_at,
+                        "content": content,
+                    }
+
+                    # 将记录转换为 JSON 字符串并添加到 JSONL
+                    jsonl_lines.append(json.dumps(export_record, ensure_ascii=False))
+                    exported_count += 1
+
+                except Exception as e:
+                    failed_items.append(f"user_id:{user_id}, cid:{cid} - {e!s}")
+                    logger.error(
+                        f"导出对话失败: user_id={user_id}, cid={cid}, error={e!s}"
+                    )
+
+            if exported_count == 0:
+                return Response().error("没有成功导出任何对话").__dict__
+
+            # 创建 JSONL 内容
+            jsonl_content = "\n".join(jsonl_lines)
+
+            # 创建一个内存文件对象
+            file_obj = BytesIO(jsonl_content.encode("utf-8"))
+            file_obj.seek(0)
+
+            # 生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"astrbot_conversations_export_{timestamp}.jsonl"
+
+            # 返回文件流
+            return await send_file(
+                file_obj,
+                mimetype="application/jsonl",
+                as_attachment=True,
+                attachment_filename=filename,
+            )
+
+        except Exception as e:
+            logger.error(f"批量导出对话失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"批量导出对话失败: {e!s}").__dict__

@@ -23,6 +23,7 @@ from astrbot.core.utils.astrbot_path import (
 from astrbot.core.utils.io import remove_dir
 
 from . import StarMetadata
+from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
@@ -467,6 +468,18 @@ class PluginManager:
                             metadata.star_cls = metadata.star_cls_type(
                                 context=self.context,
                             )
+
+                        p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                        p_author = (
+                            (metadata.author or "unknown").lower().replace("/", "_")
+                        )
+                        setattr(metadata.star_cls, "name", p_name)
+                        setattr(metadata.star_cls, "author", p_author)
+                        setattr(
+                            metadata.star_cls,
+                            "plugin_id",
+                            f"{p_author}/{p_name}",
+                        )
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
@@ -618,6 +631,7 @@ class PluginManager:
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
+        await sync_command_configs()
 
         if not fail_rec:
             return True, None
