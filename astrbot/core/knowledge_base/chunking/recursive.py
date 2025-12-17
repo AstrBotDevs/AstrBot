@@ -39,7 +39,13 @@ class RecursiveCharacterChunker(BaseChunker):
             "",  # 字符
         ]
 
-    async def chunk(self, text: str, **kwargs: object) -> list[str]:
+    async def chunk(
+        self,
+        text: str,
+        *,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+    ) -> list[str]:
         """递归地将文本分割成块
 
         Args:
@@ -54,8 +60,11 @@ class RecursiveCharacterChunker(BaseChunker):
         if not text:
             return []
 
-        overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
-        chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        overlap = self.chunk_overlap if chunk_overlap is None else chunk_overlap
+        chunk_size = self.chunk_size if chunk_size is None else chunk_size
+        if chunk_size <= 0:
+            return [text]
+        overlap = max(0, min(overlap, chunk_size - 1))
 
         text_length = self.length_function(text)
         if text_length <= chunk_size:
