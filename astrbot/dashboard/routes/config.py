@@ -193,8 +193,66 @@ class ConfigRoute(Route):
                 "POST",
                 self.update_provider_source,
             ),
+            "/config/provider_sources/<provider_source_id>/delete": (
+                "POST",
+                self.delete_provider_source,
+            ),
         }
         self.register_routes()
+
+    async def delete_provider_source(self, provider_source_id: str):
+        """删除 provider_source，并更新关联的 providers"""
+
+        provider_sources = self.config.get("provider_sources", [])
+        target_idx = next(
+            (
+                i
+                for i, ps in enumerate(provider_sources)
+                if ps.get("id") == provider_source_id
+            ),
+            -1,
+        )
+
+        if target_idx == -1:
+            return Response().error("未找到对应的 provider source").__dict__
+
+        # 删除 provider_source
+        del provider_sources[target_idx]
+
+        # 更新引用了该 provider_source 的 providers
+        affected_providers = []
+        for provider in self.config.get("provider", []):
+            if provider.get("provider_source_id") == provider_source_id:
+                provider["provider_source_id"] = None
+                affected_providers.append(provider)
+
+        # 写回配置
+        self.config["provider_sources"] = provider_sources
+
+        try:
+            save_config(self.config, self.config, is_core=True)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+        # 重载受影响的 providers，使新的 source 配置生效
+        reload_errors = []
+        prov_mgr = self.core_lifecycle.provider_manager
+        for provider in affected_providers:
+            try:
+                await prov_mgr.reload(provider)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                reload_errors.append(f"{provider.get('id')}: {e}")
+
+        if reload_errors:
+            return (
+                Response()
+                .error("删除成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+                .__dict__
+            )
+
+        return Response().ok(message="删除 provider source 成功").__dict__
 
     async def update_provider_source(self, provider_source_id: str):
         """更新或新增 provider_source，并重载关联的 providers"""
@@ -740,7 +798,15 @@ class ConfigRoute(Route):
         data = await request.json
         config = data.get("config", None)
         conf_id = data.get("conf_id", None)
+
         try:
+            # 不更新 provider_sources, provider, platform
+            # 这些配置有单独的接口进行更新
+            if conf_id == "default":
+                no_update_keys = ["provider_sources", "provider", "platform"]
+                for key in no_update_keys:
+                    config[key] = self.acm.default_conf[key]
+
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
             return Response().ok(None, "保存成功~").__dict__

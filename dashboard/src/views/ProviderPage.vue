@@ -32,56 +32,17 @@
         <div v-if="selectedProviderType === 'chat_completion'" class="d-flex align-center justify-center">
           <v-row style="max-width: 1500px; ">
             <v-col cols="12" md="4" lg="3" class="pr-md-4">
-              <v-card class="provider-sources-panel h-100" elevation="0">
-                <div class="d-flex align-center justify-space-between px-4 pt-4 pb-2">
-                  <div class="d-flex align-center ga-2">
-                    <h3 class="mb-0">{{ tm('providerSources.title') }}</h3>
-                  </div>
-                  <v-menu>
-                    <template v-slot:activator="{ props }">
-                      <v-btn v-bind="props" prepend-icon="mdi-plus" color="primary" variant="tonal" rounded="xl"
-                        size="small">
-                        新增
-                      </v-btn>
-                    </template>
-                    <v-list density="compact">
-                      <v-list-item v-for="sourceType in availableSourceTypes" :key="sourceType.value"
-                        @click="addProviderSource(sourceType.value)">
-                        <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
-                      </v-list-item>
-                    </v-list>
-                  </v-menu>
-                </div>
-
-                <div v-if="displayedProviderSources.length > 0">
-                  <v-list class="provider-source-list" nav density="compact" lines="two">
-                    <v-list-item v-for="source in displayedProviderSources"
-                      :key="source.isPlaceholder ? `template-${source.templateKey}` : source.id" :value="source.id"
-                      :active="!source.isPlaceholder && selectedProviderSource?.id === source.id"
-                      :class="['provider-source-list-item', { 'provider-source-list-item--active': !source.isPlaceholder && selectedProviderSource?.id === source.id }]"
-                      rounded="lg" @click="selectProviderSource(source)">
-                      <template #prepend>
-                        <v-avatar size="32" class="bg-grey-lighten-4" rounded="0">
-                          <v-img v-if="source?.provider" :src="resolveSourceIcon(source)" alt="logo" cover></v-img>
-                          <v-icon v-else size="32">mdi-creation</v-icon>
-                        </v-avatar>
-                      </template>
-                      <v-list-item-title class="font-weight-bold">{{ getSourceDisplayName(source) }}</v-list-item-title>
-                      <v-list-item-subtitle class="text-truncate">{{ source.api_base || 'N/A' }}</v-list-item-subtitle>
-                      <template #append>
-                        <div class="d-flex align-center ga-1">
-                          <v-btn v-if="!source.isPlaceholder" icon="mdi-delete" variant="text" size="x-small"
-                            color="error" @click.stop="deleteProviderSource(source)"></v-btn>
-                        </div>
-                      </template>
-                    </v-list-item>
-                  </v-list>
-                </div>
-                <div v-else class="text-center py-8 px-4">
-                  <v-icon size="48" color="grey-lighten-1">mdi-api-off</v-icon>
-                  <p class="text-grey mt-2">{{ tm('providerSources.empty') }}</p>
-                </div>
-              </v-card>
+              <ProviderSourcesPanel
+                :displayed-provider-sources="displayedProviderSources"
+                :selected-provider-source="selectedProviderSource"
+                :available-source-types="availableSourceTypes"
+                :tm="tm"
+                :resolve-source-icon="resolveSourceIcon"
+                :get-source-display-name="getSourceDisplayName"
+                @add-provider-source="addProviderSource"
+                @select-provider-source="selectProviderSource"
+                @delete-provider-source="deleteProviderSource"
+              />
             </v-col>
 
             <v-col cols="12" md="8" lg="9">
@@ -122,102 +83,26 @@
                       </v-expansion-panel>
                     </v-expansion-panels>
 
-                    <div class="mt-4">
-                      <div class="d-flex align-center ga-2 mb-2">
-                        <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
-                        <small style="color: grey;" v-if="availableModels.length">{{ tm('models.available') }} {{
-                          availableModels.length }}</small>
-                        <v-text-field v-model="modelSearch" density="compact" prepend-inner-icon="mdi-magnify"
-                          hide-details variant="solo-filled" flat class="ml-1" style="max-width: 240px;"
-                          :placeholder="tm('models.searchPlaceholder')" />
-                        <v-spacer></v-spacer>
-                        <v-btn color="primary" prepend-icon="mdi-download" :loading="loadingModels"
-                          @click="fetchAvailableModels" variant="tonal" size="small">
-                          {{ isSourceModified ? tm('providerSources.saveAndFetchModels') :
-                            tm('providerSources.fetchModels') }}
-                        </v-btn>
-                        <v-btn color="primary" prepend-icon="mdi-pencil-plus" variant="text" size="small"
-                          class="ml-1" @click="openManualModelDialog">
-                          {{ tm('models.manualAddButton') }}
-                        </v-btn>
-                      </div>
-
-                      <v-list density="compact" class="rounded-lg border"
-                        style="max-height: 520px; overflow-y: auto; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;">
-                        <template v-if="filteredMergedModelEntries.length > 0">
-                          <template v-for="entry in filteredMergedModelEntries"
-                            :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
-                            <v-list-item v-if="entry.type === 'configured'" class="provider-compact-item"
-                              @click="openProviderEdit(entry.provider)">
-                              <v-list-item-title class="font-weight-medium text-truncate">
-                                {{ entry.provider.id }}
-                              </v-list-item-title>
-                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1" style="font-family: monospace;">
-                                <span>{{ entry.provider.model }}</span>
-                                <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
-                                  mdi-eye-outline
-                                </v-icon>
-                                <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
-                                  mdi-wrench
-                                </v-icon>
-                                <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
-                                  mdi-brain
-                                </v-icon>
-                                <span v-if="formatContextLimit(entry.metadata)">
-                                  {{ formatContextLimit(entry.metadata) }}
-                                </span>
-                              </v-list-item-subtitle>
-                              <template #append>
-                                <div class="d-flex align-center ga-1" @click.stop>
-                                  <v-switch v-model="entry.provider.enable" density="compact" inset hide-details
-                                    color="primary" class="mr-1"
-                                    @update:modelValue="toggleProviderEnable(entry.provider, $event)"></v-switch>
-                                  <v-tooltip location="top" max-width="300">
-                                    {{ tm('availability.test') }}
-                                    <template v-slot:activator="{ props }">
-                                      <v-btn icon="mdi-wrench" size="small" variant="text" :disabled="!entry.provider.enable"
-                                        :loading="testingProviders.includes(entry.provider.id)" v-bind="props"
-                                        @click.stop="testProvider(entry.provider)"></v-btn>
-                                    </template>
-                                  </v-tooltip>
-
-                                  <v-btn icon="mdi-delete" size="small" variant="text" color="error"
-                                    @click.stop="deleteProvider(entry.provider)"></v-btn>
-                                </div>
-                              </template>
-                            </v-list-item>
-
-                            <v-list-item v-else class="cursor-pointer" @click="addModelProvider(entry.model)">
-                              <v-list-item-title>{{ entry.model }}</v-list-item-title>
-                              <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
-                                <span>{{ entry.model }}</span>
-                                <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
-                                  mdi-eye-outline
-                                </v-icon>
-                                <v-icon v-if="supportsToolCall(entry.metadata)" size="14" color="grey">
-                                  mdi-wrench
-                                </v-icon>
-                                <v-icon v-if="supportsReasoning(entry.metadata)" size="14" color="grey">
-                                  mdi-brain
-                                </v-icon>
-                                <span v-if="formatContextLimit(entry.metadata)">
-                                  {{ formatContextLimit(entry.metadata) }}
-                                </span>
-                              </v-list-item-subtitle>
-                              <template v-slot:append>
-                                <v-btn icon="mdi-plus" size="small" variant="text" color="primary"></v-btn>
-                              </template>
-                            </v-list-item>
-                          </template>
-                        </template>
-                        <template v-else>
-                          <div class="text-center pa-4 text-medium-emphasis">
-                            <v-icon size="48" color="grey-lighten-1">mdi-package-variant</v-icon>
-                            <p class="text-grey mt-2">{{ tm('models.empty') }}</p>
-                          </div>
-                        </template>
-                      </v-list>
-                    </div>
+                    <ProviderModelsPanel
+                      :entries="filteredMergedModelEntries"
+                      :available-count="availableModels.length"
+                      v-model:model-search="modelSearch"
+                      :loading-models="loadingModels"
+                      :is-source-modified="isSourceModified"
+                      :supports-image-input="supportsImageInput"
+                      :supports-tool-call="supportsToolCall"
+                      :supports-reasoning="supportsReasoning"
+                      :format-context-limit="formatContextLimit"
+                      :testing-providers="testingProviders"
+                      :tm="tm"
+                      @fetch-models="fetchAvailableModels"
+                      @open-manual-model="openManualModelDialog"
+                      @open-provider-edit="openProviderEdit"
+                      @toggle-provider-enable="toggleProviderEnable"
+                      @test-provider="testProvider"
+                      @delete-provider="deleteProvider"
+                      @add-model-provider="addModelProvider"
+                    />
                   </template>
                   <div v-else class="text-center py-8 text-medium-emphasis">
                     <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
@@ -371,13 +256,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ItemCard from '@/components/shared/ItemCard.vue'
 import AddNewProvider from '@/components/provider/AddNewProvider.vue'
+import ProviderModelsPanel from '@/components/provider/ProviderModelsPanel.vue'
+import ProviderSourcesPanel from '@/components/provider/ProviderSourcesPanel.vue'
+import { useProviderSources } from '@/composables/useProviderSources'
 import { getProviderIcon } from '@/utils/providerUtils'
 
 const props = defineProps({
@@ -390,24 +278,59 @@ const props = defineProps({
 const { tm } = useModuleI18n('features/provider')
 const router = useRouter()
 
-// ===== State =====
-const config = ref({})
-const metadata = ref({})
-const providerSources = ref([])
-const providers = ref([])
-const selectedProviderType = ref(resolveDefaultTab(props.defaultTab))
-const selectedProviderSource = ref(null)
-const selectedProviderSourceOriginalId = ref(null)
-const editableProviderSource = ref(null)
-const availableModels = ref([])
-const modelMetadata = ref({})
-const loadingModels = ref(false)
-const savingSource = ref(false)
-const testingProviders = ref([])
-const savingProviders = ref([])
-const isSourceModified = ref(false)
-const configSchema = ref({})
-const providerTemplates = ref({})
+const snackbar = ref({
+  show: false,
+  message: '',
+  color: 'success'
+})
+
+function showMessage(message, color = 'success') {
+  snackbar.value = { show: true, message, color }
+}
+
+const {
+  config,
+  metadata,
+  selectedProviderType,
+  selectedProviderSource,
+  availableModels,
+  loadingModels,
+  savingSource,
+  testingProviders,
+  isSourceModified,
+  configSchema,
+  manualModelId,
+  modelSearch,
+  providerTypes,
+  availableSourceTypes,
+  displayedProviderSources,
+  filteredMergedModelEntries,
+  filteredProviders,
+  basicSourceConfig,
+  advancedSourceConfig,
+  manualProviderId,
+  resolveSourceIcon,
+  getSourceDisplayName,
+  supportsImageInput,
+  supportsToolCall,
+  supportsReasoning,
+  formatContextLimit,
+  updateDefaultTab,
+  selectProviderSource,
+  addProviderSource,
+  deleteProviderSource,
+  saveProviderSource,
+  fetchAvailableModels,
+  addModelProvider,
+  deleteProvider,
+  modelAlreadyConfigured,
+  testProvider,
+  loadConfig,
+} = useProviderSources({
+  defaultTab: props.defaultTab,
+  tm,
+  showMessage
+})
 
 // 非 chat 类型的状态
 const showAddProviderDialog = ref(false)
@@ -418,312 +341,11 @@ const updatingMode = ref(false)
 const loading = ref(false)
 const providerStatuses = ref([])
 const showAgentRunnerDialog = ref(false)
-const sourceProviderPanels = ref(null)
 const showProviderEditDialog = ref(false)
 const providerEditData = ref(null)
 const showManualModelDialog = ref(false)
-const manualModelId = ref('')
-const modelSearch = ref('')
 
-let suppressSourceWatch = false
-
-const snackbar = ref({
-  show: false,
-  message: '',
-  color: 'success'
-})
-
-// ===== Provider Types =====
-const providerTypes = [
-  { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
-  { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
-  { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
-  { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
-  { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
-  { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
-]
-
-// ===== Computed =====
-const availableSourceTypes = computed(() => {
-  // 从 providerTemplates 中动态获取可用的 source types
-  if (!providerTemplates.value || Object.keys(providerTemplates.value).length === 0) {
-    return []
-  }
-
-  const types = []
-  for (const [templateName, template] of Object.entries(providerTemplates.value)) {
-    // 根据 provider_type 筛选
-    if (template.provider_type === selectedProviderType.value) {
-      types.push({
-        value: templateName,  // 使用 key 作为 value
-        label: templateName
-      })
-    }
-  }
-
-  return types
-})
-
-const filteredProviderSources = computed(() => {
-  if (!providerSources.value) return []
-
-  return providerSources.value.filter(source =>
-    source.provider_type === selectedProviderType.value ||
-    (source.type && isTypeMatchingProviderType(source.type, selectedProviderType.value))
-  )
-})
-
-const displayedProviderSources = computed(() => {
-  const existing = filteredProviderSources.value || []
-  const existingProviders = new Set(existing.map(src => src.provider).filter(Boolean))
-  const placeholders = []
-
-  if (providerTemplates.value && Object.keys(providerTemplates.value).length > 0) {
-    for (const [templateKey, template] of Object.entries(providerTemplates.value)) {
-      if (template.provider_type !== selectedProviderType.value) continue
-      if (!template.provider) continue
-      if (existingProviders.has(template.provider)) continue
-
-      placeholders.push({
-        id: template.id || templateKey,
-        provider: template.provider,
-        provider_type: template.provider_type,
-        type: template.type,
-        api_base: template.api_base || '',
-        templateKey,
-        isPlaceholder: true
-      })
-    }
-  }
-
-  return [...existing, ...placeholders]
-})
-
-const sourceProviders = computed(() => {
-  if (!selectedProviderSource.value || !providers.value) return []
-
-  return providers.value.filter(p =>
-    p.provider_source_id === selectedProviderSource.value.id
-  )
-})
-
-const chatProviders = computed(() => {
-  if (!providers.value) return []
-
-  return providers.value.filter(provider => {
-    const type = getProviderType(provider)
-    if (type === 'chat_completion') return true
-
-    const source = providerSources.value.find(s => s.id === provider.provider_source_id)
-    if (!source) return false
-
-    return source.provider_type === 'chat_completion' || isTypeMatchingProviderType(source.type, 'chat_completion')
-  })
-})
-
-const displayedChatProviders = computed(() => {
-  if (!chatProviders.value) return []
-
-  if (selectedProviderSource.value) {
-    return chatProviders.value.filter(p => p.provider_source_id === selectedProviderSource.value.id)
-  }
-
-  return chatProviders.value
-})
-
-const existingModelsForSelectedSource = computed(() => {
-  if (!selectedProviderSource.value) return new Set()
-  return new Set(sourceProviders.value.map(p => p.model))
-})
-
-const sortedAvailableModels = computed(() => {
-  const existing = existingModelsForSelectedSource.value
-  return [...(availableModels.value || [])].sort((a, b) => {
-    const aName = typeof a === 'string' ? a : a?.name
-    const bName = typeof b === 'string' ? b : b?.name
-    const aExists = existing.has(aName)
-    const bExists = existing.has(bName)
-    if (aExists && !bExists) return -1
-    if (!aExists && bExists) return 1
-    return 0
-  })
-})
-
-const mergedModelEntries = computed(() => {
-  const configuredEntries = (sourceProviders.value || []).map(provider => ({
-    type: 'configured',
-    provider,
-    metadata: getModelMetadata(provider.model)
-  }))
-
-  const availableEntries = (sortedAvailableModels.value || [])
-    .filter(item => {
-      const name = typeof item === 'string' ? item : item?.name
-      return !existingModelsForSelectedSource.value.has(name)
-    })
-    .map(item => {
-      const name = typeof item === 'string' ? item : item?.name
-      return {
-        type: 'available',
-        model: name,
-        metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name)
-      }
-    })
-
-  return [...configuredEntries, ...availableEntries]
-})
-
-const filteredMergedModelEntries = computed(() => {
-  const term = modelSearch.value.trim().toLowerCase()
-  if (!term) return mergedModelEntries.value
-
-  return mergedModelEntries.value.filter(entry => {
-    if (entry.type === 'configured') {
-      const id = entry.provider.id?.toLowerCase() || ''
-      const model = entry.provider.model?.toLowerCase() || ''
-      return id.includes(term) || model.includes(term)
-    }
-
-    const model = entry.model?.toLowerCase() || ''
-    return model.includes(term)
-  })
-})
-
-const manualProviderId = computed(() => {
-  if (!selectedProviderSource.value) return ''
-  const modelId = manualModelId.value.trim()
-  if (!modelId) return ''
-  return `${selectedProviderSource.value.id}/${modelId}`
-})
-
-// 基础配置：只包含常用字段
-const basicSourceConfig = computed(() => {
-  if (!editableProviderSource.value) return null
-
-  const fields = ['id', 'key', 'api_base']
-  const basic = {}
-
-  fields.forEach(field => {
-    Object.defineProperty(basic, field, {
-      get() {
-        return editableProviderSource.value[field]
-      },
-      set(val) {
-        editableProviderSource.value[field] = val
-      },
-      enumerable: true
-    })
-  })
-
-  return basic
-})
-
-// 高级配置：过滤掉基础字段
-const advancedSourceConfig = computed(() => {
-  if (!editableProviderSource.value) return null
-
-  const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type', "provider"]
-  const advanced = {}
-
-  for (const key of Object.keys(editableProviderSource.value)) {
-    if (excluded.includes(key)) continue
-    Object.defineProperty(advanced, key, {
-      get() {
-        return editableProviderSource.value[key]
-      },
-      set(val) {
-        editableProviderSource.value[key] = val
-      },
-      enumerable: true
-    })
-  }
-
-  return advanced
-})
-
-// 非 chat 类型的 providers
-const filteredProviders = computed(() => {
-  if (!config.value.provider || selectedProviderType.value === 'chat_completion') {
-    return []
-  }
-
-  return config.value.provider.filter(provider => {
-    return getProviderType(provider) === selectedProviderType.value
-  })
-})
-
-// ===== Helper Functions =====
-function isTypeMatchingProviderType(type, providerType) {
-  // 根据 type 判断是否匹配 provider_type
-  if (providerType === 'chat_completion') {
-    return type && type.includes('chat_completion')
-  }
-  return type && type.includes(providerType)
-}
-
-function resolveDefaultTab(value) {
-  const normalized = (value || '').toLowerCase()
-
-  if (normalized.startsWith('select_agent_runner_provider') || normalized === 'agent_runner') {
-    return 'agent_runner'
-  }
-
-  if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
-    return 'speech_to_text'
-  }
-
-  if (normalized === 'select_provider_tts' || normalized === 'text_to_speech' || normalized.includes('tts')) {
-    return 'text_to_speech'
-  }
-
-  if (normalized.includes('embedding')) {
-    return 'embedding'
-  }
-
-  if (normalized.includes('rerank')) {
-    return 'rerank'
-  }
-
-  return 'chat_completion'
-}
-
-function resolveSourceIcon(source) {
-  if (!source) return ''
-
-  return getProviderIcon(source.provider) || ''
-}
-
-function getSourceDisplayName(source) {
-  if (!source) return ''
-  if (source.isPlaceholder) return source.templateKey || source.id || ''
-  return source.id
-}
-
-function getModelMetadata(modelName) {
-  if (!modelName) return null
-  return modelMetadata.value?.[modelName] || null
-}
-
-function supportsImageInput(meta) {
-  const inputs = meta?.modalities?.input || []
-  return inputs.includes('image')
-}
-
-function supportsToolCall(meta) {
-  return Boolean(meta?.tool_call)
-}
-
-function supportsReasoning(meta) {
-  return Boolean(meta?.reasoning)
-}
-
-function formatContextLimit(meta) {
-  const ctx = meta?.limit?.context
-  if (!ctx || typeof ctx !== 'number') return ''
-  if (ctx >= 1_000_000) return `${Math.round(ctx / 1_000_000)}M`
-  if (ctx >= 1_000) return `${Math.round(ctx / 1_000)}K`
-  return `${ctx}`
-}
+const savingProviders = ref([])
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
@@ -757,356 +379,11 @@ async function confirmManualModel() {
   showManualModelDialog.value = false
 }
 
-// ===== Methods =====
-function showMessage(message, color = 'success') {
-  snackbar.value = { show: true, message, color }
-}
-
-function selectProviderSource(source) {
-  if (source?.isPlaceholder && source.templateKey) {
-    addProviderSource(source.templateKey)
-    return
-  }
-
-  selectedProviderSource.value = source
-  selectedProviderSourceOriginalId.value = source?.id || null
-  suppressSourceWatch = true
-  editableProviderSource.value = source ? JSON.parse(JSON.stringify(source)) : null
-  nextTick(() => {
-    suppressSourceWatch = false
-  })
-  availableModels.value = []
-  modelMetadata.value = {}
-  isSourceModified.value = false
-  sourceProviderPanels.value = null
-}
-
-function addProviderSource(templateKey) {
-  // 从模板中找到对应的配置，使用 key 而不是 type
-  const template = providerTemplates.value[templateKey]
-  if (!template) {
-    showMessage('未找到对应的模板配置', 'error')
-    return
-  }
-
-  // 使用模板中的默认 ID
-  const newId = template.id
-  const newSource = {
-    // 复制模板中的字段（排除 id, enable 等 provider 特有字段）
-    ...extractSourceFieldsFromTemplate(template),
-    id: newId,
-    type: template.type,
-    provider_type: template.provider_type,
-    provider: template.provider,
-    enable: true,
-  }
-
-  providerSources.value.push(newSource)
-  selectedProviderSource.value = newSource
-  selectedProviderSourceOriginalId.value = newId
-  editableProviderSource.value = JSON.parse(JSON.stringify(newSource))
-  availableModels.value = []
-  modelMetadata.value = {}
-  sourceProviderPanels.value = null
-  isSourceModified.value = true
-}
-
-function extractSourceFieldsFromTemplate(template) {
-  // 从模板中提取 source 相关的字段
-  const sourceFields = {}
-  const excludeKeys = [
-    'id', 'enable', 'model',
-    'provider_source_id', 'modalities',
-    'custom_extra_body'
-  ]
-
-  for (const [key, value] of Object.entries(template)) {
-    if (!excludeKeys.includes(key)) {
-      sourceFields[key] = value
-    }
-  }
-
-  return sourceFields
-}
-
-async function deleteProviderSource(source) {
-  if (!confirm(tm('providerSources.deleteConfirm', { id: source.id }))) return
-
-  try {
-    // 删除关联的 providers
-    providers.value = providers.value.filter(p => p.provider_source_id !== source.id)
-    // 删除 provider source
-    providerSources.value = providerSources.value.filter(s => s.id !== source.id)
-
-    if (selectedProviderSource.value?.id === source.id) {
-      selectedProviderSource.value = null
-      selectedProviderSourceOriginalId.value = null
-      editableProviderSource.value = null
-      sourceProviderPanels.value = null
-    }
-
-    await saveConfig()
-    showMessage(tm('providerSources.deleteSuccess'))
-  } catch (error) {
-    showMessage(error.message || tm('providerSources.deleteError'), 'error')
-  }
-}
-
-async function saveProviderSource() {
-  if (!selectedProviderSource.value) return
-
-  savingSource.value = true
-  const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id
-  try {
-    const response = await axios.post(
-      `/api/config/provider_sources/${originalId}/update`,
-      {
-        config: editableProviderSource.value,
-        original_id: originalId
-      }
-    )
-
-    if (response.data.status !== 'ok') {
-      throw new Error(response.data.message)
-    }
-
-    if (editableProviderSource.value.id !== originalId) {
-      providers.value = providers.value.map(p =>
-        p.provider_source_id === originalId
-          ? { ...p, provider_source_id: editableProviderSource.value.id }
-          : p
-      )
-      selectedProviderSourceOriginalId.value = editableProviderSource.value.id
-    }
-
-    // 同步列表中的当前 source，并保持选中
-    const idx = providerSources.value.findIndex(ps => ps.id === originalId)
-    if (idx !== -1) {
-      providerSources.value[idx] = JSON.parse(JSON.stringify(editableProviderSource.value))
-      selectedProviderSource.value = providerSources.value[idx]
-    }
-
-    // 重新建立可编辑副本
-    suppressSourceWatch = true
-    editableProviderSource.value = selectedProviderSource.value
-    nextTick(() => {
-      suppressSourceWatch = false
-    })
-
-    isSourceModified.value = false
-    showMessage(response.data.message || tm('providerSources.saveSuccess'))
-    return true
-  } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
-    return false
-  } finally {
-    savingSource.value = false
-  }
-}
-
-
-async function fetchAvailableModels() {
-  if (!selectedProviderSource.value) return
-
-  // 如果配置被修改，先保存
-  if (isSourceModified.value) {
-    const saved = await saveProviderSource()
-    if (!saved) {
-      return
-    }
-  }
-
-  loadingModels.value = true
-  try {
-    const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-    const response = await axios.get(
-      `/api/config/provider_sources/${sourceId}/models`
-    )
-    if (response.data.status === 'ok') {
-      const metadataMap = response.data.data.model_metadata || {}
-      modelMetadata.value = metadataMap
-      availableModels.value = (response.data.data.models || []).map(model => ({
-        name: model,
-        metadata: metadataMap?.[model] || null
-      }))
-      if (availableModels.value.length === 0) {
-        showMessage(tm('models.noModelsFound'), 'info')
-      }
-    } else {
-      throw new Error(response.data.message)
-    }
-  } catch (error) {
-    modelMetadata.value = {}
-    showMessage(error.response?.data?.message || error.message || tm('models.fetchError'), 'error')
-  } finally {
-    loadingModels.value = false
-  }
-}
-
-async function addModelProvider(modelName) {
-  if (!selectedProviderSource.value) return
-
-  const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-  const newId = `${sourceId}/${modelName}`
-
-  let modalities = ["text"]
-  if (supportsImageInput(getModelMetadata(modelName))) {
-    modalities.push("image")
-  }
-  if (supportsToolCall(getModelMetadata(modelName))) {
-    modalities.push("tool_use")
-  }
-
-  const newProvider = {
-    id: newId,
-    enable: false,
-    provider_source_id: sourceId,
-    model: modelName,
-    modalities: modalities,
-    custom_extra_body: {}
-  }
-
-  try {
-    const res = await axios.post('/api/config/provider/new', newProvider)
-    if (res.data.status === 'error') {
-      throw new Error(res.data.message)
-    }
-    config.value.provider.push(newProvider)
-    showMessage(res.data.message || tm('models.addSuccess', { model: modelName }))
-  } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm('providerSources.saveError'), 'error')
-  } finally {
-    await loadConfig()
-  }
-}
-
-function modelAlreadyConfigured(modelName) {
-  return existingModelsForSelectedSource.value.has(modelName)
-}
-
-async function deleteProvider(provider) {
-  if (!confirm(tm('models.deleteConfirm', { id: provider.id }))) return
-
-  try {
-    await axios.post('/api/config/provider/delete', { id: provider.id })
-    providers.value = providers.value.filter(p => p.id !== provider.id)
-    showMessage(tm('models.deleteSuccess'))
-  } catch (error) {
-    showMessage(error.message || tm('models.deleteError'), 'error')
-  } finally {
-    await loadConfig()
-  }
-}
-
-async function testProvider(provider) {
-  testingProviders.value.push(provider.id)
-  try {
-    const response = await axios.get('/api/config/provider/check_one', {
-      params: { id: provider.id }
-    })
-    if (response.data.status === 'ok' && response.data.data.error === null) {
-      showMessage(tm('models.testSuccess', { id: provider.id }))
-    } else {
-      throw new Error(response.data.data.error || tm('models.testError'))
-    }
-  } catch (error) {
-    showMessage(error.response?.data?.message || error.message || tm('models.testError'), 'error')
-  } finally {
-    testingProviders.value = testingProviders.value.filter(id => id !== provider.id)
-  }
-}
-
-async function saveConfig() {
-  try {
-    config.value.provider_sources = providerSources.value
-    config.value.provider = providers.value
-
-    await axios.post('/api/config/astrbot/update', {
-      config: config.value,
-      conf_id: 'default'
-    })
-  } catch (error) {
-    throw error
-  }
-}
-
-async function loadConfig() {
-  try {
-    const response = await axios.get('/api/config/get')
-    if (response.data.status === 'ok') {
-      config.value = response.data.data.config
-      providerSources.value = config.value.provider_sources || []
-      providers.value = config.value.provider || []
-      metadata.value = response.data.data.metadata
-    }
-  } catch (error) {
-    showMessage(error.message || 'Failed to load config', 'error')
-  }
-}
-
-
-async function loadProviderTemplate() {
-  try {
-    const response = await axios.get('/api/config/provider/template')
-    if (response.data.status === 'ok') {
-      configSchema.value = response.data.data.config_schema || {}
-      // 从 config_schema 中提取 provider templates
-      if (configSchema.value.provider?.config_template) {
-        providerTemplates.value = configSchema.value.provider.config_template
-      }
-    }
-  } catch (error) {
-    console.error('Failed to load provider template:', error)
-  }
-}
-
-// ===== Lifecycle =====
-onMounted(async () => {
-  await loadConfig()
-  await loadProviderTemplate()
-})
-
 watch(() => props.defaultTab, (val) => {
-  selectedProviderType.value = resolveDefaultTab(val)
+  updateDefaultTab(val)
 })
-
-// 跟踪编辑中的 provider source 是否被修改
-watch(editableProviderSource, () => {
-  if (suppressSourceWatch) return
-  if (!editableProviderSource.value) return
-  isSourceModified.value = true
-}, { deep: true })
 
 // ===== 非 chat 类型的方法 =====
-function getProviderType(provider) {
-  if (!provider) return undefined
-  if (provider.provider_type) {
-    return provider.provider_type
-  }
-  // 兼容旧版本的 mapping
-  const oldVersionProviderTypeMapping = {
-    "openai_chat_completion": "chat_completion",
-    "anthropic_chat_completion": "chat_completion",
-    "googlegenai_chat_completion": "chat_completion",
-    "zhipu_chat_completion": "chat_completion",
-    "dify": "agent_runner",
-    "coze": "agent_runner",
-    "dashscope": "chat_completion",
-    "openai_whisper_api": "speech_to_text",
-    "openai_whisper_selfhost": "speech_to_text",
-    "sensevoice_stt_selfhost": "speech_to_text",
-    "openai_tts_api": "text_to_speech",
-    "edge_tts": "text_to_speech",
-    "gsvi_tts_api": "text_to_speech",
-    "fishaudio_tts_api": "text_to_speech",
-    "dashscope_tts": "text_to_speech",
-    "azure_tts": "text_to_speech",
-    "minimax_tts_api": "text_to_speech",
-    "volcengine_tts": "text_to_speech",
-  }
-  return oldVersionProviderTypeMapping[provider.type]
-}
-
 function getEmptyText() {
   return tm('providers.empty.typed', { type: selectedProviderType.value })
 }
@@ -1403,43 +680,11 @@ function goToConfigPage() {
   padding-bottom: 40px;
 }
 
-.provider-sources-panel {
-  min-height: 320px;
-}
-
-.provider-source-list {
-  max-height: calc(100vh - 335px);
-  overflow-y: auto;
-  padding: 6px 8px;
-}
-
-.provider-source-list-item {
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.provider-source-list-item--active {
-  background-color: #E8F0FE;
-  border: 1px solid rgba(var(--v-theme-primary), 0.25);
-}
-
 .provider-config-card {
   min-height: 280px;
 }
 
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.border {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
 @media (max-width: 960px) {
-  .provider-source-list {
-    max-height: none;
-  }
-
-  .provider-sources-panel,
   .provider-config-card {
     min-height: auto;
   }
