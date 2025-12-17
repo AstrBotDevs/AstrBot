@@ -852,16 +852,19 @@ class ConfigRoute(Route):
 
     async def post_update_platform(self):
         update_platform_config = await request.json
-        platform_id = update_platform_config.get("id", None)
+        origin_platform_id = update_platform_config.get("id", None)
         new_config = update_platform_config.get("config", None)
-        if not platform_id or not new_config:
+        if not origin_platform_id or not new_config:
             return Response().error("参数错误").__dict__
+        
+        if origin_platform_id != new_config.get("id", None):
+            return Response().error("机器人名称不允许修改").__dict__
 
         # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
         ensure_platform_webhook_config(new_config)
 
         for i, platform in enumerate(self.config["platform"]):
-            if platform["id"] == platform_id:
+            if platform["id"] == origin_platform_id:
                 self.config["platform"][i] = new_config
                 break
         else:
