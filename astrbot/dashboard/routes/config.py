@@ -856,7 +856,7 @@ class ConfigRoute(Route):
         new_config = update_platform_config.get("config", None)
         if not origin_platform_id or not new_config:
             return Response().error("参数错误").__dict__
-        
+
         if origin_platform_id != new_config.get("id", None):
             return Response().error("机器人名称不允许修改").__dict__
 
