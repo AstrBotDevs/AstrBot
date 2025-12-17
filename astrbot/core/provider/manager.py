@@ -33,6 +33,7 @@ class ProviderManager:
         persona_mgr: PersonaManager,
     ):
         self.reload_lock = asyncio.Lock()
+        self.delete_lock = asyncio.Lock()
         self.persona_mgr = persona_mgr
         self.acm = acm
         config = acm.confs["default"]
@@ -609,6 +610,27 @@ class ProviderManager:
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
             )
             del self.inst_map[provider_id]
+
+    async def delete_provider(
+        self, provider_id: str | None = None, provider_source_id: str | None = None
+    ):
+        async with self.delete_lock:
+            # delete from config
+            target_prov_ids = []
+            if provider_id:
+                target_prov_ids.append(provider_id)
+            else:
+                for prov in self.providers_config:
+                    if prov.get("provider_source_id") == provider_source_id:
+                        target_prov_ids.append(prov.get("id"))
+            config = self.acm.default_conf
+            for tpid in target_prov_ids:
+                await self.terminate_provider(tpid)
+                config["provider"] = [
+                    prov for prov in config["provider"] if prov.get("id") != tpid
+                ]
+            config.save_config()
+            logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
 
     async def terminate(self):
         for provider_inst in self.provider_insts:

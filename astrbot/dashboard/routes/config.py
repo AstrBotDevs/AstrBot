@@ -219,38 +219,19 @@ class ConfigRoute(Route):
         # 删除 provider_source
         del provider_sources[target_idx]
 
-        # 更新引用了该 provider_source 的 providers
-        affected_providers = []
-        for provider in self.config.get("provider", []):
-            if provider.get("provider_source_id") == provider_source_id:
-                provider["provider_source_id"] = None
-                affected_providers.append(provider)
-
         # 写回配置
         self.config["provider_sources"] = provider_sources
+
+        # 删除引用了该 provider_source 的 providers
+        await self.core_lifecycle.provider_manager.delete_provider(
+            provider_source_id=provider_source_id
+        )
 
         try:
             save_config(self.config, self.config, is_core=True)
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
-
-        # 重载受影响的 providers，使新的 source 配置生效
-        reload_errors = []
-        prov_mgr = self.core_lifecycle.provider_manager
-        for provider in affected_providers:
-            try:
-                await prov_mgr.reload(provider)
-            except Exception as e:
-                logger.error(traceback.format_exc())
-                reload_errors.append(f"{provider.get('id')}: {e}")
-
-        if reload_errors:
-            return (
-                Response()
-                .error("删除成功，但部分提供商重载失败: " + ", ".join(reload_errors))
-                .__dict__
-            )
 
         return Response().ok(message="删除 provider source 成功").__dict__
 
@@ -895,13 +876,28 @@ class ConfigRoute(Route):
 
     async def post_update_provider(self):
         update_provider_config = await request.json
-        provider_id = update_provider_config.get("id", None)
+        origin_provider_id = update_provider_config.get("id", None)
         new_config = update_provider_config.get("config", None)
-        if not provider_id or not new_config:
+        if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
 
+        # check id uniqueness
+        npid = new_config.get("id", None)
+        if not npid:
+            return Response().error("服务提供商配置缺少 id 字段").__dict__
+        for provider in self.config["provider"]:
+            if (
+                provider.get("id", None) == npid
+                and provider.get("id", None) != origin_provider_id
+            ):
+                return (
+                    Response()
+                    .error(f"provider with ID '{npid}' already exists")
+                    .__dict__
+                )
+
         for i, provider in enumerate(self.config["provider"]):
-            if provider["id"] == provider_id:
+            if provider["id"] == origin_provider_id:
                 self.config["provider"][i] = new_config
                 break
         else:
@@ -933,18 +929,16 @@ class ConfigRoute(Route):
     async def post_delete_provider(self):
         provider_id = await request.json
         provider_id = provider_id.get("id", "")
-        for i, provider in enumerate(self.config["provider"]):
-            if provider["id"] == provider_id:
-                del self.config["provider"][i]
-                break
-        else:
-            return Response().error("未找到对应服务提供商").__dict__
+        if not provider_id:
+            return Response().error("缺少参数 id").__dict__
+
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.terminate_provider(provider_id)
+            await self.core_lifecycle.provider_manager.delete_provider(
+                provider_id=provider_id
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
-        return Response().ok(None, "删除成功，已经实时生效~").__dict__
+        return Response().ok(None, "删除成功，已经实时生效。").__dict__
 
     async def get_llm_tools(self):
         """获取函数调用工具。包含了本地加载的以及 MCP 服务的工具"""

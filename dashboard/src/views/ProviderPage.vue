@@ -337,18 +337,21 @@ const showAddProviderDialog = ref(false)
 const showProviderCfg = ref(false)
 const newSelectedProviderName = ref('')
 const newSelectedProviderConfig = ref({})
+const newProviderOriginalId = ref('')
 const updatingMode = ref(false)
 const loading = ref(false)
 const providerStatuses = ref([])
 const showAgentRunnerDialog = ref(false)
 const showProviderEditDialog = ref(false)
 const providerEditData = ref(null)
+const providerEditOriginalId = ref('')
 const showManualModelDialog = ref(false)
 
 const savingProviders = ref([])
 
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
+  providerEditOriginalId.value = provider.id
   showProviderEditDialog.value = true
 }
 
@@ -390,6 +393,7 @@ function getEmptyText() {
 
 function selectProviderTemplate(name) {
   newSelectedProviderName.value = name
+  newProviderOriginalId.value = ''
   showProviderCfg.value = true
   updatingMode.value = false
   newSelectedProviderConfig.value = JSON.parse(JSON.stringify(
@@ -399,6 +403,7 @@ function selectProviderTemplate(name) {
 
 function configExistingProvider(provider) {
   newSelectedProviderName.value = provider.id
+  newProviderOriginalId.value = provider.id
   newSelectedProviderConfig.value = {}
 
   // 比对默认配置模版，看看是否有更新
@@ -460,7 +465,7 @@ async function newProvider() {
   try {
     if (wasUpdating) {
       const res = await axios.post('/api/config/provider/update', {
-        id: newSelectedProviderName.value,
+        id: newProviderOriginalId.value || newSelectedProviderName.value,
         config: newSelectedProviderConfig.value
       })
       if (res.data.status === 'error') {
@@ -494,7 +499,7 @@ async function saveEditedProvider() {
   savingProviders.value.push(providerEditData.value.id)
   try {
     const res = await axios.post('/api/config/provider/update', {
-      id: providerEditData.value.id,
+      id: providerEditOriginalId.value || providerEditData.value.id,
       config: providerEditData.value
     })
 

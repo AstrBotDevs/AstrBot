@@ -354,6 +354,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return sourceFields
   }
 
+  function generateUniqueSourceId(baseId: string) {
+    const existingIds = new Set(providerSources.value.map((s: any) => s.id))
+    if (!existingIds.has(baseId)) return baseId
+
+    let counter = 1
+    let candidate = `${baseId}_${counter}`
+    while (existingIds.has(candidate)) {
+      counter += 1
+      candidate = `${baseId}_${counter}`
+    }
+
+    return candidate
+  }
+
   function addProviderSource(templateKey: string) {
     const template = providerTemplates.value[templateKey]
     if (!template) {
@@ -361,7 +375,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return
     }
 
-    const newId = template.id
+    const newId = generateUniqueSourceId(template.id)
     const newSource = {
       ...extractSourceFieldsFromTemplate(template),
       id: newId,
@@ -398,6 +412,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       showMessage(tm('providerSources.deleteSuccess'))
     } catch (error: any) {
       showMessage(error.message || tm('providerSources.deleteError'), 'error')
+    } finally {
+      await loadConfig()
     }
   }
 
@@ -445,6 +461,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return false
     } finally {
       savingSource.value = false
+      loadConfig()
     }
   }
 
