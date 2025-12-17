@@ -31,6 +31,7 @@ from astrbot.core.db.po import (
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 
+
 class FilterKwargs(T.TypedDict, total=False):
     message_types: list[str]
     platforms: list[str]
