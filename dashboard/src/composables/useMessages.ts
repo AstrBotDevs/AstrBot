@@ -2,13 +2,24 @@ import { ref, reactive, type Ref } from 'vue';
 import axios from 'axios';
 import { useToast } from '@/utils/toast';
 
+// 工具调用信息
+export interface ToolCall {
+    id: string;
+    name: string;
+    args: Record<string, any>;
+    ts: number;              // 开始时间戳
+    result?: string;         // 工具调用结果
+    finished_ts?: number;    // 完成时间戳
+}
+
 // 新格式消息部分的类型定义
 export interface MessagePart {
-    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply';
+    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply' | 'tool_call';
     text?: string;           // for plain
     attachment_id?: string;  // for image, record, file, video
     filename?: string;       // for file (filename from backend)
     message_id?: number;     // for reply (PlatformSessionHistoryMessage.id)
+    tool_calls?: ToolCall[]; // for tool_call
 }
 
 // 引用信息
@@ -42,6 +53,7 @@ export interface MessageContent {
     embedded_files?: FileInfo[];
     isLoading?: boolean;
     reply_to?: ReplyTo;  // 引用的消息
+    tool_calls?: ToolCall[];  // 工具调用
 }
 
 export interface Message {
@@ -104,6 +116,7 @@ export function useMessages(
             let audioUrl: string | undefined;
             let fileInfos: FileInfo[] = [];
             let replyTo: ReplyTo | undefined;
+            let toolCalls: ToolCall[] = [];
 
             for (const part of message as MessagePart[]) {
                 if (part.type === 'plain' && part.text) {
@@ -121,6 +134,8 @@ export function useMessages(
                     });
                 } else if (part.type === 'reply' && part.message_id) {
                     replyTo = { message_id: part.message_id };
+                } else if (part.type === 'tool_call' && part.tool_calls) {
+                    toolCalls = toolCalls.concat(part.tool_calls);
                 }
                 // video 类型可以后续扩展
             }
@@ -128,6 +143,7 @@ export function useMessages(
             // 转换为旧格式兼容的结构
             content.message = textParts.join('\n');
             content.reply_to = replyTo;
+            content.tool_calls = toolCalls.length > 0 ? toolCalls : undefined;
             if (content.type === 'user') {
                 content.image_url = imageUrls.length > 0 ? imageUrls : undefined;
                 content.audio_url = audioUrl;
@@ -410,7 +426,47 @@ export function useMessages(
                         } else if (chunk_json.type === 'plain') {
                             const chain_type = chunk_json.chain_type || 'normal';
 
-                            if (!in_streaming) {
+                            if (chain_type === 'tool_call') {
+                                // 解析工具调用数据
+                                const toolCallData = JSON.parse(chunk_json.data);
+                                const toolCall: ToolCall = {
+                                    id: toolCallData.id,
+                                    name: toolCallData.name,
+                                    args: toolCallData.args,
+                                    ts: toolCallData.ts
+                                };
+                                
+                                if (!in_streaming) {
+                                    message_obj = reactive({
+                                        type: 'bot',
+                                        message: '',
+                                        tool_calls: [toolCall]
+                                    });
+                                    messages.value.push({ content: message_obj });
+                                    in_streaming = true;
+                                } else {
+                                    if (!message_obj.tool_calls) {
+                                        message_obj.tool_calls = [];
+                                    }
+                                    // 检查是否已存在相同id的tool_call
+                                    const existingIndex = message_obj.tool_calls.findIndex((tc: ToolCall) => tc.id === toolCall.id);
+                                    if (existingIndex === -1) {
+                                        message_obj.tool_calls.push(toolCall);
+                                    }
+                                }
+                            } else if (chain_type === 'tool_call_result') {
+                                // 解析工具调用结果数据
+                                const resultData = JSON.parse(chunk_json.data);
+                                
+                                if (message_obj && message_obj.tool_calls) {
+                                    // 找到对应的 tool_call 并更新结果
+                                    const toolCall = message_obj.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
+                                    if (toolCall) {
+                                        toolCall.result = resultData.result;
+                                        toolCall.finished_ts = resultData.ts;
+                                    }
+                                }
+                            } else if (!in_streaming) {
                                 message_obj = reactive({
                                     type: 'bot',
                                     message: chain_type === 'reasoning' ? '' : chunk_json.data,

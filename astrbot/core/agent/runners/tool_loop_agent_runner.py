@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 import typing as T
 
@@ -12,6 +13,7 @@ from mcp.types import (
 )
 
 from astrbot import logger
+from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -175,23 +177,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             tool_call_result_blocks = []
-            for tool_call_name in llm_resp.tools_call_name:
-                yield AgentResponse(
-                    type="tool_call",
-                    data=AgentResponseData(
-                        chain=MessageChain(type="tool_call").message(
-                            f"🔨 调用工具: {tool_call_name}"
-                        ),
-                    ),
-                )
             async for result in self._handle_function_tools(self.req, llm_resp):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
                 elif isinstance(result, MessageChain):
                     if result.type is None:
-                        result.type = "tool_call_result"
+                        # should not happen
+                        continue
+                    if result.type == "tool_direct_result":
+                        ar_type = "tool_call_result"
+                    else:
+                        ar_type = result.type
                     yield AgentResponse(
-                        type="tool_call_result",
+                        type=ar_type,
                         data=AgentResponseData(chain=result),
                     )
             # 将结果添加到上下文中
@@ -234,6 +232,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            yield MessageChain(
+                type="tool_call",
+                chain=[
+                    Json(
+                        data={
+                            "id": func_tool_id,
+                            "name": func_tool_name,
+                            "args": func_tool_args,
+                            "ts": time.time(),
+                        }
+                    )
+                ],
+            )
             try:
                 if not req.func_tool:
                     return
@@ -307,7 +318,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     content=res.content[0].text,
                                 ),
                             )
-                            yield MessageChain().message(res.content[0].text)
                         elif isinstance(res.content[0], ImageContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
@@ -329,7 +339,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         content=resource.text,
                                     ),
                                 )
-                                yield MessageChain().message(resource.text)
                             elif (
                                 isinstance(resource, BlobResourceContents)
                                 and resource.mimeType
@@ -353,7 +362,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         content="返回的数据类型不受支持",
                                     ),
                                 )
-                                yield MessageChain().message("返回的数据类型不受支持。")
+
+                        # yield the last tool call result
+                        last_tcr_content = str(tool_call_result_blocks[-1].content)
+                        yield MessageChain(
+                            type="tool_call_result",
+                            chain=[
+                                Json(
+                                    data={
+                                        "id": func_tool_id,
+                                        "ts": time.time(),
+                                        "result": last_tcr_content,
+                                    }
+                                )
+                            ],
+                        )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户

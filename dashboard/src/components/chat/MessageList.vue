@@ -64,6 +64,50 @@
                             </div>
                             
                             <template v-else>
+                                <!-- Tool Calls Block (Collapsible) -->
+                                <div v-if="msg.content.tool_calls && msg.content.tool_calls.length > 0" class="tool-calls-container">
+                                    <div v-for="(toolCall, tcIndex) in msg.content.tool_calls" :key="toolCall.id" class="tool-call-card">
+                                        <div class="tool-call-header" @click="toggleToolCall(index, tcIndex)">
+                                            <v-icon size="small" class="tool-call-expand-icon">
+                                                {{ isToolCallExpanded(index, tcIndex) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                            </v-icon>
+                                            <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
+                                            <div class="tool-call-info">
+                                                <span class="tool-call-name">{{ toolCall.name }}</span>
+                                                <span class="tool-call-id">{{ toolCall.id }}</span>
+                                            </div>
+                                            <span class="tool-call-status" :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
+                                                <template v-if="toolCall.finished_ts">
+                                                    <v-icon size="x-small" class="status-icon">mdi-check-circle</v-icon>
+                                                    {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
+                                                </template>
+                                                <template v-else>
+                                                    <v-icon size="x-small" class="status-icon spinning">mdi-loading</v-icon>
+                                                    {{ getElapsedTime(toolCall.ts) }}
+                                                </template>
+                                            </span>
+                                        </div>
+                                        <div v-if="isToolCallExpanded(index, tcIndex)" class="tool-call-details">
+                                            <div class="tool-call-detail-row">
+                                                <span class="detail-label">ID:</span>
+                                                <code class="detail-value">{{ toolCall.id }}</code>
+                                            </div>
+                                            <div class="tool-call-detail-row">
+                                                <span class="detail-label">Name:</span>
+                                                <code class="detail-value">{{ toolCall.name }}</code>
+                                            </div>
+                                            <div class="tool-call-detail-row">
+                                                <span class="detail-label">Args:</span>
+                                                <pre class="detail-value detail-json">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                            </div>
+                                            <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                <span class="detail-label">Result:</span>
+                                                <pre class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Reasoning Block (Collapsible) -->
                                 <div v-if="msg.content.reasoning && msg.content.reasoning.trim()" class="reasoning-container">
                                     <div class="reasoning-header" @click="toggleReasoning(index)">
@@ -191,6 +235,9 @@ export default {
             scrollTimer: null,
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
             downloadingFiles: new Set(), // Track which files are being downloaded
+            expandedToolCalls: new Set(), // Track which tool call cards are expanded
+            elapsedTimeTimer: null, // Timer for updating elapsed time
+            currentTime: Date.now() / 1000, // Current time for elapsed time calculation
         };
     },
     mounted() {
@@ -198,6 +245,7 @@ export default {
         this.initImageClickEvents();
         this.addScrollListener();
         this.scrollToBottom();
+        this.startElapsedTimeTimer();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -487,6 +535,11 @@ export default {
                 clearTimeout(this.scrollTimer);
                 this.scrollTimer = null;
             }
+            // 清理 elapsed time 计时器
+            if (this.elapsedTimeTimer) {
+                clearInterval(this.elapsedTimeTimer);
+                this.elapsedTimeTimer = null;
+            }
         },
 
         // 格式化消息时间，支持别名显示
@@ -517,6 +570,91 @@ export default {
                 const month = (date.getMonth() + 1).toString().padStart(2, '0');
                 const day = date.getDate().toString().padStart(2, '0');
                 return `${month}-${day} ${timeStr}`;
+            }
+        },
+
+        // Tool call related methods
+        toggleToolCall(messageIndex, toolCallIndex) {
+            const key = `${messageIndex}-${toolCallIndex}`;
+            if (this.expandedToolCalls.has(key)) {
+                this.expandedToolCalls.delete(key);
+            } else {
+                this.expandedToolCalls.add(key);
+            }
+            // Force reactivity
+            this.expandedToolCalls = new Set(this.expandedToolCalls);
+        },
+
+        isToolCallExpanded(messageIndex, toolCallIndex) {
+            return this.expandedToolCalls.has(`${messageIndex}-${toolCallIndex}`);
+        },
+
+        // Start timer for updating elapsed time
+        startElapsedTimeTimer() {
+            // Update every 12ms for sub-second precision, then every second after 1s
+            let fastUpdateCount = 0;
+            const fastUpdateInterval = 12;
+            const slowUpdateInterval = 1000;
+            
+            const updateTime = () => {
+                this.currentTime = Date.now() / 1000;
+                
+                // Check if there are any running tool calls
+                const hasRunningToolCalls = this.messages.some(msg => 
+                    msg.content.tool_calls?.some(tc => !tc.finished_ts)
+                );
+                
+                if (hasRunningToolCalls) {
+                    // Check if any running tool call is under 1 second
+                    const hasSubSecondToolCall = this.messages.some(msg =>
+                        msg.content.tool_calls?.some(tc => 
+                            !tc.finished_ts && (this.currentTime - tc.ts) < 1
+                        )
+                    );
+                    
+                    if (hasSubSecondToolCall) {
+                        fastUpdateCount++;
+                        this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
+                    } else {
+                        this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+                    }
+                } else {
+                    // No running tool calls, check again after 1 second
+                    this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+                }
+            };
+            
+            updateTime();
+        },
+
+        // Get elapsed time string for a tool call
+        getElapsedTime(startTs) {
+            const elapsed = this.currentTime - startTs;
+            return this.formatDuration(elapsed);
+        },
+
+        // Format duration in seconds to human readable string
+        formatDuration(seconds) {
+            if (seconds < 1) {
+                return `${Math.round(seconds * 1000)}ms`;
+            } else if (seconds < 60) {
+                return `${seconds.toFixed(1)}s`;
+            } else {
+                const minutes = Math.floor(seconds / 60);
+                const secs = Math.round(seconds % 60);
+                return `${minutes}m ${secs}s`;
+            }
+        },
+
+        // Format tool result for display
+        formatToolResult(result) {
+            if (!result) return '';
+            // Try to parse as JSON for pretty formatting
+            try {
+                const parsed = JSON.parse(result);
+                return JSON.stringify(parsed, null, 2);
+            } catch {
+                return result;
             }
         }
     }
@@ -910,6 +1048,175 @@ export default {
 
 .v-theme--dark .reasoning-text {
     opacity: 0.85;
+}
+
+/* Tool Call Card Styles */
+.tool-calls-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    margin-top: 6px;
+}
+
+.tool-call-card {
+    border: 1px solid #d0dce8;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #eff3f6;
+}
+
+.v-theme--dark .tool-call-card {
+    background-color: rgba(40, 60, 100, 0.4);
+    border-color: rgba(100, 140, 200, 0.4);
+}
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    gap: 8px;
+}
+
+.tool-call-header:hover {
+    background-color: rgba(169, 194, 219, 0.15);
+}
+
+.v-theme--dark .tool-call-header:hover {
+    background-color: rgba(100, 150, 200, 0.2);
+}
+
+.tool-call-expand-icon {
+    color: var(--v-theme-secondary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.tool-call-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.tool-call-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.tool-call-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--v-theme-secondary);
+}
+
+.tool-call-id {
+    font-size: 11px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-call-status {
+    margin-left: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.tool-call-status.status-running {
+    color: #ff9800;
+}
+
+.tool-call-status.status-finished {
+    color: #4caf50;
+}
+
+.tool-call-status .status-icon {
+    font-size: 14px;
+}
+
+.tool-call-status .status-icon.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.tool-call-details {
+    padding: 12px;
+    border-top: 1px solid #e1ebf5;
+    background-color: rgba(255, 255, 255, 0.5);
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+.v-theme--dark .tool-call-details {
+    border-top-color: rgba(100, 140, 200, 0.3);
+    background-color: rgba(30, 45, 70, 0.5);
+}
+
+.tool-call-detail-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 8px;
+}
+
+.tool-call-detail-row:last-child {
+    margin-bottom: 0;
+}
+
+.detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--v-theme-secondaryText);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.detail-value {
+    font-size: 12px;
+    color: var(--v-theme-primaryText);
+    background-color: transparent;
+    padding: 4px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+}
+
+.detail-json {
+    font-family: 'Fira Code', 'Consolas', monospace;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.detail-result {
+    max-height: 300px;
+    background-color: transparent;
+}
+
+.v-theme--dark .detail-value {
+    background-color: transparent;
+}
+
+.v-theme--dark .detail-result {
+    background-color: transparent;
 }
 </style>
 

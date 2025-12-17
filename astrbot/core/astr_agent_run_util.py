@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from astrbot.core import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -35,13 +36,24 @@ async def run_agent(
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                         await astr_event.send(resp.data["chain"])
                         continue
+                    if astr_event.get_platform_id() == "webchat":
+                        await astr_event.send(resp.data["chain"])
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
                     if agent_runner.streaming:
                         # 用来标记流式响应需要分节
                         yield MessageChain(chain=[], type="break")
-                    if show_tool_use:
+
+                    if astr_event.get_platform_name() == "webchat":
+                        await astr_event.send(resp.data["chain"])
+                    elif show_tool_use:
+                        json_comp = resp.data["chain"].chain[0]
+                        if isinstance(json_comp, Json):
+                            m = f"🔨 调用工具: {json_comp.data.get('name')}"
+                        else:
+                            m = "🔨 调用工具..."
+                        chain = MessageChain(type="tool_call").message(m)
                         await astr_event.send(resp.data["chain"])
                     continue
 

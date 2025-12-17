@@ -1,11 +1,12 @@
 import base64
+import json
 import os
 import shutil
 import uuid
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record
+from astrbot.api.message_components import File, Image, Json, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .webchat_queue_mgr import webchat_queue_mgr
@@ -41,8 +42,16 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(
                     {
                         "type": "plain",
-                        "cid": cid,
                         "data": data,
+                        "streaming": streaming,
+                        "chain_type": message.type,
+                    },
+                )
+            elif isinstance(comp, Json):
+                await web_chat_back_queue.put(
+                    {
+                        "type": "plain",
+                        "data": json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
                     },
@@ -58,7 +67,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(
                     {
                         "type": "image",
-                        "cid": cid,
                         "data": data,
                         "streaming": streaming,
                     },
@@ -74,7 +82,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(
                     {
                         "type": "record",
-                        "cid": cid,
                         "data": data,
                         "streaming": streaming,
                     },
@@ -91,7 +98,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                 await web_chat_back_queue.put(
                     {
                         "type": "file",
-                        "cid": cid,
                         "data": data,
                         "streaming": streaming,
                     },
@@ -118,7 +124,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "type": "break",  # break means a segment end
                         "data": final_data,
                         "streaming": True,
-                        "cid": cid,
                     },
                 )
                 final_data = ""
@@ -142,7 +147,6 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "reasoning": reasoning_content,
                 "streaming": True,
-                "cid": cid,
             },
         )
         await super().send_streaming(generator, use_fallback)
