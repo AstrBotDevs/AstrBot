@@ -49,7 +49,7 @@ class Main(star.Star):
 
     @filter.command_group("tool")
     def tool(self) -> None:
-        pass
+        """函数工具管理"""
 
     @tool.command("ls")
     async def tool_ls(self, event: AstrMessageEvent) -> None:
@@ -73,7 +73,7 @@ class Main(star.Star):
 
     @filter.command_group("plugin")
     def plugin(self) -> None:
-        pass
+        """插件管理"""
 
     @plugin.command("ls")
     async def plugin_ls(self, event: AstrMessageEvent) -> None:
@@ -221,6 +221,7 @@ class Main(star.Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
+        """更新管理面板"""
         await self.admin_c.update_dashboard(event)
 
     @filter.command("set")

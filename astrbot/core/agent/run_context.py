@@ -9,7 +9,7 @@ from .message import Message
 TContext = TypeVar("TContext", default=Any)
 
 
-@dataclass(config={"arbitrary_types_allowed": True})
+@dataclass
 class ContextWrapper(Generic[TContext]):
     """A context for running an agent, which can be used to pass additional data or state."""
 

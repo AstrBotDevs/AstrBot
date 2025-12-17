@@ -1,4 +1,7 @@
+import uuid
+
 from astrbot.core import astrbot_config, logger
+from astrbot.core.config.default import WEBHOOK_SUPPORTED_PLATFORMS
 
 
 def _get_callback_api_base() -> str:
@@ -45,3 +48,19 @@ def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
         "====================\n"
     )
     logger.info(display_log)
+
+
+def ensure_platform_webhook_config(platform_cfg: dict) -> bool:
+    """为支持统一 webhook 的平台自动生成 webhook_uuid
+
+    Args:
+        platform_cfg (dict): 平台配置字典
+
+    Returns:
+        bool: 如果生成了 webhook_uuid 则返回 True，否则返回 False
+    """
+    pt = platform_cfg.get("type", "")
+    if pt in WEBHOOK_SUPPORTED_PLATFORMS and not platform_cfg.get("webhook_uuid"):
+        platform_cfg["webhook_uuid"] = uuid.uuid4().hex[:16]
+        return True
+    return False

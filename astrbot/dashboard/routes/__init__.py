@@ -1,5 +1,6 @@
 from .auth import AuthRoute
 from .chat import ChatRoute
+from .command import CommandRoute
 from .config import ConfigRoute
 from .conversation import ConversationRoute
 from .file import FileRoute
@@ -17,6 +18,7 @@ from .update import UpdateRoute
 __all__ = [
     "AuthRoute",
     "ChatRoute",
+    "CommandRoute",
     "ConfigRoute",
     "ConversationRoute",
     "FileRoute",

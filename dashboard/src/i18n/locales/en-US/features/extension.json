@@ -2,7 +2,9 @@
   "title": "Extension Management",
   "subtitle": "Manage and configure system extensions",
   "tabs": {
-    "installed": "Installed",
+    "installedPlugins": "Installed Plugins",
+    "installedMcpServers": "Installed MCP Servers",
+    "handlersOperation": "Manage Handlers",
     "market": "Extension Market"
   },
   "search": {
@@ -197,5 +199,12 @@
     "errors": {
       "confirmNotRegistered": "$confirm not properly registered"
     }
+  },
+  "conflicts": {
+    "title": "Command Conflicts Detected",
+    "message": "This will cause some commands to work abnormally. It is recommended to go to the [Command Management] panel to handle it.",
+    "pairs": "command conflicts",
+    "goToManage": "Go to Manage",
+    "later": "Later"
   }
 }

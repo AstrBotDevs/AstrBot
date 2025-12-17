@@ -409,7 +409,7 @@ class SlackAdapter(Platform):
             await self.socket_client.stop()
         if self.webhook_client:
             await self.webhook_client.stop()
-        logger.info("Slack 适配器已被优雅地关闭")
+        logger.info("Slack 适配器已被关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
@@ -427,3 +427,10 @@ class SlackAdapter(Platform):
 
     def get_client(self):
         return self.web_client
+
+    def unified_webhook(self) -> bool:
+        return bool(
+            self.config.get("unified_webhook_mode", False)
+            and self.config.get("slack_connection_mode", "") == "webhook"
+            and self.config.get("webhook_uuid")
+        )
