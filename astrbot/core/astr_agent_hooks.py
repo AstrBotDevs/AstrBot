@@ -24,7 +24,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_tool_end(
         self,
         run_context: ContextWrapper[AstrAgentContext],
-        tool: FunctionTool[object],
+        tool: FunctionTool[AstrAgentContext],
         tool_args: dict[str, object] | None,
         tool_result: CallToolResult | None,
     ) -> None:

@@ -10,7 +10,7 @@ from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.message_event_result import (
     CommandResult,
@@ -24,10 +24,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def execute(
         cls,
-        tool: HandoffTool | MCPTool | FunctionTool[object],
+        tool: HandoffTool | MCPTool | FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args: object,
-    ) -> T.AsyncGenerator[mcp.types.CallToolResult | None, None]:
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         """执行函数调用。
 
         Args:
@@ -59,8 +59,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args: object,
-    ) -> T.AsyncGenerator[mcp.types.CallToolResult, None]:
-        input_ = tool_args.get("input")
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
+        # 将输入统一转换/缩窄为 str | None，满足下游调用的签名
+        val = tool_args.get("input")
+        if val is None:
+            input_: str | None = None
+        elif isinstance(val, str):
+            input_ = val
+        else:
+            input_ = str(val)
 
         # make toolset for the agent
         tools = tool.agent.tools
@@ -96,10 +103,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_local(
         cls,
-        tool: FunctionTool[object],
+        tool: FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args: object,
-    ) -> T.AsyncGenerator[mcp.types.CallToolResult | None, None]:
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
@@ -181,7 +188,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool: FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args: object,
-    ) -> T.AsyncGenerator[mcp.types.CallToolResult, None]:
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         res = await tool.call(run_context, **tool_args)
         if not res:
             return
@@ -198,7 +205,7 @@ async def call_local_llm_tool(
     method_name: str,
     *args: object,
     **kwargs: object,
-) -> T.AsyncGenerator[mcp.types.CallToolResult | str | None, None]:
+) -> T.AsyncGenerator[ToolExecResult, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
     ready_to_call = None  # 一个协程或者异步生成器
 
