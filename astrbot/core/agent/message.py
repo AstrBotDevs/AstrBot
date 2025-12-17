@@ -5,9 +5,9 @@ import builtins
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
+from pydantic.config import ConfigDict
 from pydantic_core import core_schema
 from typing_extensions import Unpack
-from pydantic.config import ConfigDict
 
 
 class ContentPart(BaseModel):

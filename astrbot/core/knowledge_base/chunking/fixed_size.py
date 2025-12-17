@@ -3,8 +3,6 @@
 按照固定的字符数将文本分块,支持重叠区域。
 """
 
-from typing import Any
-
 from .base import BaseChunker
 
 

@@ -6,7 +6,6 @@
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment

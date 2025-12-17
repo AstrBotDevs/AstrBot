@@ -2,8 +2,9 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Any, Generic
+from typing import Generic
 
+from mcp.types import CallToolResult
 from tenacity import (
     before_sleep_log,
     retry,
@@ -11,7 +12,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from mcp.types import CallToolResult
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
