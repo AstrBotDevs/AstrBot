@@ -122,6 +122,14 @@
     "deleteSuccess": "模型删除成功",
     "deleteError": "模型删除失败",
     "testSuccess": "模型 {id} 测试通过",
-    "testError": "模型测试失败"
+    "testError": "模型测试失败",
+    "searchPlaceholder": "搜索模型或 ID",
+    "manualAddButton": "自定义模型",
+    "manualDialogTitle": "添加自定义模型",
+    "manualDialogModelLabel": "模型 ID（如 gpt-4.1-mini）",
+    "manualDialogPreviewLabel": "显示 ID（自动生成）",
+    "manualDialogPreviewHint": "生成规则：源ID/模型ID",
+    "manualModelRequired": "请输入模型 ID",
+    "manualModelExists": "该模型已存在"
   }
 } 

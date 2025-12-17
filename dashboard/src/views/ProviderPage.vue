@@ -127,18 +127,25 @@
                         <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
                         <small style="color: grey;" v-if="availableModels.length">{{ tm('models.available') }} {{
                           availableModels.length }}</small>
+                        <v-text-field v-model="modelSearch" density="compact" prepend-inner-icon="mdi-magnify"
+                          hide-details variant="solo-filled" flat class="ml-1" style="max-width: 240px;"
+                          :placeholder="tm('models.searchPlaceholder')" />
                         <v-spacer></v-spacer>
                         <v-btn color="primary" prepend-icon="mdi-download" :loading="loadingModels"
                           @click="fetchAvailableModels" variant="tonal" size="small">
                           {{ isSourceModified ? tm('providerSources.saveAndFetchModels') :
                             tm('providerSources.fetchModels') }}
                         </v-btn>
+                        <v-btn color="primary" prepend-icon="mdi-pencil-plus" variant="text" size="small"
+                          class="ml-1" @click="openManualModelDialog">
+                          {{ tm('models.manualAddButton') }}
+                        </v-btn>
                       </div>
 
                       <v-list density="compact" class="rounded-lg border"
                         style="max-height: 520px; overflow-y: auto; font-family:system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;">
-                        <template v-if="mergedModelEntries.length > 0">
-                          <template v-for="entry in mergedModelEntries"
+                        <template v-if="filteredMergedModelEntries.length > 0">
+                          <template v-for="entry in filteredMergedModelEntries"
                             :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
                             <v-list-item v-if="entry.type === 'configured'" class="provider-compact-item"
                               @click="openProviderEdit(entry.provider)">
@@ -273,6 +280,22 @@
     <AddNewProvider v-model:show="showAddProviderDialog" :metadata="metadata"
       @select-template="selectProviderTemplate" />
 
+    <!-- 手动添加模型对话框 -->
+    <v-dialog v-model="showManualModelDialog" max-width="400">
+      <v-card :title="tm('models.manualDialogTitle')">
+        <v-card-text class="py-4">
+          <v-text-field v-model="manualModelId" :label="tm('models.manualDialogModelLabel')" flat variant="solo-filled" autofocus clearable></v-text-field>
+          <v-text-field :model-value="manualProviderId" flat variant="solo-filled" :label="tm('models.manualDialogPreviewLabel')" persistent-hint
+            :hint="tm('models.manualDialogPreviewHint')"></v-text-field>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
+          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- 配置对话框 -->
     <v-dialog v-model="showProviderCfg" width="900" persistent>
       <v-card
@@ -398,6 +421,9 @@ const showAgentRunnerDialog = ref(false)
 const sourceProviderPanels = ref(null)
 const showProviderEditDialog = ref(false)
 const providerEditData = ref(null)
+const showManualModelDialog = ref(false)
+const manualModelId = ref('')
+const modelSearch = ref('')
 
 let suppressSourceWatch = false
 
@@ -547,6 +573,29 @@ const mergedModelEntries = computed(() => {
   return [...configuredEntries, ...availableEntries]
 })
 
+const filteredMergedModelEntries = computed(() => {
+  const term = modelSearch.value.trim().toLowerCase()
+  if (!term) return mergedModelEntries.value
+
+  return mergedModelEntries.value.filter(entry => {
+    if (entry.type === 'configured') {
+      const id = entry.provider.id?.toLowerCase() || ''
+      const model = entry.provider.model?.toLowerCase() || ''
+      return id.includes(term) || model.includes(term)
+    }
+
+    const model = entry.model?.toLowerCase() || ''
+    return model.includes(term)
+  })
+})
+
+const manualProviderId = computed(() => {
+  if (!selectedProviderSource.value) return ''
+  const modelId = manualModelId.value.trim()
+  if (!modelId) return ''
+  return `${selectedProviderSource.value.id}/${modelId}`
+})
+
 // 基础配置：只包含常用字段
 const basicSourceConfig = computed(() => {
   if (!editableProviderSource.value) return null
@@ -679,6 +728,33 @@ function formatContextLimit(meta) {
 function openProviderEdit(provider) {
   providerEditData.value = JSON.parse(JSON.stringify(provider))
   showProviderEditDialog.value = true
+}
+
+function openManualModelDialog() {
+  if (!selectedProviderSource.value) {
+    showMessage(tm('providerSources.selectHint'), 'error')
+    return
+  }
+  manualModelId.value = ''
+  showManualModelDialog.value = true
+}
+
+async function confirmManualModel() {
+  const modelId = manualModelId.value.trim()
+  if (!selectedProviderSource.value) {
+    showMessage(tm('providerSources.selectHint'), 'error')
+    return
+  }
+  if (!modelId) {
+    showMessage(tm('models.manualModelRequired'), 'error')
+    return
+  }
+  if (modelAlreadyConfigured(modelId)) {
+    showMessage(tm('models.manualModelExists'), 'error')
+    return
+  }
+  await addModelProvider(modelId)
+  showManualModelDialog.value = false
 }
 
 // ===== Methods =====
