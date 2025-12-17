@@ -243,7 +243,7 @@ class ConfigRoute(Route):
             return Response().error("缺少配置数据").__dict__
 
         new_source_config = post_data.get("config") or post_data
-        original_id = post_data.get("original_id") or provider_source_id
+        original_id = provider_source_id
 
         if not isinstance(new_source_config, dict):
             return Response().error("缺少或错误的配置数据").__dict__
@@ -253,6 +253,16 @@ class ConfigRoute(Route):
             new_source_config["id"] = original_id
 
         provider_sources = self.config.get("provider_sources", [])
+
+        for ps in provider_sources:
+            if ps.get("id") == new_source_config["id"] and ps.get("id") != original_id:
+                return (
+                    Response()
+                    .error(
+                        f"Provider source ID '{new_source_config['id']}' exists already, please try another ID.",
+                    )
+                    .__dict__
+                )
 
         # 查找旧的 provider_source，若不存在则追加为新配置
         target_idx = next(
