@@ -31,6 +31,12 @@ from astrbot.core.db.po import (
 NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 
+class FilterKwargs(T.TypedDict, total=False):
+    message_types: list[str]
+    platforms: list[str]
+    exclude_ids: list[str]
+    exclude_platforms: list[str]
+
 
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
@@ -165,7 +171,7 @@ class SQLiteDatabase(BaseDatabase):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs: object,
+        **kwargs: T.Unpack[FilterKwargs],
     ) -> tuple[list[ConversationV2], int]:
         async with self.get_db() as session:
             session: AsyncSession
