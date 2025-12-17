@@ -36,7 +36,6 @@
                 <div class="d-flex align-center justify-space-between px-4 pt-4 pb-2">
                   <div class="d-flex align-center ga-2">
                     <h3 class="mb-0">{{ tm('providerSources.title') }}</h3>
-                    <v-chip size="x-small" color="primary" variant="tonal">{{ displayedProviderSources.length }}</v-chip>
                   </div>
                   <v-menu>
                     <template v-slot:activator="{ props }">
@@ -126,7 +125,6 @@
                     <div class="mt-4">
                       <div class="d-flex align-center ga-2 mb-2">
                         <h3 class="text-h5 font-weight-bold mb-0">{{ tm('models.configured') }}</h3>
-                        <!-- <v-chip color="success" variant="tonal" size="small">{{ displayedChatProviders.length }}</v-chip> -->
                         <small style="color: grey;" v-if="availableModels.length">{{ tm('models.available') }} {{
                           availableModels.length }}</small>
                         <v-spacer></v-spacer>
@@ -359,6 +357,13 @@ import ItemCard from '@/components/shared/ItemCard.vue'
 import AddNewProvider from '@/components/provider/AddNewProvider.vue'
 import { getProviderIcon } from '@/utils/providerUtils'
 
+const props = defineProps({
+  defaultTab: {
+    type: String,
+    default: 'chat_completion'
+  }
+})
+
 const { tm } = useModuleI18n('features/provider')
 const router = useRouter()
 
@@ -367,7 +372,7 @@ const config = ref({})
 const metadata = ref({})
 const providerSources = ref([])
 const providers = ref([])
-const selectedProviderType = ref('chat_completion')
+const selectedProviderType = ref(resolveDefaultTab(props.defaultTab))
 const selectedProviderSource = ref(null)
 const selectedProviderSourceOriginalId = ref(null)
 const editableProviderSource = ref(null)
@@ -605,6 +610,32 @@ function isTypeMatchingProviderType(type, providerType) {
     return type && type.includes('chat_completion')
   }
   return type && type.includes(providerType)
+}
+
+function resolveDefaultTab(value) {
+  const normalized = (value || '').toLowerCase()
+
+  if (normalized.startsWith('select_agent_runner_provider') || normalized === 'agent_runner') {
+    return 'agent_runner'
+  }
+
+  if (normalized === 'select_provider_stt' || normalized === 'speech_to_text' || normalized.includes('stt')) {
+    return 'speech_to_text'
+  }
+
+  if (normalized === 'select_provider_tts' || normalized === 'text_to_speech' || normalized.includes('tts')) {
+    return 'text_to_speech'
+  }
+
+  if (normalized.includes('embedding')) {
+    return 'embedding'
+  }
+
+  if (normalized.includes('rerank')) {
+    return 'rerank'
+  }
+
+  return 'chat_completion'
 }
 
 function resolveSourceIcon(source) {
@@ -957,6 +988,10 @@ async function loadProviderTemplate() {
 onMounted(async () => {
   await loadConfig()
   await loadProviderTemplate()
+})
+
+watch(() => props.defaultTab, (val) => {
+  selectedProviderType.value = resolveDefaultTab(val)
 })
 
 // 跟踪编辑中的 provider source 是否被修改
