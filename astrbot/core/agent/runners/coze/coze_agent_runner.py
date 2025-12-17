@@ -70,7 +70,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         self.file_id_cache: dict[str, dict[str, str]] = {}
 
     @override
-    async def step(self):
+    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
         """
         执行 Coze Agent 的一个步骤
         """
@@ -113,7 +113,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
-    async def _execute_coze_request(self):
+    async def _execute_coze_request(self) -> T.AsyncGenerator[AgentResponse, None]:
         """执行 Coze 请求的核心逻辑"""
         prompt = self.req.prompt or ""
         session_id = self.req.session_id or "unknown"

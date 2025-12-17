@@ -8,7 +8,7 @@ from astrbot.core.utils.io import get_dashboard_version
 
 
 class HelpCommand:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def _query_astrbot_notice(self):
@@ -62,7 +62,7 @@ class HelpCommand:
         walk(commands)
         return lines
 
-    async def help(self, event: AstrMessageEvent):
+    async def help(self, event: AstrMessageEvent) -> None:
         """查看帮助"""
         notice = ""
         try:

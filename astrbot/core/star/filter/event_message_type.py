@@ -22,7 +22,7 @@ MESSAGE_TYPE_2_EVENT_MESSAGE_TYPE = {
 
 
 class EventMessageTypeFilter(HandlerFilter):
-    def __init__(self, event_message_type: EventMessageType):
+    def __init__(self, event_message_type: EventMessageType) -> None:
         self.event_message_type = event_message_type
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

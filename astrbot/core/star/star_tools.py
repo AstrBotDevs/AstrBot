@@ -89,7 +89,7 @@ class StarTools:
         id: str,
         message_chain: MessageChain,
         platform: str = "aiocqhttp",
-    ):
+    ) -> None:
         """根据 id(例如qq号, 群号等) 直接, 主动地发送消息
 
         Args:

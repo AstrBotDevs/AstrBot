@@ -62,38 +62,38 @@ class AiocqhttpAdapter(Platform):
         )
 
         @self.bot.on_request()
-        async def request(event: Event):
+        async def request(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_notice()
-        async def notice(event: Event):
+        async def notice(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_message("group")
-        async def group(event: Event):
+        async def group(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_message("private")
-        async def private(event: Event):
+        async def private(event: Event) -> None:
             abm = await self.convert_message(event)
             if abm:
                 await self.handle_msg(abm)
 
         @self.bot.on_websocket_connection
-        def on_websocket_connection(_):
+        def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
 
     async def send_by_session(
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
             session_id = session.session_id.split("_")[-1]
@@ -416,17 +416,17 @@ class AiocqhttpAdapter(Platform):
         self.shutdown_event = asyncio.Event()
         return coro
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.shutdown_event.set()
 
-    async def shutdown_trigger_placeholder(self):
+    async def shutdown_trigger_placeholder(self) -> None:
         await self.shutdown_event.wait()
         logger.info("aiocqhttp 适配器已被关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,

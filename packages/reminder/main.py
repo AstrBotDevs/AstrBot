@@ -38,7 +38,7 @@ class Main(star.Star):
         self._init_scheduler()
         self.scheduler.start()
 
-    def _init_scheduler(self):
+    def _init_scheduler(self) -> None:
         """Initialize the scheduler."""
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
@@ -82,7 +82,7 @@ class Main(star.Star):
             return reminder_time < datetime.datetime.now(self.timezone)
         return False
 
-    async def _save_data(self):
+    async def _save_data(self) -> None:
         """Save the reminder data."""
         reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
         with open(reminder_file, "w", encoding="utf-8") as f:
@@ -178,7 +178,7 @@ class Main(star.Star):
         )
 
     @filter.command_group("reminder")
-    def reminder(self):
+    def reminder(self) -> None:
         """待办提醒"""
 
     async def get_upcoming_reminders(self, unified_msg_origin: str):
@@ -246,7 +246,7 @@ class Main(star.Star):
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])
 
-    async def _reminder_callback(self, unified_msg_origin: str, d: dict):
+    async def _reminder_callback(self, unified_msg_origin: str, d: dict) -> None:
         """The callback function of the reminder."""
         logger.info(f"Reminder Activated: {d['text']}, created by {unified_msg_origin}")
         await self.context.send_message(
@@ -260,7 +260,7 @@ class Main(star.Star):
             ),
         )
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.scheduler.shutdown()
         await self._save_data()
         logger.info("Reminder plugin terminated.")

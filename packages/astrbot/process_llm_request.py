@@ -11,7 +11,7 @@ from astrbot.core.provider.func_tool_manager import ToolSet
 
 
 class ProcessLLMRequest:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.ctx = context
         cfg = context.get_config()
         self.timezone = cfg.get("timezone")
@@ -21,7 +21,7 @@ class ProcessLLMRequest:
         else:
             logger.info(f"Timezone set to: {self.timezone}")
 
-    async def _ensure_persona(self, req: ProviderRequest, cfg: dict, umo: str):
+    async def _ensure_persona(self, req: ProviderRequest, cfg: dict, umo: str) -> None:
         """确保用户人格已加载"""
         if not req.conversation:
             return
@@ -77,7 +77,7 @@ class ProcessLLMRequest:
         req: ProviderRequest,
         cfg: dict,
         img_cap_prov_id: str,
-    ):
+    ) -> None:
         try:
             caption = await self._request_img_caption(
                 img_cap_prov_id,
@@ -115,7 +115,9 @@ class ProcessLLMRequest:
             f"Cannot get image caption because provider `{provider_id}` is not exist.",
         )
 
-    async def process_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
+    async def process_llm_request(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         cfg: dict = self.ctx.get_config(umo=event.unified_msg_origin)[
             "provider_settings"

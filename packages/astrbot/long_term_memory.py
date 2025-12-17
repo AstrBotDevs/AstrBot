@@ -17,7 +17,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 
 class LongTermMemory:
-    def __init__(self, acm: AstrBotConfigManager, context: star.Context):
+    def __init__(self, acm: AstrBotConfigManager, context: star.Context) -> None:
         self.acm = acm
         self.context = context
         self.session_chats = defaultdict(list)
@@ -111,7 +111,7 @@ class LongTermMemory:
 
         return False
 
-    async def handle_message(self, event: AstrMessageEvent):
+    async def handle_message(self, event: AstrMessageEvent) -> None:
         """仅支持群聊"""
         if event.get_message_type() == MessageType.GROUP_MESSAGE:
             datetime_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -148,7 +148,7 @@ class LongTermMemory:
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
                 self.session_chats[event.unified_msg_origin].pop(0)
 
-    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest):
+    async def on_req_llm(self, event: AstrMessageEvent, req: ProviderRequest) -> None:
         """当触发 LLM 请求前，调用此方法修改 req"""
         if event.unified_msg_origin not in self.session_chats:
             return
@@ -171,7 +171,9 @@ class LongTermMemory:
             )
             req.system_prompt += chats_str
 
-    async def after_req_llm(self, event: AstrMessageEvent, llm_resp: LLMResponse):
+    async def after_req_llm(
+        self, event: AstrMessageEvent, llm_resp: LLMResponse
+    ) -> None:
         if event.unified_msg_origin not in self.session_chats:
             return
 

@@ -106,7 +106,7 @@ class ProviderRequest:
     model: str | None = None
     """模型名称，为 None 时使用提供商的默认模型"""
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"ProviderRequest(prompt={self.prompt}, session_id={self.session_id}, "
             f"image_count={len(self.image_urls or [])}, "
@@ -116,10 +116,10 @@ class ProviderRequest:
             f"conversation_id={self.conversation.cid if self.conversation else 'N/A'}, "
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.__repr__()
 
-    def append_tool_calls_result(self, tool_calls_result: ToolCallsResult):
+    def append_tool_calls_result(self, tool_calls_result: ToolCallsResult) -> None:
         """添加工具调用结果到请求中"""
         if not self.tool_calls_result:
             self.tool_calls_result = []
@@ -241,7 +241,7 @@ class LLMResponse:
         | AnthropicMessage
         | None = None,
         is_chunk: bool = False,
-    ):
+    ) -> None:
         """初始化 LLMResponse
 
         Args:
@@ -279,7 +279,7 @@ class LLMResponse:
         return self._completion_text
 
     @completion_text.setter
-    def completion_text(self, value):
+    def completion_text(self, value) -> None:
         if self.result_chain:
             self.result_chain.chain = [
                 comp

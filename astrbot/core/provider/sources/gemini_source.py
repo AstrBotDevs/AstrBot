@@ -742,7 +742,7 @@ class ProviderGoogleGenAI(Provider):
     def get_keys(self) -> list[str]:
         return self.api_keys
 
-    def set_key(self, key):
+    def set_key(self, key) -> None:
         self.chosen_api_key = key
         self._init_client()
 
@@ -782,5 +782,5 @@ class ProviderGoogleGenAI(Provider):
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         logger.info("Google GenAI 适配器已终止。")

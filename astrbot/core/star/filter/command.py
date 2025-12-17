@@ -37,7 +37,7 @@ class CommandFilter(HandlerFilter):
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
         parent_command_names: list[str] | None = None,
-    ):
+    ) -> None:
         self.command_name = command_name
         self.alias = alias if alias else set()
         self._original_command_name = command_name
@@ -63,7 +63,7 @@ class CommandFilter(HandlerFilter):
         result = "".join(parts).rstrip(",")
         return result
 
-    def init_handler_md(self, handle_md: StarHandlerMetadata):
+    def init_handler_md(self, handle_md: StarHandlerMetadata) -> None:
         self.handler_md = handle_md
         signature = inspect.signature(self.handler_md.handler)
         self.handler_params = {}  # 参数名 -> 参数类型，如果有默认值则为默认值
@@ -81,7 +81,7 @@ class CommandFilter(HandlerFilter):
     def get_handler_md(self) -> StarHandlerMetadata:
         return self.handler_md
 
-    def add_custom_filter(self, custom_filter: CustomFilter):
+    def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
 
     def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:

@@ -4,6 +4,7 @@ import asyncio
 import os
 import traceback
 import uuid
+from typing import Any
 
 import aiofiles
 from quart import request
@@ -75,7 +76,7 @@ class KnowledgeBaseRoute(Route):
         }
 
     def _set_task_result(
-        self, task_id: str, status: str, result: any = None, error: str | None = None
+        self, task_id: str, status: str, result: Any = None, error: str | None = None
     ) -> None:
         self.upload_tasks[task_id] = {
             "status": status,
@@ -136,7 +137,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台上传任务"""
         try:
             # 初始化任务状态
@@ -1214,7 +1215,7 @@ class KnowledgeBaseRoute(Route):
         max_retries: int,
         enable_cleaning: bool,
         cleaning_provider_id: str | None,
-    ):
+    ) -> None:
         """后台上传URL任务"""
         try:
             # 初始化任务状态

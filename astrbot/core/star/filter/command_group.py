@@ -15,7 +15,7 @@ class CommandGroupFilter(HandlerFilter):
         group_name: str,
         alias: set | None = None,
         parent_group: CommandGroupFilter | None = None,
-    ):
+    ) -> None:
         self.group_name = group_name
         self.alias = alias if alias else set()
         self._original_group_name = group_name
@@ -29,10 +29,10 @@ class CommandGroupFilter(HandlerFilter):
     def add_sub_command_filter(
         self,
         sub_command_filter: CommandFilter | CommandGroupFilter,
-    ):
+    ) -> None:
         self.sub_command_filters.append(sub_command_filter)
 
-    def add_custom_filter(self, custom_filter: CustomFilter):
+    def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
 
     def get_complete_command_names(self) -> list[str]:

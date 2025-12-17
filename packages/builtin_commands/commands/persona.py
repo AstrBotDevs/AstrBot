@@ -5,10 +5,10 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 
 class PersonaCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def persona(self, message: AstrMessageEvent):
+    async def persona(self, message: AstrMessageEvent) -> None:
         l = message.message_str.split(" ")  # noqa: E741
         umo = message.unified_msg_origin
 

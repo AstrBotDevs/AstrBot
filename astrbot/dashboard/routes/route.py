@@ -14,12 +14,12 @@ class RouteContext:
 class Route:
     routes: list | dict
 
-    def __init__(self, context: RouteContext):
+    def __init__(self, context: RouteContext) -> None:
         self.app = context.app
         self.config = context.config
 
-    def register_routes(self):
-        def _add_rule(path, method, func):
+    def register_routes(self) -> None:
+        def _add_rule(path, method, func) -> None:
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
             self.app.add_url_rule(full_path, view_func=func, methods=[method])

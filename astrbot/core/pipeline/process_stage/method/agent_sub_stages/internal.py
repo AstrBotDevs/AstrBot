@@ -98,7 +98,7 @@ class InternalAgentSubStage(Stage):
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """Apply knowledge base context to the provider request"""
         if not self.kb_agentic_mode:
             if req.prompt is None:
@@ -126,7 +126,7 @@ class InternalAgentSubStage(Stage):
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """Apply file extract to the provider request"""
         file_paths = []
         file_names = []
@@ -198,7 +198,7 @@ class InternalAgentSubStage(Stage):
         self,
         provider: Provider,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """检查提供商的模态能力，清理请求中的不支持内容"""
         if req.image_urls:
             provider_cfg = provider.provider_config.get("modalities", ["image"])
@@ -218,7 +218,7 @@ class InternalAgentSubStage(Stage):
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """根据事件中的插件设置，过滤请求中的工具列表"""
         if event.plugins_name is not None and req.func_tool:
             new_tool_set = ToolSet()
@@ -238,7 +238,7 @@ class InternalAgentSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         prov: Provider,
-    ):
+    ) -> None:
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
         if not req.conversation:
             return
@@ -294,7 +294,7 @@ class InternalAgentSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse | None,
-    ):
+    ) -> None:
         if (
             not req
             or not req.conversation

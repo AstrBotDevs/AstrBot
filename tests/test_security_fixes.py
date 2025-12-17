@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pytest
 
 
-def test_wecom_crypto_uses_secrets():
+def test_wecom_crypto_uses_secrets() -> None:
     """Test that WXBizJsonMsgCrypt uses secrets module instead of random."""
     from astrbot.core.platform.sources.wecom_ai_bot.WXBizJsonMsgCrypt import Prpcrypt
 
@@ -33,7 +33,7 @@ def test_wecom_crypto_uses_secrets():
         assert 1000000000000000 <= int(decoded) <= 9999999999999999
 
 
-def test_wecomai_utils_uses_secrets():
+def test_wecomai_utils_uses_secrets() -> None:
     """Test that wecomai_utils uses secrets module for random string generation."""
     from astrbot.core.platform.sources.wecom_ai_bot.wecomai_utils import (
         generate_random_string,
@@ -53,7 +53,7 @@ def test_wecomai_utils_uses_secrets():
     assert len(set(random_strings)) >= 19  # Allow for 1 collision in 20 (very unlikely)
 
 
-def test_azure_tts_signature_uses_secrets():
+def test_azure_tts_signature_uses_secrets() -> None:
     """Test that Azure TTS signature generation uses secrets module."""
     import asyncio
 
@@ -66,7 +66,7 @@ def test_azure_tts_signature_uses_secrets():
         "OTTS_AUTH_TIME": "https://example.com/api/time",
     }
 
-    async def test_nonce_generation():
+    async def test_nonce_generation() -> None:
         async with OTTSProvider(config) as provider:
             # Mock time sync to avoid actual API calls
             provider.time_offset = 0
@@ -94,7 +94,7 @@ def test_azure_tts_signature_uses_secrets():
     asyncio.run(test_nonce_generation())
 
 
-def test_ssl_context_fallback_explicit():
+def test_ssl_context_fallback_explicit() -> None:
     """Test that SSL context fallback is properly configured."""
     # This test verifies the SSL context configuration
     # We can't easily test the full io.py functions without network calls,
@@ -113,7 +113,7 @@ def test_ssl_context_fallback_explicit():
     # The actual code only uses this when certificate validation fails
 
 
-def test_io_module_has_ssl_imports():
+def test_io_module_has_ssl_imports() -> None:
     """Verify that io.py properly imports ssl module."""
     from astrbot.core.utils import io
 
@@ -124,7 +124,7 @@ def test_io_module_has_ssl_imports():
     assert hasattr(io.ssl, "CERT_NONE")
 
 
-def test_secrets_module_randomness_quality():
+def test_secrets_module_randomness_quality() -> None:
     """Test that secrets module provides high-quality randomness."""
     import secrets
 

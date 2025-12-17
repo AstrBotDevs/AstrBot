@@ -3,6 +3,7 @@ import re
 import shutil
 import ssl
 import zipfile
+from typing import NoReturn
 
 import aiohttp
 import certifi
@@ -101,10 +102,10 @@ class RepoZipUpdator:
             )
         return ret
 
-    def unzip(self):
+    def unzip(self) -> NoReturn:
         raise NotImplementedError
 
-    async def update(self):
+    async def update(self) -> NoReturn:
         raise NotImplementedError
 
     def compare_version(self, v1: str, v2: str) -> int:
@@ -148,7 +149,9 @@ class RepoZipUpdator:
             body=f"{tag_name}\n\n{sel_release_data['body']}",
         )
 
-    async def download_from_repo_url(self, target_path: str, repo_url: str, proxy=""):
+    async def download_from_repo_url(
+        self, target_path: str, repo_url: str, proxy=""
+    ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 
         logger.info(f"正在下载更新 {repo} ...")
@@ -203,7 +206,7 @@ class RepoZipUpdator:
             return author, repo, branch
         raise ValueError("无效的 GitHub URL")
 
-    def unzip_file(self, zip_path: str, target_dir: str):
+    def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
