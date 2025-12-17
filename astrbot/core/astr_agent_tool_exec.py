@@ -22,7 +22,12 @@ from astrbot.core.provider.register import llm_tools
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
+    async def execute(
+        cls,
+        tool: HandoffTool | MCPTool | FunctionTool[object],
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args: object,
+    ) -> T.AsyncGenerator[mcp.types.CallToolResult | None, None]:
         """执行函数调用。
 
         Args:
@@ -53,8 +58,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: object,
+    ) -> T.AsyncGenerator[mcp.types.CallToolResult, None]:
         input_ = tool_args.get("input")
 
         # make toolset for the agent
@@ -91,10 +96,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_local(
         cls,
-        tool: FunctionTool,
+        tool: FunctionTool[object],
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: object,
+    ) -> T.AsyncGenerator[mcp.types.CallToolResult | None, None]:
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
@@ -173,10 +178,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_mcp(
         cls,
-        tool: FunctionTool,
+        tool: FunctionTool[object],
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: object,
+    ) -> T.AsyncGenerator[mcp.types.CallToolResult, None]:
         res = await tool.call(run_context, **tool_args)
         if not res:
             return
@@ -191,9 +196,9 @@ async def call_local_llm_tool(
         | T.AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
     ],
     method_name: str,
-    *args,
-    **kwargs,
-) -> T.AsyncGenerator[T.Any, None]:
+    *args: object,
+    **kwargs: object,
+) -> T.AsyncGenerator[mcp.types.CallToolResult | str | None, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
     ready_to_call = None  # 一个协程或者异步生成器
 

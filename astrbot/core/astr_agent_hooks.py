@@ -1,5 +1,3 @@
-from typing import Any
-
 from mcp.types import CallToolResult
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
@@ -11,7 +9,11 @@ from astrbot.core.star.star_handler import EventType
 
 
 class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
-    async def on_agent_done(self, run_context, llm_response) -> None:
+    async def on_agent_done(
+        self,
+        run_context: ContextWrapper[AstrAgentContext],
+        llm_response: object,
+    ) -> None:
         # 执行事件钩子
         await call_event_hook(
             run_context.context.event,
@@ -22,8 +24,8 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_tool_end(
         self,
         run_context: ContextWrapper[AstrAgentContext],
-        tool: FunctionTool[Any],
-        tool_args: dict | None,
+        tool: FunctionTool[object],
+        tool_args: dict[str, object] | None,
         tool_result: CallToolResult | None,
     ) -> None:
         run_context.context.event.clear_result()
