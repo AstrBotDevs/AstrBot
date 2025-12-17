@@ -828,27 +828,13 @@ class ConfigRoute(Route):
     async def post_new_provider(self):
         new_provider_config = await request.json
 
-        # check id uniqueness
-        npid = new_provider_config.get("id", None)
-        if not npid:
-            return Response().error("服务提供商配置缺少 id 字段").__dict__
-        for provider in self.config["provider"]:
-            if provider.get("id", None) == npid:
-                return (
-                    Response()
-                    .error(f"provider with ID '{npid}' already exists")
-                    .__dict__
-                )
-
-        self.config["provider"].append(new_provider_config)
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.load_provider(
-                new_provider_config,
+            await self.core_lifecycle.provider_manager.create_provider(
+                new_provider_config
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
-        return Response().ok(None, "新增服务提供商配置成功~").__dict__
+        return Response().ok(None, "新增服务提供商配置成功").__dict__
 
     async def post_update_platform(self):
         update_platform_config = await request.json
@@ -884,31 +870,10 @@ class ConfigRoute(Route):
         if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
 
-        # check id uniqueness
-        npid = new_config.get("id", None)
-        if not npid:
-            return Response().error("服务提供商配置缺少 id 字段").__dict__
-        for provider in self.config["provider"]:
-            if (
-                provider.get("id", None) == npid
-                and provider.get("id", None) != origin_provider_id
-            ):
-                return (
-                    Response()
-                    .error(f"provider with ID '{npid}' already exists")
-                    .__dict__
-                )
-
-        for i, provider in enumerate(self.config["provider"]):
-            if provider["id"] == origin_provider_id:
-                self.config["provider"][i] = new_config
-                break
-        else:
-            return Response().error("未找到对应服务提供商").__dict__
-
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.reload(new_config)
+            await self.core_lifecycle.provider_manager.update_provider(
+                origin_provider_id, new_config
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新成功，已经实时生效~").__dict__

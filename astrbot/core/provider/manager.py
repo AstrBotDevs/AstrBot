@@ -33,7 +33,7 @@ class ProviderManager:
         persona_mgr: PersonaManager,
     ):
         self.reload_lock = asyncio.Lock()
-        self.delete_lock = asyncio.Lock()
+        self.resource_lock = asyncio.Lock()
         self.persona_mgr = persona_mgr
         self.acm = acm
         config = acm.confs["default"]
@@ -614,7 +614,8 @@ class ProviderManager:
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
     ):
-        async with self.delete_lock:
+        """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
+        async with self.resource_lock:
             # delete from config
             target_prov_ids = []
             if provider_id:
@@ -631,6 +632,46 @@ class ProviderManager:
                 ]
             config.save_config()
             logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
+
+    async def update_provider(self, origin_provider_id: str, new_config: dict):
+        """Update provider config and reload the instance. Config will be saved after update."""
+        async with self.resource_lock:
+            npid = new_config.get("id", None)
+            if not npid:
+                raise ValueError("New provider config must have an 'id' field")
+            config = self.acm.default_conf
+            for provider in config["provider"]:
+                if (
+                    provider.get("id", None) == npid
+                    and provider.get("id", None) != origin_provider_id
+                ):
+                    raise ValueError(f"Provider ID {npid} already exists")
+            # update config
+            for idx, provider in enumerate(config["provider"]):
+                if provider.get("id", None) == origin_provider_id:
+                    config["provider"][idx] = new_config
+                    break
+            else:
+                raise ValueError(f"Provider ID {origin_provider_id} not found")
+            config.save_config()
+            # reload instance
+            await self.reload(new_config)
+
+    async def create_provider(self, new_config: dict):
+        """Add new provider config and load the instance. Config will be saved after addition."""
+        async with self.resource_lock:
+            npid = new_config.get("id", None)
+            if not npid:
+                raise ValueError("New provider config must have an 'id' field")
+            config = self.acm.default_conf
+            for provider in config["provider"]:
+                if provider.get("id", None) == npid:
+                    raise ValueError(f"Provider ID {npid} already exists")
+            # add to config
+            config["provider"].append(new_config)
+            config.save_config()
+            # load instance
+            await self.load_provider(new_config)
 
     async def terminate(self):
         for provider_inst in self.provider_insts:
