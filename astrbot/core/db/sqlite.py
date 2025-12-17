@@ -44,6 +44,23 @@ class FilterKwargs(T.TypedDict, total=False):
     exclude_platforms: list[str]
 
 
+class UpdateKwargs(T.TypedDict, total=False):
+    plugin_name: str
+    module_path: str
+    original_command: str
+    resolved_command: str | None
+    enabled: bool
+    keep_original_alias: bool
+    conflict_key: str
+    resolution_strategy: str | None
+    note: str | None
+    extra_data: dict[str, object] | None
+    auto_managed: bool
+    status: str
+    resolution: str | None
+    auto_generated: bool
+
+
 class SQLiteDatabase(BaseDatabase):
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -481,7 +498,9 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def insert_attachment(self, path, type, mime_type):
+    async def insert_attachment(
+        self, path: str, type: str, mime_type: str
+    ) -> Attachment:
         """Insert a new attachment record."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -709,7 +728,7 @@ class SQLiteDatabase(BaseDatabase):
                 return await fn(session)
 
     @staticmethod
-    def _apply_updates(model, **updates) -> None:
+    def _apply_updates(model: SQLModel, **updates: Unpack[UpdateKwargs]) -> None:
         for field, value in updates.items():
             if value is not None:
                 setattr(model, field, value)
