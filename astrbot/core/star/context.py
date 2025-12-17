@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
@@ -375,6 +376,17 @@ class Context:
             if tool.name in tool_name:
                 logger.warning("替换已存在的 LLM 工具: " + tool.name)
                 self.provider_manager.llm_tools.remove_func(tool.name)
+
+            # create a fake empty awaitable hander to register the tool into handler registry
+            # then it can show in the web panel
+            from astrbot.core.star.register.star_handler import get_handler_or_create
+
+            fake_handler = lambda: asyncio.sleep(0)  # noqa: E731
+            fake_handler.__name__ = tool.name
+            fake_handler.__module__ = tool.__module__
+            fake_handler.__doc__ = tool.description
+            get_handler_or_create(fake_handler, EventType.OnCallingFuncToolEvent)
+
             self.provider_manager.llm_tools.func_list.append(tool)
 
     def register_web_api(
