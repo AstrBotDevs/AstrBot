@@ -88,7 +88,9 @@ class BackupRoute(Route):
         self.routes = {
             "/backup/list": ("GET", self.list_backups),
             "/backup/export": ("POST", self.export_backup),
-            "/backup/import": ("POST", self.import_backup),
+            "/backup/upload": ("POST", self.upload_backup),  # 上传文件
+            "/backup/check": ("POST", self.check_backup),  # 预检查
+            "/backup/import": ("POST", self.import_backup),  # 确认导入
             "/backup/progress": ("GET", self.get_progress),
             "/backup/download": ("GET", self.download_backup),
             "/backup/delete": ("POST", self.delete_backup),
@@ -290,58 +292,137 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def import_backup(self):
-        """导入备份
+    async def upload_backup(self):
+        """上传备份文件
 
-        支持两种方式:
-        1. multipart/form-data 文件上传
-        2. JSON 指定已存在的备份文件名
+        将备份文件上传到服务器，返回保存的文件名。
+        上传后应调用 check_backup 进行预检查。
 
         Form Data:
-        - file: 备份文件 (可选)
+        - file: 备份文件 (.zip)
+
+        返回:
+        - filename: 保存的文件名
+        """
+        try:
+            files = await request.files
+            if "file" not in files:
+                return Response().error("缺少备份文件").__dict__
+
+            file = files["file"]
+            if not file.filename or not file.filename.endswith(".zip"):
+                return Response().error("请上传 ZIP 格式的备份文件").__dict__
+
+            # 清洗文件名并生成唯一名称，防止路径遍历和覆盖
+            safe_filename = secure_filename(file.filename)
+            unique_filename = generate_unique_filename(safe_filename)
+
+            # 保存上传的文件
+            Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
+            zip_path = os.path.join(self.backup_dir, unique_filename)
+            await file.save(zip_path)
+
+            logger.info(
+                f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "filename": unique_filename,
+                        "original_filename": file.filename,
+                        "size": os.path.getsize(zip_path),
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"上传备份文件失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"上传备份文件失败: {e!s}").__dict__
+
+    async def check_backup(self):
+        """预检查备份文件
+
+        检查备份文件的版本兼容性，返回确认信息。
+        用户确认后调用 import_backup 执行导入。
 
         JSON Body:
-        - filename: 已存在的备份文件名 (可选)
+        - filename: 已上传的备份文件名
+
+        返回:
+        - ImportPreCheckResult: 预检查结果
+        """
+        try:
+            data = await request.json
+            filename = data.get("filename")
+            if not filename:
+                return Response().error("缺少 filename 参数").__dict__
+
+            # 安全检查 - 防止路径遍历
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            zip_path = os.path.join(self.backup_dir, filename)
+            if not os.path.exists(zip_path):
+                return Response().error(f"备份文件不存在: {filename}").__dict__
+
+            # 获取知识库管理器（用于构造 importer）
+            kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+
+            importer = AstrBotImporter(
+                main_db=self.db,
+                kb_manager=kb_manager,
+                config_path="data/cmd_config.json",
+                attachments_dir="data/attachments",
+                data_root="data",
+            )
+
+            # 执行预检查
+            check_result = importer.pre_check(zip_path)
+
+            return Response().ok(check_result.to_dict()).__dict__
+        except Exception as e:
+            logger.error(f"预检查备份文件失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"预检查备份文件失败: {e!s}").__dict__
+
+    async def import_backup(self):
+        """执行备份导入
+
+        在用户确认后执行实际的导入操作。
+        需要先调用 upload_backup 上传文件，再调用 check_backup 预检查。
+
+        JSON Body:
+        - filename: 已上传的备份文件名（必填）
+        - confirmed: 用户已确认（必填，必须为 true）
 
         返回:
         - task_id: 任务ID，用于查询导入进度
         """
         try:
-            zip_path = None
-            content_type = request.content_type or ""
+            data = await request.json
+            filename = data.get("filename")
+            confirmed = data.get("confirmed", False)
 
-            if "multipart/form-data" in content_type:
-                # 文件上传模式
-                files = await request.files
-                if "file" not in files:
-                    return Response().error("缺少备份文件").__dict__
+            if not filename:
+                return Response().error("缺少 filename 参数").__dict__
 
-                file = files["file"]
-                if not file.filename or not file.filename.endswith(".zip"):
-                    return Response().error("请上传 ZIP 格式的备份文件").__dict__
-
-                # 清洗文件名并生成唯一名称，防止路径遍历和覆盖
-                safe_filename = secure_filename(file.filename)
-                unique_filename = generate_unique_filename(safe_filename)
-
-                # 保存上传的文件
-                Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
-                zip_path = os.path.join(self.backup_dir, unique_filename)
-                await file.save(zip_path)
-
-                logger.info(
-                    f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
+            if not confirmed:
+                return (
+                    Response()
+                    .error("请先确认导入。导入将会清空并覆盖现有数据，此操作不可撤销。")
+                    .__dict__
                 )
-            else:
-                # JSON 模式 - 使用已存在的文件
-                data = await request.json
-                filename = data.get("filename")
-                if not filename:
-                    return Response().error("缺少 filename 参数").__dict__
 
-                zip_path = os.path.join(self.backup_dir, filename)
-                if not os.path.exists(zip_path):
-                    return Response().error(f"备份文件不存在: {filename}").__dict__
+            # 安全检查 - 防止路径遍历
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            zip_path = os.path.join(self.backup_dir, filename)
+            if not os.path.exists(zip_path):
+                return Response().error(f"备份文件不存在: {filename}").__dict__
 
             # 生成任务ID
             task_id = str(uuid.uuid4())

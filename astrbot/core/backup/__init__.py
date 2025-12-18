@@ -13,11 +13,12 @@ from .constants import (
 
 # 导入导出器和导入器
 from .exporter import AstrBotExporter
-from .importer import AstrBotImporter
+from .importer import AstrBotImporter, ImportPreCheckResult
 
 __all__ = [
     "AstrBotExporter",
     "AstrBotImporter",
+    "ImportPreCheckResult",
     "MAIN_DB_MODELS",
     "KB_METADATA_MODELS",
     "BACKUP_DIRECTORIES",

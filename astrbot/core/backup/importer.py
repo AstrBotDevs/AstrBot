@@ -1,13 +1,17 @@
 """AstrBot 数据导入器
 
 负责从 ZIP 备份文件恢复所有数据。
-导入时进行严格的版本校验，仅允许相同版本的 AstrBot 进行导入。
+导入时进行版本校验：
+- 主版本（前两位）不同时直接拒绝导入
+- 小版本（第三位）不同时提示警告，用户可选择强制导入
+- 版本匹配时也需要用户确认
 """
 
 import json
 import os
 import shutil
 import zipfile
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -74,6 +78,50 @@ def compare_versions(v1: str, v2: str) -> int:
         return 0
 
 
+@dataclass
+class ImportPreCheckResult:
+    """导入预检查结果
+
+    用于在实际导入前检查备份文件的版本兼容性，
+    并返回确认信息让用户决定是否继续导入。
+    """
+
+    # 检查是否通过（文件有效且版本可导入）
+    valid: bool = False
+    # 是否可以导入（版本兼容）
+    can_import: bool = False
+    # 版本状态: match（完全匹配）, minor_diff（小版本差异）, major_diff（主版本不同，拒绝）
+    version_status: str = ""
+    # 备份文件中的 AstrBot 版本
+    backup_version: str = ""
+    # 当前运行的 AstrBot 版本
+    current_version: str = VERSION
+    # 备份创建时间
+    backup_time: str = ""
+    # 确认消息（显示给用户）
+    confirm_message: str = ""
+    # 警告消息列表
+    warnings: list[str] = field(default_factory=list)
+    # 错误消息（如果检查失败）
+    error: str = ""
+    # 备份包含的内容摘要
+    backup_summary: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "valid": self.valid,
+            "can_import": self.can_import,
+            "version_status": self.version_status,
+            "backup_version": self.backup_version,
+            "current_version": self.current_version,
+            "backup_time": self.backup_time,
+            "confirm_message": self.confirm_message,
+            "warnings": self.warnings,
+            "error": self.error,
+            "backup_summary": self.backup_summary,
+        }
+
+
 class ImportResult:
     """导入结果"""
 
@@ -137,6 +185,156 @@ class AstrBotImporter:
         self.attachments_dir = attachments_dir
         self.kb_root_dir = kb_root_dir
         self.data_root = data_root
+
+    def pre_check(self, zip_path: str) -> ImportPreCheckResult:
+        """预检查备份文件
+
+        在实际导入前检查备份文件的有效性和版本兼容性。
+        返回检查结果供前端显示确认对话框。
+
+        Args:
+            zip_path: ZIP 备份文件路径
+
+        Returns:
+            ImportPreCheckResult: 预检查结果
+        """
+        result = ImportPreCheckResult()
+        result.current_version = VERSION
+
+        if not os.path.exists(zip_path):
+            result.error = f"备份文件不存在: {zip_path}"
+            return result
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                # 读取 manifest
+                try:
+                    manifest_data = zf.read("manifest.json")
+                    manifest = json.loads(manifest_data)
+                except KeyError:
+                    result.error = "备份文件缺少 manifest.json，不是有效的 AstrBot 备份"
+                    return result
+                except json.JSONDecodeError as e:
+                    result.error = f"manifest.json 格式错误: {e}"
+                    return result
+
+                # 提取基本信息
+                result.backup_version = manifest.get("astrbot_version", "未知")
+                result.backup_time = manifest.get("created_at", "未知")
+                result.valid = True
+
+                # 构建备份摘要
+                result.backup_summary = {
+                    "tables": list(manifest.get("tables", {}).keys()),
+                    "has_knowledge_bases": manifest.get("has_knowledge_bases", False),
+                    "has_config": manifest.get("has_config", False),
+                    "directories": manifest.get("directories", []),
+                }
+
+                # 检查版本兼容性
+                version_check = self._check_version_compatibility(result.backup_version)
+                result.version_status = version_check["status"]
+                result.can_import = version_check["can_import"]
+
+                if version_check["status"] == "major_diff":
+                    result.warnings.append(version_check["message"])
+                    result.confirm_message = (
+                        f"⛔ 无法导入：备份版本 {result.backup_version} 与当前版本 {VERSION} "
+                        f"的主版本号不同，跨主版本导入可能导致数据损坏。"
+                    )
+                elif version_check["status"] == "minor_diff":
+                    result.warnings.append(version_check["message"])
+                    result.confirm_message = (
+                        f"⚠️ 版本差异警告\n\n"
+                        f"备份版本: {result.backup_version}\n"
+                        f"当前版本: {VERSION}\n\n"
+                        f"小版本差异通常是兼容的，但可能存在少量数据结构变化。\n"
+                        f"导入将会清空并覆盖现有的所有数据！\n\n"
+                        f"是否确认继续导入？"
+                    )
+                else:
+                    # 版本匹配
+                    result.confirm_message = (
+                        f"✅ 版本匹配\n\n"
+                        f"备份版本: {result.backup_version}\n"
+                        f"备份时间: {result.backup_time}\n\n"
+                        f"⚠️ 导入将会清空并覆盖现有的所有数据，包括：\n"
+                        f"• 主数据库（对话记录、配置等）\n"
+                        f"• 知识库数据\n"
+                        f"• 插件及插件数据\n"
+                        f"• 配置文件\n\n"
+                        f"此操作不可撤销！是否确认继续？"
+                    )
+
+                return result
+
+        except zipfile.BadZipFile:
+            result.error = "无效的 ZIP 文件"
+            return result
+        except Exception as e:
+            result.error = f"检查备份文件失败: {e}"
+            return result
+
+    def _check_version_compatibility(self, backup_version: str) -> dict:
+        """检查版本兼容性
+
+        规则：
+        - 主版本（前两位，如 4.9）必须一致，否则拒绝
+        - 小版本（第三位，如 4.9.1 vs 4.9.2）不同时，警告但允许导入
+
+        Returns:
+            dict: {status, can_import, message}
+        """
+        if not backup_version:
+            return {
+                "status": "major_diff",
+                "can_import": False,
+                "message": "备份文件缺少版本信息",
+            }
+
+        backup_parts = parse_version(backup_version)
+        current_parts = parse_version(VERSION)
+
+        # 补齐到至少 2 位用于主版本比较
+        backup_major = (
+            backup_parts[:2]
+            if len(backup_parts) >= 2
+            else backup_parts + (0,) * (2 - len(backup_parts))
+        )
+        current_major = (
+            current_parts[:2]
+            if len(current_parts) >= 2
+            else current_parts + (0,) * (2 - len(current_parts))
+        )
+
+        if backup_major != current_major:
+            return {
+                "status": "major_diff",
+                "can_import": False,
+                "message": (
+                    f"主版本不兼容: 备份版本 {backup_version}, 当前版本 {VERSION}。"
+                    f"跨主版本导入可能导致数据损坏，请使用相同主版本的 AstrBot。"
+                ),
+            }
+
+        # 比较完整版本
+        backup_full = backup_parts + (0,) * (3 - len(backup_parts))
+        current_full = current_parts + (0,) * (3 - len(current_parts))
+
+        if backup_full != current_full:
+            return {
+                "status": "minor_diff",
+                "can_import": True,
+                "message": (
+                    f"小版本差异: 备份版本 {backup_version}, 当前版本 {VERSION}。"
+                ),
+            }
+
+        return {
+            "status": "match",
+            "can_import": True,
+            "message": "版本匹配",
+        }
 
     async def import_all(
         self,
@@ -283,16 +481,24 @@ class AstrBotImporter:
             return result
 
     def _validate_version(self, manifest: dict) -> None:
-        """验证版本兼容性 - 仅允许相同版本导入"""
+        """验证版本兼容性 - 仅允许相同主版本导入
+
+        注意：此方法仅在 import_all 中调用，用于双重校验。
+        前端应先调用 pre_check 获取详细的版本信息并让用户确认。
+        """
         backup_version = manifest.get("astrbot_version")
         if not backup_version:
             raise ValueError("备份文件缺少版本信息")
 
-        if backup_version != VERSION:
-            raise ValueError(
-                f"版本不匹配: 备份版本 {backup_version}, 当前版本 {VERSION}。"
-                f"请使用相同版本的 AstrBot 进行导入。"
-            )
+        # 使用新的版本兼容性检查
+        version_check = self._check_version_compatibility(backup_version)
+
+        if version_check["status"] == "major_diff":
+            raise ValueError(version_check["message"])
+
+        # minor_diff 和 match 都允许导入
+        if version_check["status"] == "minor_diff":
+            logger.warning(f"版本差异警告: {version_check['message']}")
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""

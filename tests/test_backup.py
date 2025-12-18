@@ -13,6 +13,7 @@ from astrbot.core.backup import (
     BACKUP_MANIFEST_VERSION,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
+    ImportPreCheckResult,
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
@@ -261,12 +262,26 @@ class TestAstrBotImporter:
         # 不应该抛出异常
         importer._validate_version(manifest)
 
-    def test_validate_version_mismatch(self):
-        """测试版本不匹配验证"""
+    def test_validate_version_major_diff_rejected(self):
+        """测试主版本不同被拒绝"""
         importer = AstrBotImporter(main_db=MagicMock())
 
+        # 使用一个明显不同的主版本
         manifest = {"astrbot_version": "0.0.1"}
-        with pytest.raises(ValueError, match="版本不匹配"):
+        with pytest.raises(ValueError, match="主版本不兼容"):
+            importer._validate_version(manifest)
+
+    def test_validate_version_minor_diff_allowed(self):
+        """测试小版本不同被允许（仅警告）"""
+        importer = AstrBotImporter(main_db=MagicMock())
+
+        # 解析当前版本
+        current_parts = parse_version(VERSION)
+        if len(current_parts) >= 2:
+            # 构造一个同主版本但小版本不同的版本
+            minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
+            manifest = {"astrbot_version": minor_diff_version}
+            # 不应该抛出异常
             importer._validate_version(manifest)
 
     def test_validate_version_missing(self):
@@ -334,13 +349,13 @@ class TestAstrBotImporter:
         assert any("manifest" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    async def test_import_version_mismatch(self, mock_main_db, tmp_path):
-        """测试导入版本不匹配的备份"""
-        # 创建一个版本不匹配的备份
+    async def test_import_major_version_mismatch(self, mock_main_db, tmp_path):
+        """测试导入主版本不匹配的备份"""
+        # 创建一个主版本不匹配的备份
         zip_path = tmp_path / "old_version.zip"
         manifest = {
             "version": "1.0",
-            "astrbot_version": "0.0.1",  # 错误的版本
+            "astrbot_version": "0.0.1",  # 主版本不同
             "tables": {"main_db": []},
         }
 
@@ -351,7 +366,7 @@ class TestAstrBotImporter:
         result = await importer.import_all(str(zip_path))
 
         assert result.success is False
-        assert any("版本不匹配" in err for err in result.errors)
+        assert any("主版本不兼容" in err for err in result.errors)
 
 
 class TestSecureFilename:
@@ -453,6 +468,196 @@ class TestVersionComparison:
         assert compare_versions("1.0", "1.0.0") == 0
         assert compare_versions("1.0", "1.0.1") == -1
         assert compare_versions("1.0.1", "1.0") == 1
+
+
+class TestImportPreCheckResult:
+    """ImportPreCheckResult 类测试"""
+
+    def test_init_default_values(self):
+        """测试默认值初始化"""
+        result = ImportPreCheckResult()
+        assert result.valid is False
+        assert result.can_import is False
+        assert result.version_status == ""
+        assert result.backup_version == ""
+        assert result.current_version == VERSION
+        assert result.confirm_message == ""
+        assert result.warnings == []
+        assert result.error == ""
+        assert result.backup_summary == {}
+
+    def test_to_dict(self):
+        """测试转换为字典"""
+        result = ImportPreCheckResult(
+            valid=True,
+            can_import=True,
+            version_status="match",
+            backup_version="4.9.0",
+            confirm_message="确认导入？",
+            warnings=["警告1"],
+            backup_summary={"tables": ["table1"]},
+        )
+
+        d = result.to_dict()
+        assert d["valid"] is True
+        assert d["can_import"] is True
+        assert d["version_status"] == "match"
+        assert d["backup_version"] == "4.9.0"
+        assert d["confirm_message"] == "确认导入？"
+        assert "警告1" in d["warnings"]
+        assert d["backup_summary"]["tables"] == ["table1"]
+
+
+class TestPreCheck:
+    """预检查功能测试"""
+
+    def test_pre_check_file_not_exists(self, mock_main_db):
+        """测试预检查不存在的文件"""
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check("/nonexistent/file.zip")
+
+        assert result.valid is False
+        assert "不存在" in result.error
+
+    def test_pre_check_invalid_zip(self, mock_main_db, tmp_path):
+        """测试预检查无效的 ZIP 文件"""
+        invalid_zip = tmp_path / "invalid.zip"
+        invalid_zip.write_text("not a zip file")
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(invalid_zip))
+
+        assert result.valid is False
+        assert "ZIP" in result.error or "无效" in result.error
+
+    def test_pre_check_missing_manifest(self, mock_main_db, tmp_path):
+        """测试预检查缺少 manifest 的 ZIP 文件"""
+        zip_path = tmp_path / "no_manifest.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("test.txt", "test content")
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(zip_path))
+
+        assert result.valid is False
+        assert "manifest" in result.error.lower()
+
+    def test_pre_check_version_match(self, mock_main_db, tmp_path):
+        """测试预检查版本匹配"""
+        zip_path = tmp_path / "backup.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "created_at": "2024-01-01T12:00:00",
+            "tables": {"platform_stats": 1},
+            "has_knowledge_bases": True,
+            "has_config": True,
+            "directories": ["plugins"],
+        }
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(zip_path))
+
+        assert result.valid is True
+        assert result.can_import is True
+        assert result.version_status == "match"
+        assert result.backup_version == VERSION
+        assert "✅" in result.confirm_message
+        assert result.backup_summary["has_knowledge_bases"] is True
+
+    def test_pre_check_minor_version_diff(self, mock_main_db, tmp_path):
+        """测试预检查小版本差异"""
+        # 构造一个同主版本但小版本不同的版本
+        current_parts = parse_version(VERSION)
+        # VERSION 应该至少有两个部分（如 4.9）
+        assert len(current_parts) >= 2, f"VERSION {VERSION} 应该有至少两个部分"
+        minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
+
+        zip_path = tmp_path / "backup.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": minor_diff_version,
+            "created_at": "2024-01-01T12:00:00",
+            "tables": {},
+        }
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(zip_path))
+
+        assert result.valid is True
+        assert result.can_import is True
+        assert result.version_status == "minor_diff"
+        assert "⚠️" in result.confirm_message
+        assert len(result.warnings) > 0
+
+    def test_pre_check_major_version_diff(self, mock_main_db, tmp_path):
+        """测试预检查主版本差异"""
+        zip_path = tmp_path / "backup.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": "0.0.1",  # 主版本不同
+            "created_at": "2024-01-01T12:00:00",
+            "tables": {},
+        }
+
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer.pre_check(str(zip_path))
+
+        assert result.valid is True  # 文件有效
+        assert result.can_import is False  # 但不能导入
+        assert result.version_status == "major_diff"
+        assert "⛔" in result.confirm_message
+        assert len(result.warnings) > 0
+
+
+class TestVersionCompatibility:
+    """版本兼容性检查测试"""
+
+    def test_check_version_compatibility_match(self, mock_main_db):
+        """测试版本完全匹配"""
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer._check_version_compatibility(VERSION)
+
+        assert result["status"] == "match"
+        assert result["can_import"] is True
+
+    def test_check_version_compatibility_minor_diff(self, mock_main_db):
+        """测试小版本差异"""
+        current_parts = parse_version(VERSION)
+        # VERSION 应该至少有两个部分（如 4.9）
+        assert len(current_parts) >= 2, f"VERSION {VERSION} 应该有至少两个部分"
+        minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer._check_version_compatibility(minor_diff_version)
+
+        assert result["status"] == "minor_diff"
+        assert result["can_import"] is True
+
+    def test_check_version_compatibility_major_diff(self, mock_main_db):
+        """测试主版本差异"""
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer._check_version_compatibility("0.0.1")
+
+        assert result["status"] == "major_diff"
+        assert result["can_import"] is False
+
+    def test_check_version_compatibility_empty_version(self, mock_main_db):
+        """测试空版本号"""
+        importer = AstrBotImporter(main_db=mock_main_db)
+        result = importer._check_version_compatibility("")
+
+        assert result["status"] == "major_diff"
+        assert result["can_import"] is False
 
 
 class TestModelMappings:

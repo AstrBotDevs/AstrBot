@@ -76,6 +76,7 @@
 
                     <!-- 导入标签页 -->
                     <v-window-item value="import">
+                        <!-- 步骤1: 选择文件 -->
                         <div v-if="importStatus === 'idle'" class="py-4">
                             <v-alert type="warning" variant="tonal" class="mb-4">
                                 <template v-slot:prepend>
@@ -94,19 +95,89 @@
                             ></v-file-input>
 
                             <div class="d-flex justify-center">
-                                <v-btn 
-                                    color="primary" 
-                                    size="large" 
-                                    @click="startImport" 
+                                <v-btn
+                                    color="primary"
+                                    size="large"
+                                    @click="uploadAndCheck"
                                     :disabled="!importFile"
-                                    :loading="importStatus === 'processing'"
+                                    :loading="importStatus === 'uploading'"
                                 >
-                                    <v-icon class="mr-2">mdi-import</v-icon>
-                                    {{ t('features.settings.backup.import.button') }}
+                                    <v-icon class="mr-2">mdi-upload</v-icon>
+                                    {{ t('features.settings.backup.import.uploadAndCheck') }}
                                 </v-btn>
                             </div>
                         </div>
 
+                        <!-- 步骤1.5: 上传中 -->
+                        <div v-else-if="importStatus === 'uploading'" class="text-center py-8">
+                            <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
+                            <h3 class="mb-4">{{ t('features.settings.backup.import.uploading') }}</h3>
+                            <p class="text-grey">{{ t('features.settings.backup.import.uploadWait') }}</p>
+                        </div>
+
+                        <!-- 步骤2: 确认导入 -->
+                        <div v-else-if="importStatus === 'confirm'" class="py-4">
+                            <v-alert
+                                :type="checkResult?.version_status === 'major_diff' ? 'error' : (checkResult?.version_status === 'minor_diff' ? 'warning' : 'info')"
+                                variant="tonal"
+                                class="mb-4"
+                            >
+                                <template v-slot:prepend>
+                                    <v-icon>{{ checkResult?.version_status === 'major_diff' ? 'mdi-close-circle' : (checkResult?.version_status === 'minor_diff' ? 'mdi-alert' : 'mdi-check-circle') }}</v-icon>
+                                </template>
+                                <div class="confirm-message" style="white-space: pre-line;">{{ checkResult?.confirm_message }}</div>
+                            </v-alert>
+
+                            <!-- 备份摘要 -->
+                            <v-card variant="outlined" class="mb-4" v-if="checkResult?.backup_summary">
+                                <v-card-title class="text-subtitle-1">
+                                    <v-icon class="mr-2">mdi-package-variant</v-icon>
+                                    {{ t('features.settings.backup.import.backupContents') }}
+                                </v-card-title>
+                                <v-card-text>
+                                    <v-chip-group>
+                                        <v-chip v-if="checkResult.backup_summary.tables?.length" size="small" color="primary" variant="tonal">
+                                            {{ checkResult.backup_summary.tables.length }} {{ t('features.settings.backup.import.tables') }}
+                                        </v-chip>
+                                        <v-chip v-if="checkResult.backup_summary.has_knowledge_bases" size="small" color="success" variant="tonal">
+                                            {{ t('features.settings.backup.import.knowledgeBases') }}
+                                        </v-chip>
+                                        <v-chip v-if="checkResult.backup_summary.has_config" size="small" color="info" variant="tonal">
+                                            {{ t('features.settings.backup.import.configFiles') }}
+                                        </v-chip>
+                                        <v-chip v-for="dir in (checkResult.backup_summary.directories || [])" :key="dir" size="small" color="warning" variant="tonal">
+                                            {{ dir }}
+                                        </v-chip>
+                                    </v-chip-group>
+                                </v-card-text>
+                            </v-card>
+
+                            <!-- 警告信息 -->
+                            <v-alert v-if="checkResult?.warnings?.length" type="warning" variant="tonal" class="mb-4">
+                                <div v-for="(warning, idx) in checkResult.warnings" :key="idx">{{ warning }}</div>
+                            </v-alert>
+
+                            <div class="d-flex justify-center gap-4">
+                                <v-btn
+                                    color="grey"
+                                    variant="text"
+                                    @click="resetImport"
+                                >
+                                    {{ t('core.common.cancel') }}
+                                </v-btn>
+                                <v-btn
+                                    v-if="checkResult?.can_import"
+                                    color="error"
+                                    size="large"
+                                    @click="confirmImport"
+                                >
+                                    <v-icon class="mr-2">mdi-alert</v-icon>
+                                    {{ t('features.settings.backup.import.confirmImport') }}
+                                </v-btn>
+                            </div>
+                        </div>
+
+                        <!-- 步骤3: 导入进行中 -->
                         <div v-else-if="importStatus === 'processing'" class="text-center py-8">
                             <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
                             <h3 class="mb-4">{{ t('features.settings.backup.import.processing') }}</h3>
@@ -215,11 +286,13 @@ const exportResult = ref(null)
 const exportError = ref('')
 
 // 导入状态
-const importStatus = ref('idle') // idle, processing, completed, failed
+const importStatus = ref('idle') // idle, uploading, confirm, processing, completed, failed
 const importFile = ref(null)
 const importTaskId = ref(null)
 const importProgress = ref({ current: 0, total: 100, message: '' })
 const importError = ref('')
+const uploadedFilename = ref('')  // 已上传的文件名
+const checkResult = ref(null)     // 预检查结果
 
 // 备份列表
 const loadingList = ref(false)
@@ -325,19 +398,65 @@ const resetExport = () => {
     exportError.value = ''
 }
 
-// 开始导入
-const startImport = async () => {
+// 上传并检查
+const uploadAndCheck = async () => {
     if (!importFile.value) return
+
+    importStatus.value = 'uploading'
+
+    try {
+        // 步骤1: 上传文件
+        const formData = new FormData()
+        formData.append('file', importFile.value)
+
+        const uploadResponse = await axios.post('/api/backup/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+
+        if (uploadResponse.data.status !== 'ok') {
+            throw new Error(uploadResponse.data.message)
+        }
+
+        uploadedFilename.value = uploadResponse.data.data.filename
+
+        // 步骤2: 预检查
+        const checkResponse = await axios.post('/api/backup/check', {
+            filename: uploadedFilename.value
+        })
+
+        if (checkResponse.data.status !== 'ok') {
+            throw new Error(checkResponse.data.message)
+        }
+
+        checkResult.value = checkResponse.data.data
+        
+        // 检查是否有效
+        if (!checkResult.value.valid) {
+            importStatus.value = 'failed'
+            importError.value = checkResult.value.error || t('features.settings.backup.import.invalidBackup')
+            return
+        }
+
+        // 显示确认对话框
+        importStatus.value = 'confirm'
+
+    } catch (error) {
+        importStatus.value = 'failed'
+        importError.value = error.response?.data?.message || error.message || 'Upload failed'
+    }
+}
+
+// 确认导入
+const confirmImport = async () => {
+    if (!uploadedFilename.value) return
 
     importStatus.value = 'processing'
     importProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const formData = new FormData()
-        formData.append('file', importFile.value)
-
-        const response = await axios.post('/api/backup/import', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+        const response = await axios.post('/api/backup/import', {
+            filename: uploadedFilename.value,
+            confirmed: true
         })
 
         if (response.data.status === 'ok') {
@@ -348,7 +467,7 @@ const startImport = async () => {
         }
     } catch (error) {
         importStatus.value = 'failed'
-        importError.value = error.message || 'Import failed'
+        importError.value = error.response?.data?.message || error.message || 'Import failed'
     }
 }
 
@@ -393,6 +512,8 @@ const resetImport = () => {
     importTaskId.value = null
     importProgress.value = { current: 0, total: 100, message: '' }
     importError.value = ''
+    uploadedFilename.value = ''
+    checkResult.value = null
 }
 
 // 下载备份
