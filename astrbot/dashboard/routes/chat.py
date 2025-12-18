@@ -343,7 +343,9 @@ class ChatRoute(Route):
                                 tool_calls[tool_call.get("id")] = tool_call
                                 if accumulated_text:
                                     # 如果累积了文本，则先保存文本
-                                    accumulated_parts.append({"type": "plain", "text": accumulated_text})
+                                    accumulated_parts.append(
+                                        {"type": "plain", "text": accumulated_text}
+                                    )
                                     accumulated_text = ""
                             elif chain_type == "tool_call_result":
                                 tcr = json.loads(result_text)
@@ -351,7 +353,12 @@ class ChatRoute(Route):
                                 if tc_id in tool_calls:
                                     tool_calls[tc_id]["result"] = tcr.get("result")
                                     tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                accumulated_parts.append({"type": "tool_call", "tool_calls": [tool_calls[tc_id]]})
+                                accumulated_parts.append(
+                                    {
+                                        "type": "tool_call",
+                                        "tool_calls": [tool_calls[tc_id]],
+                                    }
+                                )
                                 tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
                                 accumulated_reasoning += result_text
