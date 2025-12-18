@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+import re
 import traceback
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from quart import request, send_file
@@ -15,6 +17,50 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 
 from .route import Response, Route, RouteContext
+
+
+def secure_filename(filename: str) -> str:
+    """清洗文件名，移除路径遍历字符和危险字符
+
+    Args:
+        filename: 原始文件名
+
+    Returns:
+        安全的文件名
+    """
+    # 仅保留文件名部分，移除路径
+    filename = os.path.basename(filename)
+
+    # 替换路径分隔符和危险字符
+    filename = filename.replace("..", "_")
+    filename = filename.replace("/", "_")
+    filename = filename.replace("\\", "_")
+
+    # 仅保留字母、数字、下划线、连字符、点
+    filename = re.sub(r"[^\w\-.]", "_", filename)
+
+    # 移除前导点（隐藏文件）
+    filename = filename.lstrip(".")
+
+    # 如果文件名为空，生成一个默认名称
+    if not filename:
+        filename = "backup"
+
+    return filename
+
+
+def generate_unique_filename(original_filename: str) -> str:
+    """生成唯一的文件名，添加时间戳前缀
+
+    Args:
+        original_filename: 原始文件名（已清洗）
+
+    Returns:
+        唯一的文件名
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    name, ext = os.path.splitext(original_filename)
+    return f"uploaded_{timestamp}_{name}{ext}"
 
 
 class BackupRoute(Route):
@@ -274,10 +320,18 @@ class BackupRoute(Route):
                 if not file.filename or not file.filename.endswith(".zip"):
                     return Response().error("请上传 ZIP 格式的备份文件").__dict__
 
+                # 清洗文件名并生成唯一名称，防止路径遍历和覆盖
+                safe_filename = secure_filename(file.filename)
+                unique_filename = generate_unique_filename(safe_filename)
+
                 # 保存上传的文件
                 Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
-                zip_path = os.path.join(self.backup_dir, file.filename)
+                zip_path = os.path.join(self.backup_dir, unique_filename)
                 await file.save(zip_path)
+
+                logger.info(
+                    f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
+                )
             else:
                 # JSON 模式 - 使用已存在的文件
                 data = await request.json

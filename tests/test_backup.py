@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import zipfile
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -22,6 +23,10 @@ from astrbot.core.backup.importer import (
 from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
     ConversationV2,
+)
+from astrbot.dashboard.routes.backup import (
+    generate_unique_filename,
+    secure_filename,
 )
 
 
@@ -346,6 +351,60 @@ class TestAstrBotImporter:
 
         assert result.success is False
         assert any("版本不匹配" in err for err in result.errors)
+
+
+class TestSecureFilename:
+    """安全文件名函数测试"""
+
+    def test_secure_filename_normal(self):
+        """测试正常文件名"""
+        assert secure_filename("backup.zip") == "backup.zip"
+        assert secure_filename("my_backup_2024.zip") == "my_backup_2024.zip"
+
+    def test_secure_filename_path_traversal(self):
+        """测试路径遍历攻击"""
+        assert ".." not in secure_filename("../../../etc/passwd")
+        assert "/" not in secure_filename("/etc/passwd")
+        assert "\\" not in secure_filename("..\\..\\windows\\system32")
+
+    def test_secure_filename_with_path(self):
+        """测试带路径的文件名"""
+        result = secure_filename("/path/to/backup.zip")
+        assert result == "backup.zip"
+
+        result = secure_filename("C:\\Users\\test\\backup.zip")
+        assert result == "backup.zip"
+
+    def test_secure_filename_special_chars(self):
+        """测试特殊字符"""
+        result = secure_filename('backup<>:"|?*.zip')
+        # 特殊字符应被替换为下划线
+        assert "<" not in result
+        assert ">" not in result
+        assert ":" not in result
+        assert '"' not in result
+        assert "|" not in result
+        assert "?" not in result
+        assert "*" not in result
+
+    def test_secure_filename_hidden_file(self):
+        """测试隐藏文件（前导点）"""
+        result = secure_filename(".hidden_backup.zip")
+        assert not result.startswith(".")
+
+    def test_secure_filename_empty(self):
+        """测试空文件名"""
+        assert secure_filename("") == "backup"
+        assert secure_filename("...") == "backup"
+
+    def test_generate_unique_filename(self):
+        """测试生成唯一文件名"""
+        result = generate_unique_filename("backup.zip")
+        # 应包含 uploaded_ 前缀和时间戳
+        assert result.startswith("uploaded_")
+        assert result.endswith("_backup.zip")
+        # 应包含时间戳格式 YYYYMMDD_HHMMSS
+        assert re.search(r"uploaded_\d{8}_\d{6}_backup\.zip", result)
 
 
 class TestVersionComparison:
