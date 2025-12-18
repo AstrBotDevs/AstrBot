@@ -54,7 +54,7 @@ async def run_agent(
                         else:
                             m = "🔨 调用工具..."
                         chain = MessageChain(type="tool_call").message(m)
-                        await astr_event.send(resp.data["chain"])
+                        await astr_event.send(chain)
                     continue
 
                 if stream_to_general and resp.type == "streaming_delta":
