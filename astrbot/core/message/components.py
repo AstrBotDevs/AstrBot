@@ -629,12 +629,11 @@ class Nodes(BaseMessageComponent):
 
 class Json(BaseMessageComponent):
     type = ComponentType.Json
-    data: str | dict
-    resid: int | None = 0
+    data: dict
 
-    def __init__(self, data, **_):
-        if isinstance(data, dict):
-            data = json.dumps(data)
+    def __init__(self, data: str | dict, **_):
+        if isinstance(data, str):
+            data = json.loads(data)
         super().__init__(data=data, **_)
 
 

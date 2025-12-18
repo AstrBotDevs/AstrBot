@@ -14,7 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 
@@ -347,6 +347,16 @@ class ProviderGoogleGenAI(Provider):
         ]
         return "".join(thought_buf).strip()
 
+    def _extract_usage(
+        self, usage_metadata: types.GenerateContentResponseUsageMetadata
+    ) -> TokenUsage:
+        """Extract usage from candidate"""
+        return TokenUsage(
+            input_other=usage_metadata.prompt_token_count or 0,
+            input_cached=usage_metadata.cached_content_token_count or 0,
+            output=usage_metadata.candidates_token_count or 0,
+        )
+
     def _process_content_parts(
         self,
         candidate: types.Candidate,
@@ -501,6 +511,9 @@ class ProviderGoogleGenAI(Provider):
             result.candidates[0],
             llm_response,
         )
+        llm_response.id = result.response_id
+        if result.usage_metadata:
+            llm_response.usage = self._extract_usage(result.usage_metadata)
         return llm_response
 
     async def _query_stream(
@@ -569,6 +582,9 @@ class ProviderGoogleGenAI(Provider):
                     chunk.candidates[0],
                     llm_response,
                 )
+                llm_response.id = chunk.response_id
+                if chunk.usage_metadata:
+                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
                 yield llm_response
                 return
 
@@ -596,6 +612,9 @@ class ProviderGoogleGenAI(Provider):
                         chunk.candidates[0],
                         final_response,
                     )
+                    final_response.id = chunk.response_id
+                    if chunk.usage_metadata:
+                        final_response.usage = self._extract_usage(chunk.usage_metadata)
                 break
 
         # Yield final complete response with accumulated text

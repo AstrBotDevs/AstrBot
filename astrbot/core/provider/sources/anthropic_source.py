@@ -6,10 +6,12 @@ from mimetypes import guess_type
 import anthropic
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
+from anthropic.types.message_delta_usage import MessageDeltaUsage
+from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 
@@ -107,6 +109,22 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
+    def _extract_usage(self, usage: Usage) -> TokenUsage:
+        # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        return TokenUsage(
+            input_other=usage.input_tokens or 0,
+            input_cached=usage.cache_read_input_tokens or 0,
+            output=usage.output_tokens,
+        )
+
+    def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
+        if usage.input_tokens is not None:
+            token_usage.input_other = usage.input_tokens
+        if usage.cache_read_input_tokens is not None:
+            token_usage.input_cached = usage.cache_read_input_tokens
+        if usage.output_tokens is not None:
+            token_usage.output = usage.output_tokens
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -131,6 +149,10 @@ class ProviderAnthropic(Provider):
                 llm_response.tools_call_args.append(content_block.input)
                 llm_response.tools_call_name.append(content_block.name)
                 llm_response.tools_call_ids.append(content_block.id)
+
+        llm_response.id = completion.id
+        llm_response.usage = self._extract_usage(completion.usage)
+
         # TODO(Soulter): 处理 end_turn 情况
         if not llm_response.completion_text and not llm_response.tools_call_args:
             raise Exception(f"Anthropic API 返回的 completion 无法解析：{completion}。")
@@ -152,9 +174,16 @@ class ProviderAnthropic(Provider):
         final_text = ""
         final_tool_calls = []
 
+        id = None
+        usage = TokenUsage()
+
         async with self.client.messages.stream(**payloads) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
+                if event.type == "message_start":
+                    # the usage contains input token usage
+                    id = event.message.id
+                    usage = self._extract_usage(event.message.usage)
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         # 文本块开始
@@ -162,6 +191,8 @@ class ProviderAnthropic(Provider):
                             role="assistant",
                             completion_text="",
                             is_chunk=True,
+                            usage=usage,
+                            id=id,
                         )
                     elif event.content_block.type == "tool_use":
                         # 工具使用块开始，初始化缓冲区
@@ -179,6 +210,8 @@ class ProviderAnthropic(Provider):
                             role="assistant",
                             completion_text=event.delta.text,
                             is_chunk=True,
+                            usage=usage,
+                            id=id,
                         )
                     elif event.delta.type == "input_json_delta":
                         # 工具调用参数增量
@@ -215,6 +248,8 @@ class ProviderAnthropic(Provider):
                                 tools_call_name=[tool_info["name"]],
                                 tools_call_ids=[tool_info["id"]],
                                 is_chunk=True,
+                                usage=usage,
+                                id=id,
                             )
                         except json.JSONDecodeError:
                             # JSON 解析失败，跳过这个工具调用
@@ -223,11 +258,17 @@ class ProviderAnthropic(Provider):
                         # 清理缓冲区
                         del tool_use_buffer[event.index]
 
+                elif event.type == "message_delta":
+                    if event.usage:
+                        self._update_usage(usage, event.usage)
+
         # 返回最终的完整结果
         final_response = LLMResponse(
             role="assistant",
             completion_text=final_text,
             is_chunk=False,
+            usage=usage,
+            id=id,
         )
 
         if final_tool_calls:
