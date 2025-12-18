@@ -77,7 +77,18 @@
       "restartRequired": "数据已成功导入。建议立即重启 AstrBot 以使所有更改生效。",
       "restartNow": "立即重启",
       "failed": "导入失败",
-      "retry": "重试"
+      "retry": "重试",
+      "version": {
+        "backupVersion": "备份版本",
+        "currentVersion": "当前版本",
+        "backupTime": "备份时间",
+        "matchTitle": "✅ 版本匹配",
+        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n\n此操作不可撤销！是否确认继续？",
+        "minorDiffTitle": "⚠️ 版本差异警告",
+        "minorDiffMessage": "小版本差异通常是兼容的，但可能存在少量数据结构变化。\n导入将会清空并覆盖现有的所有数据！\n\n是否确认继续导入？",
+        "majorDiffTitle": "⛔ 无法导入",
+        "majorDiffMessage": "主版本号不同，跨主版本导入可能导致数据损坏。\n请使用相同主版本的 AstrBot 进行导入。"
+      }
     },
     "list": {
       "empty": "暂无备份文件",

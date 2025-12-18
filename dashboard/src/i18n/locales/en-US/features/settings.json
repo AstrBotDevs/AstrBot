@@ -77,7 +77,18 @@
       "restartRequired": "Data has been successfully imported. It is recommended to restart AstrBot immediately for all changes to take effect.",
       "restartNow": "Restart Now",
       "failed": "Import Failed",
-      "retry": "Retry"
+      "retry": "Retry",
+      "version": {
+        "backupVersion": "Backup Version",
+        "currentVersion": "Current Version",
+        "backupTime": "Backup Time",
+        "matchTitle": "✅ Version Match",
+        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n\nThis action cannot be undone! Do you want to continue?",
+        "minorDiffTitle": "⚠️ Version Difference Warning",
+        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "majorDiffTitle": "⛔ Cannot Import",
+        "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
+      }
     },
     "list": {
       "empty": "No backup files",

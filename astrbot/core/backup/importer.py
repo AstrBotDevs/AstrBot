@@ -220,7 +220,7 @@ class AstrBotImporter:
 
                 # 提取基本信息
                 result.backup_version = manifest.get("astrbot_version", "未知")
-                result.backup_time = manifest.get("created_at", "未知")
+                result.backup_time = manifest.get("exported_at", "未知")
                 result.valid = True
 
                 # 构建备份摘要
@@ -236,35 +236,9 @@ class AstrBotImporter:
                 result.version_status = version_check["status"]
                 result.can_import = version_check["can_import"]
 
-                if version_check["status"] == "major_diff":
-                    result.warnings.append(version_check["message"])
-                    result.confirm_message = (
-                        f"⛔ 无法导入：备份版本 {result.backup_version} 与当前版本 {VERSION} "
-                        f"的主版本号不同，跨主版本导入可能导致数据损坏。"
-                    )
-                elif version_check["status"] == "minor_diff":
-                    result.warnings.append(version_check["message"])
-                    result.confirm_message = (
-                        f"⚠️ 版本差异警告\n\n"
-                        f"备份版本: {result.backup_version}\n"
-                        f"当前版本: {VERSION}\n\n"
-                        f"小版本差异通常是兼容的，但可能存在少量数据结构变化。\n"
-                        f"导入将会清空并覆盖现有的所有数据！\n\n"
-                        f"是否确认继续导入？"
-                    )
-                else:
-                    # 版本匹配
-                    result.confirm_message = (
-                        f"✅ 版本匹配\n\n"
-                        f"备份版本: {result.backup_version}\n"
-                        f"备份时间: {result.backup_time}\n\n"
-                        f"⚠️ 导入将会清空并覆盖现有的所有数据，包括：\n"
-                        f"• 主数据库（对话记录、配置等）\n"
-                        f"• 知识库数据\n"
-                        f"• 插件及插件数据\n"
-                        f"• 配置文件\n\n"
-                        f"此操作不可撤销！是否确认继续？"
-                    )
+                # 版本信息由前端根据 version_status 和 i18n 生成显示
+                # 不再将版本消息添加到 warnings 列表中，避免中文硬编码
+                # warnings 列表保留用于其他非版本相关的警告
 
                 return result
 

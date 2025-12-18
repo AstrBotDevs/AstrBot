@@ -565,7 +565,7 @@ class TestPreCheck:
         assert result.can_import is True
         assert result.version_status == "match"
         assert result.backup_version == VERSION
-        assert "✅" in result.confirm_message
+        # confirm_message 现在由前端生成，后端不再生成
         assert result.backup_summary["has_knowledge_bases"] is True
 
     def test_pre_check_minor_version_diff(self, mock_main_db, tmp_path):
@@ -593,8 +593,8 @@ class TestPreCheck:
         assert result.valid is True
         assert result.can_import is True
         assert result.version_status == "minor_diff"
-        assert "⚠️" in result.confirm_message
-        assert len(result.warnings) > 0
+        # 版本消息由前端 i18n 生成，后端 warnings 列表不再包含版本相关消息
+        # warnings 列表保留用于其他非版本相关的警告
 
     def test_pre_check_major_version_diff(self, mock_main_db, tmp_path):
         """测试预检查主版本差异"""
@@ -615,8 +615,7 @@ class TestPreCheck:
         assert result.valid is True  # 文件有效
         assert result.can_import is False  # 但不能导入
         assert result.version_status == "major_diff"
-        assert "⛔" in result.confirm_message
-        assert len(result.warnings) > 0
+        # 版本消息由前端 i18n 生成，后端 warnings 列表不再包含版本相关消息
 
 
 class TestVersionCompatibility:

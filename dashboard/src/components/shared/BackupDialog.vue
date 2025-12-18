@@ -118,14 +118,24 @@
                         <!-- 步骤2: 确认导入 -->
                         <div v-else-if="importStatus === 'confirm'" class="py-4">
                             <v-alert
-                                :type="checkResult?.version_status === 'major_diff' ? 'error' : (checkResult?.version_status === 'minor_diff' ? 'warning' : 'info')"
+                                :type="versionAlertType"
                                 variant="tonal"
                                 class="mb-4"
                             >
                                 <template v-slot:prepend>
-                                    <v-icon>{{ checkResult?.version_status === 'major_diff' ? 'mdi-close-circle' : (checkResult?.version_status === 'minor_diff' ? 'mdi-alert' : 'mdi-check-circle') }}</v-icon>
+                                    <v-icon>{{ versionAlertIcon }}</v-icon>
                                 </template>
-                                <div class="confirm-message" style="white-space: pre-line;">{{ checkResult?.confirm_message }}</div>
+                                <div class="confirm-message">
+                                    <div class="text-h6 mb-2">{{ versionAlertTitle }}</div>
+                                    <div class="mb-2">
+                                        <strong>{{ t('features.settings.backup.import.version.backupVersion') }}:</strong> {{ checkResult?.backup_version }}<br>
+                                        <strong>{{ t('features.settings.backup.import.version.currentVersion') }}:</strong> {{ checkResult?.current_version }}
+                                    </div>
+                                    <div v-if="checkResult?.backup_time && checkResult?.backup_time !== '未知'" class="mb-2">
+                                        <strong>{{ t('features.settings.backup.import.version.backupTime') }}:</strong> {{ formatISODate(checkResult?.backup_time) }}
+                                    </div>
+                                    <div class="mt-3" style="white-space: pre-line;">{{ versionAlertMessage }}</div>
+                                </div>
                             </v-alert>
 
                             <!-- 备份摘要 -->
@@ -135,20 +145,20 @@
                                     {{ t('features.settings.backup.import.backupContents') }}
                                 </v-card-title>
                                 <v-card-text>
-                                    <v-chip-group>
-                                        <v-chip v-if="checkResult.backup_summary.tables?.length" size="small" color="primary" variant="tonal">
+                                    <div class="d-flex flex-wrap ga-2">
+                                        <v-chip v-if="checkResult.backup_summary.tables?.length" size="small" color="primary" variant="tonal" :ripple="false" class="non-interactive-chip">
                                             {{ checkResult.backup_summary.tables.length }} {{ t('features.settings.backup.import.tables') }}
                                         </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_knowledge_bases" size="small" color="success" variant="tonal">
+                                        <v-chip v-if="checkResult.backup_summary.has_knowledge_bases" size="small" color="success" variant="tonal" :ripple="false" class="non-interactive-chip">
                                             {{ t('features.settings.backup.import.knowledgeBases') }}
                                         </v-chip>
-                                        <v-chip v-if="checkResult.backup_summary.has_config" size="small" color="info" variant="tonal">
+                                        <v-chip v-if="checkResult.backup_summary.has_config" size="small" color="info" variant="tonal" :ripple="false" class="non-interactive-chip">
                                             {{ t('features.settings.backup.import.configFiles') }}
                                         </v-chip>
-                                        <v-chip v-for="dir in (checkResult.backup_summary.directories || [])" :key="dir" size="small" color="warning" variant="tonal">
+                                        <v-chip v-for="dir in (checkResult.backup_summary.directories || [])" :key="dir" size="small" color="warning" variant="tonal" :ripple="false" class="non-interactive-chip">
                                             {{ dir }}
                                         </v-chip>
-                                    </v-chip-group>
+                                    </div>
                                 </v-card-text>
                             </v-card>
 
@@ -157,18 +167,21 @@
                                 <div v-for="(warning, idx) in checkResult.warnings" :key="idx">{{ warning }}</div>
                             </v-alert>
 
-                            <div class="d-flex justify-center gap-4">
+                            <div class="d-flex justify-center align-center mt-4" style="gap: 16px;">
                                 <v-btn
-                                    color="grey"
-                                    variant="text"
+                                    color="grey-darken-1"
+                                    variant="outlined"
+                                    size="large"
                                     @click="resetImport"
                                 >
+                                    <v-icon class="mr-2">mdi-close</v-icon>
                                     {{ t('core.common.cancel') }}
                                 </v-btn>
                                 <v-btn
                                     v-if="checkResult?.can_import"
                                     color="error"
                                     size="large"
+                                    variant="flat"
                                     @click="confirmImport"
                                 >
                                     <v-icon class="mr-2">mdi-alert</v-icon>
@@ -301,6 +314,35 @@ const backupList = ref([])
 // 计算属性
 const isProcessing = computed(() => {
     return exportStatus.value === 'processing' || importStatus.value === 'processing'
+})
+
+// 版本检查相关的计算属性
+const versionAlertType = computed(() => {
+    const status = checkResult.value?.version_status
+    if (status === 'major_diff') return 'error'
+    if (status === 'minor_diff') return 'warning'
+    return 'info'
+})
+
+const versionAlertIcon = computed(() => {
+    const status = checkResult.value?.version_status
+    if (status === 'major_diff') return 'mdi-close-circle'
+    if (status === 'minor_diff') return 'mdi-alert'
+    return 'mdi-check-circle'
+})
+
+const versionAlertTitle = computed(() => {
+    const status = checkResult.value?.version_status
+    if (status === 'major_diff') return t('features.settings.backup.import.version.majorDiffTitle')
+    if (status === 'minor_diff') return t('features.settings.backup.import.version.minorDiffTitle')
+    return t('features.settings.backup.import.version.matchTitle')
+})
+
+const versionAlertMessage = computed(() => {
+    const status = checkResult.value?.version_status
+    if (status === 'major_diff') return t('features.settings.backup.import.version.majorDiffMessage')
+    if (status === 'minor_diff') return t('features.settings.backup.import.version.minorDiffMessage')
+    return t('features.settings.backup.import.version.matchMessage')
 })
 
 // 监听对话框打开
@@ -565,9 +607,19 @@ const formatFileSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 格式化日期
+// 格式化日期（从时间戳）
 const formatDate = (timestamp) => {
     return new Date(timestamp * 1000).toLocaleString()
+}
+
+// 格式化 ISO 日期字符串
+const formatISODate = (isoString) => {
+    if (!isoString) return ''
+    try {
+        return new Date(isoString).toLocaleString()
+    } catch {
+        return isoString
+    }
 }
 
 // 重启 AstrBot
@@ -607,5 +659,15 @@ defineExpose({ open })
 
 .v-list-item:last-child {
     border-bottom: none;
+}
+
+/* 禁用 Chip 的交互效果 */
+.non-interactive-chip {
+    pointer-events: none;
+    cursor: default;
+}
+
+.non-interactive-chip:hover {
+    box-shadow: none !important;
 }
 </style>
