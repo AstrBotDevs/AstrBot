@@ -34,10 +34,10 @@ async def run_agent(
                     msg_chain = resp.data["chain"]
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
-                        await astr_event.send(resp.data["chain"])
+                        await astr_event.send(msg_chain)
                         continue
                     if astr_event.get_platform_id() == "webchat":
-                        await astr_event.send(resp.data["chain"])
+                        await astr_event.send(msg_chain)
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":

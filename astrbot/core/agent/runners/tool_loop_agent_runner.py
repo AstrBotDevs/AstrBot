@@ -364,19 +364,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
 
                         # yield the last tool call result
-                        last_tcr_content = str(tool_call_result_blocks[-1].content)
-                        yield MessageChain(
-                            type="tool_call_result",
-                            chain=[
-                                Json(
-                                    data={
-                                        "id": func_tool_id,
-                                        "ts": time.time(),
-                                        "result": last_tcr_content,
-                                    }
-                                )
-                            ],
-                        )
+                        if tool_call_result_blocks:
+                            last_tcr_content = str(tool_call_result_blocks[-1].content)
+                            yield MessageChain(
+                                type="tool_call_result",
+                                chain=[
+                                    Json(
+                                        data={
+                                            "id": func_tool_id,
+                                            "ts": time.time(),
+                                            "result": last_tcr_content,
+                                        }
+                                    )
+                                ],
+                            )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
