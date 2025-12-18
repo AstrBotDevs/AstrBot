@@ -18,6 +18,11 @@
       "title": "Data Migration to v4.0.0",
       "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
       "button": "Start Migration Assistant"
+    },
+    "backup": {
+      "title": "Backup & Restore",
+      "subtitle": "Export or import all AstrBot data for easy migration to a new server",
+      "button": "Backup Manager"
     }
   },
   "sidebar": {
@@ -29,5 +34,46 @@
       "mainItems": "Main Modules",
       "moreItems": "More Features"
     }
+  },
+  "backup": {
+    "dialog": {
+      "title": "Backup Manager"
+    },
+    "tabs": {
+      "export": "Export Backup",
+      "import": "Import Backup",
+      "list": "Backup List"
+    },
+    "export": {
+      "title": "Create Backup",
+      "description": "Export all data as a ZIP backup file, including database, knowledge base, config and attachments.",
+      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files",
+      "button": "Start Export",
+      "processing": "Exporting...",
+      "wait": "Please wait, packaging data...",
+      "completed": "Export Completed!",
+      "download": "Download Backup",
+      "another": "Create New Backup",
+      "failed": "Export Failed",
+      "retry": "Retry"
+    },
+    "import": {
+      "title": "Import Backup",
+      "warning": "⚠️ Import will clear and overwrite existing data! Please make sure you have backed up your current data. Only backup files from the same AstrBot version are supported.",
+      "selectFile": "Select backup file (.zip)",
+      "button": "Start Import",
+      "processing": "Importing...",
+      "wait": "Please wait, restoring data...",
+      "completed": "Import Completed!",
+      "restartRequired": "Data has been successfully imported. It is recommended to restart AstrBot immediately for all changes to take effect.",
+      "restartNow": "Restart Now",
+      "failed": "Import Failed",
+      "retry": "Retry"
+    },
+    "list": {
+      "empty": "No backup files",
+      "refresh": "Refresh List",
+      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone."
+    }
   }
-} 
+}

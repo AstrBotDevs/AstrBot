@@ -1,4 +1,5 @@
 from .auth import AuthRoute
+from .backup import BackupRoute
 from .chat import ChatRoute
 from .command import CommandRoute
 from .config import ConfigRoute
@@ -17,6 +18,7 @@ from .update import UpdateRoute
 
 __all__ = [
     "AuthRoute",
+    "BackupRoute",
     "ChatRoute",
     "CommandRoute",
     "ConfigRoute",
