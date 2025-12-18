@@ -28,22 +28,22 @@ def secure_filename(filename: str) -> str:
     Returns:
         安全的文件名
     """
+    # 跨平台处理：先将反斜杠替换为正斜杠，再取文件名
+    filename = filename.replace("\\", "/")
     # 仅保留文件名部分，移除路径
     filename = os.path.basename(filename)
 
-    # 替换路径分隔符和危险字符
+    # 替换路径遍历字符
     filename = filename.replace("..", "_")
-    filename = filename.replace("/", "_")
-    filename = filename.replace("\\", "_")
 
     # 仅保留字母、数字、下划线、连字符、点
     filename = re.sub(r"[^\w\-.]", "_", filename)
 
-    # 移除前导点（隐藏文件）
-    filename = filename.lstrip(".")
+    # 移除前导点（隐藏文件）和尾部点
+    filename = filename.strip(".")
 
-    # 如果文件名为空，生成一个默认名称
-    if not filename:
+    # 如果文件名为空或只包含下划线，生成一个默认名称
+    if not filename or filename.replace("_", "") == "":
         filename = "backup"
 
     return filename
