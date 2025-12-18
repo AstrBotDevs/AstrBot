@@ -217,6 +217,7 @@ class BackupRoute(Route):
                 kb_manager=kb_manager,
                 config_path="data/cmd_config.json",
                 attachments_dir="data/attachments",
+                data_root="data",
             )
 
             # 创建进度回调
@@ -325,6 +326,7 @@ class BackupRoute(Route):
                 kb_manager=kb_manager,
                 config_path="data/cmd_config.json",
                 attachments_dir="data/attachments",
+                data_root="data",
             )
 
             # 创建进度回调

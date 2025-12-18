@@ -60,6 +60,17 @@ KB_METADATA_MODELS: dict[str, type[SQLModel]] = {
 }
 
 
+# 需要备份的目录列表
+BACKUP_DIRECTORIES = {
+    "plugins": "data/plugins",  # 插件本体
+    "plugin_data": "data/plugin_data",  # 插件数据
+    "config": "data/config",  # 配置目录
+    "t2i_templates": "data/t2i_templates",  # T2I 模板
+    "webchat": "data/webchat",  # WebChat 数据
+    "temp": "data/temp",  # 临时文件
+}
+
+
 class AstrBotExporter:
     """AstrBot 数据导出器
 
@@ -70,6 +81,12 @@ class AstrBotExporter:
     - 配置文件（data/cmd_config.json）
     - 附件文件
     - 知识库多媒体文件
+    - 插件目录（data/plugins）
+    - 插件数据目录（data/plugin_data）
+    - 配置目录（data/config）
+    - T2I 模板目录（data/t2i_templates）
+    - WebChat 数据目录（data/webchat）
+    - 临时文件目录（data/temp）
     """
 
     def __init__(
@@ -78,11 +95,13 @@ class AstrBotExporter:
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = "data/cmd_config.json",
         attachments_dir: str = "data/attachments",
+        data_root: str = "data",
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
         self.attachments_dir = attachments_dir
+        self.data_root = data_root
         self._checksums: dict[str, str] = {}
 
     async def export_all(
@@ -192,10 +211,19 @@ class AstrBotExporter:
                 if progress_callback:
                     await progress_callback("attachments", 100, 100, "附件导出完成")
 
-                # 5. 生成 manifest
+                # 5. 导出插件和其他目录
+                if progress_callback:
+                    await progress_callback(
+                        "directories", 0, 100, "正在导出插件和数据目录..."
+                    )
+                dir_stats = await self._export_directories(zf)
+                if progress_callback:
+                    await progress_callback("directories", 100, 100, "目录导出完成")
+
+                # 6. 生成 manifest
                 if progress_callback:
                     await progress_callback("manifest", 0, 100, "正在生成清单...")
-                manifest = self._generate_manifest(main_data, kb_meta_data)
+                manifest = self._generate_manifest(main_data, kb_meta_data, dir_stats)
                 manifest_json = json.dumps(manifest, ensure_ascii=False, indent=2)
                 zf.writestr("manifest.json", manifest_json)
                 if progress_callback:
@@ -312,6 +340,56 @@ class AstrBotExporter:
         except Exception as e:
             logger.warning(f"导出知识库媒体文件失败: {e}")
 
+    async def _export_directories(
+        self, zf: zipfile.ZipFile
+    ) -> dict[str, dict[str, int]]:
+        """导出插件和其他数据目录
+
+        Returns:
+            dict: 每个目录的统计信息 {dir_name: {"files": count, "size": bytes}}
+        """
+        stats: dict[str, dict[str, int]] = {}
+
+        for dir_name, dir_path in BACKUP_DIRECTORIES.items():
+            full_path = Path(self.data_root).parent / dir_path
+            if not full_path.exists():
+                logger.debug(f"目录不存在，跳过: {dir_path}")
+                continue
+
+            file_count = 0
+            total_size = 0
+
+            try:
+                for root, dirs, files in os.walk(full_path):
+                    # 跳过 __pycache__ 目录
+                    dirs[:] = [d for d in dirs if d != "__pycache__"]
+
+                    for file in files:
+                        # 跳过 .pyc 文件
+                        if file.endswith(".pyc"):
+                            continue
+
+                        file_path = Path(root) / file
+                        try:
+                            # 计算相对路径
+                            rel_path = file_path.relative_to(full_path)
+                            archive_path = f"directories/{dir_name}/{rel_path}"
+                            zf.write(str(file_path), archive_path)
+                            file_count += 1
+                            total_size += file_path.stat().st_size
+                        except Exception as e:
+                            logger.warning(f"导出文件 {file_path} 失败: {e}")
+
+                stats[dir_name] = {"files": file_count, "size": total_size}
+                logger.debug(
+                    f"导出目录 {dir_name}: {file_count} 个文件, {total_size} 字节"
+                )
+            except Exception as e:
+                logger.warning(f"导出目录 {dir_path} 失败: {e}")
+                stats[dir_name] = {"files": 0, "size": 0}
+
+        return stats
+
     async def _export_attachments(
         self, zf: zipfile.ZipFile, attachments: list[dict]
     ) -> None:
@@ -364,9 +442,14 @@ class AstrBotExporter:
         self._checksums[path] = f"sha256:{checksum}"
 
     def _generate_manifest(
-        self, main_data: dict[str, list[dict]], kb_meta_data: dict[str, list[dict]]
+        self,
+        main_data: dict[str, list[dict]],
+        kb_meta_data: dict[str, list[dict]],
+        dir_stats: dict[str, dict[str, int]] | None = None,
     ) -> dict:
         """生成备份清单"""
+        if dir_stats is None:
+            dir_stats = {}
         # 收集知识库 ID
         kb_document_tables = {}
         if self.kb_manager:
@@ -396,7 +479,7 @@ class AstrBotExporter:
                     kb_media_files[kb_id] = media_files
 
         manifest = {
-            "version": "1.0",
+            "version": "1.1",  # 升级版本号，支持目录备份
             "astrbot_version": VERSION,
             "exported_at": datetime.now(timezone.utc).isoformat(),
             "schema_version": {
@@ -412,6 +495,7 @@ class AstrBotExporter:
                 "attachments": attachment_files,
                 "kb_media": kb_media_files,
             },
+            "directories": list(dir_stats.keys()),
             "checksums": self._checksums,
             "statistics": {
                 "main_db": {
@@ -420,6 +504,7 @@ class AstrBotExporter:
                 "kb_metadata": {
                     table: len(records) for table, records in kb_meta_data.items()
                 },
+                "directories": dir_stats,
             },
         }
 

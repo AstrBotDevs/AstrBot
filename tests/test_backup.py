@@ -175,15 +175,21 @@ class TestAstrBotExporter:
             "knowledge_bases": [],
             "kb_documents": [],
         }
+        dir_stats = {
+            "plugins": {"files": 10, "size": 1024},
+            "plugin_data": {"files": 5, "size": 512},
+        }
 
-        manifest = exporter._generate_manifest(main_data, kb_meta_data)
+        manifest = exporter._generate_manifest(main_data, kb_meta_data, dir_stats)
 
-        assert manifest["version"] == "1.0"
+        assert manifest["version"] == "1.1"  # 升级版本号，支持目录备份
         assert manifest["astrbot_version"] == VERSION
         assert "exported_at" in manifest
         assert "tables" in manifest
         assert "statistics" in manifest
+        assert "directories" in manifest
         assert manifest["statistics"]["main_db"]["platform_stats"] == 1
+        assert manifest["statistics"]["directories"] == dir_stats
 
     @pytest.mark.asyncio
     async def test_export_all_creates_zip(

@@ -67,6 +67,7 @@ class ImportResult:
         self.success = True
         self.imported_tables: dict[str, int] = {}
         self.imported_files: dict[str, int] = {}
+        self.imported_directories: dict[str, int] = {}
         self.warnings: list[str] = []
         self.errors: list[str] = []
 
@@ -84,9 +85,21 @@ class ImportResult:
             "success": self.success,
             "imported_tables": self.imported_tables,
             "imported_files": self.imported_files,
+            "imported_directories": self.imported_directories,
             "warnings": self.warnings,
             "errors": self.errors,
         }
+
+
+# 需要恢复的目录列表
+BACKUP_DIRECTORIES = {
+    "plugins": "data/plugins",  # 插件本体
+    "plugin_data": "data/plugin_data",  # 插件数据
+    "config": "data/config",  # 配置目录
+    "t2i_templates": "data/t2i_templates",  # T2I 模板
+    "webchat": "data/webchat",  # WebChat 数据
+    "temp": "data/temp",  # 临时文件
+}
 
 
 class AstrBotImporter:
@@ -98,6 +111,12 @@ class AstrBotImporter:
     - 配置文件
     - 附件文件
     - 知识库多媒体文件
+    - 插件目录（data/plugins）
+    - 插件数据目录（data/plugin_data）
+    - 配置目录（data/config）
+    - T2I 模板目录（data/t2i_templates）
+    - WebChat 数据目录（data/webchat）
+    - 临时文件目录（data/temp）
     """
 
     def __init__(
@@ -107,12 +126,14 @@ class AstrBotImporter:
         config_path: str = "data/cmd_config.json",
         attachments_dir: str = "data/attachments",
         kb_root_dir: str = "data/knowledge_base",
+        data_root: str = "data",
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
         self.attachments_dir = attachments_dir
         self.kb_root_dir = kb_root_dir
+        self.data_root = data_root
 
     async def import_all(
         self,
@@ -235,6 +256,18 @@ class AstrBotImporter:
 
                 if progress_callback:
                     await progress_callback("attachments", 100, 100, "附件导入完成")
+
+                # 6. 导入插件和其他目录
+                if progress_callback:
+                    await progress_callback(
+                        "directories", 0, 100, "正在导入插件和数据目录..."
+                    )
+
+                dir_stats = await self._import_directories(zf, manifest, result)
+                result.imported_directories = dir_stats
+
+                if progress_callback:
+                    await progress_callback("directories", 100, 100, "目录导入完成")
 
             logger.info(f"备份导入完成: {result.to_dict()}")
             return result
@@ -467,6 +500,90 @@ class AstrBotImporter:
                     logger.warning(f"导入附件 {name} 失败: {e}")
 
         return count
+
+    async def _import_directories(
+        self,
+        zf: zipfile.ZipFile,
+        manifest: dict,
+        result: ImportResult,
+    ) -> dict[str, int]:
+        """导入插件和其他数据目录
+
+        Args:
+            zf: ZIP 文件对象
+            manifest: 备份清单
+            result: 导入结果对象
+
+        Returns:
+            dict: 每个目录导入的文件数量
+        """
+        dir_stats: dict[str, int] = {}
+
+        # 检查备份版本是否支持目录备份
+        backup_version = manifest.get("version", "1.0")
+        if backup_version < "1.1":
+            logger.info("备份版本不支持目录备份，跳过目录导入")
+            return dir_stats
+
+        backed_up_dirs = manifest.get("directories", [])
+
+        for dir_name in backed_up_dirs:
+            if dir_name not in BACKUP_DIRECTORIES:
+                result.add_warning(f"未知的目录类型: {dir_name}")
+                continue
+
+            target_dir = Path(self.data_root).parent / BACKUP_DIRECTORIES[dir_name]
+            archive_prefix = f"directories/{dir_name}/"
+
+            file_count = 0
+
+            try:
+                # 获取该目录下的所有文件
+                dir_files = [
+                    name
+                    for name in zf.namelist()
+                    if name.startswith(archive_prefix) and name != archive_prefix
+                ]
+
+                if not dir_files:
+                    continue
+
+                # 备份现有目录（如果存在）
+                if target_dir.exists():
+                    backup_path = Path(f"{target_dir}.bak")
+                    if backup_path.exists():
+                        shutil.rmtree(backup_path)
+                    shutil.move(str(target_dir), str(backup_path))
+                    logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
+
+                # 创建目标目录
+                target_dir.mkdir(parents=True, exist_ok=True)
+
+                # 解压文件
+                for name in dir_files:
+                    try:
+                        # 计算相对路径
+                        rel_path = name[len(archive_prefix) :]
+                        if not rel_path:  # 跳过目录条目
+                            continue
+
+                        target_path = target_dir / rel_path
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                        with zf.open(name) as src, open(target_path, "wb") as dst:
+                            dst.write(src.read())
+                        file_count += 1
+                    except Exception as e:
+                        result.add_warning(f"导入文件 {name} 失败: {e}")
+
+                dir_stats[dir_name] = file_count
+                logger.debug(f"导入目录 {dir_name}: {file_count} 个文件")
+
+            except Exception as e:
+                result.add_warning(f"导入目录 {dir_name} 失败: {e}")
+                dir_stats[dir_name] = 0
+
+        return dir_stats
 
     def _convert_datetime_fields(self, row: dict, model_class: type) -> dict:
         """转换 datetime 字符串字段为 datetime 对象"""
