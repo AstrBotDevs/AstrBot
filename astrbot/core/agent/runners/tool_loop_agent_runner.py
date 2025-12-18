@@ -230,6 +230,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
+        if not self.done():
+            logger.warning(
+                f"Agent reached max steps ({max_step}), forcing a final response."
+            )
+            # 拔掉所有工具
+            if self.req:
+                self.req.func_tool = None
+            # 注入提示词
+            self.run_context.messages.append(
+                Message(
+                    role="user",
+                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                )
+            )
+            # 再执行最后一步
+            async for resp in self.step():
+                yield resp
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
