@@ -217,7 +217,9 @@ class ProviderGoogleGenAI(Provider):
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
                 if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
-                    logger.warning(f"Invalid thinking level: {thinking_level}, using HIGH")
+                    logger.warning(
+                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                    )
                     thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
                 thinking_config = types.ThinkingConfig()
