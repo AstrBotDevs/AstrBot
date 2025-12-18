@@ -126,7 +126,7 @@ class ToolCall(BaseModel):
     def serialize(self, handler):
         data = handler(self)
         if self.extra_content is None:
-            data.pop("extra_content")
+            data.pop("extra_content", None)
         return data
 
 
