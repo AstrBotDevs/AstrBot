@@ -13,7 +13,12 @@ from astrbot.core.backup.exporter import (
     MAIN_DB_MODELS,
     AstrBotExporter,
 )
-from astrbot.core.backup.importer import AstrBotImporter, ImportResult
+from astrbot.core.backup.importer import (
+    AstrBotImporter,
+    ImportResult,
+    compare_versions,
+    parse_version,
+)
 from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
     ConversationV2,
@@ -341,6 +346,53 @@ class TestAstrBotImporter:
 
         assert result.success is False
         assert any("版本不匹配" in err for err in result.errors)
+
+
+class TestVersionComparison:
+    """版本比较函数测试"""
+
+    def test_parse_version_simple(self):
+        """测试解析简单版本号"""
+        assert parse_version("1.0") == (1, 0)
+        assert parse_version("2.1") == (2, 1)
+
+    def test_parse_version_multi_digit(self):
+        """测试解析多位数版本号"""
+        assert parse_version("1.10") == (1, 10)
+        assert parse_version("1.10.2") == (1, 10, 2)
+        assert parse_version("10.20.30") == (10, 20, 30)
+
+    def test_parse_version_invalid(self):
+        """测试解析无效版本号"""
+        assert parse_version("invalid") == (0,)
+        assert parse_version("") == (0,)
+        assert parse_version("1.x.2") == (0,)
+
+    def test_compare_versions_equal(self):
+        """测试版本相等"""
+        assert compare_versions("1.0", "1.0") == 0
+        assert compare_versions("1.0.0", "1.0") == 0
+        assert compare_versions("2.10", "2.10") == 0
+
+    def test_compare_versions_less_than(self):
+        """测试版本小于"""
+        assert compare_versions("1.0", "1.1") == -1
+        assert compare_versions("1.9", "1.10") == -1  # 关键测试：多位数版本比较
+        assert compare_versions("1.2", "1.10") == -1
+        assert compare_versions("1.0", "2.0") == -1
+
+    def test_compare_versions_greater_than(self):
+        """测试版本大于"""
+        assert compare_versions("1.1", "1.0") == 1
+        assert compare_versions("1.10", "1.9") == 1  # 关键测试：多位数版本比较
+        assert compare_versions("1.10", "1.2") == 1
+        assert compare_versions("2.0", "1.0") == 1
+
+    def test_compare_versions_different_lengths(self):
+        """测试不同长度版本比较"""
+        assert compare_versions("1.0", "1.0.0") == 0
+        assert compare_versions("1.0", "1.0.1") == -1
+        assert compare_versions("1.0.1", "1.0") == 1
 
 
 class TestModelMappings:

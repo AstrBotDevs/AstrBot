@@ -39,6 +39,51 @@ if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
+def parse_version(version_str: str) -> tuple[int, ...]:
+    """将版本字符串解析为数值元组用于比较
+
+    Args:
+        version_str: 版本字符串，如 "1.0", "1.10", "2.0.1"
+
+    Returns:
+        数值元组，如 (1, 0), (1, 10), (2, 0, 1)
+    """
+    try:
+        parts = version_str.split(".")
+        return tuple(int(p) for p in parts)
+    except (ValueError, AttributeError):
+        # 解析失败时返回 (0,)，确保能够比较
+        return (0,)
+
+
+def compare_versions(v1: str, v2: str) -> int:
+    """比较两个版本号
+
+    Args:
+        v1: 第一个版本字符串
+        v2: 第二个版本字符串
+
+    Returns:
+        -1 如果 v1 < v2
+         0 如果 v1 == v2
+         1 如果 v1 > v2
+    """
+    t1 = parse_version(v1)
+    t2 = parse_version(v2)
+
+    # 补齐长度以便比较
+    max_len = max(len(t1), len(t2))
+    t1 = t1 + (0,) * (max_len - len(t1))
+    t2 = t2 + (0,) * (max_len - len(t2))
+
+    if t1 < t2:
+        return -1
+    elif t1 > t2:
+        return 1
+    else:
+        return 0
+
+
 # 主数据库模型类映射
 MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "platform_stats": PlatformStat,
@@ -519,9 +564,9 @@ class AstrBotImporter:
         """
         dir_stats: dict[str, int] = {}
 
-        # 检查备份版本是否支持目录备份
+        # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
         backup_version = manifest.get("version", "1.0")
-        if backup_version < "1.1":
+        if compare_versions(backup_version, "1.1") < 0:
             logger.info("备份版本不支持目录备份，跳过目录导入")
             return dir_stats
 
