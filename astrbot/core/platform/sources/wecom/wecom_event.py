@@ -16,7 +16,7 @@ try:
     import pydub
 except Exception:
     logger.warning(
-        "检测到 pydub 库未安装，企业微信将无法语音收发。如需使用语音，请前往管理面板 -> 控制台 -> 安装 Pip 库安装 pydub。",
+        "检测到 pydub 库未安装，企业微信将无法语音收发。如需使用语音，请前往管理面板 -> 平台日志 -> 安装 Pip 库安装 pydub。",
     )
 
 
@@ -93,10 +93,10 @@ class WecomPlatformEvent(AstrMessageEvent):
         if is_wechat_kf:
             # 微信客服
             kf_message_api = getattr(self.client, "kf_message", None)
-            if not kf_message_api:
+            if not isinstance(kf_message_api, WeChatKFMessage):
                 logger.warning("未找到微信客服发送消息方法。")
                 return
-            assert isinstance(kf_message_api, WeChatKFMessage)
+
             user_id = self.get_sender_id()
             for comp in message.chain:
                 if isinstance(comp, Plain):

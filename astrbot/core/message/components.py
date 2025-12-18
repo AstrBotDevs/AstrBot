@@ -66,6 +66,9 @@ class ComponentType(str, Enum):
 class BaseMessageComponent(BaseModel):
     type: ComponentType
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
     def toDict(self):
         data = {}
         for k, v in self.__dict__.items():
@@ -551,7 +554,7 @@ class Node(BaseMessageComponent):
     id: int | None = 0  # 忽略
     name: str | None = ""  # qq昵称
     uin: str | None = "0"  # qq号
-    content: list[BaseMessageComponent] | None = []
+    content: list[BaseMessageComponent] = []
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
 
@@ -615,7 +618,7 @@ class Nodes(BaseMessageComponent):
             ret["messages"].append(d)
         return ret
 
-    async def to_dict(self):
+    async def to_dict(self) -> dict:
         """将 Nodes 转换为字典格式，适用于 OneBot JSON 格式"""
         ret = {"messages": []}
         for node in self.nodes:
@@ -626,12 +629,11 @@ class Nodes(BaseMessageComponent):
 
 class Json(BaseMessageComponent):
     type = ComponentType.Json
-    data: str | dict
-    resid: int | None = 0
+    data: dict
 
-    def __init__(self, data, **_):
-        if isinstance(data, dict):
-            data = json.dumps(data)
+    def __init__(self, data: str | dict, **_):
+        if isinstance(data, str):
+            data = json.loads(data)
         super().__init__(data=data, **_)
 
 
@@ -714,15 +716,23 @@ class File(BaseMessageComponent):
 
         if self.url:
             await self._download_file()
-            return os.path.abspath(self.file_)
+            if self.file_:
+                return os.path.abspath(self.file_)
 
         return ""
 
     async def _download_file(self):
         """下载文件"""
+        if not self.url:
+            raise ValueError("Download failed: No URL provided in File component.")
         download_dir = os.path.join(get_astrbot_data_path(), "temp")
         os.makedirs(download_dir, exist_ok=True)
-        file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+        if self.name:
+            name, ext = os.path.splitext(self.name)
+            filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+        else:
+            filename = f"{uuid.uuid4().hex}"
+        file_path = os.path.join(download_dir, filename)
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 

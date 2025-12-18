@@ -41,59 +41,97 @@ export function clearSidebarCustomization() {
 }
 
 /**
- * Apply customization to sidebar items
- * @param {Array} defaultItems - Default sidebar items array
- * @returns {Array} Customized sidebar items array (new array, doesn't mutate input)
+ * 解析侧边栏默认项与用户定制，返回主区/更多区及可选的合并结果
+ * @param {Array} defaultItems - 默认侧边栏结构
+ * @param {Object|null} customization - 用户定制（mainItems/moreItems）
+ * @param {Object} options
+ * @param {boolean} [options.cloneItems=false] - 是否克隆条目以避免外部引用被修改
+ * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
+ * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
+ */
+export function resolveSidebarItems(defaultItems, customization, options = {}) {
+  const { cloneItems = false, assembleMoreGroup = false } = options;
+
+  const all = new Map();
+  const defaultMain = [];
+  const defaultMore = [];
+
+  // 收集所有条目，按 title 建索引
+  defaultItems.forEach(item => {
+    if (item.children) {
+      item.children.forEach(child => {
+        all.set(child.title, cloneItems ? { ...child } : child);
+        defaultMore.push(child.title);
+      });
+    } else {
+      all.set(item.title, cloneItems ? { ...item } : item);
+      defaultMain.push(item.title);
+    }
+  });
+
+  const hasCustomization = Boolean(customization);
+  const mainKeys = hasCustomization ? customization.mainItems || [] : defaultMain;
+  const moreKeys = hasCustomization ? customization.moreItems || [] : defaultMore;
+  const used = hasCustomization ? new Set([...mainKeys, ...moreKeys]) : new Set(defaultMain.concat(defaultMore));
+
+  const mainItems = mainKeys
+    .map(title => all.get(title))
+    .filter(Boolean);
+
+  if (hasCustomization) {
+    // 补充新增默认主区项
+    defaultMain.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) mainItems.push(item);
+      }
+    });
+  }
+
+  const moreItems = moreKeys
+    .map(title => all.get(title))
+    .filter(Boolean);
+
+  if (hasCustomization) {
+    // 补充新增默认更多区项
+    defaultMore.forEach(title => {
+      if (!used.has(title)) {
+        const item = all.get(title);
+        if (item) moreItems.push(item);
+      }
+    });
+  }
+
+  let merged;
+  if (assembleMoreGroup) {
+    const children = cloneItems ? moreItems.map(item => ({ ...item })) : [...moreItems];
+    if (children.length > 0) {
+      merged = [
+        ...mainItems,
+        {
+          title: 'core.navigation.groups.more',
+          icon: 'mdi-dots-horizontal',
+          children
+        }
+      ];
+    } else {
+      merged = [...mainItems];
+    }
+  }
+
+  return { mainItems, moreItems, merged };
+}
+
+/**
+ * 应用侧边栏定制，返回包含更多分组的完整结构
+ * @param {Array} defaultItems - 默认侧边栏结构
+ * @returns {Array} 自定义后的结构（新数组，不修改入参）
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
-  if (!customization) {
-    return defaultItems;
-  }
-
-  const { mainItems, moreItems } = customization;
-  
-  // Create a map of all items by title for quick lookup
-  // Deep clone items to avoid mutating originals
-  const allItemsMap = new Map();
-  defaultItems.forEach(item => {
-    if (item.children) {
-      // If it's the "More" group, add children to map
-      item.children.forEach(child => {
-        allItemsMap.set(child.title, { ...child });
-      });
-    } else {
-      allItemsMap.set(item.title, { ...item });
-    }
+  const { merged } = resolveSidebarItems(defaultItems, customization, {
+    cloneItems: true,
+    assembleMoreGroup: true
   });
-
-  const customizedItems = [];
-  
-  // Add main items in custom order
-  mainItems.forEach(title => {
-    const item = allItemsMap.get(title);
-    if (item) {
-      customizedItems.push(item);
-    }
-  });
-
-  // If there are items in moreItems, create the "More Features" group
-  if (moreItems && moreItems.length > 0) {
-    const moreGroup = {
-      title: 'core.navigation.groups.more',
-      icon: 'mdi-dots-horizontal',
-      children: []
-    };
-    
-    moreItems.forEach(title => {
-      const item = allItemsMap.get(title);
-      if (item) {
-        moreGroup.children.push(item);
-      }
-    });
-    
-    customizedItems.push(moreGroup);
-  }
-
-  return customizedItems;
+  return merged || defaultItems;
 }

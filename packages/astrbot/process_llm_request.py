@@ -3,7 +3,7 @@ import copy
 import datetime
 import zoneinfo
 
-from astrbot.api import logger, star
+from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
@@ -21,16 +21,26 @@ class ProcessLLMRequest:
         else:
             logger.info(f"Timezone set to: {self.timezone}")
 
-    def _ensure_persona(self, req: ProviderRequest, cfg: dict):
+    async def _ensure_persona(self, req: ProviderRequest, cfg: dict, umo: str):
         """确保用户人格已加载"""
         if not req.conversation:
             return
         # persona inject
-        persona_id = req.conversation.persona_id or cfg.get("default_personality")
-        if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-            default_persona = self.ctx.persona_manager.selected_default_persona_v3
-            if default_persona:
-                persona_id = default_persona["name"]
+
+        # custom rule is preferred
+        persona_id = (
+            await sp.get_async(
+                scope="umo", scope_id=umo, key="session_service_config", default={}
+            )
+        ).get("persona_id")
+
+        if not persona_id:
+            persona_id = req.conversation.persona_id or cfg.get("default_personality")
+            if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
+                default_persona = self.ctx.persona_manager.selected_default_persona_v3
+                if default_persona:
+                    persona_id = default_persona["name"]
+
         persona = next(
             builtins.filter(
                 lambda persona: persona["name"] == persona_id,
@@ -129,6 +139,11 @@ class ProcessLLMRequest:
 
         # group name identifier
         if cfg.get("group_name_display") and event.message_obj.group_id:
+            if not event.message_obj.group:
+                logger.error(
+                    f"Group name display enabled but group object is None. Group ID: {event.message_obj.group_id}"
+                )
+                return
             group_name = event.message_obj.group.group_name
             if group_name:
                 req.system_prompt += f"\nGroup name: {group_name}\n"
@@ -152,7 +167,7 @@ class ProcessLLMRequest:
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if req.conversation:
             # inject persona for this request
-            self._ensure_persona(req, cfg)
+            await self._ensure_persona(req, cfg, event.unified_msg_origin)
 
             # image caption
             if img_cap_prov_id and req.image_urls:

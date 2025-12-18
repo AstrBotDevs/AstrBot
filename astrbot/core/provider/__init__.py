@@ -1,4 +1,4 @@
 from .entities import ProviderMetaData
-from .provider import Personality, Provider, STTProvider
+from .provider import Provider, STTProvider
 
-__all__ = ["Personality", "Provider", "ProviderMetaData", "STTProvider"]
+__all__ = ["Provider", "ProviderMetaData", "STTProvider"]

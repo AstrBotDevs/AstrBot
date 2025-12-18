@@ -2,9 +2,12 @@ import asyncio
 import logging
 import os
 import socket
+from typing import cast
 
 import jwt
 import psutil
+from flask.json.provider import DefaultJSONProvider
+from psutil._common import addr as psutil_addr
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
@@ -16,11 +19,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
+from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
 
-APP: Quart = None
+APP: Quart
 
 
 class AstrBotDashboard:
@@ -47,7 +51,7 @@ class AstrBotDashboard:
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        self.app.json.sort_keys = False
+        cast(DefaultJSONProvider, self.app.json).sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
@@ -63,6 +67,7 @@ class AstrBotDashboard:
             core_lifecycle,
             core_lifecycle.plugin_manager,
         )
+        self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
@@ -79,6 +84,7 @@ class AstrBotDashboard:
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
+        self.platform_route = PlatformRoute(self.context, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -102,7 +108,7 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
-        allowed_endpoints = ["/api/auth/login", "/api/file"]
+        allowed_endpoints = ["/api/auth/login", "/api/file", "/api/platform/webhook"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
         # 声明 JWT
@@ -145,7 +151,7 @@ class AstrBotDashboard:
         """获取占用端口的进程详细信息"""
         try:
             for conn in psutil.net_connections(kind="inet"):
-                if conn.laddr.port == port:
+                if cast(psutil_addr, conn.laddr).port == port:
                     try:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息

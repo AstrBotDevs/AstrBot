@@ -1,182 +1,247 @@
-<p align="center">
-    
-![6e1279651f16d7fdf4727558b72bbaf1](https://github.com/user-attachments/assets/ead4c551-fc3c-48f7-a6f7-afbfdb820512)
+![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
 </p>
 
 <div align="center">
 
-_✨ Easy-to-use Multi-platform LLM Chatbot & Development Framework ✨_
+<br>
 
+<div>
 <a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/AstrBotDevs/AstrBot)](https://github.com/AstrBotDevs/AstrBot/releases/latest)
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
-<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot"/></a>
-<a  href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="Static Badge" src="https://img.shields.io/badge/QQ群-630166526-purple"></a>
-[![wakatime](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e.svg)](https://wakatime.com/badge/user/915e5316-99c6-4563-a483-ef186cf000c9/project/018e705a-a1a7-409a-a849-3013485e6c8e)
-![Dynamic JSON Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fstats&query=v&label=7%E6%97%A5%E6%B6%88%E6%81%AF%E4%B8%8A%E8%A1%8C%E9%87%8F&cacheSeconds=3600)
-[![codecov](https://codecov.io/gh/AstrBotDevs/AstrBot/graph/badge.svg?token=FF3P5967B8)](https://codecov.io/gh/AstrBotDevs/AstrBot)
-
-<a href="https://astrbot.app/">Documentation</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracking</a>
+<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </div>
 
-AstrBot is a loosely coupled, asynchronous chatbot and development framework that supports multi-platform deployment, featuring an easy-to-use plugin system and comprehensive Large Language Model (LLM) integration capabilities.
+<br>
 
-## ✨ Key Features
+<div>
+<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?style=for-the-badge&color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
+<img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&color=76bad9" alt="python">
+<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?style=for-the-badge&color=76bad9"/></a>
+<a href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
+<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+<img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%20plugins&style=for-the-badge&label=Marketplace&cacheSeconds=3600">
+</div>
 
-1. **LLM Conversations** - Supports various LLMs including OpenAI API, Google Gemini, Llama, Deepseek, ChatGLM, etc. Enables local model deployment via Ollama/LLMTuner. Features multi-turn dialogues, personality contexts, multimodal capabilities (image understanding), and speech-to-text (Whisper).
-2. **Multi-platform Integration** - Supports QQ (OneBot), QQ Channels, WeChat (Gewechat), Feishu, and Telegram. Planned support for DingTalk, Discord, WhatsApp, and Xiaomi Smart Speakers. Includes rate limiting, whitelisting, keyword filtering, and Baidu content moderation.
-3. **Agent Capabilities** - Native support for code execution, natural language TODO lists, web search. Integrates with [Dify Platform](https://dify.ai/) for easy access to Dify assistants/knowledge bases/workflows.
-4. **Plugin System** - Optimized plugin mechanism with minimal development effort. Supports multiple installed plugins.
-5. **Web Dashboard** - Visual configuration management, plugin controls, logging, and WebChat interface for direct LLM interaction.
-6. **High Stability & Modularity** - Event bus and pipeline architecture ensures high modularization and loose coupling.
+<br>
 
-> [!TIP]
-> Dashboard Demo: [https://demo.astrbot.app/](https://demo.astrbot.app/)  
-> Username: `astrbot`, Password: `astrbot` (LLM not configured for chat page)
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
 
-## ✨ Deployment
+<a href="https://astrbot.app/">Documentation</a> ｜
+<a href="https://blog.astrbot.app/">Blog</a> ｜
+<a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+</div>
 
-#### Docker Deployment
+AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or enterprise knowledge base, AstrBot enables you to quickly build production-ready AI applications within your IM platform workflows.
 
-See docs: [Deploy with Docker](https://astrbot.app/deploy/astrbot/docker.html#docker-deployment)
+<img width="1776" height="1080" alt="image" src="https://github.com/user-attachments/assets/00782c4c-4437-4d97-aabc-605e3738da5c" />
 
-#### Windows Installer
+## Key Features
 
-Requires Python (>3.10). See docs: [Windows Installer Guide](https://astrbot.app/deploy/astrbot/windows.html)
+1. 💯 Free & Open Source.
+2. ✨ AI LLM Conversations, Multimodal, Agent, MCP, Knowledge Base, Persona Settings.
+3. 🤖 Supports integration with Dify, Alibaba Cloud Bailian, Coze and other agent platforms.
+4. 🌐 Multi-Platform: QQ, WeChat Work, Feishu, DingTalk, WeChat Official Accounts, Telegram, Slack, and [more](#supported-messaging-platforms).
+5. 📦 Plugin Extensions with nearly 800 plugins available for one-click installation.
+6. 💻 WebUI Support.
+7. 🌐 Internationalization (i18n) Support.
 
-#### Replit Deployment
+## Quick Start
+
+#### Docker Deployment (Recommended 🥳)
+
+We recommend deploying AstrBot using Docker or Docker Compose.
+
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
+
+#### uv Deployment
+
+```bash
+uvx astrbot
+```
+
+#### BT-Panel Deployment
+
+AstrBot has partnered with BT-Panel and is now available in their marketplace.
+
+Please refer to the official documentation: [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html).
+
+#### 1Panel Deployment
+
+AstrBot has been officially listed on the 1Panel marketplace.
+
+Please refer to the official documentation: [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html).
+
+#### Deploy on RainYun
+
+AstrBot has been officially listed on RainYun's cloud application platform with one-click deployment.
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+
+#### Deploy on Replit
+
+Community-contributed deployment method.
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
+#### Windows One-Click Installer
+
+Please refer to the official documentation: [Deploy AstrBot with Windows One-Click Installer](https://astrbot.app/deploy/astrbot/windows.html).
+
 #### CasaOS Deployment
 
-Community-contributed method.  
-See docs: [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html)
+Community-contributed deployment method.
+
+Please refer to the official documentation: [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html).
 
 #### Manual Deployment
 
-See docs: [Source Code Deployment](https://astrbot.app/deploy/astrbot/cli.html)
+First, install uv:
 
-## ⚡ Platform Support
+```bash
+pip install uv
+```
 
-| Platform                                                       | Status | Details             | Message Types       |
-| -------------------------------------------------------------- | ------ | ------------------- | ------------------- |
-| QQ (Official Bot)                                              | ✔      | Private/Group chats | Text, Images        |
-| QQ (OneBot)                                                    | ✔      | Private/Group chats | Text, Images, Voice |
-| WeChat (Personal)                                              | ✔      | Private/Group chats | Text, Images, Voice |
-| [Telegram](https://github.com/AstrBotDevs/AstrBot_plugin_telegram) | ✔      | Private/Group chats | Text, Images        |
-| [WeChat Work](https://github.com/AstrBotDevs/AstrBot_plugin_wecom) | ✔      | Private chats       | Text, Images, Voice |
-| Feishu                                                         | ✔      | Group chats         | Text, Images        |
-| WeChat Open Platform                                           | 🚧      | Planned             | -                   |
-| Discord                                                        | 🚧      | Planned             | -                   |
-| WhatsApp                                                       | 🚧      | Planned             | -                   |
-| Xiaomi Speakers                                                | 🚧      | Planned             | -                   |
+Install AstrBot via Git Clone:
 
-## Provider Support Status
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
+uv run main.py
+```
 
-| Name                      | Support | Type                   | Notes                                                                 |
-|---------------------------|---------|------------------------|-----------------------------------------------------------------------|
-| OpenAI API                | ✔       | Text Generation        | Supports all OpenAI API-compatible services including DeepSeek, Google Gemini, GLM, Moonshot, Alibaba Cloud Bailian, Silicon Flow, xAI, etc. |
-| Claude API                | ✔       | Text Generation        |                                                                       |
-| Google Gemini API         | ✔       | Text Generation        |                                                                       |
-| Dify                      | ✔       | LLMOps                 |                                                                       |
-| DashScope (Alibaba Cloud) | ✔       | LLMOps                 |                                                                       |
-| Ollama                    | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
-| LM Studio                 | ✔       | Model Loader           | Local deployment for open-source LLMs (DeepSeek, Llama, etc.)         |
-| LLMTuner                  | ✔       | Model Loader           | Local loading of fine-tuned models (e.g. LoRA)                        |
-| OneAPI                    | ✔       | LLM Distribution       |                                                                       |
-| Whisper                   | ✔       | Speech-to-Text         | Supports API and local deployment                                    |
-| SenseVoice                | ✔       | Speech-to-Text         | Local deployment                                                     |
-| OpenAI TTS API            | ✔       | Text-to-Speech         |                                                                       |
-| Fishaudio                 | ✔       | Text-to-Speech         | Project involving GPT-Sovits author                                  |
+Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
 
-# 🦌 Roadmap
+## Supported Messaging Platforms
 
-> [!TIP]
-> Suggestions welcome via Issues <3
+**Officially Maintained**
 
-- [ ] Ensure feature parity across all platform adapters
-- [ ] Optimize plugin APIs
-- [ ] Add default TTS services (e.g., GPT-Sovits)
-- [ ] Enhance chat features with persistent memory
-- [ ] i18n Planning
+- QQ (Official Platform & OneBot)
+- Telegram
+- WeChat Work Application & WeChat Work Intelligent Bot
+- WeChat Customer Service & WeChat Official Accounts
+- Feishu (Lark)
+- DingTalk
+- Slack
+- Discord
+- Satori
+- Misskey
+- WhatsApp (Coming Soon)
+- LINE (Coming Soon)
 
-## ❤️ Contributions
+**Community Maintained**
 
-All Issues/PRs welcome! Simply submit your changes to this project :)
+- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
+- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+- [Bilibili Direct Messages](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
+- [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)
 
-For major features, please discuss via Issues first.
+## Supported Model Services
 
-## 🌟 Support
+**LLM Services**
 
-- Star this project!
-- Support via [Afdian](https://afdian.com/a/soulter)
-- WeChat support: [QR Code](https://drive.soulter.top/f/pYfA/d903f4fa49a496fda3f16d2be9e023b5.png)
+- OpenAI and Compatible Services
+- Anthropic
+- Google Gemini
+- Moonshot AI
+- Zhipu AI
+- DeepSeek
+- Ollama (Self-hosted)
+- LM Studio (Self-hosted)
+- [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
+- [302.AI](https://share.302.ai/rr1M3l)
+- [TokenPony](https://www.tokenpony.cn/3YPyf)
+- [SiliconFlow](https://docs.siliconflow.cn/cn/usecases/use-siliconcloud-in-astrbot)
+- [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE)
+- ModelScope
+- OneAPI
 
-## ✨ Demos
+**LLMOps Platforms**
 
-> [!NOTE]
-> Code executor file I/O currently tested with Napcat(QQ)/Lagrange(QQ)
+- Dify
+- Alibaba Cloud Bailian Applications
+- Coze
 
-<div align='center'>
+**Speech-to-Text Services**
 
-<img src="https://github.com/user-attachments/assets/4ee688d9-467d-45c8-99d6-368f9a8a92d8" width="600">
+- OpenAI Whisper
+- SenseVoice
 
-_✨ Docker-based Sandboxed Code Executor (Beta) ✨_
+**Text-to-Speech Services**
 
-<img src="https://github.com/user-attachments/assets/0378f407-6079-4f64-ae4c-e97ab20611d2" height=500>
+- OpenAI TTS
+- Gemini TTS
+- GPT-Sovits-Inference
+- GPT-Sovits
+- FishAudio
+- Edge TTS
+- Alibaba Cloud Bailian TTS
+- Azure TTS
+- Minimax TTS
+- Volcano Engine TTS
 
-_✨ Multimodal Input, Web Search, Text-to-Image ✨_
+## ❤️ Contributing
 
-<img src="https://github.com/user-attachments/assets/8ec12797-e70f-460a-959e-48eca39ca2bb" height=100>
+Issues and Pull Requests are always welcome! Feel free to submit your changes to this project :)
 
-_✨ Natural Language TODO Lists ✨_
+### How to Contribute
 
-<img src="https://github.com/user-attachments/assets/e137a9e1-340a-4bf2-bb2b-771132780735" height=150>
-<img src="https://github.com/user-attachments/assets/480f5e82-cf6a-4955-a869-0d73137aa6e1" height=150>
+You can contribute by reviewing issues or helping with pull request reviews. Any issues or PRs are welcome to encourage community participation. Of course, these are just suggestions—you can contribute in any way you like. For adding new features, please discuss through an Issue first.
 
-_✨ Plugin System Showcase ✨_
+### Development Environment
 
-<img src="https://github.com/user-attachments/assets/592a8630-14c7-4e06-b496-9c0386e4f36c" width=600>
+AstrBot uses `ruff` for code formatting and linting.
 
-_✨ Web Dashboard ✨_
+```bash
+git clone https://github.com/AstrBotDevs/AstrBot
+pip install pre-commit
+pre-commit install
+```
 
-![webchat](https://drive.soulter.top/f/vlsA/ezgif-5-fb044b2542.gif)
+## 🌍 Community
 
-_✨ Built-in Web Chat Interface ✨_
+### QQ Groups
 
-</div>
+- Group 1: 322154837
+- Group 3: 630166526
+- Group 5: 822130018
+- Group 6: 753075035
+- Developer Group: 975206796
+
+### Telegram Group
+
+<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
+### Discord Server
+
+<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
+## ❤️ Special Thanks
+
+Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
+
+<a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
+</a>
+
+Additionally, the birth of this project would not have been possible without the help of the following open-source projects:
+
+- [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - The amazing cat framework
 
 ## ⭐ Star History
 
-> [!TIP] 
-> If this project helps you, please give it a star <3
+> [!TIP]
+> If this project has helped you in your life or work, or if you're interested in its future development, please give the project a Star. It's the driving force behind maintaining this open-source project <3
 
 <div align="center">
-    
-[![Star History Chart](https://api.star-history.com/svg?repos=AstrBotDevs/AstrBot&type=Date)](https://star-history.com/#AstrBotDevs/AstrBot&Date)
+
+[![Star History Chart](https://api.star-history.com/svg?repos=astrbotdevs/astrbot&type=Date)](https://star-history.com/#astrbotdevs/astrbot&Date)
 
 </div>
 
-## Disclaimer
-
-1. Licensed under `AGPL-v3`.
-2. WeChat integration uses [Gewechat](https://github.com/Devo919/Gewechat). Use at your own risk with non-critical accounts.
-3. Users must comply with local laws and regulations.
-
-<!-- ## ✨ ATRI [Beta]
-
-Available as plugin: [astrbot_plugin_atri](https://github.com/AstrBotDevs/AstrBot_plugin_atri)
-
-1. Qwen1.5-7B-Chat Lora model fine-tuned with ATRI character data
-2. Long-term memory
-3. Meme understanding & responses
-4. TTS integration
-    -->
-
+</details>
 
 _私は、高性能ですから!_
-

@@ -18,6 +18,7 @@ class CommandGroupFilter(HandlerFilter):
     ):
         self.group_name = group_name
         self.alias = alias if alias else set()
+        self._original_group_name = group_name
         self.sub_command_filters: list[CommandFilter | CommandGroupFilter] = []
         self.custom_filter_list: list[CustomFilter] = []
         self.parent_group = parent_group

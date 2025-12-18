@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from google import genai
 from google.genai import types
@@ -13,7 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
 
@@ -53,12 +54,10 @@ class ProviderGoogleGenAI(Provider):
         self,
         provider_config,
         provider_settings,
-        default_persona=None,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
-            default_persona,
         )
         self.api_keys: list = super().get_keys()
         self.chosen_api_key: str = self.api_keys[0] if len(self.api_keys) > 0 else ""
@@ -113,9 +112,9 @@ class ProviderGoogleGenAI(Provider):
                 f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}...",
             )
             raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
-        logger.error(
-            f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}",
-        )
+        # logger.error(
+        #     f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}",
+        # )
         raise e
 
     async def _prepare_query_config(
@@ -128,18 +127,18 @@ class ProviderGoogleGenAI(Provider):
     ) -> types.GenerateContentConfig:
         """准备查询配置"""
         if not modalities:
-            modalities = ["Text"]
+            modalities = ["TEXT"]
 
         # 流式输出不支持图片模态
         if (
             self.provider_settings.get("streaming_response", False)
-            and "Image" in modalities
+            and "IMAGE" in modalities
         ):
             logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
-            modalities = ["Text"]
+            modalities = ["TEXT"]
 
-        tool_list = []
-        model_name = self.get_model()
+        tool_list: list[types.Tool] | None = []
+        model_name = payloads.get("model", self.get_model())
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -198,6 +197,37 @@ class ProviderGoogleGenAI(Provider):
                 types.Tool(function_declarations=func_desc["function_declarations"]),
             ]
 
+        # oper thinking config
+        thinking_config = None
+        if model_name.startswith("gemini-2.5"):
+            # The thinkingBudget parameter, introduced with the Gemini 2.5 series
+            thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
+                "budget", 0
+            )
+            if thinking_budget is not None:
+                thinking_config = types.ThinkingConfig(
+                    thinking_budget=thinking_budget,
+                )
+        elif model_name.startswith("gemini-3"):
+            # The thinkingLevel parameter, recommended for Gemini 3 models and onwards
+            # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
+            thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
+                "level", "HIGH"
+            )
+            if thinking_level and isinstance(thinking_level, str):
+                thinking_level = thinking_level.upper()
+                if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
+                    logger.warning(
+                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                    )
+                    thinking_level = "HIGH"
+                level = types.ThinkingLevel(thinking_level)
+                thinking_config = types.ThinkingConfig()
+                if not hasattr(types.ThinkingConfig, "thinking_level"):
+                    setattr(types.ThinkingConfig, "thinking_level", level)
+                else:
+                    thinking_config.thinking_level = level
+
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
@@ -215,24 +245,9 @@ class ProviderGoogleGenAI(Provider):
             logprobs=payloads.get("logprobs"),
             seed=payloads.get("seed"),
             response_modalities=modalities,
-            tools=tool_list,
+            tools=cast(types.ToolListUnion | None, tool_list),
             safety_settings=self.safety_settings if self.safety_settings else None,
-            thinking_config=(
-                types.ThinkingConfig(
-                    thinking_budget=min(
-                        int(
-                            self.provider_config.get("gm_thinking_config", {}).get(
-                                "budget",
-                                0,
-                            ),
-                        ),
-                        24576,
-                    ),
-                )
-                if "gemini-2.5-flash" in self.get_model()
-                and hasattr(types.ThinkingConfig, "thinking_budget")
-                else None
-            ),
+            thinking_config=thinking_config,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True,
             ),
@@ -259,6 +274,7 @@ class ProviderGoogleGenAI(Provider):
             content_cls: type[types.Content],
         ) -> None:
             if contents and isinstance(contents[-1], content_cls):
+                assert contents[-1].parts is not None
                 contents[-1].parts.extend(part)
             else:
                 contents.append(content_cls(parts=part))
@@ -292,13 +308,24 @@ class ProviderGoogleGenAI(Provider):
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 elif not native_tool_enabled and "tool_calls" in message:
-                    parts = [
-                        types.Part.from_function_call(
+                    parts = []
+                    for tool in message["tool_calls"]:
+                        part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
                         )
-                        for tool in message["tool_calls"]
-                    ]
+                        # we should set thought_signature back to part if exists
+                        # for more info about thought_signature, see:
+                        # https://ai.google.dev/gemini-api/docs/thought-signatures
+                        if "extra_content" in tool and tool["extra_content"]:
+                            ts_bs64 = (
+                                tool["extra_content"]
+                                .get("google", {})
+                                .get("thought_signature")
+                            )
+                            if ts_bs64:
+                                part.thought_signature = base64.b64decode(ts_bs64)
+                        parts.append(part)
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 else:
                     logger.warning("assistant 角色的消息内容为空，已添加空格占位")
@@ -326,8 +353,28 @@ class ProviderGoogleGenAI(Provider):
 
         return gemini_contents
 
-    @staticmethod
+    def _extract_reasoning_content(self, candidate: types.Candidate) -> str:
+        """Extract reasoning content from candidate parts"""
+        if not candidate.content or not candidate.content.parts:
+            return ""
+
+        thought_buf: list[str] = [
+            (p.text or "") for p in candidate.content.parts if p.thought
+        ]
+        return "".join(thought_buf).strip()
+
+    def _extract_usage(
+        self, usage_metadata: types.GenerateContentResponseUsageMetadata
+    ) -> TokenUsage:
+        """Extract usage from candidate"""
+        return TokenUsage(
+            input_other=usage_metadata.prompt_token_count or 0,
+            input_cached=usage_metadata.cached_content_token_count or 0,
+            output=usage_metadata.candidates_token_count or 0,
+        )
+
     def _process_content_parts(
+        self,
         candidate: types.Candidate,
         llm_response: LLMResponse,
     ) -> MessageChain:
@@ -358,6 +405,11 @@ class ProviderGoogleGenAI(Provider):
             logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
             raise Exception("API 返回的 candidate.content.parts 为空。")
 
+        # 提取 reasoning content
+        reasoning = self._extract_reasoning_content(candidate)
+        if reasoning:
+            llm_response.reasoning_content = reasoning
+
         chain = []
         part: types.Part
 
@@ -380,10 +432,15 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.role = "tool"
                 llm_response.tools_call_name.append(part.function_call.name)
                 llm_response.tools_call_args.append(part.function_call.args)
-                # gemini 返回的 function_call.id 可能为 None
-                llm_response.tools_call_ids.append(
-                    part.function_call.id or part.function_call.name,
-                )
+                # function_call.id might be None, use name as fallback
+                tool_call_id = part.function_call.id or part.function_call.name
+                llm_response.tools_call_ids.append(tool_call_id)
+                # extra_content
+                if part.thought_signature:
+                    ts_bs64 = base64.b64encode(part.thought_signature).decode("utf-8")
+                    llm_response.tools_call_extra_content[tool_call_id] = {
+                        "google": {"thought_signature": ts_bs64}
+                    }
             elif (
                 part.inline_data
                 and part.inline_data.mime_type
@@ -400,9 +457,11 @@ class ProviderGoogleGenAI(Provider):
             None,
         )
 
-        modalities = ["Text"]
+        model = payloads.get("model", self.get_model())
+
+        modalities = ["TEXT"]
         if self.provider_config.get("gm_resp_image_modal", False):
-            modalities.append("Image")
+            modalities.append("IMAGE")
 
         conversation = self._prepare_conversation(payloads)
         temperature = payloads.get("temperature", 0.7)
@@ -418,10 +477,11 @@ class ProviderGoogleGenAI(Provider):
                     temperature,
                 )
                 result = await self.client.models.generate_content(
-                    model=self.get_model(),
-                    contents=conversation,
+                    model=model,
+                    contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
+                logger.debug(f"genai result: {result}")
 
                 if not result.candidates:
                     logger.error(f"请求失败, 返回的 candidates 为空: {result}")
@@ -443,11 +503,11 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)",
+                        f"{model} 不支持 system prompt，已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
-                    logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
+                    logger.warning(f"{model} 不支持函数调用，已自动去除")
                     tools = None
                 elif (
                     "Multi-modal output is not supported" in e.message
@@ -456,9 +516,9 @@ class ProviderGoogleGenAI(Provider):
                     or "only supports text output" in e.message
                 ):
                     logger.warning(
-                        f"{self.get_model()} 不支持多模态输出，降级为文本模态",
+                        f"{model} 不支持多模态输出，降级为文本模态",
                     )
-                    modalities = ["Text"]
+                    modalities = ["TEXT"]
                 else:
                     raise
                 continue
@@ -469,6 +529,9 @@ class ProviderGoogleGenAI(Provider):
             result.candidates[0],
             llm_response,
         )
+        llm_response.id = result.response_id
+        if result.usage_metadata:
+            llm_response.usage = self._extract_usage(result.usage_metadata)
         return llm_response
 
     async def _query_stream(
@@ -481,7 +544,7 @@ class ProviderGoogleGenAI(Provider):
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
         )
-
+        model = payloads.get("model", self.get_model())
         conversation = self._prepare_conversation(payloads)
 
         result = None
@@ -493,8 +556,8 @@ class ProviderGoogleGenAI(Provider):
                     system_instruction,
                 )
                 result = await self.client.models.generate_content_stream(
-                    model=self.get_model(),
-                    contents=conversation,
+                    model=model,
+                    contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
                 break
@@ -503,11 +566,11 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{self.get_model()} 不支持 system prompt，已自动去除(影响人格设置)",
+                        f"{model} 不支持 system prompt，已自动去除(影响人格设置)",
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
-                    logger.warning(f"{self.get_model()} 不支持函数调用，已自动去除")
+                    logger.warning(f"{model} 不支持函数调用，已自动去除")
                     tools = None
                 else:
                     raise
@@ -515,6 +578,7 @@ class ProviderGoogleGenAI(Provider):
 
         # Accumulate the complete response text for the final response
         accumulated_text = ""
+        accumulated_reasoning = ""
         final_response = None
 
         async for chunk in result:
@@ -536,12 +600,25 @@ class ProviderGoogleGenAI(Provider):
                     chunk.candidates[0],
                     llm_response,
                 )
+                llm_response.id = chunk.response_id
+                if chunk.usage_metadata:
+                    llm_response.usage = self._extract_usage(chunk.usage_metadata)
                 yield llm_response
                 return
 
+            _f = False
+
+            # 提取 reasoning content
+            reasoning = self._extract_reasoning_content(chunk.candidates[0])
+            if reasoning:
+                _f = True
+                accumulated_reasoning += reasoning
+                llm_response.reasoning_content = reasoning
             if chunk.text:
+                _f = True
                 accumulated_text += chunk.text
                 llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            if _f:
                 yield llm_response
 
             if chunk.candidates[0].finish_reason:
@@ -553,11 +630,18 @@ class ProviderGoogleGenAI(Provider):
                         chunk.candidates[0],
                         final_response,
                     )
+                    final_response.id = chunk.response_id
+                    if chunk.usage_metadata:
+                        final_response.usage = self._extract_usage(chunk.usage_metadata)
                 break
 
         # Yield final complete response with accumulated text
         if not final_response:
             final_response = LLMResponse("assistant", is_chunk=False)
+
+        # Set the complete accumulated reasoning in the final response
+        if accumulated_reasoning:
+            final_response.reasoning_content = accumulated_reasoning
 
         # Set the complete accumulated text in the final response
         if accumulated_text:

@@ -3,6 +3,7 @@
         <!-- 选择提供商和模型按钮 -->
         <v-chip class="text-none" variant="tonal" size="x-small"
             v-if="selectedProviderId && selectedModelName" @click="openDialog">
+            <v-icon start size="14">mdi-creation</v-icon>
             {{ selectedProviderId }} / {{ selectedModelName }}
         </v-chip>
         <v-chip variant="tonal" rounded="xl" size="x-small" v-else @click="openDialog">
@@ -10,7 +11,7 @@
         </v-chip>
 
         <!-- 选择提供商和模型对话框 -->
-        <v-dialog v-model="showDialog" max-width="800" persistent>
+        <v-dialog v-model="showDialog" max-width="800">
             <v-card style="padding: 8px;">
                 <v-card-title class="dialog-title">
                     <span>选择提供商和模型</span>

@@ -35,6 +35,7 @@ dashboard/dist/
 dashboard/src-tauri/target
 package-lock.json
 package.json
+yarn.lock
 
 # Operating System
 **/.DS_Store
@@ -49,3 +50,5 @@ chroma
 venv/*
 pytest.ini
 build/
+AGENTS.md
+IFLOW.md

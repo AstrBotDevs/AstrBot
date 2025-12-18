@@ -13,7 +13,8 @@
     "refresh": "Refresh"
   },
   "batch": {
-    "deleteSelected": "Delete Selected ({count})"
+    "deleteSelected": "Delete Selected ({count})",
+    "exportSelected": "Export Selected ({count})"
   },
   "pagination": {
     "itemsPerPage": "Items per page",
@@ -76,7 +77,8 @@
       "message": "Are you sure you want to delete the selected {count} conversations? This action cannot be undone, please proceed with caution!",
       "andMore": "and {count} more",
       "cancel": "Cancel",
-      "confirm": "Batch Delete"
+      "confirm": "Batch Delete",
+      "warning": "Warning: This action cannot be undone!"
     }
   },
   "messages": {
@@ -92,6 +94,9 @@
     "noItemSelected": "Please select conversations to delete first",
     "batchDeleteSuccess": "Successfully deleted {count} conversations",
     "batchDeleteError": "Batch delete failed",
-    "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed"
+    "batchDeletePartial": "Delete completed: {deleted} successful, {failed} failed",
+    "exportSuccess": "Export successful",
+    "exportError": "Export failed",
+    "noItemSelectedForExport": "Please select conversations to export first"
   }
 } 

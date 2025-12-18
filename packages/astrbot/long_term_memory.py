@@ -6,9 +6,9 @@ from collections import defaultdict
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
-from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -30,16 +30,13 @@ class LongTermMemory:
         except BaseException as e:
             logger.error(e)
             max_cnt = 300
-        image_caption = (
-            True
-            if cfg["provider_settings"]["default_image_caption_provider_id"]
-            and cfg["provider_ltm_settings"]["image_caption"]
-            else False
-        )
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
-        image_caption_provider_id = cfg["provider_settings"][
-            "default_image_caption_provider_id"
-        ]
+        image_caption_provider_id = cfg["provider_ltm_settings"].get(
+            "image_caption_provider_id"
+        )
+        image_caption = cfg["provider_ltm_settings"]["image_caption"] and bool(
+            image_caption_provider_id
+        )
         active_reply = cfg["provider_ltm_settings"]["active_reply"]
         enable_active_reply = active_reply.get("enable", False)
         ar_method = active_reply["method"]
@@ -142,6 +139,8 @@ class LongTermMemory:
                             logger.error(f"获取图片描述失败: {e}")
                     else:
                         parts.append(" [Image]")
+                elif isinstance(comp, At):
+                    parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
             logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
@@ -159,8 +158,12 @@ class LongTermMemory:
         cfg = self.cfg(event)
         if cfg["enable_active_reply"]:
             prompt = req.prompt
-            req.prompt = f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
-            req.prompt += f"\nNow, a new message is coming: `{prompt}`. Please react to it. Only output your response and do not output any other information."
+            req.prompt = (
+                f"You are now in a chatroom. The chat history is as follows:\n{chats_str}"
+                f"\nNow, a new message is coming: `{prompt}`. "
+                "Please react to it. Only output your response and do not output any other information. "
+                "You MUST use the SAME language as the chatroom is using."
+            )
             req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
@@ -168,13 +171,15 @@ class LongTermMemory:
             )
             req.system_prompt += chats_str
 
-    async def after_req_llm(self, event: AstrMessageEvent):
+    async def after_req_llm(self, event: AstrMessageEvent, llm_resp: LLMResponse):
         if event.unified_msg_origin not in self.session_chats:
             return
 
-        if event.get_result() and event.get_result().is_llm_result():
-            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {event.get_result().get_plain_text()}"
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
+        if llm_resp.completion_text:
+            final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
+            logger.debug(
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+            )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:

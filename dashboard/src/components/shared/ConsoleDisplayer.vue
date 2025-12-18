@@ -1,5 +1,7 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
+import { storeToRefs } from 'pinia';
+import axios from 'axios';
 </script>
 
 <template>
@@ -7,8 +9,8 @@ import { useCommonStore } from '@/stores/common';
     <!-- 添加筛选级别控件 -->
     <div class="filter-controls mb-2" v-if="showLevelBtns">
       <v-chip-group v-model="selectedLevels" column multiple>
-        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter
-          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'">
+        <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
+          :text-color="level === 'DEBUG' || level === 'INFO' ? 'black' : 'white'" class="font-weight-medium">
           {{ level }}
         </v-chip>
       </v-chip-group>
@@ -35,7 +37,6 @@ export default {
         '\u001b[32m': 'color: #00FF00;',  // green
         'default': 'color: #FFFFFF;'
       },
-      logCache: useCommonStore().getLogCache(),
       historyNum_: -1,
       logLevels: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
       selectedLevels: [0, 1, 2, 3, 4], // 默认选中所有级别
@@ -45,7 +46,17 @@ export default {
         'WARNING': 'amber',
         'ERROR': 'red',
         'CRITICAL': 'purple'
-      }
+      },
+      lastProcessedTime: 0, // 记录最后处理的日志时间戳
+      localLogCache: [], // 本地日志缓存
+    }
+  },
+  computed: {
+    commonStore() {
+      return useCommonStore();
+    },
+    logCache() {
+      return this.commonStore.log_cache;
     }
   },
   props: {
@@ -60,13 +71,39 @@ export default {
   },
   watch: {
     logCache: {
-      handler(val) {
-        const lastLog = val[this.logCache.length - 1];
-        if (lastLog && this.isLevelSelected(lastLog.level)) {
-          this.printLog(lastLog.data);
+      handler(newVal) {
+        // 基于 timestamp 处理新增的日志
+        if (newVal && newVal.length > 0) {
+          // 确保 DOM 已经准备好
+          this.$nextTick(() => {
+            // 合并到本地缓存并按时间排序
+            const newLogs = newVal.filter(log => log.time > this.lastProcessedTime);
+            
+            if (newLogs.length > 0) {
+              this.localLogCache.push(...newLogs);
+              // 按时间戳排序
+              this.localLogCache.sort((a, b) => a.time - b.time);
+              
+              // 只保留最新的 log_cache_max_len 条
+              if (this.localLogCache.length > this.commonStore.log_cache_max_len) {
+                this.localLogCache.splice(0, this.localLogCache.length - this.commonStore.log_cache_max_len);
+              }
+              
+              // 显示新日志
+              newLogs.forEach(logItem => {
+                if (this.isLevelSelected(logItem.level)) {
+                  this.printLog(logItem.data);
+                }
+              });
+              
+              // 更新最后处理时间
+              this.lastProcessedTime = Math.max(...newLogs.map(log => log.time));
+            }
+          });
         }
       },
-      deep: true
+      deep: true,
+      immediate: false
     },
     selectedLevels: {
       handler() {
@@ -75,14 +112,37 @@ export default {
       deep: true
     }
   },
-  mounted() {
-    if (this.logCache.length === 0) {
-      this.delayInit()
-    } else {
-      this.init()
-    }
+  async mounted() {
+    // 请求历史日志
+    await this.fetchLogHistory();
+    
+    // 等待 DOM 准备好后，显示历史日志
+    this.$nextTick(() => {
+      if (this.localLogCache.length > 0) {
+        this.localLogCache.forEach(logItem => {
+          if (this.isLevelSelected(logItem.level)) {
+            this.printLog(logItem.data);
+          }
+        });
+        // 更新最后处理时间
+        this.lastProcessedTime = Math.max(...this.localLogCache.map(log => log.time));
+      }
+    });
   },
   methods: {
+    async fetchLogHistory() {
+      try {
+        const res = await axios.get('/api/log-history');
+        if (res.data.data.logs && res.data.data.logs.length > 0) {
+          this.localLogCache = [...res.data.data.logs];
+          // 按时间戳排序
+          this.localLogCache.sort((a, b) => a.time - b.time);
+        }
+      } catch (err) {
+        console.error('Failed to fetch log history:', err);
+      }
+    },
+    
     getLevelColor(level) {
       return this.levelColors[level] || 'grey';
     },
@@ -98,40 +158,21 @@ export default {
     },
 
     refreshDisplay() {
-      // 清空现有的显示
       const termElement = document.getElementById('term');
       if (termElement) {
         termElement.innerHTML = '';
-      }
-
-      // 重新显示符合筛选条件的日志
-      this.init();
-    },
-
-    delayInit() {
-      if (this.logCache.length === 0) {
-        setTimeout(() => {
-          this.delayInit()
-        }, 500)
-      } else {
-        this.init()
-      }
-    },
-
-    init() {
-      this.historyNum_ = parseInt(this.historyNum)
-      let i = 0
-      for (let log of this.logCache) {
-        if (this.isLevelSelected(log.level)) { // 只显示选中级别的日志
-          if (this.historyNum_ != -1 && i >= this.logCache.length - this.historyNum_) {
-            this.printLog(log.data)
-            ++i
-          } else if (this.historyNum_ == -1) {
-            this.printLog(log.data)
-          }
+        
+        // 重新显示所有符合筛选条件的日志
+        if (this.localLogCache && this.localLogCache.length > 0) {
+          this.localLogCache.forEach(logItem => {
+            if (this.isLevelSelected(logItem.level)) {
+              this.printLog(logItem.data);
+            }
+          });
         }
       }
     },
+
 
     toggleAutoScroll() {
       this.autoScroll = !this.autoScroll;
@@ -140,6 +181,11 @@ export default {
     printLog(log) {
       // append 一个 span 标签到 term，block 的方式
       let ele = document.getElementById('term')
+      if (!ele) {
+        console.warn('term element not found, skipping log print');
+        return;
+      }
+      
       let span = document.createElement('pre')
       let style = this.logColorAnsiMap['default']
       for (let key in this.logColorAnsiMap) {
@@ -168,6 +214,7 @@ export default {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+  margin-left: 20px;
 }
 
 .fade-in {

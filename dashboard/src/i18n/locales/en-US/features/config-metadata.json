@@ -1,0 +1,491 @@
+{
+  "ai_group": {
+    "name": "AI",
+    "agent_runner": {
+      "description": "Agent Runner",
+      "hint": "Select the runner for AI conversations. Defaults to AstrBot's built-in Agent runner, which supports knowledge base, persona, and tool calling features. You don't need to modify this section unless you plan to integrate third-party Agent runners like Dify or Coze.",
+      "provider_settings": {
+        "enable": {
+          "description": "Enable",
+          "hint": "Master switch for AI conversations"
+        },
+        "agent_runner_type": {
+          "description": "Runner",
+          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application"]
+        },
+        "coze_agent_runner_provider_id": {
+          "description": "Coze Agent Runner Provider ID"
+        },
+        "dify_agent_runner_provider_id": {
+          "description": "Dify Agent Runner Provider ID"
+        },
+        "dashscope_agent_runner_provider_id": {
+          "description": "Alibaba Cloud Bailian Application Agent Runner Provider ID"
+        }
+      }
+    },
+    "ai": {
+      "description": "Model",
+      "hint": "When using non-built-in Agent runners, the default chat model and default image caption model may not take effect, but some plugins rely on these settings to invoke AI capabilities.",
+      "provider_settings": {
+        "default_provider_id": {
+          "description": "Default Chat Model",
+          "hint": "Uses the first model when left empty"
+        },
+        "default_image_caption_provider_id": {
+          "description": "Default Image Caption Model",
+          "hint": "Leave empty to disable; useful for non-multimodal models"
+        },
+        "image_caption_prompt": {
+          "description": "Image Caption Prompt"
+        }
+      },
+      "provider_stt_settings": {
+        "enable": {
+          "description": "Enable Speech-to-Text",
+          "hint": "Master switch for STT"
+        },
+        "provider_id": {
+          "description": "Default Speech-to-Text Model",
+          "hint": "Users can also select session-specific STT models using the /provider command."
+        }
+      },
+      "provider_tts_settings": {
+        "enable": {
+          "description": "Enable Text-to-Speech",
+          "hint": "Master switch for TTS"
+        },
+        "provider_id": {
+          "description": "Default Text-to-Speech Model"
+        },
+        "trigger_probability": {
+          "description": "TTS Trigger Probability"
+        }
+      }
+    },
+    "persona": {
+      "description": "Persona",
+      "provider_settings": {
+        "default_personality": {
+          "description": "Default Persona"
+        }
+      }
+    },
+    "knowledgebase": {
+      "description": "Knowledge Base",
+      "kb_names": {
+        "description": "Knowledge Base List",
+        "hint": "Supports multiple selections"
+      },
+      "kb_fusion_top_k": {
+        "description": "Fusion Search Results Count",
+        "hint": "Number of results returned after fusing search results from multiple knowledge bases"
+      },
+      "kb_final_top_k": {
+        "description": "Final Results Count",
+        "hint": "Number of results retrieved from the knowledge base. Higher values may provide more relevant information but could also introduce noise. Adjust based on actual needs"
+      },
+      "kb_agentic_mode": {
+        "description": "Agentic Knowledge Base Retrieval",
+        "hint": "When enabled, knowledge base retrieval becomes an LLM Tool, allowing the model to autonomously decide when to query the knowledge base. Requires the model to support function calling."
+      }
+    },
+    "websearch": {
+      "description": "Web Search",
+      "provider_settings": {
+        "web_search": {
+          "description": "Enable Web Search"
+        },
+        "websearch_provider": {
+          "description": "Web Search Provider"
+        },
+        "websearch_tavily_key": {
+          "description": "Tavily API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
+        "websearch_baidu_app_builder_key": {
+          "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
+          "hint": "Reference: https://console.bce.baidu.com/iam/#/iam/apikey/list"
+        },
+        "web_search_link": {
+          "description": "Display Source Citations"
+        }
+      }
+    },
+    "file_extract": {
+      "description": "File Extract",
+      "provider_settings": {
+        "file_extract": {
+          "enable": {
+            "description": "Enable File Extract"
+          },
+          "provider": {
+            "description": "File Extract Provider"
+          },
+          "moonshotai_api_key": {
+            "description": "Moonshot AI API Key"
+          }
+        }
+      }
+    },
+    "others": {
+      "description": "Other Settings",
+      "provider_settings": {
+        "display_reasoning_text": {
+          "description": "Display Reasoning Content"
+        },
+        "identifier": {
+          "description": "User Identification",
+          "hint": "When enabled, user ID information will be included in the prompt."
+        },
+        "group_name_display": {
+          "description": "Display Group Name",
+          "hint": "When enabled, group name information will be included in the prompt on supported platforms (OneBot v11)."
+        },
+        "datetime_system_prompt": {
+          "description": "Real-world Time Awareness",
+          "hint": "When enabled, current time information will be appended to the system prompt."
+        },
+        "show_tool_use_status": {
+          "description": "Output Function Call Status"
+        },
+        "max_agent_step": {
+          "description": "Maximum Tool Call Rounds"
+        },
+        "tool_call_timeout": {
+          "description": "Tool Call Timeout (seconds)"
+        },
+        "streaming_response": {
+          "description": "Streaming Output"
+        },
+        "unsupported_streaming_strategy": {
+          "description": "Platforms Without Streaming Support",
+          "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
+          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
+        },
+        "max_context_length": {
+          "description": "Maximum Conversation Rounds",
+          "hint": "Discards the oldest parts when this count is exceeded. One conversation round counts as 1, -1 means unlimited"
+        },
+        "dequeue_context_length": {
+          "description": "Dequeue Conversation Rounds",
+          "hint": "Number of conversation rounds to discard at once when maximum context length is exceeded"
+        },
+        "wake_prefix": {
+          "description": "Additional LLM Chat Wake Prefix",
+          "hint": "If the wake prefix is / and the additional chat wake prefix is chat, then /chat is required to trigger LLM requests"
+        },
+        "prompt_prefix": {
+          "description": "User Prompt",
+          "hint": "You can use {{prompt}} as a placeholder for user input. If no placeholder is provided, it will be added before the user input."
+        },
+        "reachability_check": {
+          "description": "Provider Reachability Check",
+          "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
+        }
+      },
+      "provider_tts_settings": {
+        "dual_output": {
+          "description": "Output Both Voice and Text When TTS is Enabled"
+        }
+      }
+    }
+  },
+  "platform_group": {
+    "name": "Platform",
+    "general": {
+      "description": "General",
+      "admins_id": {
+        "description": "Administrator IDs"
+      },
+      "platform_settings": {
+        "unique_session": {
+          "description": "Isolate Sessions",
+          "hint": "When enabled, group members have independent contexts."
+        },
+        "friend_message_needs_wake_prefix": {
+          "description": "Private Messages Require Wake Word"
+        },
+        "reply_prefix": {
+          "description": "Reply Text Prefix"
+        },
+        "reply_with_mention": {
+          "description": "Mention Sender in Reply"
+        },
+        "reply_with_quote": {
+          "description": "Quote Sender's Message in Reply"
+        },
+        "forward_threshold": {
+          "description": "Forward Message Word Count Threshold"
+        },
+        "empty_mention_waiting": {
+          "description": "Trigger Waiting on Mention-only Messages"
+        }
+      },
+      "wake_prefix": {
+        "description": "Wake Word"
+      },
+      "disable_builtin_commands": {
+        "description": "Disable Built-in Commands",
+        "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
+      }
+    },
+    "whitelist": {
+      "description": "Whitelist",
+      "platform_settings": {
+        "enable_id_white_list": {
+          "description": "Enable Whitelist",
+          "hint": "When enabled, only sessions in the whitelist will be responded to."
+        },
+        "id_whitelist": {
+          "description": "Whitelist ID List",
+          "hint": "Use /sid to get IDs."
+        },
+        "id_whitelist_log": {
+          "description": "Output Logs",
+          "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
+        },
+        "wl_ignore_admin_on_group": {
+          "description": "Administrator Group Messages Bypass ID Whitelist"
+        },
+        "wl_ignore_admin_on_friend": {
+          "description": "Administrator Private Messages Bypass ID Whitelist"
+        }
+      }
+    },
+    "rate_limit": {
+      "description": "Rate Limiting",
+      "platform_settings": {
+        "rate_limit": {
+          "time": {
+            "description": "Message Rate Limit Time (seconds)"
+          },
+          "count": {
+            "description": "Message Rate Limit Count"
+          },
+          "strategy": {
+            "description": "Rate Limit Strategy"
+          }
+        }
+      }
+    },
+    "content_safety": {
+      "description": "Content Safety",
+      "content_safety": {
+        "also_use_in_response": {
+          "description": "Also Check Model Response Content"
+        },
+        "baidu_aip": {
+          "enable": {
+            "description": "Use Baidu Content Safety Moderation",
+            "hint": "You need to manually install the baidu-aip library."
+          },
+          "app_id": {
+            "description": "App ID"
+          },
+          "api_key": {
+            "description": "API Key"
+          },
+          "secret_key": {
+            "description": "Secret Key"
+          }
+        },
+        "internal_keywords": {
+          "enable": {
+            "description": "Keyword Check"
+          },
+          "extra_keywords": {
+            "description": "Additional Keywords",
+            "hint": "Additional keyword blocklist, supports regular expressions."
+          }
+        }
+      }
+    },
+    "t2i": {
+      "description": "Text-to-Image",
+      "t2i": {
+        "description": "Text-to-Image Output"
+      },
+      "t2i_word_threshold": {
+        "description": "Text-to-Image Word Count Threshold"
+      }
+    },
+    "others": {
+      "description": "Other Settings",
+      "platform_settings": {
+        "ignore_bot_self_message": {
+          "description": "Ignore Bot's Own Messages"
+        },
+        "ignore_at_all": {
+          "description": "Ignore @All Events"
+        },
+        "no_permission_reply": {
+          "description": "Reply When User Has Insufficient Permissions"
+        }
+      },
+      "platform_specific": {
+        "lark": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Lark] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Lark Emoji Enum Names)",
+              "hint": "Emoji enum names reference: https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce"
+            }
+          }
+        },
+        "telegram": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Telegram] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode)",
+              "hint": "Telegram only supports a fixed reaction set, reference: https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9"
+            }
+          }
+        }
+      }
+    }
+  },
+  "plugin_group": {
+    "name": "Plugin",
+    "plugin": {
+      "description": "Plugins",
+      "plugin_set": {
+        "description": "Available Plugins",
+        "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
+      }
+    }
+  },
+  "ext_group": {
+    "name": "Ext.",
+    "segmented_reply": {
+      "description": "Segmented Reply",
+      "platform_settings": {
+        "segmented_reply": {
+          "enable": {
+            "description": "Enable Segmented Reply"
+          },
+          "only_llm_result": {
+            "description": "Segment Only LLM Results"
+          },
+          "interval_method": {
+            "description": "Interval Method"
+          },
+          "interval": {
+            "description": "Random Interval Time",
+            "hint": "Format: minimum,maximum (e.g., 1.5,3.5)"
+          },
+          "log_base": {
+            "description": "Logarithm Base",
+            "hint": "Base for logarithmic intervals, defaults to 2.0. Value range: 1.0-10.0."
+          },
+          "words_count_threshold": {
+            "description": "Segmented Reply Word Count Threshold"
+          },
+          "split_mode": {
+            "description": "Split Mode",
+            "labels": ["Regex", "Words List"]
+          },
+          "regex": {
+            "description": "Segmentation Regular Expression"
+          },
+          "split_words": {
+            "description": "Split Word List",
+            "hint": "Split when any word in the list is detected"
+          },
+          "content_cleanup_rule": {
+            "description": "Content Filtering Regular Expression",
+            "hint": "Remove specified content from segmented content. For example, `[。?!]` will remove all periods, question marks, and exclamation marks."
+          }
+        }
+      }
+    },
+    "ltm": {
+      "description": "Group Chat Context Awareness (formerly Chat Memory Enhancement)",
+      "provider_ltm_settings": {
+        "group_icl_enable": {
+          "description": "Enable Group Chat Context Awareness"
+        },
+        "group_message_max_cnt": {
+          "description": "Maximum Message Count"
+        },
+        "image_caption": {
+          "description": "Auto-understand Images",
+          "hint": "Requires setting a group chat image caption model."
+        },
+        "image_caption_provider_id": {
+          "description": "Group Chat Image Caption Model",
+          "hint": "Used for image understanding in group chat context awareness, configured separately from the default image caption model."
+        },
+        "active_reply": {
+          "enable": {
+            "description": "Active Reply"
+          },
+          "method": {
+            "description": "Active Reply Method"
+          },
+          "possibility_reply": {
+            "description": "Reply Probability",
+            "hint": "Value between 0.0-1.0"
+          },
+          "whitelist": {
+            "description": "Active Reply Whitelist",
+            "hint": "Whitelist filtering is disabled when empty. Use /sid to get IDs."
+          }
+        }
+      }
+    }
+  },
+  "system_group": {
+    "name": "System",
+    "system": {
+      "description": "System Settings",
+      "t2i_strategy": {
+        "description": "Text-to-Image Strategy",
+        "hint": "Text-to-image strategy. `remote` uses a remote HTML-based rendering service, `local` uses PIL for local rendering. When using local, place a TTF font named 'font.ttf' in the data/ directory to customize the font."
+      },
+      "t2i_endpoint": {
+        "description": "Text-to-Image Service API Endpoint",
+        "hint": "Uses AstrBot API service when empty"
+      },
+      "t2i_template": {
+        "description": "Text-to-Image Custom Template",
+        "hint": "When enabled, you can customize HTML templates for text-to-image rendering."
+      },
+      "t2i_active_template": {
+        "description": "Currently Active Text-to-Image Rendering Template",
+        "hint": "This value is maintained by the text-to-image template management page."
+      },
+      "log_level": {
+        "description": "Console Log Level",
+        "hint": "Log level for console output."
+      },
+      "pip_install_arg": {
+        "description": "Additional pip Installation Arguments",
+        "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
+      },
+      "pypi_index_url": {
+        "description": "PyPI Repository URL",
+        "hint": "PyPI repository URL for installing Python dependencies. Defaults to https://mirrors.aliyun.com/pypi/simple/"
+      },
+      "callback_api_base": {
+        "description": "Externally Accessible Callback API Address",
+        "hint": "External services may access AstrBot's backend through callback links generated by AstrBot (such as file download links). Since AstrBot cannot automatically determine the externally accessible host address in the deployment environment, this configuration item is needed to explicitly specify how external services should access AstrBot's address. Examples: http://localhost:6185, https://example.com, etc."
+      },
+      "timezone": {
+        "description": "Timezone",
+        "hint": "Timezone setting. Please enter an IANA timezone name, such as Asia/Shanghai. Uses system default timezone when empty. For all timezones, see: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab"
+      },
+      "http_proxy": {
+        "description": "HTTP Proxy",
+        "hint": "When enabled, proxy will be set by adding environment variables. Format: `http://ip:port`"
+      },
+      "no_proxy": {
+        "description": "Direct Connection Address List"
+      }
+    }
+  }
+}

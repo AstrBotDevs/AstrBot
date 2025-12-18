@@ -16,7 +16,6 @@ from ..stage import Stage
 
 class StarRequestSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
-        self.curr_provider = ctx.plugin_manager.context.get_using_provider()
         self.prompt_prefix = ctx.astrbot_config["provider_settings"]["prompt_prefix"]
         self.identifier = ctx.astrbot_config["provider_settings"]["identifier"]
         self.ctx = ctx
@@ -24,7 +23,7 @@ class StarRequestSubStage(Stage):
     async def process(
         self,
         event: AstrMessageEvent,
-    ) -> None | AsyncGenerator[None, None]:
+    ) -> AsyncGenerator[Any, None]:
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
             "activated_handlers",
         )

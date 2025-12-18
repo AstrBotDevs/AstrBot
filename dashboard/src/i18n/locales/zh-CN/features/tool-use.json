@@ -42,7 +42,10 @@
       "paramName": "参数名",
       "type": "类型",
       "description": "描述",
-      "required": "必填"
+      "required": "必填",
+      "origin": "来源",
+      "originName": "来源名称",
+      "actions": "操作"
     }
   },
   "marketplace": {

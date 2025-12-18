@@ -30,6 +30,10 @@
             <v-icon start>mdi-message-text</v-icon>
             {{ tm('providers.tabs.chatCompletion') }}
           </v-tab>
+          <v-tab value="agent_runner" class="font-weight-medium px-3">
+            <v-icon start>mdi-message-text</v-icon>
+            {{ tm('providers.tabs.agentRunner') }}
+          </v-tab>
           <v-tab value="speech_to_text" class="font-weight-medium px-3">
             <v-icon start>mdi-microphone-message</v-icon>
             {{ tm('providers.tabs.speechToText') }}
@@ -48,87 +52,103 @@
           </v-tab>
         </v-tabs>
 
-        <v-row v-if="filteredProviders.length === 0">
-          <v-col cols="12" class="text-center pa-8">
-            <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-            <p class="text-grey mt-4">{{ getEmptyText() }}</p>
-          </v-col>
-        </v-row>
+        <template v-if="activeProviderTypeTab === 'all'">
+          <v-row v-if="groupedProviders.length === 0">
+            <v-col cols="12" class="text-center pa-8">
+              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+            </v-col>
+          </v-row>
+          <div v-else>
+            <div v-for="group in groupedProviders" :key="group.typeKey" class="mb-8">
+              <h1 class="text-h3 font-weight-bold mb-4">{{ group.label }}</h1>
+              <v-row>
+                <v-col v-for="(provider, index) in group.items" :key="`${group.typeKey}-${index}`" cols="12" md="6"
+                  lg="4" xl="3">
+                  <item-card :item="provider" title-field="id" enabled-field="enable"
+                    :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+                    :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+                    @copy="copyProvider" :show-copy-button="true">
+                    <template #item-details="{ item }">
+                      <!-- 测试状态 chip -->
+                      <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
+                        <template v-slot:activator="{ props }">
+                          <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
+                            <v-icon start size="small">
+                              {{ getProviderStatus(item.id).status === 'available' ? 'mdi-check-circle' :
+                                getProviderStatus(item.id).status === 'unavailable' ? 'mdi-alert-circle' :
+                                  'mdi-clock-outline' }}
+                            </v-icon>
+                            {{ getStatusText(getProviderStatus(item.id).status) }}
+                          </v-chip>
+                        </template>
+                        <span v-if="getProviderStatus(item.id).status === 'unavailable'">
+                          {{ getProviderStatus(item.id).error }}
+                        </span>
+                        <span v-else>{{ getStatusText(getProviderStatus(item.id).status) }}</span>
+                      </v-tooltip>
+                    </template>
+                    <template #actions="{ item }">
+                      <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                        :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                        {{ tm('availability.test') }}
+                      </v-btn>
+                    </template>
+                    <template v-slot:details="{ item }">
+                    </template>
+                  </item-card>
+                </v-col>
+              </v-row>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <v-row v-if="filteredProviders.length === 0">
+            <v-col cols="12" class="text-center pa-8">
+              <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
+              <p class="text-grey mt-4">{{ getEmptyText() }}</p>
+            </v-col>
+          </v-row>
+          <v-row v-else>
+            <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
+              <item-card :item="provider" title-field="id" enabled-field="enable"
+                :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
+                :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
+                @copy="copyProvider" :show-copy-button="true">
 
-        <v-row v-else>
-          <v-col v-for="(provider, index) in filteredProviders" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="provider" title-field="id" enabled-field="enable"
-              :loading="isProviderTesting(provider.id)" @toggle-enabled="providerStatusChange"
-              :bglogo="getProviderIcon(provider.provider)" @delete="deleteProvider" @edit="configExistingProvider"
-              @copy="copyProvider" :show-copy-button="true">
-              <template #actions="{ item }">
-                <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
-                  :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
-                  {{ tm('availability.test') }}
-                </v-btn>
-              </template>
-              <template v-slot:details="{ item }">
-              </template>
-            </item-card>
-          </v-col>
-        </v-row>
+                <template #item-details="{ item }">
+                  <!-- 测试状态 chip -->
+                  <v-tooltip v-if="getProviderStatus(item.id)" location="top" max-width="300">
+                    <template v-slot:activator="{ props }">
+                      <v-chip v-bind="props" :color="getStatusColor(getProviderStatus(item.id).status)" size="small">
+                        <v-icon start size="small">
+                          {{ getProviderStatus(item.id).status === 'available' ? 'mdi-check-circle' :
+                            getProviderStatus(item.id).status === 'unavailable' ? 'mdi-alert-circle' :
+                              'mdi-clock-outline' }}
+                        </v-icon>
+                        {{ getStatusText(getProviderStatus(item.id).status) }}
+                      </v-chip>
+                    </template>
+                    <span v-if="getProviderStatus(item.id).status === 'unavailable'">
+                      {{ getProviderStatus(item.id).error }}
+                    </span>
+                    <span v-else>{{ getStatusText(getProviderStatus(item.id).status) }}</span>
+                  </v-tooltip>
+                </template>
+                <template #actions="{ item }">
+                  <v-btn style="z-index: 100000;" variant="tonal" color="info" rounded="xl" size="small"
+                    :loading="isProviderTesting(item.id)" @click="testSingleProvider(item)">
+                    {{ tm('availability.test') }}
+                  </v-btn>
+                </template>
+              </item-card>
+            </v-col>
+          </v-row>
+        </template>
       </div>
 
-      <!-- 供应商状态部分 -->
-      <v-card elevation="0" class="mt-4">
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon class="me-2">mdi-heart-pulse</v-icon>
-          <span class="text-h4">{{ tm('availability.title') }}</span>
-          <v-spacer></v-spacer>
-          <v-btn color="primary" variant="tonal" :loading="testingProviders.length > 0" @click="fetchProviderStatus">
-            <v-icon left>mdi-refresh</v-icon>
-            {{ tm('availability.refresh') }}
-          </v-btn>
-          <v-btn variant="text" color="primary" @click="showStatus = !showStatus" style="margin-left: 8px;">
-            {{ showStatus ? tm('logs.collapse') : tm('logs.expand') }}
-            <v-icon>{{ showStatus ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-expand-transition>
-          <v-card-text class="pa-0" v-if="showStatus">
-            <v-card-text class="px-4 py-3">
-              <v-alert v-if="providerStatuses.length === 0" type="info" variant="tonal">
-                {{ tm('availability.noData') }}
-              </v-alert>
-
-              <v-container v-else class="pa-0">
-                <v-row>
-                  <v-col v-for="status in providerStatuses" :key="status.id" cols="12" sm="6" md="4">
-                    <v-card variant="outlined" class="status-card" :class="`status-${status.status}`">
-                      <v-card-item>
-                        <v-icon v-if="status.status === 'available'" color="success"
-                          class="me-2">mdi-check-circle</v-icon>
-                        <v-icon v-else-if="status.status === 'unavailable'" color="error"
-                          class="me-2">mdi-alert-circle</v-icon>
-                        <v-progress-circular v-else-if="status.status === 'pending'" indeterminate color="primary"
-                          size="20" width="2" class="me-2"></v-progress-circular>
-
-                        <span class="font-weight-bold">{{ status.id }}</span>
-
-                        <v-chip :color="getStatusColor(status.status)" size="small" class="ml-2">
-                          {{ getStatusText(status.status) }}
-                        </v-chip>
-                      </v-card-item>
-                      <v-card-text v-if="status.status === 'unavailable'" class="text-caption text-medium-emphasis">
-                        <span class="font-weight-bold">{{ tm('availability.errorMessage') }}:</span> {{ status.error }}
-                      </v-card-text>
-                    </v-card>
-                  </v-col>
-                </v-row>
-              </v-container>
-            </v-card-text>
-          </v-card-text>
-        </v-expand-transition>
-      </v-card>
-
       <!-- 日志部分 -->
-      <v-card elevation="0" class="mt-4">
+      <v-card elevation="0" class="mt-4 mb-10">
         <v-card-title class="d-flex align-center py-3 px-4">
           <v-icon class="me-2">mdi-console-line</v-icon>
           <span class="text-h4">{{ tm('logs.title') }}</span>
@@ -181,6 +201,30 @@
     </v-snackbar>
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
+
+    <!-- Agent Runner 测试提示对话框 -->
+    <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
+      <v-card>
+        <v-card-title class="text-h3 d-flex align-center">
+          <v-icon start class="me-2">mdi-information</v-icon>
+          请前往「配置文件」页测试 Agent 执行器
+        </v-card-title>
+        <v-card-text class="py-4 text-body-1 text-medium-emphasis">
+          Agent 执行器的测试请在「配置文件」页进行。
+          <ol class="ml-4 mt-4 mb-4">
+            <li>找到对应的配置文件并打开。</li>
+            <li>找到 Agent 执行方式部分，修改执行器后点击保存。</li>
+            <li>点击右下角的 💬 聊天按钮进行测试。</li>
+          </ol>
+          要让机器人应用这个 Agent 执行器，你也需要前往修改 Agent 执行器。
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
+          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- ID冲突确认对话框 -->
     <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
@@ -258,6 +302,9 @@ export default {
       showKeyConfirm: false,
       keyConfirmResolve: null,
 
+      // Agent Runner 提示对话框
+      showAgentRunnerDialog: false,
+
       newSelectedProviderName: '',
       newSelectedProviderConfig: {},
       updatingMode: false,
@@ -289,8 +336,8 @@ export default {
         "anthropic_chat_completion": "chat_completion",
         "googlegenai_chat_completion": "chat_completion",
         "zhipu_chat_completion": "chat_completion",
-        "dify": "chat_completion",
-        "coze": "chat_completion",
+        "dify": "agent_runner",
+        "coze": "agent_runner",
         "dashscope": "chat_completion",
         "openai_whisper_api": "speech_to_text",
         "openai_whisper_selfhost": "speech_to_text",
@@ -334,6 +381,7 @@ export default {
         },
         tabTypes: {
           'chat_completion': this.tm('providers.tabs.chatCompletion'),
+          'agent_runner': this.tm('providers.tabs.agentRunner'),
           'speech_to_text': this.tm('providers.tabs.speechToText'),
           'text_to_speech': this.tm('providers.tabs.textToSpeech'),
           'embedding': this.tm('providers.tabs.embedding'),
@@ -363,6 +411,52 @@ export default {
       };
     },
 
+    groupedProviders() {
+      if (!this.config_data.provider) {
+        return [];
+      }
+
+      const typeOrder = [
+        'chat_completion',
+        'agent_runner',
+        'speech_to_text',
+        'text_to_speech',
+        'embedding',
+        'rerank',
+      ];
+
+      const assigned = new Set();
+      const groups = typeOrder
+        .map((typeKey) => {
+          const items = this.config_data.provider.filter((provider) => {
+            const resolved = this.getProviderType(provider);
+            if (resolved === typeKey) {
+              assigned.add(provider.id);
+              return true;
+            }
+            return false;
+          });
+          return {
+            typeKey,
+            label: this.messages.tabTypes[typeKey] || typeKey,
+            items,
+          };
+        })
+        .filter((group) => group.items.length > 0);
+
+      const remaining = this.config_data.provider.filter(
+        (provider) => !assigned.has(provider.id),
+      );
+      if (remaining.length > 0) {
+        groups.push({
+          typeKey: 'others',
+          label: this.tm('providers.tabs.all'),
+          items: remaining,
+        });
+      }
+      return groups;
+    },
+
     // 根据选择的标签过滤提供商列表
     filteredProviders() {
       if (!this.config_data.provider || this.activeProviderTypeTab === 'all') {
@@ -371,13 +465,7 @@ export default {
 
       return this.config_data.provider.filter(provider => {
         // 如果provider.provider_type已经存在，直接使用它
-        if (provider.provider_type) {
-          return provider.provider_type === this.activeProviderTypeTab;
-        }
-
-        // 否则使用映射关系
-        const mappedType = this.oldVersionProviderTypeMapping[provider.type];
-        return mappedType === this.activeProviderTypeTab;
+        return this.getProviderType(provider) === this.activeProviderTypeTab;
       });
     }
   },
@@ -387,6 +475,14 @@ export default {
   },
 
   methods: {
+    getProviderType(provider) {
+      if (!provider) return undefined;
+      if (provider.provider_type) {
+        return provider.provider_type;
+      }
+      return this.oldVersionProviderTypeMapping[provider.type];
+    },
+
     getConfig() {
       axios.get('/api/config/get').then((res) => {
         this.config_data = res.data.data.config;
@@ -666,11 +762,14 @@ export default {
       return this.testingProviders.includes(providerId);
     },
 
+    getProviderStatus(providerId) {
+      return this.providerStatuses.find(s => s.id === providerId);
+    },
+
     async testSingleProvider(provider) {
       if (this.isProviderTesting(provider.id)) return;
 
       this.testingProviders.push(provider.id);
-      this.showStatus = true; // 自动展开状态部分
 
       // 更新UI为pending状态
       const statusIndex = this.providerStatuses.findIndex(s => s.id === provider.id);
@@ -689,6 +788,11 @@ export default {
       try {
         if (!provider.enable) {
           throw new Error('该提供商未被用户启用');
+        }
+        if (provider.provider_type === 'agent_runner') {
+          this.showAgentRunnerDialog = true;
+          this.providerStatuses = this.providerStatuses.filter(s => s.id !== provider.id);
+          return;
         }
 
         const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`);
@@ -750,6 +854,10 @@ export default {
       }
       this.showIdConflictDialog = false;
     },
+    goToConfigPage() {
+      this.showAgentRunnerDialog = false;
+      this.$router.push({ name: 'Configs' });
+    },
     getStatusColor(status) {
       switch (status) {
         case 'available':
@@ -774,6 +882,7 @@ export default {
 .provider-page {
   padding: 20px;
   padding-top: 8px;
+  padding-bottom: 40px;
 }
 
 .status-card {

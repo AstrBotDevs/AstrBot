@@ -21,7 +21,17 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
-    return core_lifecycle
+    try:
+        yield core_lifecycle
+    finally:
+        # 优先停止核心生命周期以释放资源（包括关闭 MCP 等后台任务）
+        try:
+            _stop_res = core_lifecycle.stop()
+            if asyncio.iscoroutine(_stop_res):
+                await _stop_res
+        except Exception:
+            # 停止过程中如有异常，不影响后续清理
+            pass
 
 
 @pytest.fixture(scope="module")
@@ -148,6 +158,34 @@ async def test_plugins(app: Quart, authenticated_header: dict):
             exists = True
             break
     assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
+
+
+@pytest.mark.asyncio
+async def test_commands_api(app: Quart, authenticated_header: dict):
+    """Tests the command management API endpoints."""
+    test_client = app.test_client()
+
+    # GET /api/commands - list commands
+    response = await test_client.get("/api/commands", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert "items" in data["data"]
+    assert "summary" in data["data"]
+    summary = data["data"]["summary"]
+    assert "total" in summary
+    assert "disabled" in summary
+    assert "conflicts" in summary
+
+    # GET /api/commands/conflicts - list conflicts
+    response = await test_client.get(
+        "/api/commands/conflicts", headers=authenticated_header
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    # conflicts is a list
+    assert isinstance(data["data"], list)
 
 
 @pytest.mark.asyncio

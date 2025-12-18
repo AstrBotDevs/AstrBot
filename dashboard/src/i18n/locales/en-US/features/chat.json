@@ -40,14 +40,20 @@
     "deleteChat": "Delete this conversation",
     "editTitle": "Edit Title",
     "fullscreen": "Fullscreen Mode",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "reply": "Reply"
   },
   "conversation": {
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
     "llmService": "LLM Service",
-    "speechToText": "Speech to Text"
+    "speechToText": "Speech to Text",
+    "editDisplayName": "Edit Session Name",
+    "displayName": "Session Name",
+    "displayNameUpdated": "Session name updated",
+    "displayNameUpdateFailed": "Failed to update session name",
+    "confirmDelete": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
   },
   "modes": {
     "darkMode": "Switch to Dark Mode",
@@ -63,6 +69,25 @@
     "on": "Stream",
     "off": "Normal"
   },
+  "reasoning": {
+    "thinking": "Thinking Process"
+  },
+  "reply": {
+    "replyTo": "Reply to",
+    "notFound": "Message not found"
+  },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "cachedTokens": "Cached Tokens",
+    "duration": "Duration",
+    "ttft": "Time to First Token"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",
@@ -77,5 +102,9 @@
       "reconnected": "Chat connection re-established",
       "failed": "Connection failed, please refresh the page"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "Failed to send message, please try again",
+    "createSessionFailed": "Failed to create session, please refresh the page"
   }
 } 

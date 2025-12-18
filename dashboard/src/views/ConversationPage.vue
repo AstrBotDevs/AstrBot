@@ -42,6 +42,17 @@
                     </v-btn>
                     <v-btn 
                         v-if="selectedItems.length > 0" 
+                        color="success" 
+                        prepend-icon="mdi-download"
+                        variant="tonal" 
+                        @click="exportConversations" 
+                        :disabled="loading"
+                        size="small"
+                        class="mr-2">
+                        {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
+                    </v-btn>
+                    <v-btn 
+                        v-if="selectedItems.length > 0" 
                         color="error" 
                         prepend-icon="mdi-delete"
                         variant="tonal" 
@@ -187,7 +198,7 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -195,7 +206,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="false" />
+                        <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
                     </div>
                 </v-card-text>
 
@@ -320,6 +331,7 @@ import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
 
@@ -341,11 +353,13 @@ export default {
     setup() {
         const { t, locale } = useI18n();
         const { tm } = useModuleI18n('features/conversation');
+        const customizerStore = useCustomizerStore();
 
         return {
             t,
             tm,
-            locale
+            locale,
+            customizerStore
         };
     },
 
@@ -483,6 +497,12 @@ export default {
                 messageTypes: this.messageTypeFilter,
                 search: this.search
             };
+        },
+
+        // 检测是否为暗色模式
+        isDark() {
+            console.log('isDark', this.customizerStore.uiTheme);
+            return this.customizerStore.uiTheme === 'PurpleThemeDark';
         },
 
         // 将对话历史转换为 MessageList 组件期望的格式
@@ -901,6 +921,53 @@ export default {
             }
         },
 
+        // 导出选中的对话
+        async exportConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelectedForExport'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备导出的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/export', {
+                    conversations: conversations
+                }, {
+                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
+                });
+
+                // 创建一个下载链接
+                const url = window.URL.createObjectURL(response.data);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // 生成文件名（使用时间戳）
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `conversations_export_${timestamp}.jsonl`;
+                
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                
+                this.showSuccessMessage(this.tm('messages.exportSuccess'));
+            } catch (error) {
+                console.error(this.tm('messages.exportError'), error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
         // 格式化时间戳
         formatTimestamp(timestamp) {
             if (!timestamp) return this.tm('status.unknown');
@@ -985,6 +1052,11 @@ export default {
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;
+}
+
+/* 暗色模式下的聊天消息容器 */
+.v-theme--dark .conversation-messages-container {
+    background-color: #1e1e1e;
 }
 
 /* 对话详情卡片 */

@@ -34,11 +34,6 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
-    title: 'core.navigation.toolUse',
-    icon: 'mdi-function-variant',
-    to: '/tool-use'
-  },
-  {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
@@ -69,7 +64,7 @@ const sidebarItem: menu[] = [
       },
       {
         title: 'core.navigation.sessionManagement',
-        icon: 'mdi-account-group',
+        icon: 'mdi-pencil-ruler',
         to: '/session-management'
       },
       {

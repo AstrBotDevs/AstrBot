@@ -14,6 +14,7 @@ def register_platform_adapter(
     default_config_tmpl: dict | None = None,
     adapter_display_name: str | None = None,
     logo_path: str | None = None,
+    support_streaming_message: bool = True,
 ):
     """用于注册平台适配器的带参装饰器。
 
@@ -39,9 +40,11 @@ def register_platform_adapter(
         pm = PlatformMetadata(
             name=adapter_name,
             description=desc,
+            id=adapter_name,
             default_config_tmpl=default_config_tmpl,
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,
+            support_streaming_message=support_streaming_message,
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls

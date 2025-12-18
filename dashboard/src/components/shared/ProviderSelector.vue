@@ -1,7 +1,7 @@
 <template>
   <div class="d-flex align-center justify-space-between">
     <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText));">
-      未选择
+      {{ tm('providerSelector.notSelected') }}
     </span>
     <span v-else>
       {{ modelValue }}
@@ -15,7 +15,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        选择提供商
+        {{ tm('providerSelector.dialogTitle') }}
       </v-card-title>
       
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
@@ -30,8 +30,8 @@
             :active="selectedProvider === ''"
             rounded="md"
             class="ma-1">
-            <v-list-item-title>不选择</v-list-item-title>
-            <v-list-item-subtitle>清除当前选择</v-list-item-subtitle>
+            <v-list-item-title>{{ tm('providerSelector.clearSelection') }}</v-list-item-title>
+            <v-list-item-subtitle>{{ tm('providerSelector.clearSelectionSubtitle') }}</v-list-item-subtitle>
             
             <template v-slot:append>
               <v-icon v-if="selectedProvider === ''" color="primary">mdi-check-circle</v-icon>
@@ -50,7 +50,7 @@
             class="ma-1">
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ provider.type || provider.provider_type || '未知类型' }}
+              {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
               <span v-if="provider.model_config?.model">- {{ provider.model_config.model }}</span>
             </v-list-item-subtitle>
             
@@ -62,7 +62,7 @@
         
         <div v-else-if="!loading && providerList.length === 0" class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-api-off</v-icon>
-          <p class="text-grey mt-4">暂无可用的提供商</p>
+          <p class="text-grey mt-4">{{ tm('providerSelector.noProviders') }}</p>
         </div>
       </v-card-text>
       
@@ -70,11 +70,11 @@
       
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">取消</v-btn>
+        <v-btn variant="text" @click="cancelSelection">{{ tm('providerSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
           @click="confirmSelection">
-          确认选择
+          {{ tm('providerSelector.confirmSelection') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -84,6 +84,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import axios from 'axios'
+import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -94,6 +95,10 @@ const props = defineProps({
     type: String,
     default: 'chat_completion'
   },
+  providerSubtype: {
+    type: String,
+    default: ''
+  },
   buttonText: {
     type: String,
     default: '选择提供商...'
@@ -101,6 +106,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { tm } = useModuleI18n('core.shared')
 
 const dialog = ref(false)
 const providerList = ref([])
@@ -127,7 +133,10 @@ async function loadProviders() {
       }
     })
     if (response.data.status === 'ok') {
-      providerList.value = response.data.data || []
+      const providers = response.data.data || []
+      providerList.value = props.providerSubtype
+        ? providers.filter((provider) => matchesProviderSubtype(provider, props.providerSubtype))
+        : providers
     }
   } catch (error) {
     console.error('加载提供商列表失败:', error)
@@ -135,6 +144,17 @@ async function loadProviders() {
   } finally {
     loading.value = false
   }
+}
+
+function matchesProviderSubtype(provider, subtype) {
+  if (!subtype) {
+    return true
+  }
+  const normalized = String(subtype).toLowerCase()
+  const candidates = [provider.type, provider.provider, provider.id]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase())
+  return candidates.includes(normalized)
 }
 
 function selectProvider(provider) {

@@ -3,7 +3,7 @@
 
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, GetCoreSchemaHandler
+from pydantic import BaseModel, GetCoreSchemaHandler, model_serializer, model_validator
 from pydantic_core import core_schema
 
 
@@ -76,7 +76,7 @@ class ImageURLPart(ContentPart):
         """The ID of the image, to allow LLMs to distinguish different images."""
 
     type: str = "image_url"
-    image_url: str
+    image_url: ImageURL
 
 
 class AudioURLPart(ContentPart):
@@ -119,6 +119,15 @@ class ToolCall(BaseModel):
     """The ID of the tool call."""
     function: FunctionBody
     """The function body of the tool call."""
+    extra_content: dict[str, Any] | None = None
+    """Extra metadata for the tool call."""
+
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        data = handler(self)
+        if self.extra_content is None:
+            data.pop("extra_content", None)
+        return data
 
 
 class ToolCallPart(BaseModel):
@@ -138,22 +147,39 @@ class Message(BaseModel):
         "tool",
     ]
 
-    content: str | list[ContentPart]
+    content: str | list[ContentPart] | None = None
     """The content of the message."""
+
+    tool_calls: list[ToolCall] | list[dict] | None = None
+    """The tool calls of the message."""
+
+    tool_call_id: str | None = None
+    """The ID of the tool call."""
+
+    @model_validator(mode="after")
+    def check_content_required(self):
+        # assistant + tool_calls is not None: allow content to be None
+        if self.role == "assistant" and self.tool_calls is not None:
+            return self
+
+        # other all cases: content is required
+        if self.content is None:
+            raise ValueError(
+                "content is required unless role='assistant' and tool_calls is not None"
+            )
+        return self
 
 
 class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
     role: Literal["assistant"] = "assistant"
-    tool_calls: list[ToolCall] | list[dict] | None = None
 
 
 class ToolCallMessageSegment(Message):
     """A message segment representing a tool call."""
 
     role: Literal["tool"] = "tool"
-    tool_call_id: str
 
 
 class UserMessageSegment(Message):

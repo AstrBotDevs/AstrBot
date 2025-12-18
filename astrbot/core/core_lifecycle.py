@@ -16,12 +16,12 @@ import time
 import traceback
 from asyncio import Queue
 
-from astrbot.core import LogBroker, logger, sp
+from astrbot.api import logger, sp
+from astrbot.core import LogBroker
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
@@ -33,6 +33,7 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.migra_helper import migra
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus
@@ -96,11 +97,16 @@ class AstrBotCoreLifecycle:
             sp=sp,
         )
 
-        # 4.5 to 4.6 migration for umop_config_router
+        # apply migration
         try:
-            await migrate_45_to_46(self.astrbot_config_mgr, self.umop_config_router)
+            await migra(
+                self.db,
+                self.astrbot_config_mgr,
+                self.umop_config_router,
+                self.astrbot_config_mgr,
+            )
         except Exception as e:
-            logger.error(f"Migration from version 4.5 to 4.6 failed: {e!s}")
+            logger.error(f"AstrBot migration failed: {e!s}")
             logger.error(traceback.format_exc())
 
         # 初始化事件队列
@@ -191,7 +197,7 @@ class AstrBotCoreLifecycle:
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
-            extra_tasks.append(asyncio.create_task(task, name=task.__name__))
+            extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
         tasks_ = [event_bus_task, *extra_tasks]
         for task in tasks_:

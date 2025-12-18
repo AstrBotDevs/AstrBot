@@ -1,124 +1,110 @@
 {
-  "title": "会话管理",
-  "subtitle": "管理活跃会话和配置",
+  "title": "自定义规则",
+  "subtitle": "为特定会话设置自定义规则，优先级高于全局配置",
   "buttons": {
     "refresh": "刷新",
     "edit": "编辑",
-    "apply": "应用批量设置",
-    "editName": "备注",
+    "editRule": "编辑规则",
+    "deleteAllRules": "删除所有规则",
+    "addRule": "添加规则",
     "save": "保存",
     "cancel": "取消",
-    "delete": "删除"
+    "delete": "删除",
+    "clear": "清除",
+    "next": "下一步",
+    "editCustomName": "编辑备注",
+    "batchDelete": "批量删除"
   },
-  "sessions": {
-    "activeSessions": "活跃会话",
-    "sessionCount": "个会话",
-    "noActiveSessions": "暂无活跃会话",
-    "noActiveSessionsDesc": "当有用户与机器人交互时，会话将会显示在这里"
+  "customRules": {
+    "title": "自定义规则",
+    "rulesCount": "条规则",
+    "hasRules": "已配置",
+    "noRules": "暂无自定义规则",
+    "noRulesDesc": "点击「添加规则」为特定会话配置自定义规则",
+    "serviceConfig": "服务配置",
+    "pluginConfig": "插件配置",
+    "kbConfig": "知识库配置",
+    "providerConfig": "模型配置",
+    "configured": "已配置",
+    "noCustomName": "未设置备注"
+  },
+  "quickEditName": {
+    "title": "编辑备注名"
   },
   "search": {
-    "placeholder": "搜索会话...",
-    "platformFilter": "平台筛选"
+    "placeholder": "搜索会话..."
   },
   "table": {
     "headers": {
-      "sessionStatus": "会话状态",
-      "sessionInfo": "消息会话来源",
-      "persona": "人格",
-      "chatProvider": "聊天模型",
-      "sttProvider": "语音识别模型",
-      "ttsProvider": "语音合成模型",
-      "llmStatus": "启用 LLM",
-      "ttsStatus": "启用 TTS",
-      "knowledgeBase": "知识库配置",
-      "pluginManagement": "插件管理",
+      "umoInfo": "消息会话来源",
+      "rulesOverview": "规则概览",
       "actions": "操作"
     }
   },
-  "status": {
-    "enabled": "已启用",
-    "disabled": "已禁用"
-  },
   "persona": {
-    "none": "无人格"
+    "none": "跟随配置文件"
   },
-  "batchOperations": {
-    "title": "批量操作",
-    "setPersona": "批量设置人格",
-    "setChatProvider": "批量设置 Chat Provider",
-    "setSttProvider": "批量设置 STT Provider",
-    "setTtsProvider": "批量设置 TTS Provider",
-    "setLlmStatus": "批量设置 LLM 状态",
-    "setTtsStatus": "批量设置 TTS 状态",
-    "noSttProvider": "暂无可用 STT Provider",
-    "noTtsProvider": "暂无可用 TTS Provider"
+  "provider": {
+    "followConfig": "跟随配置文件"
   },
-  "pluginManagement": {
-    "title": "插件管理",
-    "noPlugins": "暂无可用插件",
-    "noPluginsDesc": "目前没有激活的插件",
-    "loading": "加载插件列表中...",
-    "author": "作者"
+  "addRule": {
+    "title": "添加自定义规则",
+    "description": "选择一个消息会话来源 (UMO) 来配置自定义规则。自定义规则的优先级高于该来源所属的配置文件中的全局规则。可以使用 /sid 指令获取该来源的 UMO 信息。",
+    "selectUmo": "选择会话",
+    "noUmos": "暂无可用会话"
   },
-  "nameEditor": {
-    "title": "编辑会话名称",
-    "customName": "自定义名称",
-    "placeholder": "输入自定义会话名称（留空则使用原始名称）",
-    "originalName": "原始名称",
-    "fullSessionId": "完整会话ID",
-    "hint": "自定义名称帮助您轻松识别会话。当设置了自定义名称时，会显示一个小感叹号标识（！），鼠标悬停时会显示实际的UMO。"
-  },
-  "knowledgeBase": {
-    "title": "知识库配置",
-    "configure": "配置",
-    "selectKB": "选择知识库",
-    "selectMultiple": "可以选择多个知识库",
-    "noKBAvailable": "暂无可用的知识库",
-    "noKBDesc": "目前没有创建任何知识库",
-    "createKB": "创建知识库",
-    "advancedSettings": "高级配置",
-    "topK": "返回结果数量",
-    "topKHint": "从知识库检索的结果数量",
-    "enableRerank": "启用重排序",
-    "enableRerankHint": "使用重排序模型提高检索质量",
-    "clearConfig": "清除配置",
-    "save": "保存",
-    "cancel": "取消",
-    "loading": "加载知识库配置中...",
-    "description": "为此会话配置使用的知识库。会话将使用配置的知识库来增强对话上下文。",
-    "saveSuccess": "知识库配置保存成功",
-    "saveFailed": "保存知识库配置失败",
-    "loadFailed": "加载知识库配置失败",
-    "clearSuccess": "知识库配置已清除",
-    "clearFailed": "清除知识库配置失败",
-    "clearConfirm": "确定要清除此会话的知识库配置吗?"
-  },
-  "list": {
-    "documents": "篇文档"
+  "ruleEditor": {
+    "title": "编辑自定义规则",
+    "description": "为此会话配置自定义规则，这些规则将优先于全局配置生效。",
+    "serviceConfig": {
+      "title": "服务配置",
+      "sessionEnabled": "启用该消息会话来源的消息处理",
+      "llmEnabled": "启用 LLM",
+      "ttsEnabled": "启用 TTS",
+      "customName": "消息会话来源备注名称"
+    },
+    "providerConfig": {
+      "title": "模型配置",
+      "chatProvider": "聊天模型",
+      "sttProvider": "语音识别模型",
+      "ttsProvider": "语音合成模型"
+    },
+    "personaConfig": {
+      "title": "人格配置",
+      "selectPersona": "选择人格",
+      "hint": "应用人格配置后，将会强制该来源的所有对话使用该人格。"
+    },
+    "pluginConfig": {
+      "title": "插件配置",
+      "disabledPlugins": "禁用的插件",
+      "hint": "选择要在此会话中禁用的插件。未选择的插件将保持启用状态。"
+    },
+    "kbConfig": {
+      "title": "知识库配置",
+      "selectKbs": "选择知识库",
+      "topK": "返回结果数量 (Top K)",
+      "enableRerank": "启用重排序"
+    }
   },
   "deleteConfirm": {
-    "message": "确定要删除会话 {sessionName} 吗？",
-    "warning": "此操作将永久删除本次会话的「全部对话记录」与「偏好设置」（插件对会话的关联数据除外），且无法恢复。确认继续？"
+    "title": "确认删除",
+    "message": "确定要删除此会话的所有自定义规则吗？删除后将恢复使用全局配置。"
+  },
+  "batchDeleteConfirm": {
+    "title": "确认批量删除",
+    "message": "确定要删除选中的 {count} 条规则吗？删除后将恢复使用全局配置。"
   },
   "messages": {
-    "refreshSuccess": "会话列表已刷新",
-    "personaUpdateSuccess": "人格更新成功",
-    "personaUpdateError": "人格更新失败",
-    "providerUpdateSuccess": "Provider 更新成功",
-    "providerUpdateError": "Provider 更新失败",
-    "sessionStatusSuccess": "会话 {status}",
-    "llmStatusSuccess": "LLM {status}",
-    "ttsStatusSuccess": "TTS {status}",
-    "statusUpdateError": "状态更新失败",
-    "loadSessionsError": "加载会话列表失败",
-    "batchUpdateSuccess": "成功批量更新 {count} 项设置",
-    "batchUpdatePartial": "批量更新完成，{success} 项成功，{error} 项失败",
-    "loadPluginsError": "加载插件列表失败",
-    "pluginStatusSuccess": "插件 {name} {status}",
-    "pluginStatusError": "插件状态更新失败",
-    "nameUpdateSuccess": "会话名称更新成功",
-    "nameUpdateError": "会话名称更新失败",
-    "deleteSuccess": "会话删除成功",
-    "deleteError": "会话删除失败"
+    "refreshSuccess": "数据已刷新",
+    "loadError": "加载数据失败",
+    "saveSuccess": "保存成功",
+    "saveError": "保存失败",
+    "clearSuccess": "已清除",
+    "clearError": "清除失败",
+    "deleteSuccess": "删除成功",
+    "deleteError": "删除失败",
+    "noChanges": "没有需要保存的更改",
+    "batchDeleteSuccess": "批量删除成功",
+    "batchDeleteError": "批量删除失败"
   }
 }

@@ -3,6 +3,7 @@ import base64
 import os
 import random
 import uuid
+from typing import cast
 
 import aiofiles
 import botpy
@@ -60,7 +61,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     time_since_last_edit = current_time - last_edit_time
 
                     if time_since_last_edit >= throttle_interval:
-                        ret = await self._post_send(stream=stream_payload)
+                        ret = cast(
+                            message.Message,
+                            await self._post_send(stream=stream_payload),
+                        )
                         stream_payload["index"] += 1
                         stream_payload["id"] = ret["id"]
                         last_edit_time = asyncio.get_event_loop().time()
@@ -69,6 +73,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 # 结束流式对话，并且传输 buffer 中剩余的消息
                 stream_payload["state"] = 10
                 ret = await self._post_send(stream=stream_payload)
+            else:
+                ret = await self._post_send()
 
         except Exception as e:
             logger.error(f"发送流式消息时出错: {e}", exc_info=True)
@@ -81,7 +87,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             return None
 
         source = self.message_obj.raw_message
-        assert isinstance(
+
+        if not isinstance(
             source,
             (
                 botpy.message.Message,
@@ -89,7 +96,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 botpy.message.DirectMessage,
                 botpy.message.C2CMessage,
             ),
-        )
+        ):
+            logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
+            return None
 
         (
             plain_text,
@@ -106,7 +115,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             return None
 
-        payload = {
+        payload: dict = {
             "content": plain_text,
             "msg_id": self.message_obj.message_id,
         }
@@ -116,8 +125,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         ret = None
 
-        match type(source):
-            case botpy.message.GroupMessage:
+        match source:
+            case botpy.message.GroupMessage():
+                if not source.group_openid:
+                    logger.error("[QQOfficial] GroupMessage 缺少 group_openid")
+                    return None
+
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
@@ -138,7 +151,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     group_openid=source.group_openid,
                     **payload,
                 )
-            case botpy.message.C2CMessage:
+
+            case botpy.message.C2CMessage():
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
@@ -167,17 +181,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         **payload,
                     )
                 logger.debug(f"Message sent to C2C: {ret}")
-            case botpy.message.Message:
+
+            case botpy.message.Message():
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.bot.api.post_message(
                     channel_id=source.channel_id,
                     **payload,
                 )
-            case botpy.message.DirectMessage:
+
+            case botpy.message.DirectMessage():
                 if image_path:
                     payload["file_image"] = image_path
                 ret = await self.bot.api.post_dms(guild_id=source.guild_id, **payload)
+
+            case _:
+                pass
 
         await super().send(self.send_buffer)
 
@@ -196,18 +215,33 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "file_type": file_type,
             "srv_send_msg": False,
         }
+
+        result = None
         if "openid" in kwargs:
             payload["openid"] = kwargs["openid"]
             route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
-            return await self.bot.api._http.request(route, json=payload)
-        if "group_openid" in kwargs:
+            result = await self.bot.api._http.request(route, json=payload)
+        elif "group_openid" in kwargs:
             payload["group_openid"] = kwargs["group_openid"]
             route = Route(
                 "POST",
                 "/v2/groups/{group_openid}/files",
                 group_openid=kwargs["group_openid"],
             )
-            return await self.bot.api._http.request(route, json=payload)
+            result = await self.bot.api._http.request(route, json=payload)
+        else:
+            raise ValueError("Invalid upload parameters")
+
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to upload image, response is not dict: {result}"
+            )
+
+        return Media(
+            file_uuid=result["file_uuid"],
+            file_info=result["file_info"],
+            ttl=result.get("ttl", 0),
+        )
 
     async def upload_group_and_c2c_record(
         self,
@@ -250,11 +284,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             result = await self.bot.api._http.request(route, json=payload)
 
             if result:
+                if not isinstance(result, dict):
+                    logger.error(f"上传文件响应格式错误: {result}")
+                    return None
+
                 return Media(
-                    file_uuid=result.get("file_uuid"),
-                    file_info=result.get("file_info"),
+                    file_uuid=result["file_uuid"],
+                    file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
-                    file_id=result.get("id", ""),
                 )
         except Exception as e:
             logger.error(f"上传请求错误: {e}")
@@ -271,7 +308,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         message_reference: message.Reference | None = None,
         media: message.Media | None = None,
         msg_id: str | None = None,
-        msg_seq: str = 1,
+        msg_seq: int | None = 1,
         event_id: str | None = None,
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
@@ -280,7 +317,14 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload = locals()
         payload.pop("self", None)
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        return await self.bot.api._http.request(route, json=payload)
+        result = await self.bot.api._http.request(route, json=payload)
+
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                f"Failed to post c2c message, response is not dict: {result}"
+            )
+
+        return message.Message(**result)
 
     @staticmethod
     async def _parse_to_qqofficial(message: MessageChain):
@@ -300,8 +344,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     image_base64 = file_to_base64(image_file_path)
                 elif i.file and i.file.startswith("base64://"):
                     image_base64 = i.file
-                else:
+                elif i.file:
                     image_base64 = file_to_base64(i.file)
+                else:
+                    raise ValueError("Unsupported image file format")
                 image_base64 = image_base64.removeprefix("base64://")
             elif isinstance(i, Record):
                 if i.file:

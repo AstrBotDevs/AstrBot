@@ -5,64 +5,222 @@
             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
-                    <div class="message-bubble user-bubble" :class="{ 'has-audio': msg.content.audio_url }"
+                    <div class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                        <pre
-                            style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
-
-                        <!-- 图片附件 -->
-                        <div class="image-attachments" v-if="msg.content.image_url && msg.content.image_url.length > 0">
-                            <div v-for="(img, index) in msg.content.image_url" :key="index" class="image-attachment">
-                                <img :src="img" class="attached-image" @click="$emit('openImagePreview', img)" />
+                        <!-- 遍历 message parts -->
+                        <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
+                            <!-- 引用消息 -->
+                            <div v-if="part.type === 'reply'" class="reply-quote"
+                                @click="scrollToMessage(part.message_id)">
+                                <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
+                                <span class="reply-quote-text">{{ getReplyContent(part.message_id) }}</span>
                             </div>
-                        </div>
 
-                        <!-- 音频附件 -->
-                        <div class="audio-attachment" v-if="msg.content.audio_url && msg.content.audio_url.length > 0">
-                            <audio controls class="audio-player">
-                                <source :src="msg.content.audio_url" type="audio/wav">
-                                {{ t('messages.errors.browser.audioNotSupported') }}
-                            </audio>
-                        </div>
+                            <!-- 纯文本 -->
+                            <pre v-else-if="part.type === 'plain' && part.text"
+                                style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ part.text }}</pre>
+
+                            <!-- 图片附件 -->
+                            <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
+                                <div class="image-attachment">
+                                    <img :src="part.embedded_url" class="attached-image"
+                                        @click="$emit('openImagePreview', part.embedded_url)" />
+                                </div>
+                            </div>
+
+                            <!-- 音频附件 -->
+                            <div v-else-if="part.type === 'record' && part.embedded_url" class="audio-attachment">
+                                <audio controls class="audio-player">
+                                    <source :src="part.embedded_url" type="audio/wav">
+                                    {{ t('messages.errors.browser.audioNotSupported') }}
+                                </audio>
+                            </div>
+
+                            <!-- 文件附件 -->
+                            <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
+                                <div class="file-attachment">
+                                    <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                                        :download="part.embedded_file.filename" class="file-link">
+                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                    </a>
+                                    <a v-else @click="downloadFile(part.embedded_file)"
+                                        class="file-link file-link-download">
+                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                        <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
+                                            size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                        <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                    </a>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
                 <!-- Bot Messages -->
                 <div v-else class="bot-message">
-
                     <v-avatar class="bot-avatar" size="36">
-                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1" indeterminate size="28"
-                            width="2"></v-progress-circular>
-                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64" color="#8fb6d2">mdi-star-four-points-small</v-icon>
+                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1"
+                            indeterminate size="28" width="2"></v-progress-circular>
+                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
+                            color="#8fb6d2">mdi-star-four-points-small</v-icon>
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">
-                            <!-- Text -->
-                            <div v-if="msg.content.message && msg.content.message.trim()"
-                                v-html="md.render(msg.content.message)" class="markdown-content"></div>
+                            <!-- Loading state -->
+                            <div v-if="msg.content.isLoading" class="loading-container">
+                                <span class="loading-text">{{ tm('message.loading') }}</span>
+                            </div>
 
-                            <!-- Image -->
-                            <div class="embedded-images"
-                                v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
-                                <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
-                                    class="embedded-image">
-                                    <img :src="img" class="bot-embedded-image"
-                                        @click="$emit('openImagePreview', img)" />
+                            <template v-else>
+                                <!-- Reasoning Block (Collapsible) - 放在最前面 -->
+                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                                    class="reasoning-container">
+                                    <div class="reasoning-header" @click="toggleReasoning(index)">
+                                        <v-icon size="small" class="reasoning-icon">
+                                            {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                        </v-icon>
+                                        <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
+                                    </div>
+                                    <div v-if="isReasoningExpanded(index)" class="reasoning-content">
+                                        <div v-html="md.render(msg.content.reasoning)"
+                                            class="markdown-content reasoning-text"></div>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <!-- Audio -->
-                            <div class="embedded-audio" v-if="msg.content.embedded_audio">
-                                <audio controls class="audio-player">
-                                    <source :src="msg.content.embedded_audio" type="audio/wav">
-                                    {{ t('messages.errors.browser.audioNotSupported') }}
-                                </audio>
-                            </div>
+                                <!-- 遍历 message parts (保持顺序) -->
+                                <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
+                                    <!-- Tool Calls Block -->
+                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
+                                        class="tool-calls-container">
+                                        <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
+                                            class="tool-call-card">
+                                            <div class="tool-call-header"
+                                                @click="toggleToolCall(index, partIndex, tcIndex)">
+                                                <v-icon size="small" class="tool-call-expand-icon">
+                                                    {{ isToolCallExpanded(index, partIndex, tcIndex) ?
+                                                    'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                                </v-icon>
+                                                <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
+                                                <div class="tool-call-info">
+                                                    <span class="tool-call-name">{{ toolCall.name }}</span>
+                                                </div>
+                                                <span class="tool-call-status"
+                                                    :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
+                                                    <template v-if="toolCall.finished_ts">
+                                                        <v-icon size="x-small"
+                                                            class="status-icon">mdi-check-circle</v-icon>
+                                                        {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
+                                                    </template>
+                                                    <template v-else>
+                                                        <v-icon size="x-small"
+                                                            class="status-icon spinning">mdi-loading</v-icon>
+                                                        {{ getElapsedTime(toolCall.ts) }}
+                                                    </template>
+                                                </span>
+                                            </div>
+                                            <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
+                                                class="tool-call-details">
+                                                <div class="tool-call-detail-row">
+                                                    <span class="detail-label">ID:</span>
+                                                    <code class="detail-value">{{ toolCall.id }}</code>
+                                                </div>
+                                                <div class="tool-call-detail-row">
+                                                    <span class="detail-label">Args:</span>
+                                                    <pre
+                                                        class="detail-value detail-json">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                </div>
+                                                <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                    <span class="detail-label">Result:</span>
+                                                    <pre
+                                                        class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Text (Markdown) -->
+                                    <div v-else-if="part.type === 'plain' && part.text && part.text.trim()"
+                                        v-html="md.render(part.text)" class="markdown-content"></div>
+
+                                    <!-- Image -->
+                                    <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
+                                        <div class="embedded-image">
+                                            <img :src="part.embedded_url" class="bot-embedded-image"
+                                                @click="$emit('openImagePreview', part.embedded_url)" />
+                                        </div>
+                                    </div>
+
+                                    <!-- Audio -->
+                                    <div v-else-if="part.type === 'record' && part.embedded_url" class="embedded-audio">
+                                        <audio controls class="audio-player">
+                                            <source :src="part.embedded_url" type="audio/wav">
+                                            {{ t('messages.errors.browser.audioNotSupported') }}
+                                        </audio>
+                                    </div>
+
+                                    <!-- Files -->
+                                    <div v-else-if="part.type === 'file' && part.embedded_file" class="embedded-files">
+                                        <div class="embedded-file">
+                                            <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                                                :download="part.embedded_file.filename" class="file-link">
+                                                <v-icon size="small"
+                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                            </a>
+                                            <a v-else @click="downloadFile(part.embedded_file)"
+                                                class="file-link file-link-download">
+                                                <v-icon size="small"
+                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                                <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
+                                                    size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                                <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </template>
+                            </template>
                         </div>
-                        <div class="message-actions">
-                            <v-btn :icon="getCopyIcon(index)" size="small" variant="text" class="copy-message-btn"
+                        <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
+                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
+                                }}</span>
+                            <!-- Agent Stats Menu -->
+                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover :close-on-content-click="false">
+                                <template v-slot:activator="{ props }">
+                                    <v-icon v-bind="props" size="x-small" class="stats-info-icon">mdi-information-outline</v-icon>
+                                </template>
+                                <v-card class="stats-menu-card" variant="elevated" elevation="3">
+                                    <v-card-text class="stats-menu-content">
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.inputTokens') }}</span>
+                                            <span class="stats-menu-value">{{ getInputTokens(msg.content.agentStats.token_usage) }}</span>
+                                        </div>
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.outputTokens') }}</span>
+                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output || 0 }}</span>
+                                        </div>
+                                        <div class="stats-menu-row" v-if="msg.content.agentStats.token_usage.input_cached > 0">
+                                            <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
+                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.input_cached }}</span>
+                                        </div>
+                                        <div class="stats-menu-row" v-if="msg.content.agentStats.time_to_first_token > 0">
+                                            <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
+                                            <span class="stats-menu-value">{{ formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
+                                        </div>
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.duration') }}</span>
+                                            <span class="stats-menu-value">{{ formatAgentDuration(msg.content.agentStats) }}</span>
+                                        </div>
+                                    </v-card-text>
+                                </v-card>
+                            </v-menu>
+                            <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
+                            <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
+                                @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
                         </div>
                     </div>
                 </div>
@@ -76,6 +234,7 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
+import axios from 'axios';
 
 const md = new MarkdownIt({
     html: false,
@@ -109,7 +268,7 @@ export default {
             default: false
         }
     },
-    emits: ['openImagePreview'],
+    emits: ['openImagePreview', 'replyMessage'],
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
@@ -125,7 +284,12 @@ export default {
             copiedMessages: new Set(),
             isUserNearBottom: true,
             scrollThreshold: 1,
-            scrollTimer: null
+            scrollTimer: null,
+            expandedReasoning: new Set(), // Track which reasoning blocks are expanded
+            downloadingFiles: new Set(), // Track which files are being downloaded
+            expandedToolCalls: new Set(), // Track which tool call cards are expanded
+            elapsedTimeTimer: null, // Timer for updating elapsed time
+            currentTime: Date.now() / 1000, // Current time for elapsed time calculation
         };
     },
     mounted() {
@@ -133,6 +297,7 @@ export default {
         this.initImageClickEvents();
         this.addScrollListener();
         this.scrollToBottom();
+        this.startElapsedTimeTimer();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -142,6 +307,94 @@ export default {
         }
     },
     methods: {
+        // 检查 message 中是否有音频
+        hasAudio(messageParts) {
+            if (!Array.isArray(messageParts)) return false;
+            return messageParts.some(part => part.type === 'record' && part.embedded_url);
+        },
+
+        // 获取被引用消息的内容
+        getReplyContent(messageId) {
+            const replyMsg = this.messages.find(m => m.id === messageId);
+            if (!replyMsg) {
+                return this.tm('reply.notFound');
+            }
+            let content = '';
+            if (Array.isArray(replyMsg.content.message)) {
+                const textParts = replyMsg.content.message
+                    .filter(part => part.type === 'plain' && part.text)
+                    .map(part => part.text);
+                content = textParts.join('');
+            }
+            // 截断过长内容
+            if (content.length > 50) {
+                content = content.substring(0, 50) + '...';
+            }
+            return content || '[媒体内容]';
+        },
+
+        // 滚动到指定消息
+        scrollToMessage(messageId) {
+            const msgIndex = this.messages.findIndex(m => m.id === messageId);
+            if (msgIndex === -1) return;
+
+            const container = this.$refs.messageContainer;
+            const messageItems = container?.querySelectorAll('.message-item');
+            if (messageItems && messageItems[msgIndex]) {
+                messageItems[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 高亮一下
+                messageItems[msgIndex].classList.add('highlight-message');
+                setTimeout(() => {
+                    messageItems[msgIndex].classList.remove('highlight-message');
+                }, 2000);
+            }
+        },
+
+        // Toggle reasoning expansion state
+        toggleReasoning(messageIndex) {
+            if (this.expandedReasoning.has(messageIndex)) {
+                this.expandedReasoning.delete(messageIndex);
+            } else {
+                this.expandedReasoning.add(messageIndex);
+            }
+            // Force reactivity
+            this.expandedReasoning = new Set(this.expandedReasoning);
+        },
+
+        // Check if reasoning is expanded
+        isReasoningExpanded(messageIndex) {
+            return this.expandedReasoning.has(messageIndex);
+        },
+
+        // 下载文件
+        async downloadFile(file) {
+            if (!file.attachment_id) return;
+
+            // 标记为下载中
+            this.downloadingFiles.add(file.attachment_id);
+            this.downloadingFiles = new Set(this.downloadingFiles);
+
+            try {
+                const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
+                    responseType: 'blob'
+                });
+
+                const url = URL.createObjectURL(response.data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.filename || 'file';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
+            } catch (err) {
+                console.error('Download file failed:', err);
+            } finally {
+                this.downloadingFiles.delete(file.attachment_id);
+                this.downloadingFiles = new Set(this.downloadingFiles);
+            }
+        },
+
         // 复制代码到剪贴板
         copyCodeToClipboard(code) {
             navigator.clipboard.writeText(code).then(() => {
@@ -164,29 +417,29 @@ export default {
         },
 
         // 复制bot消息到剪贴板
-        copyBotMessage(message, messageIndex) {
-            // 获取对应的消息对象
-            const msgObj = this.messages[messageIndex].content;
+        copyBotMessage(messageParts, messageIndex) {
             let textToCopy = '';
 
-            // 如果有文本消息，添加到复制内容中
-            if (message && message.trim()) {
-                // 移除HTML标签，获取纯文本
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = message;
-                textToCopy = tempDiv.textContent || tempDiv.innerText || message;
-            }
+            if (Array.isArray(messageParts)) {
+                // 提取所有文本内容
+                const textContents = messageParts
+                    .filter(part => part.type === 'plain' && part.text)
+                    .map(part => part.text);
+                textToCopy = textContents.join('\n');
 
-            // 如果有内嵌图片，添加说明
-            if (msgObj && msgObj.embedded_images && msgObj.embedded_images.length > 0) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += `[包含 ${msgObj.embedded_images.length} 张图片]`;
-            }
+                // 检查是否有图片
+                const imageCount = messageParts.filter(part => part.type === 'image' && part.embedded_url).length;
+                if (imageCount > 0) {
+                    if (textToCopy) textToCopy += '\n\n';
+                    textToCopy += `[包含 ${imageCount} 张图片]`;
+                }
 
-            // 如果有内嵌音频，添加说明
-            if (msgObj && msgObj.embedded_audio) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += '[包含音频内容]';
+                // 检查是否有音频
+                const hasAudio = messageParts.some(part => part.type === 'record' && part.embedded_url);
+                if (hasAudio) {
+                    if (textToCopy) textToCopy += '\n\n';
+                    textToCopy += '[包含音频内容]';
+                }
             }
 
             // 如果没有任何内容，使用默认文本
@@ -338,6 +591,150 @@ export default {
                 clearTimeout(this.scrollTimer);
                 this.scrollTimer = null;
             }
+            // 清理 elapsed time 计时器
+            if (this.elapsedTimeTimer) {
+                clearInterval(this.elapsedTimeTimer);
+                this.elapsedTimeTimer = null;
+            }
+        },
+
+        // 格式化消息时间，支持别名显示
+        formatMessageTime(dateStr) {
+            if (!dateStr) return '';
+
+            const date = new Date(dateStr);
+            const now = new Date();
+
+            // 获取本地时间的日期部分
+            const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterdayDay = new Date(todayDay);
+            yesterdayDay.setDate(yesterdayDay.getDate() - 1);
+
+            // 格式化时间 HH:MM
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const timeStr = `${hours}:${minutes}`;
+
+            // 判断是今天、昨天还是更早
+            if (dateDay.getTime() === todayDay.getTime()) {
+                return `${this.tm('time.today')} ${timeStr}`;
+            } else if (dateDay.getTime() === yesterdayDay.getTime()) {
+                return `${this.tm('time.yesterday')} ${timeStr}`;
+            } else {
+                // 更早的日期显示完整格式
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                return `${month}-${day} ${timeStr}`;
+            }
+        },
+
+        // Tool call related methods
+        toggleToolCall(messageIndex, partIndex, toolCallIndex) {
+            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
+            if (this.expandedToolCalls.has(key)) {
+                this.expandedToolCalls.delete(key);
+            } else {
+                this.expandedToolCalls.add(key);
+            }
+            // Force reactivity
+            this.expandedToolCalls = new Set(this.expandedToolCalls);
+        },
+
+        isToolCallExpanded(messageIndex, partIndex, toolCallIndex) {
+            return this.expandedToolCalls.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
+        },
+
+        // Start timer for updating elapsed time
+        startElapsedTimeTimer() {
+            // Update every 12ms for sub-second precision, then every second after 1s
+            let fastUpdateCount = 0;
+            const fastUpdateInterval = 12;
+            const slowUpdateInterval = 1000;
+
+            const updateTime = () => {
+                this.currentTime = Date.now() / 1000;
+
+                // Check if there are any running tool calls
+                const hasRunningToolCalls = this.messages.some(msg =>
+                    Array.isArray(msg.content.message) && msg.content.message.some(part =>
+                        part.type === 'tool_call' && part.tool_calls?.some(tc => !tc.finished_ts)
+                    )
+                );
+
+                if (hasRunningToolCalls) {
+                    // Check if any running tool call is under 1 second
+                    const hasSubSecondToolCall = this.messages.some(msg =>
+                        Array.isArray(msg.content.message) && msg.content.message.some(part =>
+                            part.type === 'tool_call' && part.tool_calls?.some(tc =>
+                                !tc.finished_ts && (this.currentTime - tc.ts) < 1
+                            )
+                        )
+                    );
+
+                    if (hasSubSecondToolCall) {
+                        fastUpdateCount++;
+                        this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
+                    } else {
+                        this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+                    }
+                } else {
+                    // No running tool calls, check again after 1 second
+                    this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
+                }
+            };
+
+            updateTime();
+        },
+
+        // Get elapsed time string for a tool call
+        getElapsedTime(startTs) {
+            const elapsed = this.currentTime - startTs;
+            return this.formatDuration(elapsed);
+        },
+
+        // Format duration in seconds to human readable string
+        formatDuration(seconds) {
+            if (seconds < 1) {
+                return `${Math.round(seconds * 1000)}ms`;
+            } else if (seconds < 60) {
+                return `${seconds.toFixed(1)}s`;
+            } else {
+                const minutes = Math.floor(seconds / 60);
+                const secs = Math.round(seconds % 60);
+                return `${minutes}m ${secs}s`;
+            }
+        },
+
+        // Format tool result for display
+        formatToolResult(result) {
+            if (!result) return '';
+            // Try to parse as JSON for pretty formatting
+            try {
+                const parsed = JSON.parse(result);
+                return JSON.stringify(parsed, null, 2);
+            } catch {
+                return result;
+            }
+        },
+
+        // Get input tokens (input_other + input_cached)
+        getInputTokens(tokenUsage) {
+            if (!tokenUsage) return 0;
+            return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
+        },
+
+        // Format agent duration
+        formatAgentDuration(agentStats) {
+            if (!agentStats) return '';
+            const duration = agentStats.end_time - agentStats.start_time;
+            return this.formatDuration(duration);
+        },
+
+        // Format time to first token
+        formatTTFT(ttft) {
+            if (!ttft || ttft <= 0) return '';
+            return this.formatDuration(ttft);
         }
     }
 }
@@ -348,7 +745,7 @@ export default {
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(0);
     }
 
     to {
@@ -368,6 +765,22 @@ export default {
     min-height: 0;
 }
 
+.message-bubble {
+    padding: 2px 16px;
+    border-radius: 12px;
+}
+
+
+@media (max-width: 768px) {
+    .messages-container {
+        padding: 0;
+    }
+
+    .message-bubble {
+        padding: 2px 8px;
+    }
+}
+
 /* 消息列表样式 */
 .message-list {
     max-width: 900px;
@@ -376,7 +789,7 @@ export default {
 }
 
 .message-item {
-    margin-bottom: 24px;
+    margin-bottom: 12px;
     animation: fadeIn 0.3s ease-out;
 }
 
@@ -404,10 +817,36 @@ export default {
 
 .message-actions {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     opacity: 0;
     transition: opacity 0.2s ease;
-    margin-left: 8px;
+    margin-left: 16px;
+}
+
+/* 最后一条消息始终显示操作按钮 */
+.message-item:last-child .message-actions {
+    opacity: 1;
+}
+
+.message-time {
+    font-size: 12px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+/* Agent Stats Info Icon */
+.stats-info-icon {
+    margin-left: 6px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.6;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.stats-info-icon:hover {
+    opacity: 1;
 }
 
 .bot-message:hover .message-actions {
@@ -435,10 +874,63 @@ export default {
     background-color: rgba(76, 175, 80, 0.1);
 }
 
-.message-bubble {
-    padding: 2px 16px;
-    border-radius: 12px;
+.reply-message-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    color: var(--v-theme-secondary);
 }
+
+.reply-message-btn:hover {
+    opacity: 1;
+    background-color: rgba(103, 58, 183, 0.1);
+}
+
+/* 引用消息显示样式 */
+.reply-quote {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    background-color: rgba(103, 58, 183, 0.08);
+    border-left: 3px solid var(--v-theme-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.reply-quote:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reply-quote-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.reply-quote-text {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 消息高亮动画 */
+.highlight-message {
+    animation: highlightPulse 2s ease-out;
+}
+
+@keyframes highlightPulse {
+    0% {
+        background-color: rgba(103, 58, 183, 0.3);
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
 
 .user-bubble {
     color: var(--v-theme-primaryText);
@@ -512,17 +1004,12 @@ export default {
 }
 
 .bot-embedded-image {
-    max-width: 80%;
+    max-width: 40%;
     width: auto;
     height: auto;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     cursor: pointer;
     transition: transform 0.2s ease;
-}
-
-.bot-embedded-image:hover {
-    transform: scale(1.02);
 }
 
 .embedded-audio {
@@ -535,9 +1022,306 @@ export default {
     max-width: 300px;
 }
 
+/* 文件附件样式 */
+.file-attachments,
+.embedded-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.file-attachment,
+.embedded-file {
+    display: flex;
+    align-items: center;
+}
+
+.file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: rgba(var(--v-theme-primary), 0.08);
+    border: 1px solid rgba(var(--v-theme-primary), 0.2);
+    border-radius: 8px;
+    color: rgb(var(--v-theme-primary));
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    max-width: 300px;
+}
+
+.file-link-download {
+    cursor: pointer;
+}
+
+.download-icon {
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+.file-icon {
+    flex-shrink: 0;
+    color: rgb(var(--v-theme-primary));
+}
+
+.file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v-theme--dark .file-link {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--v-theme-secondary);
+}
+
+.v-theme--dark .file-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.v-theme--dark .file-icon {
+    color: var(--v-theme-secondary);
+}
+
 /* 动画类 */
 .fade-in {
     animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Reasoning 区块样式 */
+.reasoning-container {
+    margin-bottom: 12px;
+    margin-top: 6px;
+    border: 1px solid var(--v-theme-border);
+    border-radius: 8px;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.v-theme--dark .reasoning-container {
+    background-color: rgba(103, 58, 183, 0.08);
+}
+
+.reasoning-header {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    border-radius: 8px;
+}
+
+.reasoning-header:hover {
+    background-color: rgba(103, 58, 183, 0.08);
+}
+
+.v-theme--dark .reasoning-header:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reasoning-icon {
+    margin-right: 6px;
+    color: var(--v-theme-secondary);
+    transition: transform 0.2s ease;
+}
+
+.reasoning-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--v-theme-secondary);
+    letter-spacing: 0.3px;
+}
+
+.reasoning-content {
+    padding: 0px 12px;
+    border-top: 1px solid var(--v-theme-border);
+    color: gray;
+    animation: fadeIn 0.2s ease-in-out;
+    font-style: italic;
+}
+
+.reasoning-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--v-theme-secondaryText);
+}
+
+.v-theme--dark .reasoning-text {
+    opacity: 0.85;
+}
+
+/* Tool Call Card Styles */
+.tool-calls-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    margin-top: 6px;
+}
+
+.tool-call-card {
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #eff3f6;
+    margin: 8px 0px;
+}
+
+.v-theme--dark .tool-call-card {
+    background-color: rgba(40, 60, 100, 0.4);
+    border-color: rgba(100, 140, 200, 0.4);
+}
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    gap: 8px;
+}
+
+.tool-call-header:hover {
+    background-color: rgba(169, 194, 219, 0.15);
+}
+
+.v-theme--dark .tool-call-header:hover {
+    background-color: rgba(100, 150, 200, 0.2);
+}
+
+.tool-call-expand-icon {
+    color: var(--v-theme-secondary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.tool-call-icon {
+    color: var(--v-theme-secondary);
+    flex-shrink: 0;
+}
+
+.tool-call-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.tool-call-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--v-theme-secondary);
+}
+
+.tool-call-id {
+    font-size: 11px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-call-status {
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.tool-call-status.status-running {
+    color: #ff9800;
+}
+
+.tool-call-status.status-finished {
+    color: #4caf50;
+}
+
+.tool-call-status .status-icon {
+    font-size: 14px;
+}
+
+.tool-call-status .status-icon.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.tool-call-details {
+    padding: 12px;
+    background-color: rgba(255, 255, 255, 0.5);
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+.v-theme--dark .tool-call-details {
+    border-top-color: rgba(100, 140, 200, 0.3);
+    background-color: rgba(30, 45, 70, 0.5);
+}
+
+.tool-call-detail-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 8px;
+}
+
+.tool-call-detail-row:last-child {
+    margin-bottom: 0;
+}
+
+.detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--v-theme-secondaryText);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.detail-value {
+    font-size: 12px;
+    color: var(--v-theme-primaryText);
+    background-color: transparent;
+    padding: 4px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+}
+
+.detail-json {
+    font-family: 'Fira Code', 'Consolas', monospace;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.detail-result {
+    max-height: 300px;
+    background-color: transparent;
+}
+
+.v-theme--dark .detail-value {
+    background-color: transparent;
+}
+
+.v-theme--dark .detail-result {
+    background-color: transparent;
 }
 </style>
 
@@ -748,6 +1532,32 @@ export default {
     margin: 10px 0;
 }
 
+.loading-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    margin-top: 2px;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: var(--v-theme-secondaryText);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
 .markdown-content blockquote {
     border-left: 4px solid var(--v-theme-secondary);
     padding-left: 16px;
@@ -770,5 +1580,37 @@ export default {
 
 .markdown-content th {
     background-color: var(--v-theme-containerBg);
+}
+
+/* Stats Menu 样式 */
+.stats-menu-card {
+    border-radius: 8px !important;
+    min-width: 160px;
+}
+
+.stats-menu-content {
+    padding: 12px 16px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stats-menu-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.stats-menu-label {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+}
+
+.stats-menu-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    color: var(--v-theme-primaryText);
 }
 </style>

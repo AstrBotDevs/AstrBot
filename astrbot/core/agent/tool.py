@@ -1,15 +1,18 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
 
 import jsonschema
 import mcp
 from deprecated import deprecated
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic.dataclasses import dataclass
+
+from astrbot.core.message.message_event_result import MessageEventResult
 
 from .run_context import ContextWrapper, TContext
 
 ParametersType = dict[str, Any]
+ToolExecResult = str | mcp.types.CallToolResult
 
 
 @dataclass
@@ -37,7 +40,10 @@ class ToolSchema:
 class FunctionTool(ToolSchema, Generic[TContext]):
     """A callable tool, for function calling."""
 
-    handler: Callable[..., Awaitable[Any]] | None = None
+    handler: (
+        Callable[..., Awaitable[str | None] | AsyncGenerator[MessageEventResult, None]]
+        | None
+    ) = None
     """a callable that implements the tool's functionality. It should be an async function."""
 
     handler_module_path: str | None = None
@@ -55,15 +61,14 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(
-        self, context: ContextWrapper[TContext], **kwargs
-    ) -> str | mcp.types.CallToolResult:
+    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
         )
 
 
+@dataclass
 class ToolSet:
     """A set of function tools that can be used in function calling.
 
@@ -71,8 +76,7 @@ class ToolSet:
     convert the tools to different API formats (OpenAI, Anthropic, Google GenAI).
     """
 
-    def __init__(self, tools: list[FunctionTool] | None = None):
-        self.tools: list[FunctionTool] = tools or []
+    tools: list[FunctionTool] = Field(default_factory=list)
 
     def empty(self) -> bool:
         """Check if the tool set is empty."""

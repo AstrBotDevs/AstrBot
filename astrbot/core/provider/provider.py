@@ -1,26 +1,27 @@
 import abc
 import asyncio
+import os
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from typing import TypeAlias, Union
 
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.db.po import Personality
 from astrbot.core.provider.entities import (
     LLMResponse,
-    ProviderType,
+    ProviderMeta,
     RerankResult,
     ToolCallsResult,
 )
 from astrbot.core.provider.register import provider_cls_map
+from astrbot.core.utils.astrbot_path import get_astrbot_path
 
-
-@dataclass
-class ProviderMeta:
-    id: str
-    model: str
-    type: str
-    provider_type: ProviderType
+Providers: TypeAlias = Union[
+    "Provider",
+    "STTProvider",
+    "TTSProvider",
+    "EmbeddingProvider",
+    "RerankProvider",
+]
 
 
 class AbstractProvider(abc.ABC):
@@ -43,15 +44,23 @@ class AbstractProvider(abc.ABC):
         """Get the provider metadata"""
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
-        provider_type = meta_data.provider_type if meta_data else None
-        if provider_type is None:
-            raise ValueError(f"Cannot find provider type: {provider_type_name}")
-        return ProviderMeta(
-            id=self.provider_config["id"],
+        if not meta_data:
+            raise ValueError(f"Provider type {provider_type_name} not registered")
+        meta = ProviderMeta(
+            id=self.provider_config.get("id", "default"),
             model=self.get_model(),
             type=provider_type_name,
-            provider_type=provider_type,
+            provider_type=meta_data.provider_type,
         )
+        return meta
+
+    async def test(self):
+        """test the provider is a
+
+        raises:
+            Exception: if the provider is not available
+        """
+        ...
 
 
 class Provider(AbstractProvider):
@@ -61,14 +70,9 @@ class Provider(AbstractProvider):
         self,
         provider_config: dict,
         provider_settings: dict,
-        default_persona: Personality | None = None,
     ) -> None:
         super().__init__(provider_config)
-
         self.provider_settings = provider_settings
-
-        self.curr_personality = default_persona
-        """维护了当前的使用的 persona，即人格。可能为 None"""
 
     @abc.abstractmethod
     def get_current_key(self) -> str:
@@ -147,7 +151,9 @@ class Provider(AbstractProvider):
             - 如果传入了 tools，将会使用 tools 进行 Function-calling。如果模型不支持 Function-calling，将会抛出错误。
 
         """
-        ...
+        if False:  # pragma: no cover - make this an async generator for typing
+            yield None  # type: ignore
+        raise NotImplementedError()
 
     async def pop_record(self, context: list):
         """弹出 context 第一条非系统提示词对话记录"""
@@ -180,6 +186,12 @@ class Provider(AbstractProvider):
 
         return dicts
 
+    async def test(self, timeout: float = 45.0):
+        await asyncio.wait_for(
+            self.text_chat(prompt="REPLY `PONG` ONLY"),
+            timeout=timeout,
+        )
+
 
 class STTProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -192,6 +204,14 @@ class STTProvider(AbstractProvider):
         """获取音频的文本"""
         raise NotImplementedError
 
+    async def test(self):
+        sample_audio_path = os.path.join(
+            get_astrbot_path(),
+            "samples",
+            "stt_health_check.wav",
+        )
+        await self.get_text(sample_audio_path)
+
 
 class TTSProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
@@ -203,6 +223,9 @@ class TTSProvider(AbstractProvider):
     async def get_audio(self, text: str) -> str:
         """获取文本的音频，返回音频文件路径"""
         raise NotImplementedError
+
+    async def test(self):
+        await self.get_audio("hi")
 
 
 class EmbeddingProvider(AbstractProvider):
@@ -225,6 +248,9 @@ class EmbeddingProvider(AbstractProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         ...
+
+    async def test(self):
+        await self.get_embedding("astrbot")
 
     async def get_embeddings_batch(
         self,
@@ -309,3 +335,8 @@ class RerankProvider(AbstractProvider):
     ) -> list[RerankResult]:
         """获取查询和文档的重排序分数"""
         ...
+
+    async def test(self):
+        result = await self.rerank("Apple", documents=["apple", "banana"])
+        if not result:
+            raise Exception("Rerank provider test failed, no results returned")

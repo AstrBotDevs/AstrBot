@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
+from typing import Any
 
 from quart import request
 
@@ -14,19 +15,18 @@ from astrbot.core.config.default import (
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
 )
+from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
-from astrbot.core.provider.entities import ProviderType
-from astrbot.core.provider.provider import RerankProvider
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
-from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
 
 
-def try_cast(value: str, type_: str):
+def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
             return int(value)
@@ -133,7 +133,9 @@ def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False)
                 is_core,
             )
         else:
-            errors, post_config = validate_config(post_config, config.schema, is_core)
+            errors, post_config = validate_config(
+                post_config, getattr(config, "schema", {}), is_core
+            )
     except BaseException as e:
         logger.error(traceback.format_exc())
         logger.warning(f"验证配置时出现异常: {e}")
@@ -247,11 +249,8 @@ class ConfigRoute(Route):
 
     async def get_default_config(self):
         """获取默认配置文件"""
-        return (
-            Response()
-            .ok({"config": DEFAULT_CONFIG, "metadata": CONFIG_METADATA_3})
-            .__dict__
-        )
+        metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+        return Response().ok({"config": DEFAULT_CONFIG, "metadata": metadata}).__dict__
 
     async def get_abconf_list(self):
         """获取所有 AstrBot 配置文件的列表"""
@@ -282,17 +281,15 @@ class ConfigRoute(Route):
         try:
             if system_config:
                 abconf = self.acm.confs["default"]
-                return (
-                    Response()
-                    .ok({"config": abconf, "metadata": CONFIG_METADATA_3_SYSTEM})
-                    .__dict__
+                metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+                    CONFIG_METADATA_3_SYSTEM
                 )
+                return Response().ok({"config": abconf, "metadata": metadata}).__dict__
+            if abconf_id is None:
+                raise ValueError("abconf_id cannot be None")
             abconf = self.acm.confs[abconf_id]
-            return (
-                Response()
-                .ok({"config": abconf, "metadata": CONFIG_METADATA_3})
-                .__dict__
-            )
+            metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
+            return Response().ok({"config": abconf, "metadata": metadata}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
@@ -358,169 +355,20 @@ class ConfigRoute(Route):
             f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})",
         )
 
-        if provider_capability_type == ProviderType.CHAT_COMPLETION:
-            try:
-                logger.debug(f"Sending 'Ping' to provider: {status_info['name']}")
-                response = await asyncio.wait_for(
-                    provider.text_chat(prompt="REPLY `PONG` ONLY"),
-                    timeout=45.0,
-                )
-                logger.debug(
-                    f"Received response from {status_info['name']}: {response}",
-                )
-                if response is not None:
-                    status_info["status"] = "available"
-                    response_text_snippet = ""
-                    if (
-                        hasattr(response, "completion_text")
-                        and response.completion_text
-                    ):
-                        response_text_snippet = (
-                            response.completion_text[:70] + "..."
-                            if len(response.completion_text) > 70
-                            else response.completion_text
-                        )
-                    elif hasattr(response, "result_chain") and response.result_chain:
-                        try:
-                            response_text_snippet = (
-                                response.result_chain.get_plain_text()[:70] + "..."
-                                if len(response.result_chain.get_plain_text()) > 70
-                                else response.result_chain.get_plain_text()
-                            )
-                        except Exception as _:
-                            pass
-                    logger.info(
-                        f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{response_text_snippet}'",
-                    )
-                else:
-                    status_info["error"] = (
-                        "Test call returned None, but expected an LLMResponse object."
-                    )
-                    logger.warning(
-                        f"Provider {status_info['name']} (ID: {status_info['id']}) test call returned None.",
-                    )
-
-            except asyncio.TimeoutError:
-                status_info["error"] = (
-                    "Connection timed out after 45 seconds during test call."
-                )
-                logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) timed out.",
-                )
-            except Exception as e:
-                error_message = str(e)
-                status_info["error"] = error_message
-                logger.warning(
-                    f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}",
-                )
-                logger.debug(
-                    f"Traceback for {status_info['name']}:\n{traceback.format_exc()}",
-                )
-
-        elif provider_capability_type == ProviderType.EMBEDDING:
-            try:
-                # For embedding, we can call the get_embedding method with a short prompt.
-                embedding_result = await provider.get_embedding("health_check")
-                if isinstance(embedding_result, list) and (
-                    not embedding_result or isinstance(embedding_result[0], float)
-                ):
-                    status_info["status"] = "available"
-                else:
-                    status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        f"Embedding test failed: unexpected result type {type(embedding_result)}"
-                    )
-            except Exception as e:
-                logger.error(
-                    f"Error testing embedding provider {provider_name}: {e}",
-                    exc_info=True,
-                )
-                status_info["status"] = "unavailable"
-                status_info["error"] = f"Embedding test failed: {e!s}"
-
-        elif provider_capability_type == ProviderType.TEXT_TO_SPEECH:
-            try:
-                # For TTS, we can call the get_audio method with a short prompt.
-                audio_result = await provider.get_audio("你好")
-                if isinstance(audio_result, str) and audio_result:
-                    status_info["status"] = "available"
-                else:
-                    status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        f"TTS test failed: unexpected result type {type(audio_result)}"
-                    )
-            except Exception as e:
-                logger.error(
-                    f"Error testing TTS provider {provider_name}: {e}",
-                    exc_info=True,
-                )
-                status_info["status"] = "unavailable"
-                status_info["error"] = f"TTS test failed: {e!s}"
-        elif provider_capability_type == ProviderType.SPEECH_TO_TEXT:
-            try:
-                logger.debug(
-                    f"Sending health check audio to provider: {status_info['name']}",
-                )
-                sample_audio_path = os.path.join(
-                    get_astrbot_path(),
-                    "samples",
-                    "stt_health_check.wav",
-                )
-                if not os.path.exists(sample_audio_path):
-                    status_info["status"] = "unavailable"
-                    status_info["error"] = (
-                        "STT test failed: sample audio file not found."
-                    )
-                    logger.warning(
-                        f"STT test for {status_info['name']} failed: sample audio file not found at {sample_audio_path}",
-                    )
-                else:
-                    text_result = await provider.get_text(sample_audio_path)
-                    if isinstance(text_result, str) and text_result:
-                        status_info["status"] = "available"
-                        snippet = (
-                            text_result[:70] + "..."
-                            if len(text_result) > 70
-                            else text_result
-                        )
-                        logger.info(
-                            f"Provider {status_info['name']} (ID: {status_info['id']}) is available. Response snippet: '{snippet}'",
-                        )
-                    else:
-                        status_info["status"] = "unavailable"
-                        status_info["error"] = (
-                            f"STT test failed: unexpected result type {type(text_result)}"
-                        )
-                        logger.warning(
-                            f"STT test for {status_info['name']} failed: unexpected result type {type(text_result)}",
-                        )
-            except Exception as e:
-                logger.error(
-                    f"Error testing STT provider {provider_name}: {e}",
-                    exc_info=True,
-                )
-                status_info["status"] = "unavailable"
-                status_info["error"] = f"STT test failed: {e!s}"
-        elif provider_capability_type == ProviderType.RERANK:
-            try:
-                assert isinstance(provider, RerankProvider)
-                await provider.rerank("Apple", documents=["apple", "banana"])
-                status_info["status"] = "available"
-            except Exception as e:
-                logger.error(
-                    f"Error testing rerank provider {provider_name}: {e}",
-                    exc_info=True,
-                )
-                status_info["status"] = "unavailable"
-                status_info["error"] = f"Rerank test failed: {e!s}"
-
-        else:
-            logger.debug(
-                f"Provider {provider_name} is not a Chat Completion or Embedding provider. Marking as available without test. Meta: {meta}",
-            )
+        try:
+            await provider.test()
             status_info["status"] = "available"
-            status_info["error"] = (
-                "This provider type is not tested and is assumed to be available."
+            logger.info(
+                f"Provider {status_info['name']} (ID: {status_info['id']}) is available.",
+            )
+        except Exception as e:
+            error_message = str(e)
+            status_info["error"] = error_message
+            logger.warning(
+                f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}",
+            )
+            logger.debug(
+                f"Traceback for {status_info['name']}:\n{traceback.format_exc()}",
             )
 
         return status_info
@@ -598,9 +446,15 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_id").__dict__
 
         prov_mgr = self.core_lifecycle.provider_manager
-        provider: Provider | None = prov_mgr.inst_map.get(provider_id, None)
+        provider = prov_mgr.inst_map.get(provider_id, None)
         if not provider:
             return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+        if not isinstance(provider, Provider):
+            return (
+                Response()
+                .error(f"提供商 {provider_id} 类型不支持获取模型列表")
+                .__dict__
+            )
 
         try:
             models = await provider.get_models()
@@ -651,9 +505,9 @@ class ConfigRoute(Route):
             if not isinstance(inst, EmbeddingProvider):
                 return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
 
-            # 初始化
-            if getattr(inst, "initialize", None):
-                await inst.initialize()
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
 
             # 获取嵌入向量维度
             vec = await inst.get_embedding("echo")
@@ -703,6 +557,10 @@ class ConfigRoute(Route):
 
     async def post_new_platform(self):
         new_platform_config = await request.json
+
+        # 如果是支持统一 webhook 模式的平台，生成 webhook_uuid
+        ensure_platform_webhook_config(new_platform_config)
+
         self.config["platform"].append(new_platform_config)
         try:
             save_config(self.config, self.config, is_core=True)
@@ -731,6 +589,9 @@ class ConfigRoute(Route):
         new_config = update_platform_config.get("config", None)
         if not platform_id or not new_config:
             return Response().error("参数错误").__dict__
+
+        # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
+        ensure_platform_webhook_config(new_config)
 
         for i, platform in enumerate(self.config["platform"]):
             if platform["id"] == platform_id:
@@ -906,7 +767,7 @@ class ConfigRoute(Route):
         return {"metadata": CONFIG_METADATA_2, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
-        ret = {"metadata": None, "config": None}
+        ret: dict = {"metadata": None, "config": None}
 
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

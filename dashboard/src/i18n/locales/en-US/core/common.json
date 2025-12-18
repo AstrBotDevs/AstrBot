@@ -66,13 +66,26 @@
   },
   "list": {
     "addItemPlaceholder": "Add new item, press Enter to confirm",
-    "addButton": "Add"
+    "addButton": "Add",
+    "batchImport": "Batch Import",
+    "batchImportTitle": "Batch Import",
+    "batchImportLabel": "One item per line",
+    "batchImportPlaceholder": "Example:\nItem 1\nItem 2\nItem 3\nItem 4",
+    "batchImportHint": "Each line will be treated as a separate item, empty lines will be ignored",
+    "batchImportButton": "Import {count} items",
+    "noItems": "No items",
+    "noItemsHint": "No items yet, type in the input above and press Enter to add",
+    "inputPlaceholder": "Type and press Enter to add",
+    "editTitle": "Edit List Items",
+    "modifyButton": "Modify"
   },
   "itemCard": {
     "enabled": "Enabled",
     "disabled": "Disabled",
     "delete": "Delete",
+    "copy": "Copy",
     "edit": "Edit",
+    "copy": "Copy",
     "noData": "No data available"
   }
-} 
+}

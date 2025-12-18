@@ -8,7 +8,7 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 
 const props = defineProps({
@@ -27,6 +27,34 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const { tm, getRaw } = useModuleI18n('features/config-metadata')
+
+// 翻译器函数 - 如果是国际化键则翻译，否则原样返回
+const translateIfKey = (value) => {
+  if (!value || typeof value !== 'string') return value
+  return tm(value)
+}
+
+// 处理labels翻译 - labels可以是数组或国际化键
+const getTranslatedLabels = (itemMeta) => {
+  if (!itemMeta?.labels) return null
+  
+  // 如果labels是字符串（国际化键）
+  if (typeof itemMeta.labels === 'string') {
+    const translatedLabels = getRaw(itemMeta.labels)
+    // 如果翻译成功且是数组，返回翻译结果
+    if (Array.isArray(translatedLabels)) {
+      return translatedLabels
+    }
+  }
+  
+  // 如果labels是数组，直接返回
+  if (Array.isArray(itemMeta.labels)) {
+    return itemMeta.labels
+  }
+  
+  return null
+}
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -101,6 +129,21 @@ function shouldShowItem(itemMeta, itemKey) {
   return true
 }
 
+// 检查最外层的 object 是否应该显示
+function shouldShowSection() {
+  const sectionMeta = props.metadata[props.metadataKey]
+  if (!sectionMeta?.condition) {
+    return true
+  }
+  for (const [conditionKey, expectedValue] of Object.entries(sectionMeta.condition)) {
+    const actualValue = getValueBySelector(props.iterable, conditionKey)
+    if (actualValue !== expectedValue) {
+      return false
+    }
+  }
+  return true
+}
+
 function hasVisibleItemsAfter(items, currentIndex) {
   const itemEntries = Object.entries(items)
 
@@ -114,19 +157,40 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
   return false
 }
+
+function parseSpecialValue(value) {
+  if (!value || typeof value !== 'string') {
+    return { name: '', subtype: '' }
+  }
+  const [name, ...rest] = value.split(':')
+  return {
+    name,
+    subtype: rest.join(':') || ''
+  }
+}
+
+function getSpecialName(value) {
+  return parseSpecialValue(value).name
+}
+
+function getSpecialSubtype(value) {
+  return parseSpecialValue(value).subtype
+}
+
 </script>
 
 <template>
 
 
-  <v-card style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));" rounded="md" variant="outlined">
+  <v-card v-if="shouldShowSection()" style="margin-bottom: 16px; padding-bottom: 8px; background-color: rgb(var(--v-theme-background));"
+    rounded="md" variant="outlined">
     <v-card-text class="config-section" v-if="metadata[metadataKey]?.type === 'object'" style="padding-bottom: 8px;">
       <v-list-item-title class="config-title">
-        {{ metadata[metadataKey]?.description }}
+        {{ translateIfKey(metadata[metadataKey]?.description) }}
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
         <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-        {{ metadata[metadataKey]?.hint }}
+        {{ translateIfKey(metadata[metadataKey]?.hint) }}
       </v-list-item-subtitle>
     </v-card-text>
 
@@ -140,13 +204,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
             <v-col cols="12" sm="6" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
-                  {{ itemMeta?.description || itemKey }}
+                  {{ translateIfKey(itemMeta?.description) || itemKey }}
                   <span class="property-key">({{ itemKey }})</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
                   <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                  {{ itemMeta?.hint }}
+                  {{ translateIfKey(itemMeta?.hint) }}
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
@@ -154,7 +218,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <div class="w-100" v-if="!itemMeta?._special">
                 <!-- Select input for JSON selector -->
                 <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
-                  :items="itemMeta?.options" :disabled="itemMeta?.readonly" density="compact" variant="outlined"
+                  :items="(() => {
+                    const labels = getTranslatedLabels(itemMeta);
+                    return labels 
+                      ? itemMeta.options.map((value, index) => ({ title: labels[index] || value, value: value }))
+                      : itemMeta.options;
+                  })()" 
+                  :disabled="itemMeta?.readonly" density="compact" variant="outlined"
                   class="config-field" hide-details></v-select>
 
                 <!-- Code Editor for JSON selector -->
@@ -175,10 +245,29 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 <v-text-field v-else-if="itemMeta?.type === 'string'" v-model="createSelectorModel(itemKey).value"
                   density="compact" variant="outlined" class="config-field" hide-details></v-text-field>
 
-                <!-- Numeric input for JSON selector -->
-                <v-text-field v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-                  v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined" class="config-field"
-                  type="number" hide-details></v-text-field>
+                <!-- Numeric input with optional slider for JSON selector -->
+                <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
+                  <v-slider
+                    v-if="itemMeta?.slider"
+                    v-model.number="createSelectorModel(itemKey).value"
+                    :min="itemMeta?.slider?.min ?? 0"
+                    :max="itemMeta?.slider?.max ?? 100"
+                    :step="itemMeta?.slider?.step ?? 1"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    style="flex: 3"
+                  ></v-slider>
+                  <v-text-field
+                    v-model.number="createSelectorModel(itemKey).value"
+                    density="compact"
+                    variant="outlined"
+                    class="config-field"
+                    style="flex: 2"
+                    type="number"
+                    hide-details
+                  ></v-text-field>
+                </div>
 
                 <!-- Text area for JSON selector -->
                 <v-textarea v-else-if="itemMeta?.type === 'text'" v-model="createSelectorModel(itemKey).value"
@@ -186,22 +275,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
                 <!-- Boolean switch for JSON selector -->
                 <v-switch v-else-if="itemMeta?.type === 'bool'" v-model="createSelectorModel(itemKey).value"
-                  color="primary" inset density="compact" hide-details style="display: flex; justify-content: end;"></v-switch>
+                  color="primary" inset density="compact" hide-details
+                  style="display: flex; justify-content: end;"></v-switch>
 
                 <!-- List item for JSON selector -->
-                <ListConfigItem
-                  v-else-if="itemMeta?.type === 'list'"
-                  v-model="createSelectorModel(itemKey).value"
-                  button-text="修改"
-                  class="config-field"
-                />
+                <ListConfigItem v-else-if="itemMeta?.type === 'list'" v-model="createSelectorModel(itemKey).value"
+                  button-text="修改" class="config-field" />
 
                 <!-- Object editor for JSON selector -->
-                <ObjectEditor
-                  v-else-if="itemMeta?.type === 'dict'"
-                  v-model="createSelectorModel(itemKey).value"
-                  class="config-field"
-                />
+                <ObjectEditor v-else-if="itemMeta?.type === 'dict'" v-model="createSelectorModel(itemKey).value"
+                  class="config-field" />
 
                 <!-- Fallback for JSON selector -->
                 <v-text-field v-else v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined"
@@ -210,50 +293,36 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
               <!-- Special handling for specific metadata types -->
               <div v-else-if="itemMeta?._special === 'select_provider'">
-                <ProviderSelector
-                  v-model="createSelectorModel(itemKey).value"
-                  :provider-type="'chat_completion'"
-                />
+                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'" />
               </div>
               <div v-else-if="itemMeta?._special === 'select_provider_stt'">
-                <ProviderSelector
-                  v-model="createSelectorModel(itemKey).value"
-                  :provider-type="'speech_to_text'"
-                />
+                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'speech_to_text'" />
               </div>
               <div v-else-if="itemMeta?._special === 'select_provider_tts'">
+                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'text_to_speech'" />
+              </div>
+              <div v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
                 <ProviderSelector
                   v-model="createSelectorModel(itemKey).value"
-                  :provider-type="'text_to_speech'"
+                  :provider-type="'agent_runner'"
+                  :provider-subtype="getSpecialSubtype(itemMeta?._special)"
                 />
               </div>
               <div v-else-if="itemMeta?._special === 'provider_pool'">
-                <ProviderSelector
-                  v-model="createSelectorModel(itemKey).value"
-                  :provider-type="'chat_completion'"
-                  button-text="选择提供商池..."
-                />
+                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'"
+                  button-text="选择提供商池..." />
               </div>
               <div v-else-if="itemMeta?._special === 'select_persona'">
-                <PersonaSelector
-                  v-model="createSelectorModel(itemKey).value"
-                />
+                <PersonaSelector v-model="createSelectorModel(itemKey).value" />
               </div>
               <div v-else-if="itemMeta?._special === 'persona_pool'">
-                <PersonaSelector
-                  v-model="createSelectorModel(itemKey).value"
-                  button-text="选择人格池..."
-                />
+                <PersonaSelector v-model="createSelectorModel(itemKey).value" button-text="选择人格池..." />
               </div>
               <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
-                <KnowledgeBaseSelector
-                  v-model="createSelectorModel(itemKey).value"
-                />
+                <KnowledgeBaseSelector v-model="createSelectorModel(itemKey).value" />
               </div>
               <div v-else-if="itemMeta?._special === 'select_plugin_set'">
-                <PluginSetSelector
-                  v-model="createSelectorModel(itemKey).value"
-                />
+                <PluginSetSelector v-model="createSelectorModel(itemKey).value" />
               </div>
               <div v-else-if="itemMeta?._special === 't2i_template'">
                 <T2ITemplateEditor />
@@ -262,21 +331,17 @@ function hasVisibleItemsAfter(items, currentIndex) {
           </v-row>
 
           <!-- Plugin Set Selector 全宽显示区域 -->
-          <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'" class="plugin-set-display-row">
+          <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+            class="plugin-set-display-row">
             <v-col cols="12" class="plugin-set-display">
-              <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0" class="selected-plugins-full-width">
+              <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                class="selected-plugins-full-width">
                 <div class="plugins-header">
                   <small class="text-grey">已选择的插件：</small>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-2">
-                  <v-chip
-                    v-for="plugin in (createSelectorModel(itemKey).value || [])"
-                    :key="plugin"
-                    size="small"
-                    label
-                    color="primary"
-                    variant="outlined"
-                  >
+                  <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                    color="primary" variant="outlined">
                     {{ plugin === '*' ? '所有插件' : plugin }}
                   </v-chip>
                 </div>
@@ -284,7 +349,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
             </v-col>
           </v-row>
         </template>
-        <v-divider class="config-divider" v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"></v-divider>
+        <v-divider class="config-divider"
+          v-if="shouldShowItem(itemMeta, itemKey) && hasVisibleItemsAfter(metadata[metadataKey].items, index)"></v-divider>
       </div>
 
     </div>

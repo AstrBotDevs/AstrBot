@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any, cast
 
 import botpy
 import botpy.message
@@ -11,6 +12,7 @@ from astrbot import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.platform import AstrBotMessage, MessageType, Platform, PlatformMetadata
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
@@ -34,7 +36,9 @@ class botClient(Client):
             MessageType.GROUP_MESSAGE,
         )
         abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.group_openid
+            abm.sender.user_id
+            if self.platform.unique_session
+            else cast(str, message.group_openid)
         )
         self._commit(abm)
 
@@ -87,13 +91,12 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
         self.unique_session = platform_settings["unique_session"]
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
 
         intents = botpy.Intents(
             public_messages=True,
@@ -106,6 +109,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             timeout=20,
         )
         self.client.set_platform(self)
+        self.webhook_helper = None
 
     async def send_by_session(
         self,
@@ -118,7 +122,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         return PlatformMetadata(
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
         )
 
     async def run(self):
@@ -128,16 +132,37 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             self.client,
         )
         await self.webhook_helper.initialize()
-        await self.webhook_helper.start_polling()
+
+        # 如果启用统一 webhook 模式，则不启动独立服务器
+        webhook_uuid = self.config.get("webhook_uuid")
+        if self.unified_webhook_mode and webhook_uuid:
+            log_webhook_info(f"{self.meta().id}(QQ 官方机器人 Webhook)", webhook_uuid)
+            # 保持运行状态，等待 shutdown
+            await self.webhook_helper.shutdown_event.wait()
+        else:
+            await self.webhook_helper.start_polling()
 
     def get_client(self) -> botClient:
         return self.client
 
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        if not self.webhook_helper:
+            return {"error": "Webhook helper not initialized"}, 500
+
+        # 复用 webhook_helper 的回调处理逻辑
+        return await self.webhook_helper.handle_callback(request)
+
     async def terminate(self):
-        self.webhook_helper.shutdown_event.set()
+        if self.webhook_helper:
+            self.webhook_helper.shutdown_event.set()
         await self.client.close()
-        try:
-            await self.webhook_helper.server.shutdown()
-        except Exception as _:
-            pass
+        if self.webhook_helper and not self.unified_webhook_mode:
+            try:
+                await self.webhook_helper.server.shutdown()
+            except Exception as exc:
+                logger.warning(
+                    f"Exception occurred during QQOfficialWebhook server shutdown: {exc}",
+                    exc_info=True,
+                )
         logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")

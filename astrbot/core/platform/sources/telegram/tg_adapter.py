@@ -42,8 +42,7 @@ class TelegramPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
 
@@ -381,7 +380,9 @@ class TelegramPlatformAdapter(Platform):
                     f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
-                message.message.append(Comp.File(file=file_path, name=file_name))
+                message.message.append(
+                    Comp.File(file=file_path, name=file_name, url=file_path)
+                )
 
         elif update.message.video:
             file = await update.message.video.get_file()
@@ -423,6 +424,6 @@ class TelegramPlatformAdapter(Platform):
             if self.application.updater is not None:
                 await self.application.updater.stop()
 
-            logger.info("Telegram 适配器已被优雅地关闭")
+            logger.info("Telegram 适配器已被关闭")
         except Exception as e:
             logger.error(f"Telegram 适配器关闭时出错: {e}")

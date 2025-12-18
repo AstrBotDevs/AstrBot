@@ -4,7 +4,7 @@
             :align-tabs="$vuetify.display.mobile ? 'left' : 'start'" color="deep-purple-accent-4" class="config-tabs">
             <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index"
                 style="font-weight: 1000; font-size: 15px">
-                {{ metadata[key]['name'] }}
+                {{ tm(metadata[key]['name']) }}
             </v-tab>
         </v-tabs>
         <v-tabs-window v-model="tab" class="config-tabs-window" :style="readonly ? 'pointer-events: none; opacity: 0.6;' : ''">
@@ -59,7 +59,17 @@ export default {
     }
   },
   setup() {
-    const { tm } = useModuleI18n('features/config');
+    const { tm: tmConfig } = useModuleI18n('features/config');
+    const { tm: tmMetadata } = useModuleI18n('features/config-metadata');
+    
+    const tm = (key) => {
+      const metadataResult = tmMetadata(key);
+      if (!metadataResult.startsWith('[MISSING:') && !metadataResult.startsWith('[INVALID:')) {
+        return metadataResult;
+      }
+      return tmConfig(key);
+    };
+    
     return {
       tm
     };

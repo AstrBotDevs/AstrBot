@@ -1,15 +1,23 @@
-import traceback
-
 from quart import request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
 
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import ConversationV2, Preference
 from astrbot.core.provider.entities import ProviderType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 
 from .route import Response, Route, RouteContext
+
+AVAILABLE_SESSION_RULE_KEYS = [
+    "session_service_config",
+    "session_plugin_config",
+    "kb_config",
+    f"provider_perf_{ProviderType.CHAT_COMPLETION.value}",
+    f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
+    f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
+]
 
 
 class SessionManagementRoute(Route):
@@ -22,667 +30,364 @@ class SessionManagementRoute(Route):
         super().__init__(context)
         self.db_helper = db_helper
         self.routes = {
-            "/session/list": ("GET", self.list_sessions),
-            "/session/update_persona": ("POST", self.update_session_persona),
-            "/session/update_provider": ("POST", self.update_session_provider),
-            "/session/plugins": ("GET", self.get_session_plugins),
-            "/session/update_plugin": ("POST", self.update_session_plugin),
-            "/session/update_llm": ("POST", self.update_session_llm),
-            "/session/update_tts": ("POST", self.update_session_tts),
-            "/session/update_name": ("POST", self.update_session_name),
-            "/session/update_status": ("POST", self.update_session_status),
-            "/session/delete": ("POST", self.delete_session),
+            "/session/list-rule": ("GET", self.list_session_rule),
+            "/session/update-rule": ("POST", self.update_session_rule),
+            "/session/delete-rule": ("POST", self.delete_session_rule),
+            "/session/batch-delete-rule": ("POST", self.batch_delete_session_rule),
+            "/session/active-umos": ("GET", self.list_umos),
         }
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def list_sessions(self):
-        """获取所有会话的列表，包括 persona 和 provider 信息"""
-        try:
-            page = int(request.args.get("page", 1))
-            page_size = int(request.args.get("page_size", 20))
-            search_query = request.args.get("search", "")
-            platform = request.args.get("platform", "")
+    async def _get_umo_rules(
+        self, page: int = 1, page_size: int = 10, search: str = ""
+    ) -> tuple[dict, int]:
+        """获取所有带有自定义规则的 umo 及其规则内容（支持分页和搜索）。
 
-            # 获取活跃的会话数据（处于对话内的会话）
-            sessions_data, total = await self.db_helper.get_session_conversations(
-                page,
-                page_size,
-                search_query,
-                platform,
+        如果某个 umo 在 preference 中有以下字段，则表示有自定义规则：
+
+        1. session_service_config (包含了 是否启用这个umo, 这个umo是否启用 llm, 这个umo是否启用tts, umo自定义名称。)
+        2. session_plugin_config (包含了 这个 umo 的 plugin set)
+        3. provider_perf_{ProviderType.value} (包含了这个 umo 所选择使用的 provider 信息)
+        4. kb_config (包含了这个 umo 的知识库相关配置)
+
+        Args:
+            page: 页码，从 1 开始
+            page_size: 每页数量
+            search: 搜索关键词，匹配 umo 或 custom_name
+
+        Returns:
+            tuple[dict, int]: (umo_rules, total) - 分页后的 umo 规则和总数
+        """
+        umo_rules = {}
+        async with self.db_helper.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(Preference).where(
+                    col(Preference.scope) == "umo",
+                    col(Preference.key).in_(AVAILABLE_SESSION_RULE_KEYS),
+                )
+            )
+            prefs = result.scalars().all()
+            for pref in prefs:
+                umo_id = pref.scope_id
+                if umo_id not in umo_rules:
+                    umo_rules[umo_id] = {}
+                if pref.key == "session_plugin_config" and umo_id in pref.value["val"]:
+                    umo_rules[umo_id][pref.key] = pref.value["val"][umo_id]
+                else:
+                    umo_rules[umo_id][pref.key] = pref.value["val"]
+
+        # 搜索过滤
+        if search:
+            search_lower = search.lower()
+            filtered_rules = {}
+            for umo_id, rules in umo_rules.items():
+                # 匹配 umo
+                if search_lower in umo_id.lower():
+                    filtered_rules[umo_id] = rules
+                    continue
+                # 匹配 custom_name
+                svc_config = rules.get("session_service_config", {})
+                custom_name = svc_config.get("custom_name", "") if svc_config else ""
+                if custom_name and search_lower in custom_name.lower():
+                    filtered_rules[umo_id] = rules
+            umo_rules = filtered_rules
+
+        # 获取总数
+        total = len(umo_rules)
+
+        # 分页处理
+        all_umo_ids = list(umo_rules.keys())
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_umo_ids = all_umo_ids[start_idx:end_idx]
+
+        # 只返回分页后的数据
+        paginated_rules = {umo_id: umo_rules[umo_id] for umo_id in paginated_umo_ids}
+
+        return paginated_rules, total
+
+    async def list_session_rule(self):
+        """获取所有自定义的规则（支持分页和搜索）
+
+        返回已配置规则的 umo 列表及其规则内容，以及可用的 personas 和 providers
+
+        Query 参数:
+            page: 页码，默认为 1
+            page_size: 每页数量，默认为 10
+            search: 搜索关键词，匹配 umo 或 custom_name
+        """
+        try:
+            # 获取分页和搜索参数
+            page = request.args.get("page", 1, type=int)
+            page_size = request.args.get("page_size", 10, type=int)
+            search = request.args.get("search", "", type=str).strip()
+
+            # 参数校验
+            if page < 1:
+                page = 1
+            if page_size < 1:
+                page_size = 10
+            if page_size > 100:
+                page_size = 100
+
+            umo_rules, total = await self._get_umo_rules(
+                page=page, page_size=page_size, search=search
             )
 
+            # 构建规则列表
+            rules_list = []
+            for umo, rules in umo_rules.items():
+                rule_info = {
+                    "umo": umo,
+                    "rules": rules,
+                }
+                # 解析 umo 格式: 平台:消息类型:会话ID
+                parts = umo.split(":")
+                if len(parts) >= 3:
+                    rule_info["platform"] = parts[0]
+                    rule_info["message_type"] = parts[1]
+                    rule_info["session_id"] = parts[2]
+                rules_list.append(rule_info)
+
+            # 获取可用的 providers 和 personas
             provider_manager = self.core_lifecycle.provider_manager
             persona_mgr = self.core_lifecycle.persona_mgr
-            personas = persona_mgr.personas_v3
 
-            sessions = []
-
-            # 循环补充非数据库信息，如 provider 和 session 状态
-            for data in sessions_data:
-                session_id = data["session_id"]
-                conversation_id = data["conversation_id"]
-                conv_persona_id = data["persona_id"]
-                title = data["title"]
-                persona_name = data["persona_name"]
-
-                # 处理 persona 显示
-                if persona_name is None:
-                    if conv_persona_id is None:
-                        if default_persona := persona_mgr.selected_default_persona_v3:
-                            persona_name = default_persona["name"]
-                    else:
-                        persona_name = "[%None]"
-
-                session_info = {
-                    "session_id": session_id,
-                    "conversation_id": conversation_id,
-                    "persona_id": persona_name,
-                    "chat_provider_id": None,
-                    "stt_provider_id": None,
-                    "tts_provider_id": None,
-                    "session_enabled": SessionServiceManager.is_session_enabled(
-                        session_id,
-                    ),
-                    "llm_enabled": SessionServiceManager.is_llm_enabled_for_session(
-                        session_id,
-                    ),
-                    "tts_enabled": SessionServiceManager.is_tts_enabled_for_session(
-                        session_id,
-                    ),
-                    "platform": session_id.split(":")[0]
-                    if ":" in session_id
-                    else "unknown",
-                    "message_type": session_id.split(":")[1]
-                    if session_id.count(":") >= 1
-                    else "unknown",
-                    "session_name": SessionServiceManager.get_session_display_name(
-                        session_id,
-                    ),
-                    "session_raw_name": session_id.split(":")[2]
-                    if session_id.count(":") >= 2
-                    else session_id,
-                    "title": title,
-                }
-
-                # 获取 provider 信息
-                chat_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.CHAT_COMPLETION,
-                    umo=session_id,
-                )
-                tts_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.TEXT_TO_SPEECH,
-                    umo=session_id,
-                )
-                stt_provider = provider_manager.get_using_provider(
-                    provider_type=ProviderType.SPEECH_TO_TEXT,
-                    umo=session_id,
-                )
-                if chat_provider:
-                    meta = chat_provider.meta()
-                    session_info["chat_provider_id"] = meta.id
-                if tts_provider:
-                    meta = tts_provider.meta()
-                    session_info["tts_provider_id"] = meta.id
-                if stt_provider:
-                    meta = stt_provider.meta()
-                    session_info["stt_provider_id"] = meta.id
-
-                sessions.append(session_info)
-
-            # 获取可用的 personas 和 providers 列表
             available_personas = [
-                {"name": p["name"], "prompt": p.get("prompt", "")} for p in personas
+                {"name": p["name"], "prompt": p.get("prompt", "")}
+                for p in persona_mgr.personas_v3
             ]
 
-            available_chat_providers = []
-            for provider in provider_manager.provider_insts:
-                meta = provider.meta()
-                available_chat_providers.append(
-                    {
-                        "id": meta.id,
-                        "name": meta.id,
-                        "model": meta.model,
-                        "type": meta.type,
-                    },
-                )
-
-            available_stt_providers = []
-            for provider in provider_manager.stt_provider_insts:
-                meta = provider.meta()
-                available_stt_providers.append(
-                    {
-                        "id": meta.id,
-                        "name": meta.id,
-                        "model": meta.model,
-                        "type": meta.type,
-                    },
-                )
-
-            available_tts_providers = []
-            for provider in provider_manager.tts_provider_insts:
-                meta = provider.meta()
-                available_tts_providers.append(
-                    {
-                        "id": meta.id,
-                        "name": meta.id,
-                        "model": meta.model,
-                        "type": meta.type,
-                    },
-                )
-
-            result = {
-                "sessions": sessions,
-                "available_personas": available_personas,
-                "available_chat_providers": available_chat_providers,
-                "available_stt_providers": available_stt_providers,
-                "available_tts_providers": available_tts_providers,
-                "pagination": {
-                    "page": page,
-                    "page_size": page_size,
-                    "total": total,
-                    "total_pages": (total + page_size - 1) // page_size
-                    if page_size > 0
-                    else 0,
-                },
-            }
-
-            return Response().ok(result).__dict__
-
-        except Exception as e:
-            error_msg = f"获取会话列表失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"获取会话列表失败: {e!s}").__dict__
-
-    async def _update_single_session_persona(self, session_id: str, persona_name: str):
-        """更新单个会话的 persona 的内部方法"""
-        conversation_manager = self.core_lifecycle.star_context.conversation_manager
-        conversation_id = await conversation_manager.get_curr_conversation_id(
-            session_id,
-        )
-
-        conv = None
-        if conversation_id:
-            conv = await conversation_manager.get_conversation(
-                unified_msg_origin=session_id,
-                conversation_id=conversation_id,
-            )
-        if not conv or not conversation_id:
-            conversation_id = await conversation_manager.new_conversation(session_id)
-
-        # 更新 persona
-        await conversation_manager.update_conversation_persona_id(
-            session_id,
-            persona_name,
-        )
-
-    async def _handle_batch_operation(
-        self,
-        session_ids: list,
-        operation_func,
-        operation_name: str,
-        **kwargs,
-    ):
-        """通用的批量操作处理方法"""
-        success_count = 0
-        error_sessions = []
-
-        for session_id in session_ids:
-            try:
-                await operation_func(session_id, **kwargs)
-                success_count += 1
-            except Exception as e:
-                logger.error(f"批量{operation_name} 会话 {session_id} 失败: {e!s}")
-                error_sessions.append(session_id)
-
-        if error_sessions:
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"批量更新完成，成功: {success_count}，失败: {len(error_sessions)}",
-                        "success_count": success_count,
-                        "error_count": len(error_sessions),
-                        "error_sessions": error_sessions,
-                    },
-                )
-                .__dict__
-            )
-        return (
-            Response()
-            .ok(
+            available_chat_providers = [
                 {
-                    "message": f"成功批量{operation_name} {success_count} 个会话",
-                    "success_count": success_count,
-                },
-            )
-            .__dict__
-        )
+                    "id": p.meta().id,
+                    "name": p.meta().id,
+                    "model": p.meta().model,
+                }
+                for p in provider_manager.provider_insts
+            ]
 
-    async def update_session_persona(self):
-        """更新指定会话的 persona，支持批量操作"""
-        try:
-            data = await request.get_json()
-            is_batch = data.get("is_batch", False)
-            persona_name = data.get("persona_name")
+            available_stt_providers = [
+                {
+                    "id": p.meta().id,
+                    "name": p.meta().id,
+                    "model": p.meta().model,
+                }
+                for p in provider_manager.stt_provider_insts
+            ]
 
-            if persona_name is None:
-                return Response().error("缺少必要参数: persona_name").__dict__
+            available_tts_providers = [
+                {
+                    "id": p.meta().id,
+                    "name": p.meta().id,
+                    "model": p.meta().model,
+                }
+                for p in provider_manager.tts_provider_insts
+            ]
 
-            if is_batch:
-                session_ids = data.get("session_ids", [])
-                if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
+            # 获取可用的插件列表（排除 reserved 的系统插件）
+            plugin_manager = self.core_lifecycle.plugin_manager
+            available_plugins = [
+                {
+                    "name": p.name,
+                    "display_name": p.display_name or p.name,
+                    "desc": p.desc,
+                }
+                for p in plugin_manager.context.get_all_stars()
+                if not p.reserved and p.name
+            ]
 
-                return await self._handle_batch_operation(
-                    session_ids,
-                    self._update_single_session_persona,
-                    "更新人格",
-                    persona_name=persona_name,
-                )
-            session_id = data.get("session_id")
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+            # 获取可用的知识库列表
+            available_kbs = []
+            kb_manager = self.core_lifecycle.kb_manager
+            if kb_manager:
+                try:
+                    kbs = await kb_manager.list_kbs()
+                    available_kbs = [
+                        {
+                            "kb_id": kb.kb_id,
+                            "kb_name": kb.kb_name,
+                            "emoji": kb.emoji,
+                        }
+                        for kb in kbs
+                    ]
+                except Exception as e:
+                    logger.warning(f"获取知识库列表失败: {e!s}")
 
-            await self._update_single_session_persona(session_id, persona_name)
             return (
                 Response()
                 .ok(
                     {
-                        "message": f"成功更新会话 {session_id} 的人格为 {persona_name}",
-                    },
+                        "rules": rules_list,
+                        "total": total,
+                        "page": page,
+                        "page_size": page_size,
+                        "available_personas": available_personas,
+                        "available_chat_providers": available_chat_providers,
+                        "available_stt_providers": available_stt_providers,
+                        "available_tts_providers": available_tts_providers,
+                        "available_plugins": available_plugins,
+                        "available_kbs": available_kbs,
+                        "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
+                    }
                 )
                 .__dict__
             )
-
         except Exception as e:
-            error_msg = f"更新会话人格失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话人格失败: {e!s}").__dict__
+            logger.error(f"获取规则列表失败: {e!s}")
+            return Response().error(f"获取规则列表失败: {e!s}").__dict__
 
-    async def _update_single_session_provider(
-        self,
-        session_id: str,
-        provider_id: str,
-        provider_type_enum,
-    ):
-        """更新单个会话的 provider 的内部方法"""
-        provider_manager = self.core_lifecycle.star_context.provider_manager
-        await provider_manager.set_provider(
-            provider_id=provider_id,
-            provider_type=provider_type_enum,
-            umo=session_id,
-        )
+    async def update_session_rule(self):
+        """更新某个 umo 的自定义规则
 
-    async def update_session_provider(self):
-        """更新指定会话的 provider，支持批量操作"""
+        请求体:
+        {
+            "umo": "平台:消息类型:会话ID",
+            "rule_key": "session_service_config" | "session_plugin_config" | "kb_config" | "provider_perf_xxx",
+            "rule_value": {...}  // 规则值，具体结构根据 rule_key 不同而不同
+        }
+        """
         try:
             data = await request.get_json()
-            is_batch = data.get("is_batch", False)
-            provider_id = data.get("provider_id")
-            provider_type = data.get("provider_type")
+            umo = data.get("umo")
+            rule_key = data.get("rule_key")
+            rule_value = data.get("rule_value")
 
-            if not provider_id or not provider_type:
+            if not umo:
+                return Response().error("缺少必要参数: umo").__dict__
+            if not rule_key:
+                return Response().error("缺少必要参数: rule_key").__dict__
+            if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+                return Response().error(f"不支持的规则键: {rule_key}").__dict__
+
+            if rule_key == "session_plugin_config":
+                rule_value = {
+                    umo: rule_value,
+                }
+
+            # 使用 shared preferences 更新规则
+            await sp.session_put(umo, rule_key, rule_value)
+
+            return (
+                Response()
+                .ok({"message": f"规则 {rule_key} 已更新", "umo": umo})
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"更新会话规则失败: {e!s}")
+            return Response().error(f"更新会话规则失败: {e!s}").__dict__
+
+    async def delete_session_rule(self):
+        """删除某个 umo 的自定义规则
+
+        请求体:
+        {
+            "umo": "平台:消息类型:会话ID",
+            "rule_key": "session_service_config" | "session_plugin_config" | ... (可选，不传则删除所有规则)
+        }
+        """
+        try:
+            data = await request.get_json()
+            umo = data.get("umo")
+            rule_key = data.get("rule_key")
+
+            if not umo:
+                return Response().error("缺少必要参数: umo").__dict__
+
+            if rule_key:
+                # 删除单个规则
+                if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+                    return Response().error(f"不支持的规则键: {rule_key}").__dict__
+                await sp.session_remove(umo, rule_key)
                 return (
                     Response()
-                    .error("缺少必要参数: provider_id, provider_type")
+                    .ok({"message": f"规则 {rule_key} 已删除", "umo": umo})
                     .__dict__
                 )
+            else:
+                # 删除该 umo 的所有规则
+                await sp.clear_async("umo", umo)
+                return Response().ok({"message": "所有规则已删除", "umo": umo}).__dict__
+        except Exception as e:
+            logger.error(f"删除会话规则失败: {e!s}")
+            return Response().error(f"删除会话规则失败: {e!s}").__dict__
 
-            # 转换 provider_type 字符串为枚举
-            if provider_type == "chat_completion":
-                provider_type_enum = ProviderType.CHAT_COMPLETION
-            elif provider_type == "speech_to_text":
-                provider_type_enum = ProviderType.SPEECH_TO_TEXT
-            elif provider_type == "text_to_speech":
-                provider_type_enum = ProviderType.TEXT_TO_SPEECH
+    async def batch_delete_session_rule(self):
+        """批量删除多个 umo 的自定义规则
+
+        请求体:
+        {
+            "umos": ["平台:消息类型:会话ID", ...]  // umo 列表
+        }
+        """
+        try:
+            data = await request.get_json()
+            umos = data.get("umos", [])
+
+            if not umos:
+                return Response().error("缺少必要参数: umos").__dict__
+
+            if not isinstance(umos, list):
+                return Response().error("参数 umos 必须是数组").__dict__
+
+            # 批量删除
+            deleted_count = 0
+            failed_umos = []
+            for umo in umos:
+                try:
+                    await sp.clear_async("umo", umo)
+                    deleted_count += 1
+                except Exception as e:
+                    logger.error(f"删除 umo {umo} 的规则失败: {e!s}")
+                    failed_umos.append(umo)
+
+            if failed_umos:
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "message": f"已删除 {deleted_count} 条规则，{len(failed_umos)} 条删除失败",
+                            "deleted_count": deleted_count,
+                            "failed_umos": failed_umos,
+                        }
+                    )
+                    .__dict__
+                )
             else:
                 return (
                     Response()
-                    .error(f"不支持的 provider_type: {provider_type}")
-                    .__dict__
-                )
-
-            if is_batch:
-                session_ids = data.get("session_ids", [])
-                if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
-
-                return await self._handle_batch_operation(
-                    session_ids,
-                    self._update_single_session_provider,
-                    f"更新 {provider_type} 提供商",
-                    provider_id=provider_id,
-                    provider_type_enum=provider_type_enum,
-                )
-            session_id = data.get("session_id")
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            await self._update_single_session_provider(
-                session_id,
-                provider_id,
-                provider_type_enum,
-            )
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"成功更新会话 {session_id} 的 {provider_type} 提供商为 {provider_id}",
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"更新会话提供商失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话提供商失败: {e!s}").__dict__
-
-    async def get_session_plugins(self):
-        """获取指定会话的插件配置信息"""
-        try:
-            session_id = request.args.get("session_id")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            # 获取所有已激活的插件
-            all_plugins = []
-            plugin_manager = self.core_lifecycle.plugin_manager
-
-            for plugin in plugin_manager.context.get_all_stars():
-                # 只显示已激活的插件，不包括保留插件
-                if plugin.activated and not plugin.reserved:
-                    plugin_name = plugin.name or ""
-                    plugin_enabled = SessionPluginManager.is_plugin_enabled_for_session(
-                        session_id,
-                        plugin_name,
-                    )
-
-                    all_plugins.append(
+                    .ok(
                         {
-                            "name": plugin_name,
-                            "author": plugin.author,
-                            "desc": plugin.desc,
-                            "enabled": plugin_enabled,
-                        },
+                            "message": f"已删除 {deleted_count} 条规则",
+                            "deleted_count": deleted_count,
+                        }
                     )
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "session_id": session_id,
-                        "plugins": all_plugins,
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"获取会话插件配置失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"获取会话插件配置失败: {e!s}").__dict__
-
-    async def update_session_plugin(self):
-        """更新指定会话的插件启停状态"""
-        try:
-            data = await request.get_json()
-            session_id = data.get("session_id")
-            plugin_name = data.get("plugin_name")
-            enabled = data.get("enabled")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            if not plugin_name:
-                return Response().error("缺少必要参数: plugin_name").__dict__
-
-            if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
-
-            # 验证插件是否存在且已激活
-            plugin_manager = self.core_lifecycle.plugin_manager
-            plugin = plugin_manager.context.get_registered_star(plugin_name)
-
-            if not plugin:
-                return Response().error(f"插件 {plugin_name} 不存在").__dict__
-
-            if not plugin.activated:
-                return Response().error(f"插件 {plugin_name} 未激活").__dict__
-
-            if plugin.reserved:
-                return (
-                    Response()
-                    .error(f"插件 {plugin_name} 是系统保留插件，无法管理")
                     .__dict__
                 )
-
-            # 使用 SessionPluginManager 更新插件状态
-            SessionPluginManager.set_plugin_status_for_session(
-                session_id,
-                plugin_name,
-                enabled,
-            )
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"插件 {plugin_name} 已{'启用' if enabled else '禁用'}",
-                        "session_id": session_id,
-                        "plugin_name": plugin_name,
-                        "enabled": enabled,
-                    },
-                )
-                .__dict__
-            )
-
         except Exception as e:
-            error_msg = f"更新会话插件状态失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话插件状态失败: {e!s}").__dict__
+            logger.error(f"批量删除会话规则失败: {e!s}")
+            return Response().error(f"批量删除会话规则失败: {e!s}").__dict__
 
-    async def _update_single_session_llm(self, session_id: str, enabled: bool):
-        """更新单个会话的LLM状态的内部方法"""
-        SessionServiceManager.set_llm_status_for_session(session_id, enabled)
+    async def list_umos(self):
+        """列出所有有对话记录的 umo，从 Conversations 表中找
 
-    async def update_session_llm(self):
-        """更新指定会话的LLM启停状态，支持批量操作"""
+        仅返回 umo 字符串列表，用于用户在创建规则时选择 umo
+        """
         try:
-            data = await request.get_json()
-            is_batch = data.get("is_batch", False)
-            enabled = data.get("enabled")
-
-            if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
-
-            if is_batch:
-                session_ids = data.get("session_ids", [])
-                if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
-
-                result = await self._handle_batch_operation(
-                    session_ids,
-                    self._update_single_session_llm,
-                    f"{'启用' if enabled else '禁用'}LLM",
-                    enabled=enabled,
+            # 从 Conversation 表获取所有 distinct user_id (即 umo)
+            async with self.db_helper.get_db() as session:
+                session: AsyncSession
+                result = await session.execute(
+                    select(ConversationV2.user_id)
+                    .distinct()
+                    .order_by(ConversationV2.user_id)
                 )
-                return result
-            session_id = data.get("session_id")
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
+                umos = [row[0] for row in result.fetchall()]
 
-            await self._update_single_session_llm(session_id, enabled)
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"LLM已{'启用' if enabled else '禁用'}",
-                        "session_id": session_id,
-                        "llm_enabled": enabled,
-                    },
-                )
-                .__dict__
-            )
-
+            return Response().ok({"umos": umos}).__dict__
         except Exception as e:
-            error_msg = f"更新会话LLM状态失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话LLM状态失败: {e!s}").__dict__
-
-    async def _update_single_session_tts(self, session_id: str, enabled: bool):
-        """更新单个会话的TTS状态的内部方法"""
-        SessionServiceManager.set_tts_status_for_session(session_id, enabled)
-
-    async def update_session_tts(self):
-        """更新指定会话的TTS启停状态，支持批量操作"""
-        try:
-            data = await request.get_json()
-            is_batch = data.get("is_batch", False)
-            enabled = data.get("enabled")
-
-            if enabled is None:
-                return Response().error("缺少必要参数: enabled").__dict__
-
-            if is_batch:
-                session_ids = data.get("session_ids", [])
-                if not session_ids:
-                    return Response().error("缺少必要参数: session_ids").__dict__
-
-                result = await self._handle_batch_operation(
-                    session_ids,
-                    self._update_single_session_tts,
-                    f"{'启用' if enabled else '禁用'}TTS",
-                    enabled=enabled,
-                )
-                return result
-            session_id = data.get("session_id")
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            await self._update_single_session_tts(session_id, enabled)
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"TTS已{'启用' if enabled else '禁用'}",
-                        "session_id": session_id,
-                        "tts_enabled": enabled,
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"更新会话TTS状态失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话TTS状态失败: {e!s}").__dict__
-
-    async def update_session_name(self):
-        """更新指定会话的自定义名称"""
-        try:
-            data = await request.get_json()
-            session_id = data.get("session_id")
-            custom_name = data.get("custom_name", "")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            # 使用 SessionServiceManager 更新会话名称
-            SessionServiceManager.set_session_custom_name(session_id, custom_name)
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"会话名称已更新为: {custom_name if custom_name.strip() else '已清除自定义名称'}",
-                        "session_id": session_id,
-                        "custom_name": custom_name,
-                        "display_name": SessionServiceManager.get_session_display_name(
-                            session_id,
-                        ),
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"更新会话名称失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话名称失败: {e!s}").__dict__
-
-    async def update_session_status(self):
-        """更新指定会话的整体启停状态"""
-        try:
-            data = await request.get_json()
-            session_id = data.get("session_id")
-            session_enabled = data.get("session_enabled")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            if session_enabled is None:
-                return Response().error("缺少必要参数: session_enabled").__dict__
-
-            # 使用 SessionServiceManager 更新会话整体状态
-            SessionServiceManager.set_session_status(session_id, session_enabled)
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"会话整体状态已更新为: {'启用' if session_enabled else '禁用'}",
-                        "session_id": session_id,
-                        "session_enabled": session_enabled,
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"更新会话整体状态失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"更新会话整体状态失败: {e!s}").__dict__
-
-    async def delete_session(self):
-        """删除指定会话及其所有相关数据"""
-        try:
-            data = await request.get_json()
-            session_id = data.get("session_id")
-
-            if not session_id:
-                return Response().error("缺少必要参数: session_id").__dict__
-
-            # 删除会话的所有相关数据
-            conversation_manager = self.core_lifecycle.conversation_manager
-
-            # 1. 删除会话的所有对话
-            try:
-                await conversation_manager.delete_conversations_by_user_id(session_id)
-            except Exception as e:
-                logger.warning(f"删除会话 {session_id} 的对话失败: {e!s}")
-
-            # 2. 清除会话的偏好设置数据（清空该会话的所有配置）
-            try:
-                await sp.clear_async("umo", session_id)
-            except Exception as e:
-                logger.warning(f"清除会话 {session_id} 的偏好设置失败: {e!s}")
-
-            return (
-                Response()
-                .ok(
-                    {
-                        "message": f"会话 {session_id} 及其相关所有对话数据已成功删除",
-                        "session_id": session_id,
-                    },
-                )
-                .__dict__
-            )
-
-        except Exception as e:
-            error_msg = f"删除会话失败: {e!s}\n{traceback.format_exc()}"
-            logger.error(error_msg)
-            return Response().error(f"删除会话失败: {e!s}").__dict__
+            logger.error(f"获取 UMO 列表失败: {e!s}")
+            return Response().error(f"获取 UMO 列表失败: {e!s}").__dict__

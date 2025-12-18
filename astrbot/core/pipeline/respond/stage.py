@@ -10,7 +10,6 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
-from astrbot.core.utils.session_lock import session_lock_manager
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -118,7 +117,9 @@ class RespondStage(Stage):
         if not self.enable_seg:
             return False
 
-        if self.only_llm_result and not event.get_result().is_llm_result():
+        if (result := event.get_result()) is None:
+            return False
+        if self.only_llm_result and not result.is_llm_result():
             return False
 
         if event.get_platform_name() in [
@@ -157,7 +158,11 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        if event.get_extra("_streaming_finished", False):
+            # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
+            return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            event.set_extra("_streaming_finished", True)
             return
 
         logger.info(
@@ -169,12 +174,15 @@ class RespondStage(Stage):
                 logger.warning("async_stream 为空，跳过发送。")
                 return
             # 流式结果直接交付平台适配器处理
-            use_fallback = self.config.get("provider_settings", {}).get(
-                "streaming_segmented",
-                False,
+            realtime_segmenting = (
+                self.config.get("provider_settings", {}).get(
+                    "unsupported_streaming_strategy",
+                    "realtime_segmenting",
+                )
+                == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, use_fallback)
+            await event.send_streaming(result.async_stream, realtime_segmenting)
             return
         if len(result.chain) > 0:
             # 检查路径映射
@@ -183,7 +191,7 @@ class RespondStage(Stage):
                     if isinstance(component, Comp.File) and component.file:
                         # 支持 File 消息段的路径映射。
                         component.file = path_Mapping(mappings, component.file)
-                        event.get_result().chain[idx] = component
+                        result.chain[idx] = component
 
             # 检查消息链是否为空
             try:
@@ -218,21 +226,20 @@ class RespondStage(Stage):
                         f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
                     )
                     return
-                async with session_lock_manager.acquire_lock(event.unified_msg_origin):
-                    for comp in result.chain:
-                        i = await self._calc_comp_interval(comp)
-                        await asyncio.sleep(i)
-                        try:
-                            if comp.type in need_separately:
-                                await event.send(MessageChain([comp]))
-                            else:
-                                await event.send(MessageChain([*header_comps, comp]))
-                                header_comps.clear()
-                        except Exception as e:
-                            logger.error(
-                                f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
-                                exc_info=True,
-                            )
+                for comp in result.chain:
+                    i = await self._calc_comp_interval(comp)
+                    await asyncio.sleep(i)
+                    try:
+                        if comp.type in need_separately:
+                            await event.send(MessageChain([comp]))
+                        else:
+                            await event.send(MessageChain([*header_comps, comp]))
+                            header_comps.clear()
+                    except Exception as e:
+                        logger.error(
+                            f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
+                            exc_info=True,
+                        )
             else:
                 if all(
                     comp.type in {ComponentType.Reply, ComponentType.At}

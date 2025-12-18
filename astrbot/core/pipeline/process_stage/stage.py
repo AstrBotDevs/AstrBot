@@ -1,13 +1,12 @@
 from collections.abc import AsyncGenerator
 
-from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
-from .method.llm_request import LLMRequestSubStage
+from .method.agent_request import AgentRequestSubStage
 from .method.star_request import StarRequestSubStage
 
 
@@ -17,9 +16,12 @@ class ProcessStage(Stage):
         self.ctx = ctx
         self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
-        self.llm_request_sub_stage = LLMRequestSubStage()
-        await self.llm_request_sub_stage.initialize(ctx)
 
+        # initialize agent sub stage
+        self.agent_sub_stage = AgentRequestSubStage()
+        await self.agent_sub_stage.initialize(ctx)
+
+        # initialize star request sub stage
         self.star_request_sub_stage = StarRequestSubStage()
         await self.star_request_sub_stage.initialize(ctx)
 
@@ -39,7 +41,7 @@ class ProcessStage(Stage):
                     # Handler 的 LLM 请求
                     event.set_extra("provider_request", resp)
                     _t = False
-                    async for _ in self.llm_request_sub_stage.process(event):
+                    async for _ in self.agent_sub_stage.process(event):
                         _t = True
                         yield
                     if not _t:
@@ -58,14 +60,7 @@ class ProcessStage(Stage):
         ):
             # 是否有过发送操作 and 是否是被 @ 或者通过唤醒前缀
             if (
-                event.get_result() and not event.get_result().is_stopped()
+                event.get_result() and not event.is_stopped()
             ) or not event.get_result():
-                # 事件没有终止传播
-                provider = self.ctx.plugin_manager.context.get_using_provider()
-
-                if not provider:
-                    logger.info("未找到可用的 LLM 提供商，请先前往配置服务提供商。")
-                    return
-
-                async for _ in self.llm_request_sub_stage.process(event):
+                async for _ in self.agent_sub_stage.process(event):
                     yield

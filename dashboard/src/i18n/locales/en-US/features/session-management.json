@@ -1,124 +1,110 @@
 {
-  "title": "Session Management",
-  "subtitle": "Manage active sessions and configurations",
+  "title": "Custom Rules",
+  "subtitle": "Set custom rules for specific sessions, which take priority over global settings",
   "buttons": {
     "refresh": "Refresh",
     "edit": "Edit",
-    "apply": "Apply Batch Settings",
-    "editName": "Edit Session Name",
+    "editRule": "Edit Rules",
+    "deleteAllRules": "Delete All Rules",
+    "addRule": "Add Rule",
     "save": "Save",
     "cancel": "Cancel",
-    "delete": "Delete"
+    "delete": "Delete",
+    "clear": "Clear",
+    "next": "Next",
+    "editCustomName": "Edit Note",
+    "batchDelete": "Batch Delete"
   },
-  "sessions": {
-    "activeSessions": "Active Sessions",
-    "sessionCount": "sessions",
-    "noActiveSessions": "No active sessions",
-    "noActiveSessionsDesc": "Sessions will appear here when users interact with the bot"
+  "customRules": {
+    "title": "Custom Rules",
+    "rulesCount": "rules",
+    "hasRules": "Configured",
+    "noRules": "No Custom Rules",
+    "noRulesDesc": "Click 'Add Rule' to configure custom rules for specific sessions",
+    "serviceConfig": "Service Config",
+    "pluginConfig": "Plugin Config",
+    "kbConfig": "Knowledge Base",
+    "providerConfig": "Provider Config",
+    "configured": "Configured",
+    "noCustomName": "No note set"
+  },
+  "quickEditName": {
+    "title": "Edit Note"
   },
   "search": {
-    "placeholder": "Search sessions...",
-    "platformFilter": "Platform Filter"
+    "placeholder": "Search sessions..."
   },
   "table": {
     "headers": {
-      "sessionStatus": "Session Status",
-      "sessionInfo": "Session Info",
-      "persona": "Persona",
-      "chatProvider": "Chat Provider",
-      "sttProvider": "STT Provider",
-      "ttsProvider": "TTS Provider",
-      "llmStatus": "LLM Status",
-      "ttsStatus": "TTS Status",
-      "knowledgeBase": "Knowledge Base",
-      "pluginManagement": "Plugin Management",
+      "umoInfo": "Unified Message Origin",
+      "rulesOverview": "Rules Overview",
       "actions": "Actions"
     }
   },
-  "status": {
-    "enabled": "Enabled",
-    "disabled": "Disabled"
-  },
   "persona": {
-    "none": "No Persona"
+    "none": "Follow Config"
   },
-  "batchOperations": {
-    "title": "Batch Operations",
-    "setPersona": "Batch Set Persona",
-    "setChatProvider": "Batch Set Chat Provider",
-    "setSttProvider": "Batch Set STT Provider",
-    "setTtsProvider": "Batch Set TTS Provider",
-    "setLlmStatus": "Batch Set LLM Status",
-    "setTtsStatus": "Batch Set TTS Status",
-    "noSttProvider": "No STT Provider Available",
-    "noTtsProvider": "No TTS Provider Available"
+  "provider": {
+    "followConfig": "Follow Config"
   },
-  "pluginManagement": {
-    "title": "Plugin Management",
-    "noPlugins": "No available plugins",
-    "noPluginsDesc": "Currently no active plugins",
-    "loading": "Loading plugin list...",
-    "author": "Author"
+  "addRule": {
+    "title": "Add Custom Rule",
+    "description": "Select a session (UMO) to configure custom rules. Custom rules take priority over global settings.",
+    "selectUmo": "Select Session",
+    "noUmos": "No sessions available"
   },
-  "nameEditor": {
-    "title": "Edit Session Name",
-    "customName": "Custom Name",
-    "placeholder": "Enter custom session name (leave empty to use original name)",
-    "originalName": "Original Name",
-    "fullSessionId": "Full Session ID",
-    "hint": "Custom names help you easily identify sessions. The small information icon (!) will show the actual UMO when hovering."
-  },
-  "knowledgeBase": {
-    "title": "Knowledge Base Configuration",
-    "configure": "Configure",
-    "selectKB": "Select Knowledge Bases",
-    "selectMultiple": "You can select multiple knowledge bases",
-    "noKBAvailable": "No knowledge bases available",
-    "noKBDesc": "No knowledge bases have been created yet",
-    "createKB": "Create Knowledge Base",
-    "advancedSettings": "Advanced Settings",
-    "topK": "Result Count",
-    "topKHint": "Number of results to retrieve from knowledge base",
-    "enableRerank": "Enable Reranking",
-    "enableRerankHint": "Use reranking model to improve retrieval quality",
-    "clearConfig": "Clear Configuration",
-    "save": "Save",
-    "cancel": "Cancel",
-    "loading": "Loading knowledge base configuration...",
-    "description": "Configure knowledge bases for this session. The session will use configured knowledge bases to enhance conversation context.",
-    "saveSuccess": "Knowledge base configuration saved successfully",
-    "saveFailed": "Failed to save knowledge base configuration",
-    "loadFailed": "Failed to load knowledge base configuration",
-    "clearSuccess": "Knowledge base configuration cleared",
-    "clearFailed": "Failed to clear knowledge base configuration",
-    "clearConfirm": "Are you sure you want to clear the knowledge base configuration for this session?"
-  },
-  "list": {
-    "documents": "documents"
+  "ruleEditor": {
+    "title": "Edit Custom Rules",
+    "description": "Configure custom rules for this session. These rules take priority over global settings.",
+    "serviceConfig": {
+      "title": "Service Configuration",
+      "sessionEnabled": "Enable Session",
+      "llmEnabled": "Enable LLM",
+      "ttsEnabled": "Enable TTS",
+      "customName": "Custom Name"
+    },
+    "providerConfig": {
+      "title": "Provider Configuration",
+      "chatProvider": "Chat Provider",
+      "sttProvider": "STT Provider",
+      "ttsProvider": "TTS Provider"
+    },
+    "personaConfig": {
+      "title": "Persona Configuration",
+      "selectPersona": "Select Persona",
+      "hint": "Persona settings affect the conversation style and behavior of the LLM"
+    },
+    "pluginConfig": {
+      "title": "Plugin Configuration",
+      "disabledPlugins": "Disabled Plugins",
+      "hint": "Select plugins to disable for this session. Unselected plugins will remain enabled."
+    },
+    "kbConfig": {
+      "title": "Knowledge Base Configuration",
+      "selectKbs": "Select Knowledge Bases",
+      "topK": "Top K Results",
+      "enableRerank": "Enable Reranking"
+    }
   },
   "deleteConfirm": {
-    "message": "Are you sure you want to delete session {sessionName}?",
-    "warning": "This action will permanently delete all chat history and preference settings for this session (except for data linked via plugins), and this cannot be undone. Continue?"
+    "title": "Confirm Delete",
+    "message": "Are you sure you want to delete all custom rules for this session? Global settings will be used after deletion."
+  },
+  "batchDeleteConfirm": {
+    "title": "Confirm Batch Delete",
+    "message": "Are you sure you want to delete {count} selected rules? Global settings will be used after deletion."
   },
   "messages": {
-    "refreshSuccess": "Session list refreshed",
-    "personaUpdateSuccess": "Persona updated successfully",
-    "personaUpdateError": "Failed to update persona",
-    "providerUpdateSuccess": "Provider updated successfully",
-    "providerUpdateError": "Failed to update provider",
-    "sessionStatusSuccess": "Session {status}",
-    "llmStatusSuccess": "LLM {status}",
-    "ttsStatusSuccess": "TTS {status}",
-    "statusUpdateError": "Failed to update status",
-    "loadSessionsError": "Failed to load session list",
-    "batchUpdateSuccess": "Successfully batch updated {count} settings",
-    "batchUpdatePartial": "Batch update completed, {success} successful, {error} failed",
-    "loadPluginsError": "Failed to load plugin list",
-    "pluginStatusSuccess": "Plugin {name} {status}",
-    "pluginStatusError": "Failed to update plugin status",
-    "nameUpdateSuccess": "Session name updated successfully",
-    "nameUpdateError": "Failed to update session name",
-    "deleteSuccess": "Session deleted successfully",
-    "deleteError": "Failed to delete session"
+    "refreshSuccess": "Data refreshed",
+    "loadError": "Failed to load data",
+    "saveSuccess": "Saved successfully",
+    "saveError": "Failed to save",
+    "clearSuccess": "Cleared successfully",
+    "clearError": "Failed to clear",
+    "deleteSuccess": "Deleted successfully",
+    "deleteError": "Failed to delete",
+    "noChanges": "No changes to save",
+    "batchDeleteSuccess": "Batch delete successful",
+    "batchDeleteError": "Batch delete failed"
   }
 }

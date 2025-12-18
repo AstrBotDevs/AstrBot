@@ -22,6 +22,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .wecomai_api import (
@@ -30,7 +31,7 @@ from .wecomai_api import (
     WecomAIBotStreamMessageBuilder,
 )
 from .wecomai_event import WecomAIBotMessageEvent
-from .wecomai_queue_mgr import WecomAIQueueMgr, wecomai_queue_mgr
+from .wecomai_queue_mgr import WecomAIQueueMgr
 from .wecomai_server import WecomAIBotServer
 from .wecomai_utils import (
     WecomAIBotConstants,
@@ -103,9 +104,7 @@ class WecomAIBotAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
 
         # 初始化配置参数
@@ -122,6 +121,7 @@ class WecomAIBotAdapter(Platform):
             "wecomaibot_friend_message_welcome_text",
             "",
         )
+        self.unified_webhook_mode = self.config.get("unified_webhook_mode", False)
 
         # 平台元数据
         self.metadata = PlatformMetadata(
@@ -144,9 +144,12 @@ class WecomAIBotAdapter(Platform):
         # 事件循环和关闭信号
         self.shutdown_event = asyncio.Event()
 
+        # 队列管理器
+        self.queue_mgr = WecomAIQueueMgr()
+
         # 队列监听器
         self.queue_listener = WecomAIQueueListener(
-            wecomai_queue_mgr,
+            self.queue_mgr,
             self._handle_queued_message,
         )
 
@@ -189,7 +192,7 @@ class WecomAIBotAdapter(Platform):
                     stream_id,
                     session_id,
                 )
-                wecomai_queue_mgr.set_pending_response(stream_id, callback_params)
+                self.queue_mgr.set_pending_response(stream_id, callback_params)
 
                 resp = WecomAIBotStreamMessageBuilder.make_text_stream(
                     stream_id,
@@ -207,7 +210,7 @@ class WecomAIBotAdapter(Platform):
         elif msgtype == "stream":
             # wechat server is requesting for updates of a stream
             stream_id = message_data["stream"]["id"]
-            if not wecomai_queue_mgr.has_back_queue(stream_id):
+            if not self.queue_mgr.has_back_queue(stream_id):
                 logger.error(f"Cannot find back queue for stream_id: {stream_id}")
 
                 # 返回结束标志，告诉微信服务器流已结束
@@ -222,7 +225,7 @@ class WecomAIBotAdapter(Platform):
                     callback_params["timestamp"],
                 )
                 return resp
-            queue = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+            queue = self.queue_mgr.get_or_create_back_queue(stream_id)
             if queue.empty():
                 logger.debug(
                     f"No new messages in back queue for stream_id: {stream_id}",
@@ -242,10 +245,9 @@ class WecomAIBotAdapter(Platform):
                 elif msg["type"] == "end":
                     # stream end
                     finish = True
-                    wecomai_queue_mgr.remove_queues(stream_id)
+                    self.queue_mgr.remove_queues(stream_id)
                     break
-                else:
-                    pass
+
             logger.debug(
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
@@ -313,8 +315,8 @@ class WecomAIBotAdapter(Platform):
         session_id: str,
     ):
         """将消息放入队列进行异步处理"""
-        input_queue = wecomai_queue_mgr.get_or_create_queue(stream_id)
-        _ = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+        input_queue = self.queue_mgr.get_or_create_queue(stream_id)
+        _ = self.queue_mgr.get_or_create_back_queue(stream_id)
         message_payload = {
             "message_data": message_data,
             "callback_params": callback_params,
@@ -423,16 +425,33 @@ class WecomAIBotAdapter(Platform):
 
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
-        logger.info("启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port)
 
         async def run_both():
-            # 同时运行HTTP服务器和队列监听器
-            await asyncio.gather(
-                self.server.start_server(),
-                self.queue_listener.run(),
-            )
+            # 如果启用统一 webhook 模式，则不启动独立服务器
+            webhook_uuid = self.config.get("webhook_uuid")
+            if self.unified_webhook_mode and webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(企业微信智能机器人)", webhook_uuid)
+                # 只运行队列监听器
+                await self.queue_listener.run()
+            else:
+                logger.info(
+                    "启动企业微信智能机器人适配器，监听 %s:%d", self.host, self.port
+                )
+                # 同时运行HTTP服务器和队列监听器
+                await asyncio.gather(
+                    self.server.start_server(),
+                    self.queue_listener.run(),
+                )
 
         return run_both()
+
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        # 根据请求方法分发到不同的处理函数
+        if request.method == "GET":
+            return await self.server.handle_verify(request)
+        else:
+            return await self.server.handle_callback(request)
 
     async def terminate(self):
         """终止适配器"""
@@ -453,6 +472,7 @@ class WecomAIBotAdapter(Platform):
                 platform_meta=self.meta(),
                 session_id=message.session_id,
                 api_client=self.api_client,
+                queue_mgr=self.queue_mgr,
             )
 
             self.commit_event(message_event)

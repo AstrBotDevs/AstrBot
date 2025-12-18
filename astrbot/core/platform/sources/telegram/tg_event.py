@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from typing import Any, cast
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -17,8 +18,6 @@ from astrbot.api.message_components import (
     Reply,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import download_file
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -97,7 +96,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 "chat_id": user_name,
             }
             if has_reply:
-                payload["reply_to_message_id"] = reply_message_id
+                payload["reply_to_message_id"] = str(reply_message_id)
             if message_thread_id:
                 payload["message_thread_id"] = message_thread_id
 
@@ -110,33 +109,30 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     try:
                         md_text = telegramify_markdown.markdownify(
                             chunk,
-                            max_line_length=None,
                             normalize_whitespace=False,
                         )
                         await client.send_message(
                             text=md_text,
                             parse_mode="MarkdownV2",
-                            **payload,
+                            **cast(Any, payload),
                         )
                     except Exception as e:
                         logger.warning(
                             f"MarkdownV2 send failed: {e}. Using plain text instead.",
                         )
-                        await client.send_message(text=chunk, **payload)
+                        await client.send_message(text=chunk, **cast(Any, payload))
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
-                await client.send_photo(photo=image_path, **payload)
+                await client.send_photo(photo=image_path, **cast(Any, payload))
             elif isinstance(i, File):
-                if i.file.startswith("https://"):
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    path = os.path.join(temp_dir, i.name)
-                    await download_file(i.file, path)
-                    i.file = path
-
-                await client.send_document(document=i.file, filename=i.name, **payload)
+                path = await i.get_file()
+                name = i.name or os.path.basename(path)
+                await client.send_document(
+                    document=path, filename=name, **cast(Any, payload)
+                )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **payload)
+                await client.send_voice(voice=path, **cast(Any, payload))
 
     async def send(self, message: MessageChain):
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -204,6 +200,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if isinstance(chain, MessageChain):
                 if chain.type == "break":
                     # 分割符
+                    if message_id:
+                        try:
+                            await self.client.edit_message_text(
+                                text=delta,
+                                chat_id=payload["chat_id"],
+                                message_id=message_id,
+                            )
+                        except Exception as e:
+                            logger.warning(f"编辑消息失败(streaming-break): {e!s}")
                     message_id = None  # 重置消息 ID
                     delta = ""  # 重置 delta
                     continue
@@ -214,24 +219,23 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         delta += i.text
                     elif isinstance(i, Image):
                         image_path = await i.convert_to_file_path()
-                        await self.client.send_photo(photo=image_path, **payload)
+                        await self.client.send_photo(
+                            photo=image_path, **cast(Any, payload)
+                        )
                         continue
                     elif isinstance(i, File):
-                        if i.file.startswith("https://"):
-                            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                            path = os.path.join(temp_dir, i.name)
-                            await download_file(i.file, path)
-                            i.file = path
+                        path = await i.get_file()
+                        name = i.name or os.path.basename(path)
 
                         await self.client.send_document(
-                            document=i.file,
-                            filename=i.name,
-                            **payload,
+                            document=path,
+                            filename=name,
+                            **cast(Any, payload),
                         )
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self.client.send_voice(voice=path, **payload)
+                        await self.client.send_voice(voice=path, **cast(Any, payload))
                         continue
                     else:
                         logger.warning(f"不支持的消息类型: {type(i)}")
@@ -260,7 +264,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 else:
                     # delta 长度一般不会大于 4096，因此这里直接发送
                     try:
-                        msg = await self.client.send_message(text=delta, **payload)
+                        msg = await self.client.send_message(
+                            text=delta, **cast(Any, payload)
+                        )
                         current_content = delta
                     except Exception as e:
                         logger.warning(f"发送消息失败(streaming): {e!s}")
@@ -274,7 +280,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 try:
                     markdown_text = telegramify_markdown.markdownify(
                         delta,
-                        max_line_length=None,
                         normalize_whitespace=False,
                     )
                     await self.client.edit_message_text(
