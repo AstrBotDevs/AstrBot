@@ -26,7 +26,7 @@ from astrbot.core.provider.provider import Provider
 
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
-from ..response import AgentResponseData
+from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
@@ -71,6 +71,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         self.run_context.messages = messages
 
+        self.stats = AgentStats()
+        self.stats.start_time = time.time()
+
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         if self.streaming:
@@ -100,6 +103,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         async for llm_response in self._iter_llm_responses():
             if llm_response.is_chunk:
+                # update ttft
+                if self.stats.time_to_first_token == 0:
+                    self.stats.time_to_first_token = time.time() - self.stats.start_time
+
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -123,6 +130,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 continue
             llm_resp_result = llm_response
+
+            if not llm_response.is_chunk and llm_response.usage:
+                # only count the token usage of the final response for computation purpose
+                self.stats.token_usage += llm_response.usage
             break  # got final response
 
         if not llm_resp_result:
@@ -134,6 +145,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
+            self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
             yield AgentResponse(
                 type="err",
@@ -148,6 +160,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 如果没有工具调用，转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
+            self.stats.end_time = time.time()
             # record the final assistant message
             self.run_context.messages.append(
                 Message(
@@ -387,6 +400,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户，此工具调用不会被记录到历史中。"
                         )
                         self._transition_state(AgentState.DONE)
+                        self.stats.end_time = time.time()
                     else:
                         # 不应该出现其他类型
                         logger.warning(

@@ -81,6 +81,15 @@ async def run_agent(
                         continue
                     yield resp.data["chain"]  # MessageChain
             if agent_runner.done():
+                # send agent stats to webchat
+                if astr_event.get_platform_name() == "webchat":
+                    await astr_event.send(
+                        MessageChain(
+                            type="agent_stats",
+                            chain=[Json(data=agent_runner.stats.to_dict())],
+                        )
+                    )
+
                 break
 
         except Exception as e:

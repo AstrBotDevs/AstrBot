@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import enum
 import json
@@ -200,6 +202,38 @@ class ProviderRequest:
 
 
 @dataclass
+class TokenUsage:
+    input_other: int = 0
+    """The number of input tokens, excluding cached tokens."""
+    input_cached: int = 0
+    """The number of input cached tokens."""
+    output: int = 0
+    """The number of output tokens."""
+
+    @property
+    def total(self) -> int:
+        return self.input_other + self.input_cached + self.output
+
+    @property
+    def input(self) -> int:
+        return self.input_other + self.input_cached
+
+    def __add__(self, other: TokenUsage) -> TokenUsage:
+        return TokenUsage(
+            input_other=self.input_other + other.input_other,
+            input_cached=self.input_cached + other.input_cached,
+            output=self.output + other.output,
+        )
+
+    def __sub__(self, other: TokenUsage) -> TokenUsage:
+        return TokenUsage(
+            input_other=self.input_other - other.input_other,
+            input_cached=self.input_cached - other.input_cached,
+            output=self.output - other.output,
+        )
+
+
+@dataclass
 class LLMResponse:
     role: str
     """The role of the message, e.g., assistant, tool, err"""
@@ -227,6 +261,11 @@ class LLMResponse:
     is_chunk: bool = False
     """Indicates if the response is a chunked response."""
 
+    id: str | None = None
+    """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
+    usage: TokenUsage | None = None
+    """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
+
     def __init__(
         self,
         role: str,
@@ -241,6 +280,8 @@ class LLMResponse:
         | AnthropicMessage
         | None = None,
         is_chunk: bool = False,
+        id: str | None = None,
+        usage: TokenUsage | None = None,
     ):
         """初始化 LLMResponse
 

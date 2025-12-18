@@ -80,6 +80,14 @@
     "today": "Today",
     "yesterday": "Yesterday"
   },
+  "stats": {
+    "tokens": "Tokens",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "cachedTokens": "Cached Tokens",
+    "duration": "Duration",
+    "ttft": "Time to First Token"
+  },
   "connection": {
     "title": "Connection Status Notice",
     "message": "The system detected that the chat connection needs to be re-established.",

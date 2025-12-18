@@ -186,6 +186,36 @@
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
                             <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
                                 }}</span>
+                            <!-- Agent Stats Menu -->
+                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover :close-on-content-click="false">
+                                <template v-slot:activator="{ props }">
+                                    <v-icon v-bind="props" size="x-small" class="stats-info-icon">mdi-information-outline</v-icon>
+                                </template>
+                                <v-card class="stats-menu-card" variant="elevated" elevation="3">
+                                    <v-card-text class="stats-menu-content">
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.inputTokens') }}</span>
+                                            <span class="stats-menu-value">{{ getInputTokens(msg.content.agentStats.token_usage) }}</span>
+                                        </div>
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.outputTokens') }}</span>
+                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output || 0 }}</span>
+                                        </div>
+                                        <div class="stats-menu-row" v-if="msg.content.agentStats.token_usage.input_cached > 0">
+                                            <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
+                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.input_cached }}</span>
+                                        </div>
+                                        <div class="stats-menu-row" v-if="msg.content.agentStats.time_to_first_token > 0">
+                                            <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
+                                            <span class="stats-menu-value">{{ formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
+                                        </div>
+                                        <div class="stats-menu-row">
+                                            <span class="stats-menu-label">{{ tm('stats.duration') }}</span>
+                                            <span class="stats-menu-value">{{ formatAgentDuration(msg.content.agentStats) }}</span>
+                                        </div>
+                                    </v-card-text>
+                                </v-card>
+                            </v-menu>
                             <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
@@ -686,6 +716,25 @@ export default {
             } catch {
                 return result;
             }
+        },
+
+        // Get input tokens (input_other + input_cached)
+        getInputTokens(tokenUsage) {
+            if (!tokenUsage) return 0;
+            return (tokenUsage.input_other || 0) + (tokenUsage.input_cached || 0);
+        },
+
+        // Format agent duration
+        formatAgentDuration(agentStats) {
+            if (!agentStats) return '';
+            const duration = agentStats.end_time - agentStats.start_time;
+            return this.formatDuration(duration);
+        },
+
+        // Format time to first token
+        formatTTFT(ttft) {
+            if (!ttft || ttft <= 0) return '';
+            return this.formatDuration(ttft);
         }
     }
 }
@@ -785,6 +834,19 @@ export default {
     color: var(--v-theme-secondaryText);
     opacity: 0.7;
     white-space: nowrap;
+}
+
+/* Agent Stats Info Icon */
+.stats-info-icon {
+    margin-left: 6px;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.6;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.stats-info-icon:hover {
+    opacity: 1;
 }
 
 .bot-message:hover .message-actions {
@@ -1518,5 +1580,37 @@ export default {
 
 .markdown-content th {
     background-color: var(--v-theme-containerBg);
+}
+
+/* Stats Menu 样式 */
+.stats-menu-card {
+    border-radius: 8px !important;
+    min-width: 160px;
+}
+
+.stats-menu-content {
+    padding: 12px 16px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stats-menu-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.stats-menu-label {
+    font-size: 13px;
+    color: var(--v-theme-secondaryText);
+}
+
+.stats-menu-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    color: var(--v-theme-primaryText);
 }
 </style>

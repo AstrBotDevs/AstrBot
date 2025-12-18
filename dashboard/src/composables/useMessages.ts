@@ -12,6 +12,21 @@ export interface ToolCall {
     finished_ts?: number;    // 完成时间戳
 }
 
+// Token 使用统计
+export interface TokenUsage {
+    input_other: number;
+    input_cached: number;
+    output: number;
+}
+
+// Agent 统计信息
+export interface AgentStats {
+    token_usage: TokenUsage;
+    start_time: number;
+    end_time: number;
+    time_to_first_token: number;
+}
+
 // 文件信息结构
 export interface FileInfo {
     url?: string;           // blob URL (可选，点击时才加载)
@@ -45,6 +60,7 @@ export interface MessageContent {
     message: MessagePart[];          // 消息部分列表 (保持顺序)
     reasoning?: string;              // reasoning content (for bot)
     isLoading?: boolean;             // loading state
+    agentStats?: AgentStats;         // agent 统计信息 (for bot)
 }
 
 export interface Message {
@@ -147,6 +163,12 @@ export function useMessages(
                 }
                 // plain, reply, tool_call, video 保持原样
             }
+        }
+
+        // 处理 agent_stats (snake_case -> camelCase)
+        if (content.agent_stats) {
+            content.agentStats = content.agent_stats;
+            delete content.agent_stats;
         }
     }
 
@@ -506,6 +528,11 @@ export function useMessages(
                             if (lastBotMsg && lastBotMsg.content?.type === 'bot') {
                                 lastBotMsg.id = chunk_json.data.id;
                                 lastBotMsg.created_at = chunk_json.data.created_at;
+                            }
+                        } else if (chunk_json.type === 'agent_stats') {
+                            // 更新当前 bot 消息的 agent 统计信息
+                            if (message_obj) {
+                                message_obj.agentStats = chunk_json.data;
                             }
                         }
 

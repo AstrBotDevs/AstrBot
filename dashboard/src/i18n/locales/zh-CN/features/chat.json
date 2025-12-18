@@ -80,6 +80,14 @@
     "today": "今天",
     "yesterday": "昨天"
   },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "输入 Token",
+    "outputTokens": "输出 Token",
+    "cachedTokens": "缓存 Token",
+    "duration": "耗时",
+    "ttft": "首字时间"
+  },
   "connection": {
     "title": "连接状态提醒",
     "message": "系统检测到聊天连接需要重新建立。",

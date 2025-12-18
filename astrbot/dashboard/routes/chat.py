@@ -227,6 +227,7 @@ class ChatRoute(Route):
         text: str,
         media_parts: list,
         reasoning: str,
+        agent_stats: dict,
     ):
         """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
@@ -237,6 +238,8 @@ class ChatRoute(Route):
         new_his = {"type": "bot", "message": bot_message_parts}
         if reasoning:
             new_his["reasoning"] = reasoning
+        if agent_stats:
+            new_his["agent_stats"] = agent_stats
 
         record = await self.platform_history_mgr.insert(
             platform_id="webchat",
@@ -295,7 +298,7 @@ class ChatRoute(Route):
             accumulated_text = ""
             accumulated_reasoning = ""
             tool_calls = {}
-
+            agent_stats = {}
             try:
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
@@ -316,6 +319,15 @@ class ChatRoute(Route):
                         msg_type = result.get("type")
                         streaming = result.get("streaming", False)
                         chain_type = result.get("chain_type")
+
+                        if chain_type == "agent_stats":
+                            stats_info = {
+                                "type": "agent_stats",
+                                "data": json.loads(result_text),
+                            }
+                            yield f"data: {json.dumps(stats_info, ensure_ascii=False)}\n\n"
+                            agent_stats = stats_info["data"]
+                            continue
 
                         # 发送 SSE 数据
                         try:
@@ -406,6 +418,7 @@ class ChatRoute(Route):
                                 accumulated_text,
                                 accumulated_parts,
                                 accumulated_reasoning,
+                                agent_stats,
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
@@ -424,6 +437,7 @@ class ChatRoute(Route):
                             accumulated_text = ""
                             accumulated_reasoning = ""
                             tool_calls = {}
+                            agent_stats = {}
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
 

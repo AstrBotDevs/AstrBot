@@ -12,6 +12,7 @@ from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from openai.types.completion_usage import CompletionUsage
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -19,7 +20,7 @@ from astrbot.api.provider import Provider
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.provider.entities import LLMResponse, ToolCallsResult
+from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.io import download_image_by_url
 
 from ..register import register_provider_adapter
@@ -208,6 +209,7 @@ class ProviderOpenAIOfficial(Provider):
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
             _y = False
+            llm_response.id = chunk.id
             if reasoning:
                 llm_response.reasoning_content = reasoning
                 _y = True
@@ -217,6 +219,8 @@ class ProviderOpenAIOfficial(Provider):
                     chain=[Comp.Plain(completion_text)],
                 )
                 _y = True
+            if chunk.usage:
+                llm_response.usage = self._extract_usage(chunk.usage)
             if _y:
                 yield llm_response
 
@@ -244,6 +248,15 @@ class ProviderOpenAIOfficial(Provider):
             if reasoning_attr:
                 reasoning_text = str(reasoning_attr)
         return reasoning_text
+
+    def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
+        ptd = usage.prompt_tokens_details
+        cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
+        return TokenUsage(
+            input_other=usage.prompt_tokens - cached,
+            input_cached=ptd.cached_tokens if ptd and ptd.cached_tokens else 0,
+            output=usage.completion_tokens,
+        )
 
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
@@ -321,6 +334,10 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 
         llm_response.raw_completion = completion
+        llm_response.id = completion.id
+
+        if completion.usage:
+            llm_response.usage = self._extract_usage(completion.usage)
 
         return llm_response
 
