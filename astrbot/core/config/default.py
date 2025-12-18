@@ -976,7 +976,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {"budget": 0, "level": "high"},
+                        "gm_thinking_config": {"budget": 0, "level": "HIGH"},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "DeepSeek": {
@@ -1830,10 +1830,10 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                                 "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
                                 "options": [
-                                    "minimal",
-                                    "low",
-                                    "medium",
-                                    "high",
+                                    "MINIMAL",
+                                    "LOW",
+                                    "MEDIUM",
+                                    "HIGH",
                                 ],
                             },
                         },

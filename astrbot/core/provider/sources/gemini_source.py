@@ -212,10 +212,13 @@ class ProviderGoogleGenAI(Provider):
             # The thinkingLevel parameter, recommended for Gemini 3 models and onwards
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "high"
+                "level", "HIGH"
             )
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
+                if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
+                    logger.warning(f"Invalid thinking level: {thinking_level}, using HIGH")
+                    thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
                 thinking_config = types.ThinkingConfig()
                 if not hasattr(types.ThinkingConfig, "thinking_level"):
