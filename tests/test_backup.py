@@ -9,11 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.backup.exporter import (
+from astrbot.core.backup import (
+    BACKUP_MANIFEST_VERSION,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
-    AstrBotExporter,
 )
+from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
     AstrBotImporter,
     ImportResult,
@@ -192,7 +193,7 @@ class TestAstrBotExporter:
 
         manifest = exporter._generate_manifest(main_data, kb_meta_data, dir_stats)
 
-        assert manifest["version"] == "1.1"  # 升级版本号，支持目录备份
+        assert manifest["version"] == BACKUP_MANIFEST_VERSION
         assert manifest["astrbot_version"] == VERSION
         assert "exported_at" in manifest
         assert "tables" in manifest

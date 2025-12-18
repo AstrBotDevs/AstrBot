@@ -3,7 +3,23 @@
 提供数据导出和导入功能，支持用户在服务器迁移时一键备份和恢复所有数据。
 """
 
+# 从 constants 模块导入共享常量
+from .constants import (
+    BACKUP_DIRECTORIES,
+    BACKUP_MANIFEST_VERSION,
+    KB_METADATA_MODELS,
+    MAIN_DB_MODELS,
+)
+
+# 导入导出器和导入器
 from .exporter import AstrBotExporter
 from .importer import AstrBotImporter
 
-__all__ = ["AstrBotExporter", "AstrBotImporter"]
+__all__ = [
+    "AstrBotExporter",
+    "AstrBotImporter",
+    "MAIN_DB_MODELS",
+    "KB_METADATA_MODELS",
+    "BACKUP_DIRECTORIES",
+    "BACKUP_MANIFEST_VERSION",
+]

@@ -13,26 +13,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete
-from sqlmodel import SQLModel
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.po import (
-    Attachment,
-    CommandConfig,
-    CommandConflict,
-    ConversationV2,
-    Persona,
-    PlatformMessageHistory,
-    PlatformSession,
-    PlatformStat,
-    Preference,
-)
-from astrbot.core.knowledge_base.models import (
-    KBDocument,
-    KBMedia,
-    KnowledgeBase,
+
+# 从共享常量模块导入
+from .constants import (
+    BACKUP_DIRECTORIES,
+    KB_METADATA_MODELS,
+    MAIN_DB_MODELS,
 )
 
 if TYPE_CHECKING:
@@ -84,27 +74,6 @@ def compare_versions(v1: str, v2: str) -> int:
         return 0
 
 
-# 主数据库模型类映射
-MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
-    "platform_stats": PlatformStat,
-    "conversations": ConversationV2,
-    "personas": Persona,
-    "preferences": Preference,
-    "platform_message_history": PlatformMessageHistory,
-    "platform_sessions": PlatformSession,
-    "attachments": Attachment,
-    "command_configs": CommandConfig,
-    "command_conflicts": CommandConflict,
-}
-
-# 知识库元数据模型类映射
-KB_METADATA_MODELS: dict[str, type[SQLModel]] = {
-    "knowledge_bases": KnowledgeBase,
-    "kb_documents": KBDocument,
-    "kb_media": KBMedia,
-}
-
-
 class ImportResult:
     """导入结果"""
 
@@ -134,17 +103,6 @@ class ImportResult:
             "warnings": self.warnings,
             "errors": self.errors,
         }
-
-
-# 需要恢复的目录列表
-BACKUP_DIRECTORIES = {
-    "plugins": "data/plugins",  # 插件本体
-    "plugin_data": "data/plugin_data",  # 插件数据
-    "config": "data/config",  # 配置目录
-    "t2i_templates": "data/t2i_templates",  # T2I 模板
-    "webchat": "data/webchat",  # WebChat 数据
-    "temp": "data/temp",  # 临时文件
-}
 
 
 class AstrBotImporter:
