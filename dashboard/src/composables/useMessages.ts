@@ -12,22 +12,6 @@ export interface ToolCall {
     finished_ts?: number;    // 完成时间戳
 }
 
-// 新格式消息部分的类型定义
-export interface MessagePart {
-    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply' | 'tool_call';
-    text?: string;           // for plain
-    attachment_id?: string;  // for image, record, file, video
-    filename?: string;       // for file (filename from backend)
-    message_id?: number;     // for reply (PlatformSessionHistoryMessage.id)
-    tool_calls?: ToolCall[]; // for tool_call
-}
-
-// 引用信息
-export interface ReplyInfo {
-    messageId: number;
-    messageContent: string;
-}
-
 // 文件信息结构
 export interface FileInfo {
     url?: string;           // blob URL (可选，点击时才加载)
@@ -35,25 +19,32 @@ export interface FileInfo {
     attachment_id?: string; // 用于按需下载
 }
 
-// 引用消息信息
-export interface ReplyTo {
-    message_id: number;
-    message_content?: string;  // 被引用消息的内容（解析后填充）
+// 消息部分的类型定义
+export interface MessagePart {
+    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply' | 'tool_call';
+    text?: string;           // for plain
+    attachment_id?: string;  // for image, record, file, video
+    filename?: string;       // for file (filename from backend)
+    message_id?: number;     // for reply (PlatformSessionHistoryMessage.id)
+    tool_calls?: ToolCall[]; // for tool_call
+    // embedded fields - 加载后填充
+    embedded_url?: string;   // blob URL for image, record
+    embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
+    reply_content?: string;  // for reply - 被引用消息的内容
 }
 
+// 引用信息 (用于发送消息时)
+export interface ReplyInfo {
+    messageId: number;
+    messageContent: string;
+}
+
+// 简化的消息内容结构
 export interface MessageContent {
-    type: string;
-    message: string | MessagePart[];  // 支持旧格式(string)和新格式(MessagePart[])
-    reasoning?: string;
-    image_url?: string[];
-    audio_url?: string;
-    file_url?: FileInfo[];
-    embedded_images?: string[];
-    embedded_audio?: string;
-    embedded_files?: FileInfo[];
-    isLoading?: boolean;
-    reply_to?: ReplyTo;  // 引用的消息
-    tool_calls?: ToolCall[];  // 工具调用
+    type: string;                    // 'user' | 'bot'
+    message: MessagePart[];          // 消息部分列表 (保持顺序)
+    reasoning?: string;              // reasoning content (for bot)
+    isLoading?: boolean;             // loading state
 }
 
 export interface Message {
@@ -105,56 +96,58 @@ export function useMessages(
         }
     }
 
-    // 解析新格式消息为旧格式兼容的结构 (用于显示)
+    // 解析消息内容，填充 embedded 字段 (保持原始顺序)
     async function parseMessageContent(content: any): Promise<void> {
         const message = content.message;
 
-        // 如果 message 是数组 (新格式)
-        if (Array.isArray(message)) {
-            let textParts: string[] = [];
-            let imageUrls: string[] = [];
-            let audioUrl: string | undefined;
-            let fileInfos: FileInfo[] = [];
-            let replyTo: ReplyTo | undefined;
-            let toolCalls: ToolCall[] = [];
+        // 如果 message 是字符串 (旧格式)，转换为数组格式
+        if (typeof message === 'string') {
+            const parts: MessagePart[] = [];
+            let text = message;
 
+            // 处理旧格式的特殊标记
+            if (text.startsWith('[IMAGE]')) {
+                const img = text.replace('[IMAGE]', '');
+                const imageUrl = await getMediaFile(img);
+                parts.push({
+                    type: 'image',
+                    embedded_url: imageUrl
+                });
+            } else if (text.startsWith('[RECORD]')) {
+                const audio = text.replace('[RECORD]', '');
+                const audioUrl = await getMediaFile(audio);
+                parts.push({
+                    type: 'record',
+                    embedded_url: audioUrl
+                });
+            } else if (text) {
+                parts.push({
+                    type: 'plain',
+                    text: text
+                });
+            }
+
+            content.message = parts;
+            return;
+        }
+
+        // 如果 message 是数组 (新格式)，遍历并填充 embedded 字段
+        if (Array.isArray(message)) {
             for (const part of message as MessagePart[]) {
-                if (part.type === 'plain' && part.text) {
-                    textParts.push(part.text);
-                } else if (part.type === 'image' && part.attachment_id) {
-                    const url = await getAttachment(part.attachment_id);
-                    if (url) imageUrls.push(url);
+                if (part.type === 'image' && part.attachment_id) {
+                    part.embedded_url = await getAttachment(part.attachment_id);
                 } else if (part.type === 'record' && part.attachment_id) {
-                    audioUrl = await getAttachment(part.attachment_id);
+                    part.embedded_url = await getAttachment(part.attachment_id);
                 } else if (part.type === 'file' && part.attachment_id) {
                     // file 类型不预加载，保留 attachment_id 以便点击时下载
-                    fileInfos.push({
+                    part.embedded_file = {
                         attachment_id: part.attachment_id,
                         filename: part.filename || 'file'
-                    });
-                } else if (part.type === 'reply' && part.message_id) {
-                    replyTo = { message_id: part.message_id };
-                } else if (part.type === 'tool_call' && part.tool_calls) {
-                    toolCalls = toolCalls.concat(part.tool_calls);
+                    };
                 }
-                // video 类型可以后续扩展
-            }
-
-            // 转换为旧格式兼容的结构
-            content.message = textParts.join('\n');
-            content.reply_to = replyTo;
-            content.tool_calls = toolCalls.length > 0 ? toolCalls : undefined;
-            if (content.type === 'user') {
-                content.image_url = imageUrls.length > 0 ? imageUrls : undefined;
-                content.audio_url = audioUrl;
-                content.file_url = fileInfos.length > 0 ? fileInfos : undefined;
-            } else {
-                content.embedded_images = imageUrls.length > 0 ? imageUrls : undefined;
-                content.embedded_audio = audioUrl;
-                content.embedded_files = fileInfos.length > 0 ? fileInfos : undefined;
+                // plain, reply, tool_call, video 保持原样
             }
         }
-        // 如果 message 是字符串 (旧格式)，保持原有处理逻辑
     }
 
     async function getSessionMessages(sessionId: string, router: any) {
@@ -177,46 +170,10 @@ export function useMessages(
                 }, 3000);
             }
 
-            // 处理历史消息中的媒体文件
+            // 处理历史消息
             for (let i = 0; i < history.length; i++) {
                 let content = history[i].content;
-
-                // 首先尝试解析新格式消息
                 await parseMessageContent(content);
-
-                // 以下是旧格式的兼容处理 (message 是字符串的情况)
-                if (typeof content.message === 'string') {
-                    if (content.message?.startsWith('[IMAGE]')) {
-                        let img = content.message.replace('[IMAGE]', '');
-                        const imageUrl = await getMediaFile(img);
-                        if (!content.embedded_images) {
-                            content.embedded_images = [];
-                        }
-                        content.embedded_images.push(imageUrl);
-                        content.message = '';
-                    }
-
-                    if (content.message?.startsWith('[RECORD]')) {
-                        let audio = content.message.replace('[RECORD]', '');
-                        const audioUrl = await getMediaFile(audio);
-                        content.embedded_audio = audioUrl;
-                        content.message = '';
-                    }
-                }
-
-                // 旧格式中的 image_url 和 audio_url 字段处理
-                if (content.image_url && content.image_url.length > 0) {
-                    for (let j = 0; j < content.image_url.length; j++) {
-                        // 检查是否已经是 blob URL (新格式解析后的结果)
-                        if (!content.image_url[j].startsWith('blob:')) {
-                            content.image_url[j] = await getMediaFile(content.image_url[j]);
-                        }
-                    }
-                }
-
-                if (content.audio_url && !content.audio_url.startsWith('blob:')) {
-                    content.audio_url = await getMediaFile(content.audio_url);
-                }
             }
 
             messages.value = history;
@@ -233,47 +190,66 @@ export function useMessages(
         selectedModelName: string,
         replyTo: ReplyInfo | null = null
     ) {
-        // Create user message
+        // 构建用户消息的 message 部分
+        const userMessageParts: MessagePart[] = [];
+
+        // 添加引用消息段
+        if (replyTo) {
+            userMessageParts.push({
+                type: 'reply',
+                message_id: replyTo.messageId,
+                reply_content: replyTo.messageContent
+            });
+        }
+
+        // 添加纯文本消息段
+        if (prompt) {
+            userMessageParts.push({
+                type: 'plain',
+                text: prompt
+            });
+        }
+
+        // 添加文件消息段
+        for (const f of stagedFiles) {
+            const partType = f.type === 'image' ? 'image' :
+                f.type === 'record' ? 'record' : 'file';
+            
+            // 获取嵌入 URL
+            const embeddedUrl = await getAttachment(f.attachment_id);
+            
+            userMessageParts.push({
+                type: partType as 'image' | 'record' | 'file',
+                attachment_id: f.attachment_id,
+                filename: f.original_name,
+                embedded_url: partType !== 'file' ? embeddedUrl : undefined,
+                embedded_file: partType === 'file' ? {
+                    attachment_id: f.attachment_id,
+                    filename: f.original_name
+                } : undefined
+            });
+        }
+
+        // 添加录音（如果有）
+        if (audioName) {
+            userMessageParts.push({
+                type: 'record',
+                embedded_url: audioName  // 录音使用本地 URL
+            });
+        }
+
+        // 创建用户消息
         const userMessage: MessageContent = {
             type: 'user',
-            message: prompt,
-            image_url: [],
-            audio_url: undefined,
-            file_url: [],
-            reply_to: replyTo ? { message_id: replyTo.messageId } : undefined
+            message: userMessageParts
         };
-
-        // 分离图片和文件
-        const imageFiles = stagedFiles.filter(f => f.type === 'image');
-        const nonImageFiles = stagedFiles.filter(f => f.type !== 'image');
-
-        // 使用 attachment_id 获取图片内容（避免 blob URL 被 revoke 后 404）
-        if (imageFiles.length > 0) {
-            const imageUrls = await Promise.all(
-                imageFiles.map(f => getAttachment(f.attachment_id))
-            );
-            userMessage.image_url = imageUrls.filter(url => url !== '');
-        }
-
-        // 使用 blob URL 作为音频预览（录音不走 attachment）
-        if (audioName) {
-            userMessage.audio_url = audioName;
-        }
-
-        // 文件不预加载，只显示文件名和 attachment_id
-        if (nonImageFiles.length > 0) {
-            userMessage.file_url = nonImageFiles.map(f => ({
-                filename: f.original_name,
-                attachment_id: f.attachment_id
-            }));
-        }
 
         messages.value.push({ content: userMessage });
 
         // 添加一个加载中的机器人消息占位符
-        const loadingMessage = reactive({
+        const loadingMessage = reactive<MessageContent>({
             type: 'bot',
-            message: '',
+            message: [],
             reasoning: '',
             isLoading: true
         });
@@ -288,12 +264,11 @@ export function useMessages(
             // 收集所有 attachment_id
             const files = stagedFiles.map(f => f.attachment_id);
 
-            // 构建 message 参数
-            // 当 files 或 reply 存在时，message 是 list，否则是 str
+            // 构建发送给后端的 message 参数
             let messageToSend: string | MessagePart[];
             if (files.length > 0 || replyTo) {
                 const parts: MessagePart[] = [];
-                
+
                 // 添加引用消息段
                 if (replyTo) {
                     parts.push({
@@ -301,7 +276,7 @@ export function useMessages(
                         message_id: replyTo.messageId
                     });
                 }
-                
+
                 // 添加纯文本消息段
                 if (prompt) {
                     parts.push({
@@ -309,17 +284,17 @@ export function useMessages(
                         text: prompt
                     });
                 }
-                
+
                 // 添加文件消息段
                 for (const f of stagedFiles) {
-                    const partType = f.type === 'image' ? 'image' : 
-                                     f.type === 'record' ? 'record' : 'file';
+                    const partType = f.type === 'image' ? 'image' :
+                        f.type === 'record' ? 'record' : 'file';
                     parts.push({
                         type: partType as 'image' | 'record' | 'file',
                         attachment_id: f.attachment_id
                     });
                 }
-                
+
                 messageToSend = parts;
             } else {
                 messageToSend = prompt;
@@ -347,7 +322,7 @@ export function useMessages(
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();
             let in_streaming = false;
-            let message_obj: any = null;
+            let message_obj: MessageContent | null = null;
 
             isStreaming.value = true;
 
@@ -394,8 +369,10 @@ export function useMessages(
                             const imageUrl = await getMediaFile(img);
                             let bot_resp: MessageContent = {
                                 type: 'bot',
-                                message: '',
-                                embedded_images: [imageUrl]
+                                message: [{
+                                    type: 'image',
+                                    embedded_url: imageUrl
+                                }]
                             };
                             messages.value.push({ content: bot_resp });
                         } else if (chunk_json.type === 'record') {
@@ -403,23 +380,27 @@ export function useMessages(
                             const audioUrl = await getMediaFile(audio);
                             let bot_resp: MessageContent = {
                                 type: 'bot',
-                                message: '',
-                                embedded_audio: audioUrl
+                                message: [{
+                                    type: 'record',
+                                    embedded_url: audioUrl
+                                }]
                             };
                             messages.value.push({ content: bot_resp });
                         } else if (chunk_json.type === 'file') {
                             // 格式: [FILE]filename|original_name
                             let fileData = chunk_json.data.replace('[FILE]', '');
-                            let [filename, originalName] = fileData.includes('|') 
-                                ? fileData.split('|', 2) 
+                            let [filename, originalName] = fileData.includes('|')
+                                ? fileData.split('|', 2)
                                 : [fileData, fileData];
                             const fileUrl = await getMediaFile(filename);
                             let bot_resp: MessageContent = {
                                 type: 'bot',
-                                message: '',
-                                embedded_files: [{
-                                    url: fileUrl,
-                                    filename: originalName
+                                message: [{
+                                    type: 'file',
+                                    embedded_file: {
+                                        url: fileUrl,
+                                        filename: originalName
+                                    }
                                 }]
                             };
                             messages.value.push({ content: bot_resp });
@@ -435,51 +416,86 @@ export function useMessages(
                                     args: toolCallData.args,
                                     ts: toolCallData.ts
                                 };
-                                
+
                                 if (!in_streaming) {
-                                    message_obj = reactive({
+                                    message_obj = reactive<MessageContent>({
                                         type: 'bot',
-                                        message: '',
-                                        tool_calls: [toolCall]
+                                        message: [{
+                                            type: 'tool_call',
+                                            tool_calls: [toolCall]
+                                        }]
                                     });
                                     messages.value.push({ content: message_obj });
                                     in_streaming = true;
                                 } else {
-                                    if (!message_obj.tool_calls) {
-                                        message_obj.tool_calls = [];
-                                    }
-                                    // 检查是否已存在相同id的tool_call
-                                    const existingIndex = message_obj.tool_calls.findIndex((tc: ToolCall) => tc.id === toolCall.id);
-                                    if (existingIndex === -1) {
-                                        message_obj.tool_calls.push(toolCall);
+                                    // 找到最后一个 tool_call part 或创建新的
+                                    const lastPart = message_obj!.message[message_obj!.message.length - 1];
+                                    if (lastPart?.type === 'tool_call') {
+                                        // 检查是否已存在相同id的tool_call
+                                        const existingIndex = lastPart.tool_calls!.findIndex((tc: ToolCall) => tc.id === toolCall.id);
+                                        if (existingIndex === -1) {
+                                            lastPart.tool_calls!.push(toolCall);
+                                        }
+                                    } else {
+                                        // 添加新的 tool_call part
+                                        message_obj!.message.push({
+                                            type: 'tool_call',
+                                            tool_calls: [toolCall]
+                                        });
                                     }
                                 }
                             } else if (chain_type === 'tool_call_result') {
                                 // 解析工具调用结果数据
                                 const resultData = JSON.parse(chunk_json.data);
-                                
-                                if (message_obj && message_obj.tool_calls) {
-                                    // 找到对应的 tool_call 并更新结果
-                                    const toolCall = message_obj.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
-                                    if (toolCall) {
-                                        toolCall.result = resultData.result;
-                                        toolCall.finished_ts = resultData.ts;
+
+                                if (message_obj) {
+                                    // 遍历所有 tool_call parts 找到对应的 tool_call
+                                    for (const part of message_obj.message) {
+                                        if (part.type === 'tool_call' && part.tool_calls) {
+                                            const toolCall = part.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
+                                            if (toolCall) {
+                                                toolCall.result = resultData.result;
+                                                toolCall.finished_ts = resultData.ts;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
-                            } else if (!in_streaming) {
-                                message_obj = reactive({
-                                    type: 'bot',
-                                    message: chain_type === 'reasoning' ? '' : chunk_json.data,
-                                    reasoning: chain_type === 'reasoning' ? chunk_json.data : '',
-                                });
-                                messages.value.push({ content: message_obj });
-                                in_streaming = true;
-                            } else {
-                                if (chain_type === 'reasoning') {
-                                    // 使用 reactive 对象，直接修改属性会触发响应式更新
-                                    message_obj.reasoning = (message_obj.reasoning || '') + chunk_json.data;
+                            } else if (chain_type === 'reasoning') {
+                                if (!in_streaming) {
+                                    message_obj = reactive<MessageContent>({
+                                        type: 'bot',
+                                        message: [],
+                                        reasoning: chunk_json.data
+                                    });
+                                    messages.value.push({ content: message_obj });
+                                    in_streaming = true;
                                 } else {
-                                    message_obj.message = (message_obj.message || '') + chunk_json.data;
+                                    message_obj!.reasoning = (message_obj!.reasoning || '') + chunk_json.data;
+                                }
+                            } else {
+                                // normal text
+                                if (!in_streaming) {
+                                    message_obj = reactive<MessageContent>({
+                                        type: 'bot',
+                                        message: [{
+                                            type: 'plain',
+                                            text: chunk_json.data
+                                        }]
+                                    });
+                                    messages.value.push({ content: message_obj });
+                                    in_streaming = true;
+                                } else {
+                                    // 找到最后一个 plain part 或创建新的
+                                    const lastPart = message_obj!.message[message_obj!.message.length - 1];
+                                    if (lastPart?.type === 'plain') {
+                                        lastPart.text = (lastPart.text || '') + chunk_json.data;
+                                    } else {
+                                        message_obj!.message.push({
+                                            type: 'plain',
+                                            text: chunk_json.data
+                                        });
+                                    }
                                 }
                             }
                         } else if (chunk_json.type === 'update_title') {
@@ -536,4 +552,3 @@ export function useMessages(
         getAttachment
     };
 }
-

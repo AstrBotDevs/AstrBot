@@ -5,56 +5,66 @@
             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
-                    <div class="message-bubble user-bubble" :class="{ 'has-audio': msg.content.audio_url }"
+                    <div class="message-bubble user-bubble" :class="{ 'has-audio': hasAudio(msg.content.message) }"
                         :style="{ backgroundColor: isDark ? '#2d2e30' : '#e7ebf4' }">
-                        <!-- 引用消息 -->
-                        <div v-if="msg.content.reply_to" class="reply-quote" @click="scrollToMessage(msg.content.reply_to.message_id)">
-                            <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
-                            <span class="reply-quote-text">{{ getReplyContent(msg.content.reply_to.message_id) }}</span>
-                        </div>
-                        <pre
-                            style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ msg.content.message }}</pre>
-
-                        <!-- 图片附件 -->
-                        <div class="image-attachments" v-if="msg.content.image_url && msg.content.image_url.length > 0">
-                            <div v-for="(img, index) in msg.content.image_url" :key="index" class="image-attachment">
-                                <img :src="img" class="attached-image" @click="$emit('openImagePreview', img)" />
+                        <!-- 遍历 message parts -->
+                        <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
+                            <!-- 引用消息 -->
+                            <div v-if="part.type === 'reply'" class="reply-quote"
+                                @click="scrollToMessage(part.message_id)">
+                                <v-icon size="small" class="reply-quote-icon">mdi-reply</v-icon>
+                                <span class="reply-quote-text">{{ getReplyContent(part.message_id) }}</span>
                             </div>
-                        </div>
 
-                        <!-- 音频附件 -->
-                        <div class="audio-attachment" v-if="msg.content.audio_url && msg.content.audio_url.length > 0">
-                            <audio controls class="audio-player">
-                                <source :src="msg.content.audio_url" type="audio/wav">
-                                {{ t('messages.errors.browser.audioNotSupported') }}
-                            </audio>
-                        </div>
+                            <!-- 纯文本 -->
+                            <pre v-else-if="part.type === 'plain' && part.text"
+                                style="font-family: inherit; white-space: pre-wrap; word-wrap: break-word;">{{ part.text }}</pre>
 
-                        <!-- 文件附件 -->
-                        <div class="file-attachments" v-if="msg.content.file_url && msg.content.file_url.length > 0">
-                            <div v-for="(file, fileIdx) in msg.content.file_url" :key="fileIdx" class="file-attachment">
-                                <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
-                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                    <span class="file-name">{{ file.filename }}</span>
-                                </a>
-                                <a v-else @click="downloadFile(file)" class="file-link file-link-download">
-                                    <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                    <span class="file-name">{{ file.filename }}</span>
-                                    <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
-                                    <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
-                                </a>
+                            <!-- 图片附件 -->
+                            <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
+                                <div class="image-attachment">
+                                    <img :src="part.embedded_url" class="attached-image"
+                                        @click="$emit('openImagePreview', part.embedded_url)" />
+                                </div>
                             </div>
-                        </div>
+
+                            <!-- 音频附件 -->
+                            <div v-else-if="part.type === 'record' && part.embedded_url" class="audio-attachment">
+                                <audio controls class="audio-player">
+                                    <source :src="part.embedded_url" type="audio/wav">
+                                    {{ t('messages.errors.browser.audioNotSupported') }}
+                                </audio>
+                            </div>
+
+                            <!-- 文件附件 -->
+                            <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
+                                <div class="file-attachment">
+                                    <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                                        :download="part.embedded_file.filename" class="file-link">
+                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                    </a>
+                                    <a v-else @click="downloadFile(part.embedded_file)"
+                                        class="file-link file-link-download">
+                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                        <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
+                                            size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                        <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                    </a>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
                 <!-- Bot Messages -->
                 <div v-else class="bot-message">
-
                     <v-avatar class="bot-avatar" size="36">
-                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1" indeterminate size="28"
-                            width="2"></v-progress-circular>
-                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64" color="#8fb6d2">mdi-star-four-points-small</v-icon>
+                        <v-progress-circular :index="index" v-if="isStreaming && index === messages.length - 1"
+                            indeterminate size="28" width="2"></v-progress-circular>
+                        <v-icon v-else-if="messages[index - 1]?.content.type !== 'bot'" size="64"
+                            color="#8fb6d2">mdi-star-four-points-small</v-icon>
                     </v-avatar>
                     <div class="bot-message-content">
                         <div class="message-bubble bot-bubble">
@@ -62,54 +72,11 @@
                             <div v-if="msg.content.isLoading" class="loading-container">
                                 <span class="loading-text">{{ tm('message.loading') }}</span>
                             </div>
-                            
-                            <template v-else>
-                                <!-- Tool Calls Block (Collapsible) -->
-                                <div v-if="msg.content.tool_calls && msg.content.tool_calls.length > 0" class="tool-calls-container">
-                                    <div v-for="(toolCall, tcIndex) in msg.content.tool_calls" :key="toolCall.id" class="tool-call-card">
-                                        <div class="tool-call-header" @click="toggleToolCall(index, tcIndex)">
-                                            <v-icon size="small" class="tool-call-expand-icon">
-                                                {{ isToolCallExpanded(index, tcIndex) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                            </v-icon>
-                                            <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
-                                            <div class="tool-call-info">
-                                                <span class="tool-call-name">{{ toolCall.name }}</span>
-                                                <span class="tool-call-id">{{ toolCall.id }}</span>
-                                            </div>
-                                            <span class="tool-call-status" :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
-                                                <template v-if="toolCall.finished_ts">
-                                                    <v-icon size="x-small" class="status-icon">mdi-check-circle</v-icon>
-                                                    {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
-                                                </template>
-                                                <template v-else>
-                                                    <v-icon size="x-small" class="status-icon spinning">mdi-loading</v-icon>
-                                                    {{ getElapsedTime(toolCall.ts) }}
-                                                </template>
-                                            </span>
-                                        </div>
-                                        <div v-if="isToolCallExpanded(index, tcIndex)" class="tool-call-details">
-                                            <div class="tool-call-detail-row">
-                                                <span class="detail-label">ID:</span>
-                                                <code class="detail-value">{{ toolCall.id }}</code>
-                                            </div>
-                                            <div class="tool-call-detail-row">
-                                                <span class="detail-label">Name:</span>
-                                                <code class="detail-value">{{ toolCall.name }}</code>
-                                            </div>
-                                            <div class="tool-call-detail-row">
-                                                <span class="detail-label">Args:</span>
-                                                <pre class="detail-value detail-json">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
-                                            </div>
-                                            <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                <span class="detail-label">Result:</span>
-                                                <pre class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <!-- Reasoning Block (Collapsible) -->
-                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()" class="reasoning-container">
+                            <template v-else>
+                                <!-- Reasoning Block (Collapsible) - 放在最前面 -->
+                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                                    class="reasoning-container">
                                     <div class="reasoning-header" @click="toggleReasoning(index)">
                                         <v-icon size="small" class="reasoning-icon">
                                             {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
@@ -117,53 +84,108 @@
                                         <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
                                     </div>
                                     <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                        <div v-html="md.render(msg.content.reasoning)" class="markdown-content reasoning-text"></div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Text -->
-                                <div v-if="msg.content.message && msg.content.message.trim()"
-                                    v-html="md.render(msg.content.message)" class="markdown-content"></div>
-
-                                <!-- Image -->
-                                <div class="embedded-images"
-                                    v-if="msg.content.embedded_images && msg.content.embedded_images.length > 0">
-                                    <div v-for="(img, imgIndex) in msg.content.embedded_images" :key="imgIndex"
-                                        class="embedded-image">
-                                        <img :src="img" class="bot-embedded-image"
-                                            @click="$emit('openImagePreview', img)" />
+                                        <div v-html="md.render(msg.content.reasoning)"
+                                            class="markdown-content reasoning-text"></div>
                                     </div>
                                 </div>
 
-                                <!-- Audio -->
-                                <div class="embedded-audio" v-if="msg.content.embedded_audio">
-                                    <audio controls class="audio-player">
-                                        <source :src="msg.content.embedded_audio" type="audio/wav">
-                                        {{ t('messages.errors.browser.audioNotSupported') }}
-                                    </audio>
-                                </div>
-
-                                <!-- Files -->
-                                <div class="embedded-files"
-                                    v-if="msg.content.embedded_files && msg.content.embedded_files.length > 0">
-                                    <div v-for="(file, fileIndex) in msg.content.embedded_files" :key="fileIndex"
-                                        class="embedded-file">
-                                        <a v-if="file.url" :href="file.url" :download="file.filename" class="file-link">
-                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                            <span class="file-name">{{ file.filename }}</span>
-                                        </a>
-                                        <a v-else @click="downloadFile(file)" class="file-link file-link-download">
-                                            <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
-                                            <span class="file-name">{{ file.filename }}</span>
-                                            <v-icon v-if="downloadingFiles.has(file.attachment_id)" size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
-                                            <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
-                                        </a>
+                                <!-- 遍历 message parts (保持顺序) -->
+                                <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
+                                    <!-- Tool Calls Block -->
+                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
+                                        class="tool-calls-container">
+                                        <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
+                                            class="tool-call-card">
+                                            <div class="tool-call-header"
+                                                @click="toggleToolCall(index, partIndex, tcIndex)">
+                                                <v-icon size="small" class="tool-call-expand-icon">
+                                                    {{ isToolCallExpanded(index, partIndex, tcIndex) ?
+                                                    'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                                </v-icon>
+                                                <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
+                                                <div class="tool-call-info">
+                                                    <span class="tool-call-name">{{ toolCall.name }}</span>
+                                                </div>
+                                                <span class="tool-call-status"
+                                                    :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
+                                                    <template v-if="toolCall.finished_ts">
+                                                        <v-icon size="x-small"
+                                                            class="status-icon">mdi-check-circle</v-icon>
+                                                        {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
+                                                    </template>
+                                                    <template v-else>
+                                                        <v-icon size="x-small"
+                                                            class="status-icon spinning">mdi-loading</v-icon>
+                                                        {{ getElapsedTime(toolCall.ts) }}
+                                                    </template>
+                                                </span>
+                                            </div>
+                                            <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
+                                                class="tool-call-details">
+                                                <div class="tool-call-detail-row">
+                                                    <span class="detail-label">ID:</span>
+                                                    <code class="detail-value">{{ toolCall.id }}</code>
+                                                </div>
+                                                <div class="tool-call-detail-row">
+                                                    <span class="detail-label">Args:</span>
+                                                    <pre
+                                                        class="detail-value detail-json">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                </div>
+                                                <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                    <span class="detail-label">Result:</span>
+                                                    <pre
+                                                        class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+
+                                    <!-- Text (Markdown) -->
+                                    <div v-else-if="part.type === 'plain' && part.text && part.text.trim()"
+                                        v-html="md.render(part.text)" class="markdown-content"></div>
+
+                                    <!-- Image -->
+                                    <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
+                                        <div class="embedded-image">
+                                            <img :src="part.embedded_url" class="bot-embedded-image"
+                                                @click="$emit('openImagePreview', part.embedded_url)" />
+                                        </div>
+                                    </div>
+
+                                    <!-- Audio -->
+                                    <div v-else-if="part.type === 'record' && part.embedded_url" class="embedded-audio">
+                                        <audio controls class="audio-player">
+                                            <source :src="part.embedded_url" type="audio/wav">
+                                            {{ t('messages.errors.browser.audioNotSupported') }}
+                                        </audio>
+                                    </div>
+
+                                    <!-- Files -->
+                                    <div v-else-if="part.type === 'file' && part.embedded_file" class="embedded-files">
+                                        <div class="embedded-file">
+                                            <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
+                                                :download="part.embedded_file.filename" class="file-link">
+                                                <v-icon size="small"
+                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                            </a>
+                                            <a v-else @click="downloadFile(part.embedded_file)"
+                                                class="file-link file-link-download">
+                                                <v-icon size="small"
+                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
+                                                <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
+                                                    size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
+                                                <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </template>
                             </template>
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
-                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at) }}</span>
+                            <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
+                                }}</span>
                             <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
                                 :class="{ 'copy-success': isCopySuccess(index) }"
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
@@ -255,6 +277,12 @@ export default {
         }
     },
     methods: {
+        // 检查 message 中是否有音频
+        hasAudio(messageParts) {
+            if (!Array.isArray(messageParts)) return false;
+            return messageParts.some(part => part.type === 'record' && part.embedded_url);
+        },
+
         // 获取被引用消息的内容
         getReplyContent(messageId) {
             const replyMsg = this.messages.find(m => m.id === messageId);
@@ -262,9 +290,7 @@ export default {
                 return this.tm('reply.notFound');
             }
             let content = '';
-            if (typeof replyMsg.content.message === 'string') {
-                content = replyMsg.content.message;
-            } else if (Array.isArray(replyMsg.content.message)) {
+            if (Array.isArray(replyMsg.content.message)) {
                 const textParts = replyMsg.content.message
                     .filter(part => part.type === 'plain' && part.text)
                     .map(part => part.text);
@@ -281,7 +307,7 @@ export default {
         scrollToMessage(messageId) {
             const msgIndex = this.messages.findIndex(m => m.id === messageId);
             if (msgIndex === -1) return;
-            
+
             const container = this.$refs.messageContainer;
             const messageItems = container?.querySelectorAll('.message-item');
             if (messageItems && messageItems[msgIndex]) {
@@ -313,16 +339,16 @@ export default {
         // 下载文件
         async downloadFile(file) {
             if (!file.attachment_id) return;
-            
+
             // 标记为下载中
             this.downloadingFiles.add(file.attachment_id);
             this.downloadingFiles = new Set(this.downloadingFiles);
-            
+
             try {
                 const response = await axios.get(`/api/chat/get_attachment?attachment_id=${file.attachment_id}`, {
                     responseType: 'blob'
                 });
-                
+
                 const url = URL.createObjectURL(response.data);
                 const a = document.createElement('a');
                 a.href = url;
@@ -361,29 +387,29 @@ export default {
         },
 
         // 复制bot消息到剪贴板
-        copyBotMessage(message, messageIndex) {
-            // 获取对应的消息对象
-            const msgObj = this.messages[messageIndex].content;
+        copyBotMessage(messageParts, messageIndex) {
             let textToCopy = '';
 
-            // 如果有文本消息，添加到复制内容中
-            if (message && message.trim()) {
-                // 移除HTML标签，获取纯文本
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = message;
-                textToCopy = tempDiv.textContent || tempDiv.innerText || message;
-            }
+            if (Array.isArray(messageParts)) {
+                // 提取所有文本内容
+                const textContents = messageParts
+                    .filter(part => part.type === 'plain' && part.text)
+                    .map(part => part.text);
+                textToCopy = textContents.join('\n');
 
-            // 如果有内嵌图片，添加说明
-            if (msgObj && msgObj.embedded_images && msgObj.embedded_images.length > 0) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += `[包含 ${msgObj.embedded_images.length} 张图片]`;
-            }
+                // 检查是否有图片
+                const imageCount = messageParts.filter(part => part.type === 'image' && part.embedded_url).length;
+                if (imageCount > 0) {
+                    if (textToCopy) textToCopy += '\n\n';
+                    textToCopy += `[包含 ${imageCount} 张图片]`;
+                }
 
-            // 如果有内嵌音频，添加说明
-            if (msgObj && msgObj.embedded_audio) {
-                if (textToCopy) textToCopy += '\n\n';
-                textToCopy += '[包含音频内容]';
+                // 检查是否有音频
+                const hasAudio = messageParts.some(part => part.type === 'record' && part.embedded_url);
+                if (hasAudio) {
+                    if (textToCopy) textToCopy += '\n\n';
+                    textToCopy += '[包含音频内容]';
+                }
             }
 
             // 如果没有任何内容，使用默认文本
@@ -545,21 +571,21 @@ export default {
         // 格式化消息时间，支持别名显示
         formatMessageTime(dateStr) {
             if (!dateStr) return '';
-            
+
             const date = new Date(dateStr);
             const now = new Date();
-            
+
             // 获取本地时间的日期部分
             const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
             const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const yesterdayDay = new Date(todayDay);
             yesterdayDay.setDate(yesterdayDay.getDate() - 1);
-            
+
             // 格式化时间 HH:MM
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
             const timeStr = `${hours}:${minutes}`;
-            
+
             // 判断是今天、昨天还是更早
             if (dateDay.getTime() === todayDay.getTime()) {
                 return `${this.tm('time.today')} ${timeStr}`;
@@ -574,8 +600,8 @@ export default {
         },
 
         // Tool call related methods
-        toggleToolCall(messageIndex, toolCallIndex) {
-            const key = `${messageIndex}-${toolCallIndex}`;
+        toggleToolCall(messageIndex, partIndex, toolCallIndex) {
+            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
             if (this.expandedToolCalls.has(key)) {
                 this.expandedToolCalls.delete(key);
             } else {
@@ -585,8 +611,8 @@ export default {
             this.expandedToolCalls = new Set(this.expandedToolCalls);
         },
 
-        isToolCallExpanded(messageIndex, toolCallIndex) {
-            return this.expandedToolCalls.has(`${messageIndex}-${toolCallIndex}`);
+        isToolCallExpanded(messageIndex, partIndex, toolCallIndex) {
+            return this.expandedToolCalls.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
         },
 
         // Start timer for updating elapsed time
@@ -595,23 +621,27 @@ export default {
             let fastUpdateCount = 0;
             const fastUpdateInterval = 12;
             const slowUpdateInterval = 1000;
-            
+
             const updateTime = () => {
                 this.currentTime = Date.now() / 1000;
-                
+
                 // Check if there are any running tool calls
-                const hasRunningToolCalls = this.messages.some(msg => 
-                    msg.content.tool_calls?.some(tc => !tc.finished_ts)
+                const hasRunningToolCalls = this.messages.some(msg =>
+                    Array.isArray(msg.content.message) && msg.content.message.some(part =>
+                        part.type === 'tool_call' && part.tool_calls?.some(tc => !tc.finished_ts)
+                    )
                 );
-                
+
                 if (hasRunningToolCalls) {
                     // Check if any running tool call is under 1 second
                     const hasSubSecondToolCall = this.messages.some(msg =>
-                        msg.content.tool_calls?.some(tc => 
-                            !tc.finished_ts && (this.currentTime - tc.ts) < 1
+                        Array.isArray(msg.content.message) && msg.content.message.some(part =>
+                            part.type === 'tool_call' && part.tool_calls?.some(tc =>
+                                !tc.finished_ts && (this.currentTime - tc.ts) < 1
+                            )
                         )
                     );
-                    
+
                     if (hasSubSecondToolCall) {
                         fastUpdateCount++;
                         this.elapsedTimeTimer = setTimeout(updateTime, fastUpdateInterval);
@@ -623,7 +653,7 @@ export default {
                     this.elapsedTimeTimer = setTimeout(updateTime, slowUpdateInterval);
                 }
             };
-            
+
             updateTime();
         },
 
@@ -684,6 +714,22 @@ export default {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+}
+
+.message-bubble {
+    padding: 2px 16px;
+    border-radius: 12px;
+}
+
+
+@media (max-width: 768px) {
+    .messages-container {
+        padding: 0;
+    }
+
+    .message-bubble {
+        padding: 2px 8px;
+    }
 }
 
 /* 消息列表样式 */
@@ -817,15 +863,12 @@ export default {
     0% {
         background-color: rgba(103, 58, 183, 0.3);
     }
+
     100% {
         background-color: transparent;
     }
 }
 
-.message-bubble {
-    padding: 2px 16px;
-    border-radius: 12px;
-}
 
 .user-bubble {
     color: var(--v-theme-primaryText);
@@ -1060,10 +1103,10 @@ export default {
 }
 
 .tool-call-card {
-    border: 1px solid #d0dce8;
     border-radius: 8px;
     overflow: hidden;
     background-color: #eff3f6;
+    margin: 8px 0px;
 }
 
 .v-theme--dark .tool-call-card {
@@ -1124,7 +1167,7 @@ export default {
 }
 
 .tool-call-status {
-    margin-left: 6px;
+    margin-left: 8px;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1153,6 +1196,7 @@ export default {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
@@ -1160,7 +1204,6 @@ export default {
 
 .tool-call-details {
     padding: 12px;
-    border-top: 1px solid #e1ebf5;
     background-color: rgba(255, 255, 255, 0.5);
     animation: fadeIn 0.2s ease-in-out;
 }
@@ -1442,9 +1485,12 @@ export default {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0.6;
     }
+
     50% {
         opacity: 1;
     }

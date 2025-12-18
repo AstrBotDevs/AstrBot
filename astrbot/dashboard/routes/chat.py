@@ -227,15 +227,12 @@ class ChatRoute(Route):
         text: str,
         media_parts: list,
         reasoning: str,
-        tool_calls: list[dict],
     ):
         """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
+        bot_message_parts.extend(media_parts)
         if text:
             bot_message_parts.append({"type": "plain", "text": text})
-        if tool_calls:
-            bot_message_parts.append({"type": "tool_call", "tool_calls": tool_calls})
-        bot_message_parts.extend(media_parts)
 
         new_his = {"type": "bot", "message": bot_message_parts}
         if reasoning:
@@ -344,12 +341,18 @@ class ChatRoute(Route):
                             if chain_type == "tool_call":
                                 tool_call = json.loads(result_text)
                                 tool_calls[tool_call.get("id")] = tool_call
+                                if accumulated_text:
+                                    # 如果累积了文本，则先保存文本
+                                    accumulated_parts.append({"type": "plain", "text": accumulated_text})
+                                    accumulated_text = ""
                             elif chain_type == "tool_call_result":
                                 tcr = json.loads(result_text)
                                 tc_id = tcr.get("id")
                                 if tc_id in tool_calls:
                                     tool_calls[tc_id]["result"] = tcr.get("result")
                                     tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
+                                accumulated_parts.append({"type": "tool_call", "tool_calls": [tool_calls[tc_id]]})
+                                tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
                                 accumulated_reasoning += result_text
                             elif streaming:
@@ -383,19 +386,19 @@ class ChatRoute(Route):
                         if msg_type == "end":
                             break
                         elif (
-                            (streaming and msg_type == "complete")
-                            or not streaming
-                            or msg_type == "break"
+                            (streaming and msg_type == "complete") or not streaming
+                            # or msg_type == "break"
                         ):
-                            if chain_type == "tool_call":
-                                # tool_call_result 才存
+                            if (
+                                chain_type == "tool_call"
+                                or chain_type == "tool_call_result"
+                            ):
                                 continue
                             saved_record = await self._save_bot_message(
                                 webchat_conv_id,
                                 accumulated_text,
                                 accumulated_parts,
                                 accumulated_reasoning,
-                                list(tool_calls.values()),
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:

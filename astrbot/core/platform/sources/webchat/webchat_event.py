@@ -117,17 +117,17 @@ class WebChatMessageEvent(AstrMessageEvent):
         cid = self.session_id.split("!")[-1]
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         async for chain in generator:
-            if chain.type == "break" and final_data:
-                # 分割符
-                await web_chat_back_queue.put(
-                    {
-                        "type": "break",  # break means a segment end
-                        "data": final_data,
-                        "streaming": True,
-                    },
-                )
-                final_data = ""
-                continue
+            # if chain.type == "break" and final_data:
+            #     # 分割符
+            #     await web_chat_back_queue.put(
+            #         {
+            #             "type": "break",  # break means a segment end
+            #             "data": final_data,
+            #             "streaming": True,
+            #         },
+            #     )
+            #     final_data = ""
+            #     continue
 
             r = await WebChatMessageEvent._send(
                 chain,
