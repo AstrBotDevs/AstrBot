@@ -946,7 +946,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
                         "timeout": 120,
                         "model_config": {
-                            "model": "gemini-1.5-flash",
+                            "model": "gemini-3-flash-preview",
                             "temperature": 0.4,
                         },
                         "custom_headers": {},
@@ -963,7 +963,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://generativelanguage.googleapis.com/",
                         "timeout": 120,
                         "model_config": {
-                            "model": "gemini-2.0-flash-exp",
+                            "model": "gemini-3-flash-preview",
                             "temperature": 0.4,
                         },
                         "gm_resp_image_modal": False,
@@ -976,9 +976,7 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {
-                            "budget": 0,
-                        },
+                        "gm_thinking_config": {"budget": 0, "level": "high"},
                         "modalities": ["text", "image", "tool_use"],
                     },
                     "DeepSeek": {
@@ -1819,13 +1817,24 @@ CONFIG_METADATA_2 = {
                         },
                     },
                     "gm_thinking_config": {
-                        "description": "Gemini思考设置",
+                        "description": "Thinking Config",
                         "type": "object",
                         "items": {
                             "budget": {
-                                "description": "思考预算",
+                                "description": "Thinking Budget",
                                 "type": "int",
-                                "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
+                                "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget",
+                            },
+                            "level": {
+                                "description": "Thinking Level",
+                                "type": "string",
+                                "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
+                                "options": [
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                ],
                             },
                         },
                     },

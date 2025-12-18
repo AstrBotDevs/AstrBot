@@ -19,7 +19,7 @@ dingtalk-stream>=0.22.1
 docstring-parser>=0.16
 faiss-cpu==1.10.0
 filelock>=3.18.0
-google-genai>=1.14.0
+google-genai>=1.56.0
 lark-oapi>=1.4.15
 lxml-html-clean>=0.4.2
 mcp>=1.8.0
