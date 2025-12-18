@@ -200,6 +200,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if isinstance(chain, MessageChain):
                 if chain.type == "break":
                     # 分割符
+                    if message_id:
+                        try:
+                            await self.client.edit_message_text(
+                                text=delta,
+                                chat_id=payload["chat_id"],
+                                message_id=message_id,
+                            )
+                        except Exception as e:
+                            logger.warning(f"编辑消息失败(streaming-break): {e!s}")
                     message_id = None  # 重置消息 ID
                     delta = ""  # 重置 delta
                     continue
