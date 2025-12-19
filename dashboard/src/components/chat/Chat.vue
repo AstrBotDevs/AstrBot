@@ -277,11 +277,14 @@ function clearReply() {
 async function handleSelectConversation(sessionIds: string[]) {
     if (!sessionIds[0]) return;
 
+    // 立即更新选中状态，避免需要点击两次
+    currSessionId.value = sessionIds[0];
+    selectedSessions.value = [sessionIds[0]];
+
     // 更新 URL
     const basePath = props.chatboxMode ? '/chatbox' : '/chat';
     if (route.path !== `${basePath}/${sessionIds[0]}`) {
         router.push(`${basePath}/${sessionIds[0]}`);
-        return;
     }
 
     // 手机端关闭侧边栏
@@ -291,9 +294,6 @@ async function handleSelectConversation(sessionIds: string[]) {
 
     // 清除引用状态
     clearReply();
-
-    currSessionId.value = sessionIds[0];
-    selectedSessions.value = [sessionIds[0]];
     
     await getSessionMsg(sessionIds[0], router);
     

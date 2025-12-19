@@ -236,7 +236,7 @@ function handleDeleteConversation(session: Session) {
     border-radius: 20px !important;
     height: auto !important;
     /* min-height: 56px; */
-    padding: 8px 16px !important;
+    padding: 0px 16px !important;
     position: relative;
 }
 
