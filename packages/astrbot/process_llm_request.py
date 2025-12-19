@@ -188,7 +188,7 @@ class ProcessLLMRequest:
                 f"({quote.sender_nickname}): " if quote.sender_nickname else ""
             )
             message_str = quote.message_str or "[Empty Text]"
-            content_parts.append(f"[Quoted Message] {sender_info}{message_str}")
+            content_parts.append(f"{sender_info}{message_str}")
 
             # 2. 处理引用的图片 (保留原有逻辑，但改变输出目标)
             image_seg = None
@@ -225,6 +225,10 @@ class ProcessLLMRequest:
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
-            # 3. 将所有部分组合成一条 user 消息
-            combined_text = "\n".join(content_parts)
-            req.contexts.append({"role": "user", "content": combined_text})
+            # 3. 将所有部分组合成文本并直接注入到当前消息中
+            # 确保引用内容被正确的标签包裹
+            quoted_content = "\n".join(content_parts)
+            # 确保所有内容都在<Quoted Message>标签内
+            quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
+
+            req.prompt = f"{quoted_text}\n\n{req.prompt}"
