@@ -7,18 +7,16 @@ import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import { md5 } from 'js-md5';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
-import MarkdownIt from 'markdown-it';
+import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
 import { useTheme } from 'vuetify';
 
-// 配置markdown-it，默认安全设置
-const md = new MarkdownIt({
-  html: true,        // 启用HTML标签
-  breaks: true,       // 换行转<br>
-  linkify: true,      // 自动转链接
-  typographer: false  // 禁用智能引号
-});
+enableKatex();
+enableMermaid();
 
 const customizer = useCustomizerStore();
 const theme = useTheme();
@@ -335,8 +333,8 @@ commonStore.getStartTime();
             </div>
 
             <div v-if="releaseMessage"
-              style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;"
-              v-html="md.render(releaseMessage)" class="markdown-content">
+              style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;">
+              <MarkdownRender :content="releaseMessage" :typewriter="false" class="markdown-content" />
             </div>
 
             <div class="mb-4 mt-4">
@@ -433,8 +431,8 @@ commonStore.getStartTime();
           {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
         </v-card-title>
         <v-card-text
-          style="font-size: 14px; max-height: 400px; overflow-y: auto;"
-          v-html="md.render(selectedReleaseNotes)" class="markdown-content">
+          style="font-size: 14px; max-height: 400px; overflow-y: auto;">
+          <MarkdownRender :content="selectedReleaseNotes" :typewriter="false" class="markdown-content" />
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>

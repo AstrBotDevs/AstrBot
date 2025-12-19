@@ -329,19 +329,10 @@
 import axios from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
-
-// 配置markdown-it，默认安全设置
-const md = new MarkdownIt({
-    html: false,        // 禁用HTML标签（关键！）
-    breaks: true,       // 换行转<br>
-    linkify: true,      // 自动转链接
-    typographer: false  // 禁用智能引号（避免干扰）
-});
 
 export default {
     name: 'ConversationPage',
