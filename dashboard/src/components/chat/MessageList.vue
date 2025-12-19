@@ -104,7 +104,7 @@
                                     <div v-if="isReasoningExpanded(index)" class="reasoning-content">
                                         <MarkdownRender :content="msg.content.reasoning" class="reasoning-text markdown-content"
                                             :typewriter="false"
-                                            :style="isDark ? { opacity: '0.85' } : {}" />
+                                            :style="isDark ? { opacity: '0.85' } : {}" :is-dark="isDark" />
                                     </div>
                                 </div>
 
@@ -174,7 +174,7 @@
 
                                     <!-- Text (Markdown) -->
                                     <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
-                                        :content="part.text" :typewriter="false" class="markdown-content" :is-dark="true"/>
+                                        :content="part.text" :typewriter="false" class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }"/>
 
                                     <!-- Image -->
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
