@@ -773,11 +773,40 @@ export default {
 
 @media (max-width: 768px) {
     .messages-container {
+        padding: 8px;
+    }
+
+    .message-list {
+        max-width: 100%;
+    }
+
+    .message-item {
         padding: 0;
     }
 
     .message-bubble {
-        padding: 2px 8px;
+        padding: 2px 12px;
+    }
+
+    .bot-message {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .bot-message-content {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    .bot-bubble {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .bot-avatar {
+        margin-left: 4px;
     }
 }
 
@@ -945,6 +974,7 @@ export default {
     color: var(--v-theme-primaryText);
     font-size: 15px;
     max-width: 100%;
+    padding-left: 12px;
 }
 
 .user-avatar,
@@ -1097,7 +1127,7 @@ export default {
     margin-bottom: 12px;
     margin-top: 6px;
     border: 1px solid var(--v-theme-border);
-    border-radius: 8px;
+    border-radius: 20px;
     overflow: hidden;
     width: fit-content;
 }
@@ -1113,7 +1143,7 @@ export default {
     cursor: pointer;
     user-select: none;
     transition: background-color 0.2s ease;
-    border-radius: 8px;
+    border-radius: 20px;
 }
 
 .reasoning-header:hover {
@@ -1366,6 +1396,7 @@ export default {
 .markdown-content p {
     margin-top: .5rem;
     margin-bottom: .5rem;
+    font-size: 15.5px;
 }
 
 .markdown-content pre {
@@ -1375,6 +1406,11 @@ export default {
     overflow-x: auto;
     margin: 12px 0;
     position: relative;
+}
+
+.markdown-content hr {
+    margin: 12px 0;
+    opacity: 0.5;
 }
 
 .markdown-content code {
