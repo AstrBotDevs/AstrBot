@@ -1,7 +1,7 @@
 <template>
     <div class="input-area fade-in">
         <div class="input-container"
-            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px;">
+            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; box-shadow: 0px 2px 2px rgba(0, 0, 0, 0.1);">
             <!-- 引用预览区 -->
             <div class="reply-preview" v-if="props.replyTo">
                 <div class="reply-content">
@@ -16,8 +16,8 @@
                 @keydown="handleKeyDown"
                 :disabled="disabled" 
                 placeholder="Ask AstrBot..."
-                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 8px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0px 12px;">
+                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
                 <div style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px;">
                     <ConfigSelector
                         :session-id="sessionId || null"
