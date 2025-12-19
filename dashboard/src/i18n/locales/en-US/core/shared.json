@@ -40,6 +40,8 @@
     "cancelSelection": "Cancel",
     "clearSelection": "None",
     "clearSelectionSubtitle": "Clear current selection",
-    "unknownType": "Unknown type"
+    "unknownType": "Unknown type",
+    "createProvider": "Create Provider",
+    "manageProviders": "Provider Management"
   }
 }

@@ -68,7 +68,7 @@ class ProviderGoogleGenAI(Provider):
             self.api_base = self.api_base[:-1]
 
         self._init_client()
-        self.set_model(provider_config["model_config"]["model"])
+        self.set_model(provider_config.get("model", "unknown"))
         self._init_safety_settings()
 
     def _init_client(self) -> None:
@@ -689,10 +689,9 @@ class ProviderGoogleGenAI(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": context_query, **model_config}
+        payloads = {"messages": context_query, "model": model}
 
         retry = 10
         keys = self.api_keys.copy()
@@ -742,10 +741,9 @@ class ProviderGoogleGenAI(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": context_query, **model_config}
+        payloads = {"messages": context_query, "model": model}
 
         retry = 10
         keys = self.api_keys.copy()
