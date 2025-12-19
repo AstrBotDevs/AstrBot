@@ -151,6 +151,7 @@ class ProviderManager:
 
         """
         provider = None
+        provider_id = None
         if umo:
             provider_id = sp.get(
                 f"provider_perf_{provider_type.value}",
@@ -188,6 +189,10 @@ class ProviderManager:
                     )
             else:
                 raise ValueError(f"Unknown provider type: {provider_type}")
+
+        if not provider and provider_id:
+            logger.warning(f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。")
+
         return provider
 
     async def initialize(self):
