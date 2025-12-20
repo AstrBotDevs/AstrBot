@@ -181,37 +181,54 @@ class ProcessLLMRequest:
                 quote = comp
                 break
         if quote:
-            sender_info = ""
-            if quote.sender_nickname:
-                sender_info = f"(Sent by {quote.sender_nickname})"
-            message_str = quote.message_str or "[Empty Text]"
-            req.system_prompt += (
-                f"\nUser is quoting a message{sender_info}.\n"
-                f"Here are the information of the quoted message: Text Content: {message_str}.\n"
+            content_parts = []
+
+            # 1. 处理引用的文本
+            sender_info = (
+                f"({quote.sender_nickname}): " if quote.sender_nickname else ""
             )
+            message_str = quote.message_str or "[Empty Text]"
+            content_parts.append(f"{sender_info}{message_str}")
+
+            # 2. 处理引用的图片 (保留原有逻辑，但改变输出目标)
             image_seg = None
             if quote.chain:
                 for comp in quote.chain:
                     if isinstance(comp, Image):
                         image_seg = comp
                         break
+
             if image_seg:
                 try:
+                    # 找到可以生成图片描述的 provider
                     prov = None
                     if img_cap_prov_id:
                         prov = self.ctx.get_provider_by_id(img_cap_prov_id)
                     if prov is None:
                         prov = self.ctx.get_using_provider(event.unified_msg_origin)
+
+                    # 调用 provider 生成图片描述
                     if prov and isinstance(prov, Provider):
                         llm_resp = await prov.text_chat(
                             prompt="Please describe the image content.",
                             image_urls=[await image_seg.convert_to_file_path()],
                         )
                         if llm_resp.completion_text:
-                            req.system_prompt += (
-                                f"Image Caption: {llm_resp.completion_text}\n"
+                            # 将图片描述作为文本添加到 content_parts
+                            content_parts.append(
+                                f"[Image Caption in quoted message]: {llm_resp.completion_text}"
                             )
                     else:
-                        logger.warning("No provider found for image captioning.")
+                        logger.warning(
+                            "No provider found for image captioning in quote."
+                        )
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
+
+            # 3. 将所有部分组合成文本并直接注入到当前消息中
+            # 确保引用内容被正确的标签包裹
+            quoted_content = "\n".join(content_parts)
+            # 确保所有内容都在<Quoted Message>标签内
+            quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
+
+            req.prompt = f"{quoted_text}\n\n{req.prompt}"
