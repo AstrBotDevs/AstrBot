@@ -229,9 +229,17 @@ class StatRoute(Route):
                 return Response().error("Invalid version format").__dict__
 
             if not os.path.exists(changelog_path):
-                return Response().error(f"Changelog for version {version} not found").__dict__
+                return (
+                    Response()
+                    .error(f"Changelog for version {version} not found")
+                    .__dict__
+                )
             if not os.path.isfile(changelog_path):
-                return Response().error(f"Changelog for version {version} not found").__dict__
+                return (
+                    Response()
+                    .error(f"Changelog for version {version} not found")
+                    .__dict__
+                )
 
             with open(changelog_path, encoding="utf-8") as f:
                 content = f.read()
