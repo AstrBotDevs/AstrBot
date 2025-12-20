@@ -15,10 +15,19 @@
   "knowledgeBase": "Knowledge Base",
   "about": "About",
   "settings": "Settings",
+  "changelog": "Changelog",
   "documentation": "Documentation",
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
     "more": "More Features"
+  },
+  "changelogDialog": {
+    "title": "Changelog",
+    "loading": "Loading...",
+    "error": "Failed to load",
+    "notFound": "Changelog for this version not found",
+    "selectVersion": "Select Version",
+    "current": "Current"
   }
 }
