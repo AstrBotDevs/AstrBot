@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
-import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import { md5 } from 'js-md5';
 import { useAuthStore } from '@/stores/auth';
 import { useCommonStore } from '@/stores/common';
@@ -14,6 +13,10 @@ import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
 import { useTheme } from 'vuetify';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
+import { useLanguageSwitcher } from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
+import AboutPage from '@/views/AboutPage.vue';
 
 enableKatex();
 enableMermaid();
@@ -24,6 +27,7 @@ const { t } = useI18n();
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
+let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
@@ -248,6 +252,14 @@ function openReleaseNotesDialog(body: string, tag: string) {
   releaseNotesDialog.value = true;
 }
 
+function handleLogoClick() {
+  if (customizer.viewMode === 'chat') {
+    aboutDialog.value = true;
+  } else {
+    router.push('/about');
+  }
+}
+
 getVersion();
 checkUpdate();
 
@@ -255,37 +267,62 @@ const commonStore = useCommonStore();
 commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
+// 视图模式切换
+const viewMode = computed({
+  get: () => customizer.viewMode,
+  set: (value: 'bot' | 'chat') => {
+    customizer.SET_VIEW_MODE(value);
+  }
+});
+
+// 语言切换相关
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
+const languages = computed(() => 
+  languageOptions.value.map(lang => ({
+    code: lang.value,
+    name: lang.label,
+    flag: lang.flag
+  }))
+);
+const currentLocale = computed(() => locale.value);
+const changeLanguage = async (langCode: string) => {
+  await switchLanguage(langCode as Locale);
+};
+
 </script>
 
 <template>
   <v-app-bar elevation="0" height="55">
 
-    <v-btn v-if="useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 22px;"
+    <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 22px;"
       class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-else
+    <v-btn v-else-if="customizer.viewMode === 'bot'"
       style="margin-left: 22px; color: var(--v-theme-primaryText); background-color: var(--v-theme-secondary)"
       class="hidden-md-and-down" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-if="useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3" color="lightsecondary"
+    <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3" color="lightsecondary"
       icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-else class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs }" @click="router.push('/about')">
-      <span class="logo-text">Astr<span class="logo-text-light">Bot</span></span>
+    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
+      <span class="logo-text Outfit">Astr<span class="logo-text">Bot</span></span>
+      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
-    <v-spacer />
+  <v-spacer />
 
     <!-- 版本提示信息 - 在手机上隐藏 -->
     <div class="mr-4 hidden-xs">
@@ -296,26 +333,106 @@ commonStore.getStartTime();
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
+    
+    <!-- Bot/Chat 模式切换按钮 -->
+    <v-btn-toggle
+      v-model="viewMode"
+      mandatory
+      variant="outlined"
+      density="compact"
+      class="mr-4"
+      color="primary"
+    >
+      <v-btn value="bot" size="small">
+        <v-icon start>mdi-robot</v-icon>
+        Bot
+      </v-btn>
+      <v-btn value="chat" size="small">
+        <v-icon start>mdi-chat</v-icon>
+        Chat
+      </v-btn>
+    </v-btn-toggle>
 
-    <!-- 语言切换器 -->
-    <LanguageSwitcher variant="header" />
 
-    <!-- 主题切换按钮 -->
-    <v-btn size="small" @click="toggleDarkMode();" class="action-btn" color="var(--v-theme-surface)" variant="flat"
-      rounded="sm" icon>
-      <v-icon v-if="useCustomizerStore().uiTheme === 'PurpleThemeDark'">mdi-weather-night</v-icon>
-      <v-icon v-else>mdi-white-balance-sunny</v-icon>
-    </v-btn>
+    <!-- 功能菜单 -->
+    <StyledMenu offset="12" location="bottom end">
+      <template v-slot:activator="{ props: activatorProps }">
+        <v-btn
+          v-bind="activatorProps"
+          size="small"
+          class="action-btn mr-4"
+          color="var(--v-theme-surface)"
+          variant="flat"
+          rounded="sm"
+          icon
+        >
+          <v-icon>mdi-dots-vertical</v-icon>
+        </v-btn>
+      </template>
+
+      <!-- 语言切换 -->
+      <v-list-item
+        v-for="lang in languages"
+        :key="lang.code"
+        :value="lang.code"
+        @click="changeLanguage(lang.code)"
+        :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <span class="language-flag">{{ lang.flag }}</span>
+        </template>
+        <v-list-item-title>{{ lang.name }}</v-list-item-title>
+      </v-list-item>
+
+      <!-- 主题切换 -->
+      <v-list-item
+        @click="toggleDarkMode()"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon>
+            {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
+          </v-icon>
+        </template>
+        <v-list-item-title>
+          {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
+        </v-list-item-title>
+      </v-list-item>
+
+      <!-- 更新按钮 -->
+      <v-list-item
+        @click="checkUpdate(); getReleases(); updateStatusDialog = true"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon>mdi-arrow-up-circle</v-icon>
+        </template>
+        <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
+        <template v-slot:append v-if="hasNewVersion || dashboardHasNewVersion">
+          <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
+        </template>
+      </v-list-item>
+
+      <!-- 账户按钮 -->
+      <v-list-item
+        @click="dialog = true"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon>mdi-account</v-icon>
+        </template>
+        <v-list-item-title>{{ t('core.header.accountDialog.title') }}</v-list-item-title>
+      </v-list-item>
+    </StyledMenu>
 
     <!-- 更新对话框 -->
     <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1200'"
       :fullscreen="$vuetify.display.xs">
-      <template v-slot:activator="{ props }">
-        <v-btn size="small" @click="checkUpdate(); getReleases();" class="action-btn"
-          color="var(--v-theme-surface)" variant="flat" rounded="sm" v-bind="props" icon>
-          <v-icon>mdi-arrow-up-circle</v-icon>
-        </v-btn>
-      </template>
       <v-card>
         <v-card-title class="mobile-card-title">
           <span class="text-h5">{{ t('core.header.updateDialog.title') }}</span>
@@ -351,7 +468,7 @@ commonStore.getStartTime();
                       }}</a> {{ t('core.header.updateDialog.dockerTipContinue') }}</small>
                 </div>
 
-                <v-alert v-if="releases.some(item => isPreRelease(item['tag_name']))" type="warning" variant="tonal"
+                <v-alert v-if="releases.some((item: any) => isPreRelease(item['tag_name']))" type="warning" variant="tonal"
                   border="start">
                   <template v-slot:prepend>
                     <v-icon>mdi-alert-circle-outline</v-icon>
@@ -367,7 +484,7 @@ commonStore.getStartTime();
                 </v-alert>
 
                 <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="8">
-                  <template v-slot:item.tag_name="{ item }: { item: { tag_name: string } }">
+                  <template v-slot:item.tag_name="{ item }: { item: any }">
                     <div class="d-flex align-center">
                       <span>{{ item.tag_name }}</span>
                       <v-chip v-if="isPreRelease(item.tag_name)" size="x-small" color="warning" variant="tonal"
@@ -445,12 +562,6 @@ commonStore.getStartTime();
 
     <!-- 账户对话框 -->
     <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
-      <template v-slot:activator="{ props }">
-        <v-btn size="small" class="action-btn mr-4" color="var(--v-theme-surface)" variant="flat" rounded="sm"
-          v-bind="props" icon>
-          <v-icon>mdi-account</v-icon>
-        </v-btn>
-      </template>
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-center mb-6">
@@ -504,6 +615,16 @@ commonStore.getStartTime();
             {{ t('core.header.accountDialog.actions.save') }}
           </v-btn>
         </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- About 对话框 - 仅在 chat mode 下使用 -->
+    <v-dialog v-model="aboutDialog"
+      width="600">
+      <v-card>
+        <v-card-text style="overflow-y: auto;">
+          <AboutPage />
+        </v-card-text>
       </v-card>
     </v-dialog>
   </v-app-bar>
@@ -565,6 +686,10 @@ commonStore.getStartTime();
   gap: 4px;
 }
 
+.chat-mode-logo {
+  margin-left: 22px;
+}
+
 .logo-text {
   font-size: 24px;
   font-weight: 1000;
@@ -576,11 +701,17 @@ commonStore.getStartTime();
 
 .version-text {
   font-size: 12px;
-  color: var(--v-theme-secondaryText);
+  color: gray;
+  margin-left: 4px;
 }
 
 .action-btn {
   margin-right: 6px;
+}
+
+.language-flag {
+  font-size: 16px;
+  margin-right: 8px;
 }
 
 /* 移动端对话框标题样式 */
@@ -613,6 +744,20 @@ commonStore.getStartTime();
   .v-tabs .v-tab {
     padding: 0 10px;
     font-size: 0.9rem;
+  }
+
+  /* 移动端模式切换按钮样式 */
+  .v-btn-toggle {
+    margin-right: 8px;
+  }
+
+  .v-btn-toggle .v-btn {
+    font-size: 0.75rem;
+    padding: 0 8px;
+  }
+
+  .v-btn-toggle .v-icon {
+    font-size: 16px;
   }
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="dialog" :max-width="isMobile ? undefined : '1400'" :fullscreen="isMobile" scrollable persistent>
+  <v-dialog v-model="dialog" :max-width="isMobile ? undefined : '1400'" :fullscreen="isMobile" scrollable>
     <v-card class="provider-config-dialog" :class="{ 'mobile-dialog': isMobile }">
       <v-card-title class="d-flex align-center justify-space-between pa-4 pb-0">
         <div class="d-flex align-center ga-2">

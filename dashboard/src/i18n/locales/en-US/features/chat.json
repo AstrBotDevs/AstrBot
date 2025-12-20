@@ -42,7 +42,7 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "Provider Configuration"
+    "providerConfig": "AI Configuration"
   },
   "conversation": {
     "newConversation": "New Conversation",

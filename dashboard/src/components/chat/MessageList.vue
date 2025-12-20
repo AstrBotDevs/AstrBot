@@ -2,12 +2,7 @@
     <div class="messages-container" ref="messageContainer">
         <!-- 加载指示器 -->
         <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
-            <v-progress-circular
-                indeterminate
-                size="48"
-                width="4"
-                color="primary"
-            ></v-progress-circular>
+            <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
         </div>
         <!-- 聊天消息列表 -->
         <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }">
@@ -50,8 +45,7 @@
                                 <div class="file-attachment">
                                     <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
                                         :download="part.embedded_file.filename" class="file-link"
-                                        :class="{ 'is-dark': isDark }"
-                                        :style="isDark ? {
+                                        :class="{ 'is-dark': isDark }" :style="isDark ? {
                                             backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                             borderColor: 'rgba(255, 255, 255, 0.1)',
                                             color: 'var(--v-theme-secondary)'
@@ -61,9 +55,7 @@
                                         <span class="file-name">{{ part.embedded_file.filename }}</span>
                                     </a>
                                     <a v-else @click="downloadFile(part.embedded_file)"
-                                        class="file-link file-link-download"
-                                        :class="{ 'is-dark': isDark }"
-                                        :style="isDark ? {
+                                        class="file-link file-link-download" :class="{ 'is-dark': isDark }" :style="isDark ? {
                                             backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                             borderColor: 'rgba(255, 255, 255, 0.1)',
                                             color: 'var(--v-theme-secondary)'
@@ -99,11 +91,9 @@
                             <template v-else>
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
                                 <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
-                                    class="reasoning-container"
-                                    :class="{ 'is-dark': isDark }"
+                                    class="reasoning-container" :class="{ 'is-dark': isDark }"
                                     :style="isDark ? { backgroundColor: 'rgba(103, 58, 183, 0.08)' } : {}">
-                                    <div class="reasoning-header" 
-                                        :class="{ 'is-dark': isDark }"
+                                    <div class="reasoning-header" :class="{ 'is-dark': isDark }"
                                         @click="toggleReasoning(index)">
                                         <v-icon size="small" class="reasoning-icon">
                                             {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
@@ -111,8 +101,8 @@
                                         <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
                                     </div>
                                     <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                        <MarkdownRender :content="msg.content.reasoning" class="reasoning-text markdown-content"
-                                            :typewriter="false"
+                                        <MarkdownRender :content="msg.content.reasoning"
+                                            class="reasoning-text markdown-content" :typewriter="false"
                                             :style="isDark ? { opacity: '0.85' } : {}" :is-dark="isDark" />
                                     </div>
                                 </div>
@@ -123,14 +113,11 @@
                                     <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
                                         class="tool-calls-container">
                                         <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
-                                            class="tool-call-card"
-                                            :class="{ 'is-dark': isDark }"
-                                            :style="isDark ? {
+                                            class="tool-call-card" :class="{ 'is-dark': isDark }" :style="isDark ? {
                                                 backgroundColor: 'rgba(40, 60, 100, 0.4)',
                                                 borderColor: 'rgba(100, 140, 200, 0.4)'
                                             } : {}">
-                                            <div class="tool-call-header"
-                                                :class="{ 'is-dark': isDark }"
+                                            <div class="tool-call-header" :class="{ 'is-dark': isDark }"
                                                 @click="toggleToolCall(index, partIndex, tcIndex)">
                                                 <v-icon size="small" class="tool-call-expand-icon">
                                                     {{ isToolCallExpanded(index, partIndex, tcIndex) ?
@@ -155,27 +142,27 @@
                                                 </span>
                                             </div>
                                             <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
-                                                class="tool-call-details"
-                                                :style="isDark ? {
+                                                class="tool-call-details" :style="isDark ? {
                                                     borderTopColor: 'rgba(100, 140, 200, 0.3)',
                                                     backgroundColor: 'rgba(30, 45, 70, 0.5)'
                                                 } : {}">
                                                 <div class="tool-call-detail-row">
                                                     <span class="detail-label">ID:</span>
                                                     <code class="detail-value"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id }}</code>
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
+                    }}</code>
                                                 </div>
                                                 <div class="tool-call-detail-row">
                                                     <span class="detail-label">Args:</span>
-                                                    <pre
-                                                        class="detail-value detail-json"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                    <pre class="detail-value detail-json"
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
+                                                            JSON.stringify(toolCall.args, null, 2) }}</pre>
                                                 </div>
                                                 <div v-if="toolCall.result" class="tool-call-detail-row">
                                                     <span class="detail-label">Result:</span>
-                                                    <pre
-                                                        class="detail-value detail-json detail-result"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}</pre>
+                                                    <pre class="detail-value detail-json detail-result"
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
+                </pre>
                                                 </div>
                                             </div>
                                         </div>
@@ -183,7 +170,8 @@
 
                                     <!-- Text (Markdown) -->
                                     <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
-                                        :content="part.text" :typewriter="false" class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }"/>
+                                        :content="part.text" :typewriter="false" class="markdown-content"
+                                        :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
                                     <!-- Image -->
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
@@ -206,8 +194,7 @@
                                         <div class="embedded-file">
                                             <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
                                                 :download="part.embedded_file.filename" class="file-link"
-                                                :class="{ 'is-dark': isDark }"
-                                                :style="isDark ? {
+                                                :class="{ 'is-dark': isDark }" :style="isDark ? {
                                                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                                     borderColor: 'rgba(255, 255, 255, 0.1)',
                                                     color: 'var(--v-theme-secondary)'
@@ -217,8 +204,7 @@
                                                 <span class="file-name">{{ part.embedded_file.filename }}</span>
                                             </a>
                                             <a v-else @click="downloadFile(part.embedded_file)"
-                                                class="file-link file-link-download"
-                                                :class="{ 'is-dark': isDark }"
+                                                class="file-link file-link-download" :class="{ 'is-dark': isDark }"
                                                 :style="isDark ? {
                                                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                                     borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -238,7 +224,7 @@
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
                             <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
-                                }}</span>
+                            }}</span>
                             <!-- Agent Stats Menu -->
                             <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover
                                 :close-on-content-click="false">
@@ -797,7 +783,6 @@ export default {
 </script>
 
 <style scoped>
-
 :deep(.hr-node) {
     margin-top: 1.25rem;
     margin-bottom: 1.25rem;
@@ -874,6 +859,33 @@ export default {
     padding: 2px 16px;
     border-radius: 12px;
 }
+
+.loading-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    margin-top: 8px;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: var(--v-theme-secondaryText);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
 
 
 @media (max-width: 768px) {

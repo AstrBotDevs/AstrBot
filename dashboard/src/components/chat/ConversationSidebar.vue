@@ -117,7 +117,7 @@
                 <!-- 提供商配置 -->
                 <v-list-item class="styled-menu-item" @click="showProviderConfigDialog = true">
                     <template v-slot:prepend>
-                        <v-icon>mdi-cog-outline</v-icon>
+                        <v-icon>mdi-creation</v-icon>
                     </template>
                     <v-list-item-title>{{ tm('actions.providerConfig') }}</v-list-item-title>
                 </v-list-item>
