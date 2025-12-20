@@ -113,8 +113,19 @@
                     </template>
                     <v-list-item-title>{{ chatboxMode ? tm('actions.exitFullscreen') : tm('actions.fullscreen') }}</v-list-item-title>
                 </v-list-item>
+
+                <!-- 提供商配置 -->
+                <v-list-item class="styled-menu-item" @click="showProviderConfigDialog = true">
+                    <template v-slot:prepend>
+                        <v-icon>mdi-cog-outline</v-icon>
+                    </template>
+                    <v-list-item-title>{{ tm('actions.providerConfig') }}</v-list-item-title>
+                </v-list-item>
             </StyledMenu>
         </div>
+
+        <!-- 提供商配置对话框 -->
+        <ProviderConfigDialog v-model="showProviderConfigDialog" />
     </div>
 </template>
 
@@ -124,6 +135,7 @@ import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
+import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 
 interface Props {
     sessions: Session[];
@@ -151,6 +163,7 @@ const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 
 const sidebarCollapsed = ref(true);
+const showProviderConfigDialog = ref(false);
 
 // 从 localStorage 读取侧边栏折叠状态
 const savedCollapsedState = localStorage.getItem('sidebarCollapsed');

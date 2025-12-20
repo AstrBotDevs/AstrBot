@@ -41,7 +41,8 @@
     "editTitle": "Edit Title",
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
-    "reply": "Reply"
+    "reply": "Reply",
+    "providerConfig": "Provider Configuration"
   },
   "conversation": {
     "newConversation": "New Conversation",
