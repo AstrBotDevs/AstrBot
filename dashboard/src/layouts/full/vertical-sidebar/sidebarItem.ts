@@ -44,11 +44,6 @@ const sidebarItem: menu[] = [
     to: '/knowledge-base',
   },
   {
-    title: 'core.navigation.chat',
-    icon: 'mdi-chat',
-    to: '/chat'
-  },
-  {
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [

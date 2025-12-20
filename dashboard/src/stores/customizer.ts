@@ -9,7 +9,8 @@ export const useCustomizerStore = defineStore({
     mini_sidebar: config.mini_sidebar,
     fontTheme: "Poppins",
     uiTheme: config.uiTheme,
-    inputBg: config.inputBg
+    inputBg: config.inputBg,
+    viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot' // 'bot' 或 'chat'
   }),
 
   getters: {},
@@ -26,6 +27,10 @@ export const useCustomizerStore = defineStore({
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
+    },
+    SET_VIEW_MODE(payload: 'bot' | 'chat') {
+      this.viewMode = payload;
+      localStorage.setItem("viewMode", payload);
     },
   }
 });
