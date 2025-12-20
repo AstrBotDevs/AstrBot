@@ -275,6 +275,14 @@ const viewMode = computed({
   }
 });
 
+// Merry Christmas! 🎄
+const isChristmas = computed(() => {
+  const today = new Date();
+  const month = today.getMonth() + 1; // getMonth() 返回 0-11
+  const day = today.getDate();
+  return month === 12 && day === 25;
+});
+
 // 语言切换相关
 const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
 const languages = computed(() => 
@@ -317,7 +325,9 @@ const changeLanguage = async (langCode: string) => {
     </v-btn>
 
     <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
-      <span class="logo-text Outfit">Astr<span class="logo-text">Bot</span></span>
+      <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
+        <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
+      </span></span>
       <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
@@ -697,6 +707,20 @@ const changeLanguage = async (langCode: string) => {
 
 .logo-text-light {
   font-weight: normal;
+}
+
+.bot-text-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.xmas-hat {
+  position: absolute;
+  top: -3px;
+  right: -14px;
+  width: 24px;
+  height: 24px;
+  z-index: 1;
 }
 
 .version-text {
