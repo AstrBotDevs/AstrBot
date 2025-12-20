@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
@@ -12,6 +12,7 @@ import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
 import { router } from '@/router';
+import { useRoute } from 'vue-router';
 import { useTheme } from 'vuetify';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
@@ -24,6 +25,7 @@ enableMermaid();
 const customizer = useCustomizerStore();
 const theme = useTheme();
 const { t } = useI18n();
+const route = useRoute();
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -275,6 +277,16 @@ const viewMode = computed({
   }
 });
 
+// 监听 viewMode 变化，切换到 bot 模式时跳转到首页
+watch(() => customizer.viewMode, (newMode, oldMode) => {
+  if (newMode === 'bot' && oldMode === 'chat') {
+    // 从 chat 模式切换到 bot 模式时，跳转到首页
+    if (route.path !== '/') {
+      router.push('/');
+    }
+  }
+});
+
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
@@ -303,24 +315,24 @@ const changeLanguage = async (langCode: string) => {
   <v-app-bar elevation="0" height="55">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 22px;"
-      class="hidden-md-and-down text-secondary" color="lightsecondary" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
+      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
+      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px; color: var(--v-theme-primaryText); background-color: var(--v-theme-secondary)"
+      style="margin-left: 22px;"
       class="hidden-md-and-down" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)" size="small">
+      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3" color="lightsecondary"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
+      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER" size="small">
+      @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
