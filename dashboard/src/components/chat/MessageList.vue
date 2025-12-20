@@ -1,7 +1,16 @@
 <template>
     <div class="messages-container" ref="messageContainer">
+        <!-- 加载指示器 -->
+        <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
+            <v-progress-circular
+                indeterminate
+                size="48"
+                width="4"
+                color="primary"
+            ></v-progress-circular>
+        </div>
         <!-- 聊天消息列表 -->
-        <div class="message-list">
+        <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }">
             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
@@ -308,6 +317,10 @@ export default {
             default: false
         },
         isStreaming: {
+            type: Boolean,
+            default: false
+        },
+        isLoadingMessages: {
             type: Boolean,
             default: false
         }
@@ -830,6 +843,31 @@ export default {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    position: relative;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    background-color: rgba(255, 255, 255, 0.7);
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.is-dark {
+    background-color: rgba(30, 30, 30, 0.7);
+}
+
+.message-list.loading-blur {
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
 }
 
 .message-bubble {
