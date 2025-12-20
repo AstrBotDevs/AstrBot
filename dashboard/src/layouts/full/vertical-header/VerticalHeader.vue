@@ -696,7 +696,7 @@ const changeLanguage = async (langCode: string) => {
 
 /* 响应式布局样式 */
 .logo-container {
-  margin-left: 16px;
+  margin-left: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
