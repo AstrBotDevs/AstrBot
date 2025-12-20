@@ -3,10 +3,6 @@
         <v-card :title="tm('dialogs.addProvider.title')">
             <v-card-text style="overflow-y: auto;">
                 <v-tabs v-model="activeProviderTab" grow>
-                    <v-tab value="chat_completion" class="font-weight-medium px-3">
-                        <v-icon start>mdi-message-text</v-icon>
-                        {{ tm('dialogs.addProvider.tabs.basic') }}
-                    </v-tab>
                     <v-tab value="agent_runner" class="font-weight-medium px-3">
                         <v-icon start>mdi-cogs</v-icon>
                         {{ tm('dialogs.addProvider.tabs.agentRunner') }}
@@ -116,7 +112,7 @@ export default {
 
         // 按提供商类型获取模板列表
         getTemplatesByType(type) {
-            const templates = this.metadata['provider_group']?.metadata?.provider?.config_template || {};
+            const templates = this.metadata.provider.config_template || {};
             const filtered = {};
 
             for (const [name, template] of Object.entries(templates)) {

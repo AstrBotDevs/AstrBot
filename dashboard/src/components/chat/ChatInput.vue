@@ -26,7 +26,9 @@
                         :initial-config-id="props.configId"
                         @config-changed="handleConfigChange"
                     />
-                    <ProviderModelSelector v-if="showProviderSelector" ref="providerModelSelectorRef" />
+                    
+                    <!-- Provider/Model Selector Menu -->
+                    <ProviderModelMenu v-if="showProviderSelector" ref="providerModelMenuRef" />
                     
                     <v-tooltip :text="enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled')" location="top">
                         <template v-slot:activator="{ props }">
@@ -84,8 +86,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import ProviderModelSelector from './ProviderModelSelector.vue';
 import ConfigSelector from './ConfigSelector.vue';
+import ProviderModelMenu from './ProviderModelMenu.vue';
 import type { Session } from '@/composables/useSessions';
 
 interface StagedFileInfo {
@@ -141,7 +143,7 @@ const { tm } = useModuleI18n('features/chat');
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelSelectorRef = ref<InstanceType<typeof ProviderModelSelector> | null>(null);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 
 const localPrompt = computed({
@@ -234,7 +236,7 @@ function getCurrentSelection() {
     if (!showProviderSelector.value) {
         return null;
     }
-    return providerModelSelectorRef.value?.getCurrentSelection();
+    return providerModelMenuRef.value?.getCurrentSelection();
 }
 
 onMounted(() => {

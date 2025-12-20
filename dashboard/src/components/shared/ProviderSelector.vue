@@ -14,8 +14,20 @@
   <!-- Provider Selection Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        {{ tm('providerSelector.dialogTitle') }}
+      <v-card-title
+        class="text-h3 py-4 d-flex align-center justify-space-between gap-4 flex-wrap"
+        style="font-weight: normal;"
+      >
+        <span>{{ tm('providerSelector.dialogTitle') }}</span>
+        <v-btn
+          size="small"
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-plus"
+          @click="openProviderDrawer"
+        >
+          {{ tm('providerSelector.createProvider') }}
+        </v-btn>
       </v-card-title>
       
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
@@ -51,7 +63,7 @@
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
             <v-list-item-subtitle>
               {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
-              <span v-if="provider.model_config?.model">- {{ provider.model_config.model }}</span>
+              <span v-if="provider.model">- {{ provider.model }}</span>
             </v-list-item-subtitle>
             
             <template v-slot:append>
@@ -79,12 +91,33 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <v-overlay
+    v-model="providerDrawer"
+    class="provider-drawer-overlay"
+    location="right"
+    transition="slide-x-reverse-transition"
+    :scrim="true"
+    @click:outside="closeProviderDrawer"
+  >
+    <v-card class="provider-drawer-card" elevation="12">
+      <div class="provider-drawer-header">
+        <v-btn icon variant="text" @click="closeProviderDrawer">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </div>
+      <div class="provider-drawer-content">
+        <ProviderPage :default-tab="defaultTab" />
+      </div>
+    </v-card>
+  </v-overlay>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import ProviderPage from '@/views/ProviderPage.vue'
 
 const props = defineProps({
   modelValue: {
@@ -112,11 +145,25 @@ const dialog = ref(false)
 const providerList = ref([])
 const loading = ref(false)
 const selectedProvider = ref('')
+const providerDrawer = ref(false)
+
+const defaultTab = computed(() => {
+  if (props.providerType === 'agent_runner' && props.providerSubtype) {
+    return `select_agent_runner_provider:${props.providerSubtype}`
+  }
+  return props.providerType || 'chat_completion'
+})
 
 // 监听 modelValue 变化，同步到 selectedProvider
 watch(() => props.modelValue, (newValue) => {
   selectedProvider.value = newValue || ''
 }, { immediate: true })
+
+watch(providerDrawer, (isOpen, wasOpen) => {
+  if (!isOpen && wasOpen) {
+    loadProviders()
+  }
+})
 
 async function openDialog() {
   selectedProvider.value = props.modelValue || ''
@@ -170,6 +217,14 @@ function cancelSelection() {
   selectedProvider.value = props.modelValue || ''
   dialog.value = false
 }
+
+function openProviderDrawer() {
+  providerDrawer.value = true
+}
+
+function closeProviderDrawer() {
+  providerDrawer.value = false
+}
 </script>
 
 <style scoped>
@@ -183,5 +238,36 @@ function cancelSelection() {
 
 .v-list-item.v-list-item--active {
   background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.provider-drawer-overlay {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.provider-drawer-card {
+  width: clamp(360px, 70vw, 1200px);
+  height: calc(100vh - 32px);
+  margin: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.provider-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px 20px;
+}
+
+.provider-drawer-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.provider-drawer-content > * {
+  height: 100%;
+  overflow: auto;
 }
 </style>

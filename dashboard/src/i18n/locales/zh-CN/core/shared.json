@@ -40,6 +40,8 @@
     "cancelSelection": "取消",
     "clearSelection": "不选择",
     "clearSelectionSubtitle": "清除当前选择",
-    "unknownType": "未知类型"
+    "unknownType": "未知类型",
+    "createProvider": "创建提供商",
+    "manageProviders": "提供商管理"
   }
 }

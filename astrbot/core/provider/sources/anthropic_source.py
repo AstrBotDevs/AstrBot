@@ -47,7 +47,7 @@ class ProviderAnthropic(Provider):
             base_url=self.base_url,
         )
 
-        self.set_model(provider_config["model_config"]["model"])
+        self.set_model(provider_config.get("model", "unknown"))
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -130,7 +130,11 @@ class ProviderAnthropic(Provider):
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
 
-        completion = await self.client.messages.create(**payloads, stream=False)
+        extra_body = self.provider_config.get("custom_extra_body", {})
+
+        completion = await self.client.messages.create(
+            **payloads, stream=False, extra_body=extra_body
+        )
 
         assert isinstance(completion, Message)
         logger.debug(f"completion: {completion}")
@@ -173,11 +177,13 @@ class ProviderAnthropic(Provider):
         # 用于累积最终结果
         final_text = ""
         final_tool_calls = []
-
         id = None
         usage = TokenUsage()
+        extra_body = self.provider_config.get("custom_extra_body", {})
 
-        async with self.client.messages.stream(**payloads) as stream:
+        async with self.client.messages.stream(
+            **payloads, extra_body=extra_body
+        ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
                 if event.type == "message_start":
@@ -318,10 +324,9 @@ class ProviderAnthropic(Provider):
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": new_messages, **model_config}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
@@ -331,7 +336,6 @@ class ProviderAnthropic(Provider):
         try:
             llm_response = await self._query(payloads, func_tool)
         except Exception as e:
-            # logger.error(f"发生了错误。Provider 配置如下: {model_config}")
             raise e
 
         return llm_response
@@ -373,10 +377,9 @@ class ProviderAnthropic(Provider):
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": new_messages, **model_config}
+        payloads = {"messages": new_messages, "model": model}
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:

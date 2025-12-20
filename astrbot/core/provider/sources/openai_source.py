@@ -69,8 +69,7 @@ class ProviderOpenAIOfficial(Provider):
             self.client.chat.completions.create,
         ).parameters.keys()
 
-        model_config = provider_config.get("model_config", {})
-        model = model_config.get("model", "unknown")
+        model = provider_config.get("model", "unknown")
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
@@ -375,10 +374,9 @@ class ProviderOpenAIOfficial(Provider):
                 for tcr in tool_calls_result:
                     context_query.extend(tcr.to_openai_messages())
 
-        model_config = self.provider_config.get("model_config", {})
-        model_config["model"] = model or self.get_model()
+        model = model or self.get_model()
 
-        payloads = {"messages": context_query, **model_config}
+        payloads = {"messages": context_query, "model": model}
 
         # xAI origin search tool inject
         self._maybe_inject_xai_search(payloads, **kwargs)
