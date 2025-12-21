@@ -1,7 +1,15 @@
 <template>
     <div class="input-area fade-in">
         <div class="input-container"
-            style="width: 85%; max-width: 900px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 24px; box-shadow: 0px 2px 2px rgba(0, 0, 0, 0.1);">
+            :style="{
+                width: '85%',
+                maxWidth: '900px',
+                margin: '0 auto',
+                border: isDark ? 'none' : '1px solid #e0e0e0',
+                borderRadius: '24px',
+                boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
+                backgroundColor: isDark ? '#2d2d2d' : 'transparent'
+            }">
             <!-- 引用预览区 -->
             <div class="reply-preview" v-if="props.replyTo">
                 <div class="reply-content">
@@ -86,6 +94,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
 import ConfigSelector from './ConfigSelector.vue';
 import ProviderModelMenu from './ProviderModelMenu.vue';
 import type { Session } from '@/composables/useSessions';
@@ -140,6 +149,7 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
+const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
@@ -261,7 +271,7 @@ defineExpose({
 <style scoped>
 .input-area {
     padding: 16px;
-    background-color: var(--v-theme-surface);
+    background-color: transparent;
     position: relative;
     border-top: 1px solid var(--v-theme-border);
     flex-shrink: 0;

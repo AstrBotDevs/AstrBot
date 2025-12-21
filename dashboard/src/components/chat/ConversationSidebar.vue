@@ -35,7 +35,8 @@
                     @update:selected="$emit('selectConversation', $event)">
                     <v-list-item v-for="item in sessions" :key="item.session_id" :value="item.session_id"
                         rounded="lg" class="conversation-item" active-color="secondary">
-                        <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title">
+                        <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title"
+                            :style="{ color: isDark ? '#ffffff' : '#000000' }">
                             {{ item.display_name || tm('conversation.newConversation') }}
                         </v-list-item-title>
                         <!-- <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
