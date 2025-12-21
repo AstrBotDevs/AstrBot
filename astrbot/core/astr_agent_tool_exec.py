@@ -209,8 +209,8 @@ async def call_local_llm_tool(
         else:
             raise ValueError(f"未知的方法名: {method_name}")
     except ValueError as e:
-        raise Exception(f"Tool execution ValueError: {e}")
-    except TypeError:
+        raise Exception(f"Tool execution ValueError: {e}") from e
+    except TypeError as e:
         # 获取函数的签名（包括类型），除了第一个 event/context 参数。
         try:
             sig = inspect.signature(handler)
@@ -241,10 +241,10 @@ async def call_local_llm_tool(
 
         raise Exception(
             f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
-        )
+        ) from e
     except Exception as e:
         trace_ = traceback.format_exc()
-        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}")
+        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}") from e
 
     if not ready_to_call:
         return
