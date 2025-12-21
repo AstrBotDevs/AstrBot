@@ -79,7 +79,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         payload = {
             "contexts": self.run_context.messages,
             "func_tool": self.req.func_tool,
-            "model": self.req.model, # NOTE: in fact, this arg is None in most cases
+            "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
         }
 
