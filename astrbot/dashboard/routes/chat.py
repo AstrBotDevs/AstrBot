@@ -436,7 +436,7 @@ class ChatRoute(Route):
                             accumulated_parts = []
                             accumulated_text = ""
                             accumulated_reasoning = ""
-                            tool_calls = {}
+                            # tool_calls = {}
                             agent_stats = {}
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)

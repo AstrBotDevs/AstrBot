@@ -172,7 +172,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.append(
                 Message(
                     role="assistant",
-                    content=llm_resp.completion_text or "",
+                    content=llm_resp.completion_text or "*No response*",
                 ),
             )
             try:
@@ -402,35 +402,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     ),
                                 )
 
-                        # yield the last tool call result
-                        if tool_call_result_blocks:
-                            last_tcr_content = str(tool_call_result_blocks[-1].content)
-                            yield MessageChain(
-                                type="tool_call_result",
-                                chain=[
-                                    Json(
-                                        data={
-                                            "id": func_tool_id,
-                                            "ts": time.time(),
-                                            "result": last_tcr_content,
-                                        }
-                                    )
-                                ],
-                            )
-
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop。
                         # 发送消息逻辑在 ToolExecutor 中处理了。
                         logger.warning(
-                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户，此工具调用不会被记录到历史中。"
+                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户。"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content="*工具没有返回值或者将结果直接发送给了用户*",
+                            ),
+                        )
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。",
+                            f"Tool 返回了不支持的类型: {type(resp)}。",
+                        )
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content="*工具返回了不支持的类型，请告诉用户检查这个工具的定义和实现。*",
+                            ),
                         )
 
                 try:
@@ -451,6 +449,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         content=f"error: {e!s}",
                     ),
                 )
+
+        # yield the last tool call result
+        if tool_call_result_blocks:
+            last_tcr_content = str(tool_call_result_blocks[-1].content)
+            yield MessageChain(
+                type="tool_call_result",
+                chain=[
+                    Json(
+                        data={
+                            "id": func_tool_id,
+                            "ts": time.time(),
+                            "result": last_tcr_content,
+                        }
+                    )
+                ],
+            )
 
         # 处理函数调用响应
         if tool_call_result_blocks:

@@ -209,12 +209,42 @@ async def call_local_llm_tool(
         else:
             raise ValueError(f"未知的方法名: {method_name}")
     except ValueError as e:
-        logger.error(f"调用本地 LLM 工具时出错: {e}", exc_info=True)
-    except TypeError:
-        logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+        raise Exception(f"Tool execution ValueError: {e}") from e
+    except TypeError as e:
+        # 获取函数的签名（包括类型），除了第一个 event/context 参数。
+        try:
+            sig = inspect.signature(handler)
+            params = list(sig.parameters.values())
+            # 跳过第一个参数（event 或 context）
+            if params:
+                params = params[1:]
+
+            param_strs = []
+            for param in params:
+                param_str = param.name
+                if param.annotation != inspect.Parameter.empty:
+                    # 获取类型注解的字符串表示
+                    if isinstance(param.annotation, type):
+                        type_str = param.annotation.__name__
+                    else:
+                        type_str = str(param.annotation)
+                    param_str += f": {type_str}"
+                if param.default != inspect.Parameter.empty:
+                    param_str += f" = {param.default!r}"
+                param_strs.append(param_str)
+
+            handler_param_str = (
+                ", ".join(param_strs) if param_strs else "(no additional parameters)"
+            )
+        except Exception:
+            handler_param_str = "(unable to inspect signature)"
+
+        raise Exception(
+            f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
+        ) from e
     except Exception as e:
         trace_ = traceback.format_exc()
-        logger.error(f"调用本地 LLM 工具时出错: {e}\n{trace_}")
+        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}") from e
 
     if not ready_to_call:
         return

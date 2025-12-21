@@ -310,7 +310,7 @@ async function handleSelectConversation(sessionIds: string[]) {
     isLoadingMessages.value = true;
     
     try {
-        await getSessionMsg(sessionIds[0], router);
+        await getSessionMsg(sessionIds[0]);
     } finally {
         isLoadingMessages.value = false;
     }
