@@ -138,7 +138,7 @@ class ProviderGoogleGenAI(Provider):
             modalities = ["TEXT"]
 
         tool_list: list[types.Tool] | None = []
-        model_name = payloads.get("model", self.get_model())
+        model_name = cast(str, payloads.get("model", self.get_model()))
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
@@ -199,7 +199,16 @@ class ProviderGoogleGenAI(Provider):
 
         # oper thinking config
         thinking_config = None
-        if model_name.startswith("gemini-2.5"):
+        if model_name in [
+            "gemini-2.5-pro",
+            "gemini-2.5-pro-preview",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-preview",
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite-preview",
+            "gemini-robotics-er-1.5-preview",
+            "gemini-live-2.5-flash-preview-native-audio-09-2025",
+        ]:
             # The thinkingBudget parameter, introduced with the Gemini 2.5 series
             thinking_budget = self.provider_config.get("gm_thinking_config", {}).get(
                 "budget", 0
@@ -208,7 +217,14 @@ class ProviderGoogleGenAI(Provider):
                 thinking_config = types.ThinkingConfig(
                     thinking_budget=thinking_budget,
                 )
-        elif model_name.startswith("gemini-3"):
+        elif model_name in [
+            "gemini-3-pro",
+            "gemini-3-pro-preview",
+            "gemini-3-flash",
+            "gemini-3-flash-preview",
+            "gemini-3-flash-lite",
+            "gemini-3-flash-lite-preview",
+        ]:
             # The thinkingLevel parameter, recommended for Gemini 3 models and onwards
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
             thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
