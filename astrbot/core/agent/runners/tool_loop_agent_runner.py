@@ -76,12 +76,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        payload = {
+            "contexts": self.run_context.messages,
+            "func_tool": self.req.func_tool,
+            "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
+            "session_id": self.req.session_id,
+        }
+
         if self.streaming:
-            stream = self.provider.text_chat_stream(**self.req.__dict__)
+            stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:  # type: ignore
                 yield resp
         else:
-            yield await self.provider.text_chat(**self.req.__dict__)
+            yield await self.provider.text_chat(**payload)
 
     @override
     async def step(self):
@@ -227,6 +234,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         step_count = 0
         while not self.done() and step_count < max_step:
             step_count += 1
+            async for resp in self.step():
+                yield resp
+
+        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
+        if not self.done():
+            logger.warning(
+                f"Agent reached max steps ({max_step}), forcing a final response."
+            )
+            # 拔掉所有工具
+            if self.req:
+                self.req.func_tool = None
+            # 注入提示词
+            self.run_context.messages.append(
+                Message(
+                    role="user",
+                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                )
+            )
+            # 再执行最后一步
             async for resp in self.step():
                 yield resp
 

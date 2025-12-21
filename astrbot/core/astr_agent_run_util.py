@@ -2,6 +2,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.components import Json
@@ -24,8 +25,25 @@ async def run_agent(
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
-    while step_idx < max_step:
+    while step_idx < max_step + 1:
         step_idx += 1
+
+        if step_idx == max_step + 1:
+            logger.warning(
+                f"Agent reached max steps ({max_step}), forcing a final response."
+            )
+            if not agent_runner.done():
+                # 拔掉所有工具
+                if agent_runner.req:
+                    agent_runner.req.func_tool = None
+                # 注入提示词
+                agent_runner.run_context.messages.append(
+                    Message(
+                        role="user",
+                        content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    )
+                )
+
         try:
             async for resp in agent_runner.step():
                 if astr_event.is_stopped():
