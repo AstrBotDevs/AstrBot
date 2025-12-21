@@ -1,5 +1,5 @@
 <template>
-    <v-menu :close-on-content-click="false" location="top">
+    <v-menu v-model="menuOpen" :close-on-content-click="false" location="top" @update:model-value="handleMenuToggle">
         <template v-slot:activator="{ props: menuProps }">
             <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" size="x-small">
                 <v-icon start size="14">mdi-creation</v-icon>
@@ -72,11 +72,13 @@ interface ProviderConfig {
     model: string;
     api_base?: string;
     model_metadata?: ModelMetadata;
+    enable?: boolean;
 }
 
 const providerConfigs = ref<ProviderConfig[]>([]);
 const selectedProviderId = ref('');
 const searchQuery = ref('');
+const menuOpen = ref(false);
 
 const filteredProviders = computed(() => {
     if (!searchQuery.value) {
@@ -107,7 +109,10 @@ function loadProviderConfigs() {
         params: { provider_type: 'chat_completion' }
     }).then(response => {
         if (response.data.status === 'ok') {
-            providerConfigs.value = response.data.data || [];
+            // 过滤掉 enable 为 false 的配置
+            providerConfigs.value = (response.data.data || []).filter(
+                (p: ProviderConfig) => p.enable !== false
+            );
         }
     }).catch(error => {
         console.error('获取提供商列表失败:', error);
@@ -138,6 +143,13 @@ function getCurrentSelection() {
         providerId: selectedProviderId.value,
         modelName: provider?.model || ''
     };
+}
+
+function handleMenuToggle(isOpen: boolean) {
+    if (isOpen) {
+        // 每次打开菜单时重新获取数据
+        loadProviderConfigs();
+    }
 }
 
 onMounted(() => {
