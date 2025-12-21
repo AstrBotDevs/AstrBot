@@ -172,7 +172,7 @@ export function useMessages(
         }
     }
 
-    async function getSessionMessages(sessionId: string, router: any) {
+    async function getSessionMessages(sessionId: string) {
         if (!sessionId) return;
 
         try {
@@ -188,7 +188,7 @@ export function useMessages(
 
                 // 如果会话还在运行，3秒后重新获取消息
                 setTimeout(() => {
-                    getSessionMessages(currSessionId.value, router);
+                    getSessionMessages(currSessionId.value);
                 }, 3000);
             }
 
@@ -353,6 +353,10 @@ export function useMessages(
                     const { done, value } = await reader.read();
                     if (done) {
                         console.log('SSE stream completed');
+                        // 流式传输结束后，获取最终消息并重新渲染
+                        if (currSessionId.value) {
+                            await getSessionMessages(currSessionId.value);
+                        }
                         break;
                     }
 
