@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.9.2"
+version = "4.10.0-alpha.1"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.10"

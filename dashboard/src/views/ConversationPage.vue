@@ -329,19 +329,10 @@
 import axios from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
-
-// 配置markdown-it，默认安全设置
-const md = new MarkdownIt({
-    html: false,        // 禁用HTML标签（关键！）
-    breaks: true,       // 换行转<br>
-    linkify: true,      // 自动转链接
-    typographer: false  // 禁用智能引号（避免干扰）
-});
 
 export default {
     name: 'ConversationPage',
@@ -508,21 +499,23 @@ export default {
         // 将对话历史转换为 MessageList 组件期望的格式
         formattedMessages() {
             return this.conversationHistory.map(msg => {
-                console.log('处理消息:', msg.role, msg.image_url, msg.audio_url);
+                console.log('处理消息:', msg.role, msg.content);
+                
+                // 将消息内容转换为 MessagePart[] 格式
+                const messageParts = this.convertContentToMessageParts(msg.content);
+                
                 if (msg.role === 'user') {
                     return {
                         content: {
                             type: 'user',
-                            message: this.extractTextFromContent(msg.content),
-                            image_url: this.extractImagesFromContent(msg.content),
+                            message: messageParts
                         }
                     };
                 } else {
                     return {
                         content: {
                             type: 'bot',
-                            message: this.extractTextFromContent(msg.content),
-                            embedded_images: this.extractImagesFromContent(msg.content),
+                            message: messageParts
                         }
                     };
                 }
@@ -999,7 +992,61 @@ export default {
             this.showMessage = true;
         },
 
-        // 从内容中提取文本
+        // 将消息内容转换为 MessagePart[] 格式
+        convertContentToMessageParts(content) {
+            const parts = [];
+            
+            if (typeof content === 'string') {
+                // 纯文本内容
+                if (content.trim()) {
+                    parts.push({
+                        type: 'plain',
+                        text: content
+                    });
+                }
+            } else if (Array.isArray(content)) {
+                // 数组格式（OpenAI 格式）
+                content.forEach(item => {
+                    if (item.type === 'text' && item.text) {
+                        parts.push({
+                            type: 'plain',
+                            text: item.text
+                        });
+                    } else if (item.type === 'image_url' && item.image_url?.url) {
+                        parts.push({
+                            type: 'image',
+                            embedded_url: item.image_url.url
+                        });
+                    }
+                });
+            } else if (typeof content === 'object' && content !== null) {
+                // 对象格式，尝试提取文本和图片
+                const textParts = [];
+                for (const [key, value] of Object.entries(content)) {
+                    if (typeof value === 'string' && value.trim()) {
+                        textParts.push(value);
+                    }
+                }
+                if (textParts.length > 0) {
+                    parts.push({
+                        type: 'plain',
+                        text: textParts.join('\n')
+                    });
+                }
+            }
+            
+            // 如果没有提取到任何内容，添加一个空文本
+            if (parts.length === 0) {
+                parts.push({
+                    type: 'plain',
+                    text: ''
+                });
+            }
+            
+            return parts;
+        },
+
+        // 从内容中提取文本（保留用于其他用途）
         extractTextFromContent(content) {
             if (typeof content === 'string') {
                 return content;
@@ -1013,7 +1060,7 @@ export default {
             return '';
         },
 
-        // 从内容中提取图片URL
+        // 从内容中提取图片URL（保留用于其他用途）
         extractImagesFromContent(content) {
             if (Array.isArray(content)) {
                 return content.filter(item => item.type === 'image_url')

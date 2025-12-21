@@ -162,7 +162,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
         <!-- Regular Property -->
         <template v-else>
           <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
-            <v-col cols="12" sm="7" class="property-info">
+            <v-col cols="12" sm="6" class="property-info">
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
@@ -180,7 +180,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
               </v-list-item>
             </v-col>
 
-            <v-col cols="12" sm="5" class="config-input">
+            <v-col cols="12" sm="6" class="config-input">
               <div v-if="metadata[metadataKey].items[key]" class="w-100">
                 <!-- Special handling for specific metadata types -->
                 <div v-if="metadata[metadataKey].items[key]?._special === 'select_provider'">
@@ -540,6 +540,7 @@ function hasVisibleItemsAfter(items, currentIndex) {
   font-size: 0.85em;
   opacity: 0.7;
   font-weight: normal;
+  display: none;
 }
 
 .important-hint {
@@ -573,7 +574,6 @@ function hasVisibleItemsAfter(items, currentIndex) {
   align-items: center;
   padding: 4px 8px;
   border-radius: 4px;
-  transition: background-color 0.2s;
 }
 
 .config-row:hover {

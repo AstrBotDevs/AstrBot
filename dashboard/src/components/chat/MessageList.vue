@@ -1,7 +1,11 @@
 <template>
     <div class="messages-container" ref="messageContainer">
+        <!-- 加载指示器 -->
+        <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
+            <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
+        </div>
         <!-- 聊天消息列表 -->
-        <div class="message-list">
+        <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }">
             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
@@ -40,13 +44,24 @@
                             <div v-else-if="part.type === 'file' && part.embedded_file" class="file-attachments">
                                 <div class="file-attachment">
                                     <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
-                                        :download="part.embedded_file.filename" class="file-link">
-                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        :download="part.embedded_file.filename" class="file-link"
+                                        :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                                            color: 'var(--v-theme-secondary)'
+                                        } : {}">
+                                        <v-icon size="small" class="file-icon"
+                                            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                         <span class="file-name">{{ part.embedded_file.filename }}</span>
                                     </a>
                                     <a v-else @click="downloadFile(part.embedded_file)"
-                                        class="file-link file-link-download">
-                                        <v-icon size="small" class="file-icon">mdi-file-document-outline</v-icon>
+                                        class="file-link file-link-download" :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                                            color: 'var(--v-theme-secondary)'
+                                        } : {}">
+                                        <v-icon size="small" class="file-icon"
+                                            :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                         <span class="file-name">{{ part.embedded_file.filename }}</span>
                                         <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
                                             size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
@@ -76,16 +91,19 @@
                             <template v-else>
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
                                 <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
-                                    class="reasoning-container">
-                                    <div class="reasoning-header" @click="toggleReasoning(index)">
+                                    class="reasoning-container" :class="{ 'is-dark': isDark }"
+                                    :style="isDark ? { backgroundColor: 'rgba(103, 58, 183, 0.08)' } : {}">
+                                    <div class="reasoning-header" :class="{ 'is-dark': isDark }"
+                                        @click="toggleReasoning(index)">
                                         <v-icon size="small" class="reasoning-icon">
                                             {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
                                         </v-icon>
                                         <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
                                     </div>
                                     <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                        <div v-html="md.render(msg.content.reasoning)"
-                                            class="markdown-content reasoning-text"></div>
+                                        <MarkdownRender :content="msg.content.reasoning"
+                                            class="reasoning-text markdown-content" :typewriter="false"
+                                            :style="isDark ? { opacity: '0.85' } : {}" :is-dark="isDark" />
                                     </div>
                                 </div>
 
@@ -95,12 +113,15 @@
                                     <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
                                         class="tool-calls-container">
                                         <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
-                                            class="tool-call-card">
-                                            <div class="tool-call-header"
+                                            class="tool-call-card" :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                                backgroundColor: 'rgba(40, 60, 100, 0.4)',
+                                                borderColor: 'rgba(100, 140, 200, 0.4)'
+                                            } : {}">
+                                            <div class="tool-call-header" :class="{ 'is-dark': isDark }"
                                                 @click="toggleToolCall(index, partIndex, tcIndex)">
                                                 <v-icon size="small" class="tool-call-expand-icon">
                                                     {{ isToolCallExpanded(index, partIndex, tcIndex) ?
-                                                    'mdi-chevron-down' : 'mdi-chevron-right' }}
+                                                        'mdi-chevron-down' : 'mdi-chevron-right' }}
                                                 </v-icon>
                                                 <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
                                                 <div class="tool-call-info">
@@ -121,28 +142,36 @@
                                                 </span>
                                             </div>
                                             <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
-                                                class="tool-call-details">
+                                                class="tool-call-details" :style="isDark ? {
+                                                    borderTopColor: 'rgba(100, 140, 200, 0.3)',
+                                                    backgroundColor: 'rgba(30, 45, 70, 0.5)'
+                                                } : {}">
                                                 <div class="tool-call-detail-row">
                                                     <span class="detail-label">ID:</span>
-                                                    <code class="detail-value">{{ toolCall.id }}</code>
+                                                    <code class="detail-value"
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
+                    }}</code>
                                                 </div>
                                                 <div class="tool-call-detail-row">
                                                     <span class="detail-label">Args:</span>
-                                                    <pre
-                                                        class="detail-value detail-json">{{ JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                    <pre class="detail-value detail-json"
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
+                                                            JSON.stringify(toolCall.args, null, 2) }}</pre>
                                                 </div>
                                                 <div v-if="toolCall.result" class="tool-call-detail-row">
                                                     <span class="detail-label">Result:</span>
-                                                    <pre
-                                                        class="detail-value detail-json detail-result">{{ formatToolResult(toolCall.result) }}</pre>
+                                                    <pre class="detail-value detail-json detail-result"
+                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
+                </pre>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- Text (Markdown) -->
-                                    <div v-else-if="part.type === 'plain' && part.text && part.text.trim()"
-                                        v-html="md.render(part.text)" class="markdown-content"></div>
+                                    <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
+                                        :content="part.text" :typewriter="false" class="markdown-content"
+                                        :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
                                     <!-- Image -->
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
@@ -164,15 +193,25 @@
                                     <div v-else-if="part.type === 'file' && part.embedded_file" class="embedded-files">
                                         <div class="embedded-file">
                                             <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
-                                                :download="part.embedded_file.filename" class="file-link">
-                                                <v-icon size="small"
-                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                :download="part.embedded_file.filename" class="file-link"
+                                                :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                                                    color: 'var(--v-theme-secondary)'
+                                                } : {}">
+                                                <v-icon size="small" class="file-icon"
+                                                    :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                                 <span class="file-name">{{ part.embedded_file.filename }}</span>
                                             </a>
                                             <a v-else @click="downloadFile(part.embedded_file)"
-                                                class="file-link file-link-download">
-                                                <v-icon size="small"
-                                                    class="file-icon">mdi-file-document-outline</v-icon>
+                                                class="file-link file-link-download" :class="{ 'is-dark': isDark }"
+                                                :style="isDark ? {
+                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                                                    color: 'var(--v-theme-secondary)'
+                                                } : {}">
+                                                <v-icon size="small" class="file-icon"
+                                                    :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
                                                 <span class="file-name">{{ part.embedded_file.filename }}</span>
                                                 <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
                                                     size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
@@ -185,33 +224,42 @@
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
                             <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
-                                }}</span>
+                            }}</span>
                             <!-- Agent Stats Menu -->
-                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover :close-on-content-click="false">
+                            <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover
+                                :close-on-content-click="false">
                                 <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" size="x-small" class="stats-info-icon">mdi-information-outline</v-icon>
+                                    <v-icon v-bind="props" size="x-small"
+                                        class="stats-info-icon">mdi-information-outline</v-icon>
                                 </template>
                                 <v-card class="stats-menu-card" variant="elevated" elevation="3">
                                     <v-card-text class="stats-menu-content">
                                         <div class="stats-menu-row">
                                             <span class="stats-menu-label">{{ tm('stats.inputTokens') }}</span>
-                                            <span class="stats-menu-value">{{ getInputTokens(msg.content.agentStats.token_usage) }}</span>
+                                            <span class="stats-menu-value">{{
+                                                getInputTokens(msg.content.agentStats.token_usage) }}</span>
                                         </div>
                                         <div class="stats-menu-row">
                                             <span class="stats-menu-label">{{ tm('stats.outputTokens') }}</span>
-                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output || 0 }}</span>
+                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.output
+                                                || 0 }}</span>
                                         </div>
-                                        <div class="stats-menu-row" v-if="msg.content.agentStats.token_usage.input_cached > 0">
+                                        <div class="stats-menu-row"
+                                            v-if="msg.content.agentStats.token_usage.input_cached > 0">
                                             <span class="stats-menu-label">{{ tm('stats.cachedTokens') }}</span>
-                                            <span class="stats-menu-value">{{ msg.content.agentStats.token_usage.input_cached }}</span>
+                                            <span class="stats-menu-value">{{
+                                                msg.content.agentStats.token_usage.input_cached }}</span>
                                         </div>
-                                        <div class="stats-menu-row" v-if="msg.content.agentStats.time_to_first_token > 0">
+                                        <div class="stats-menu-row"
+                                            v-if="msg.content.agentStats.time_to_first_token > 0">
                                             <span class="stats-menu-label">{{ tm('stats.ttft') }}</span>
-                                            <span class="stats-menu-value">{{ formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
+                                            <span class="stats-menu-value">{{
+                                                formatTTFT(msg.content.agentStats.time_to_first_token) }}</span>
                                         </div>
                                         <div class="stats-menu-row">
                                             <span class="stats-menu-label">{{ tm('stats.duration') }}</span>
-                                            <span class="stats-menu-value">{{ formatAgentDuration(msg.content.agentStats) }}</span>
+                                            <span class="stats-menu-value">{{
+                                                formatAgentDuration(msg.content.agentStats) }}</span>
                                         </div>
                                     </v-card-text>
                                 </v-card>
@@ -231,29 +279,20 @@
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import MarkdownIt from 'markdown-it';
-import hljs from 'highlight.js';
+import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue'
+import 'markstream-vue/index.css'
+import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
 
-const md = new MarkdownIt({
-    html: false,
-    breaks: true,
-    linkify: true,
-    highlight: function (code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-            try {
-                return hljs.highlight(code, { language: lang }).value;
-            } catch (err) {
-                console.error('Highlight error:', err);
-            }
-        }
-        return hljs.highlightAuto(code).value;
-    }
-});
+enableKatex();
+enableMermaid();
 
 export default {
     name: 'MessageList',
+    components: {
+        MarkdownRender
+    },
     props: {
         messages: {
             type: Array,
@@ -266,6 +305,10 @@ export default {
         isStreaming: {
             type: Boolean,
             default: false
+        },
+        isLoadingMessages: {
+            type: Boolean,
+            default: false
         }
     },
     emits: ['openImagePreview', 'replyMessage'],
@@ -275,8 +318,7 @@ export default {
 
         return {
             t,
-            tm,
-            md
+            tm
         };
     },
     data() {
@@ -741,6 +783,29 @@ export default {
 </script>
 
 <style scoped>
+:deep(.hr-node) {
+    margin-top: 1.25rem;
+    margin-bottom: 1.25rem;
+    opacity: 0.5;
+    border-top-width: .3px;
+}
+
+:deep(.paragraph-node) {
+    margin: .5rem 0;
+    line-height: 1.7;
+    margin-block: 1rem;
+}
+
+:deep(.list-node) {
+    margin-top: .5rem;
+    margin-bottom: .5rem;
+}
+
+:deep(.mermaid-block-header) {
+    gap: 8px;
+}
+
+
 /* 基础动画 */
 @keyframes fadeIn {
     from {
@@ -763,6 +828,31 @@ export default {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    position: relative;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10;
+    background-color: rgba(255, 255, 255, 0.7);
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.is-dark {
+    background-color: rgba(30, 30, 30, 0.7);
+}
+
+.message-list.loading-blur {
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
 }
 
 .message-bubble {
@@ -770,14 +860,70 @@ export default {
     border-radius: 12px;
 }
 
+.loading-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    margin-top: 8px;
+}
+
+.loading-text {
+    font-size: 14px;
+    color: var(--v-theme-secondaryText);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+
 
 @media (max-width: 768px) {
     .messages-container {
+        padding: 8px;
+    }
+
+    .message-list {
+        max-width: 100%;
+    }
+
+    .message-item {
         padding: 0;
     }
 
     .message-bubble {
-        padding: 2px 8px;
+        padding: 2px 12px;
+    }
+
+    .bot-message {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .bot-message-content {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    .bot-bubble {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .bot-avatar {
+        margin-left: 4px;
     }
 }
 
@@ -943,14 +1089,15 @@ export default {
 .bot-bubble {
     border: 1px solid var(--v-theme-border);
     color: var(--v-theme-primaryText);
-    font-size: 15px;
+    font-size: 16px;
     max-width: 100%;
+    padding-left: 12px;
 }
 
 .user-avatar,
 .bot-avatar {
     align-self: flex-start;
-    margin-top: 6px;
+    margin-top: 12px;
 }
 
 /* 附件样式 */
@@ -1072,19 +1219,9 @@ export default {
     white-space: nowrap;
 }
 
-.v-theme--dark .file-link {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: var(--v-theme-secondary);
-}
-
-.v-theme--dark .file-link:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.v-theme--dark .file-icon {
-    color: var(--v-theme-secondary);
+.file-link.is-dark:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 /* 动画类 */
@@ -1097,13 +1234,9 @@ export default {
     margin-bottom: 12px;
     margin-top: 6px;
     border: 1px solid var(--v-theme-border);
-    border-radius: 8px;
+    border-radius: 20px;
     overflow: hidden;
     width: fit-content;
-}
-
-.v-theme--dark .reasoning-container {
-    background-color: rgba(103, 58, 183, 0.08);
 }
 
 .reasoning-header {
@@ -1113,14 +1246,14 @@ export default {
     cursor: pointer;
     user-select: none;
     transition: background-color 0.2s ease;
-    border-radius: 8px;
+    border-radius: 20px;
 }
 
 .reasoning-header:hover {
     background-color: rgba(103, 58, 183, 0.08);
 }
 
-.v-theme--dark .reasoning-header:hover {
+.reasoning-header.is-dark:hover {
     background-color: rgba(103, 58, 183, 0.15);
 }
 
@@ -1151,10 +1284,6 @@ export default {
     color: var(--v-theme-secondaryText);
 }
 
-.v-theme--dark .reasoning-text {
-    opacity: 0.85;
-}
-
 /* Tool Call Card Styles */
 .tool-calls-container {
     display: flex;
@@ -1171,11 +1300,6 @@ export default {
     margin: 8px 0px;
 }
 
-.v-theme--dark .tool-call-card {
-    background-color: rgba(40, 60, 100, 0.4);
-    border-color: rgba(100, 140, 200, 0.4);
-}
-
 .tool-call-header {
     display: flex;
     align-items: center;
@@ -1190,7 +1314,7 @@ export default {
     background-color: rgba(169, 194, 219, 0.15);
 }
 
-.v-theme--dark .tool-call-header:hover {
+.tool-call-header.is-dark:hover {
     background-color: rgba(100, 150, 200, 0.2);
 }
 
@@ -1270,11 +1394,6 @@ export default {
     animation: fadeIn 0.2s ease-in-out;
 }
 
-.v-theme--dark .tool-call-details {
-    border-top-color: rgba(100, 140, 200, 0.3);
-    background-color: rgba(30, 45, 70, 0.5);
-}
-
 .tool-call-detail-row {
     display: flex;
     flex-direction: column;
@@ -1315,272 +1434,14 @@ export default {
     max-height: 300px;
     background-color: transparent;
 }
-
-.v-theme--dark .detail-value {
-    background-color: transparent;
-}
-
-.v-theme--dark .detail-result {
-    background-color: transparent;
-}
 </style>
 
 <style>
-/* Markdown内容样式 - 需要全局样式 */
 .markdown-content {
-    font-family: inherit;
+    max-width: 100%;
     line-height: 1.6;
 }
 
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4,
-.markdown-content h5,
-.markdown-content h6 {
-    margin-top: 16px;
-    margin-bottom: 10px;
-    font-weight: 600;
-    color: var(--v-theme-primaryText);
-}
-
-.markdown-content h1 {
-    font-size: 1.8em;
-    border-bottom: 1px solid var(--v-theme-border);
-    padding-bottom: 6px;
-}
-
-.markdown-content h2 {
-    font-size: 1.5em;
-}
-
-.markdown-content h3 {
-    font-size: 1.3em;
-}
-
-.markdown-content li {
-    margin-left: 16px;
-    margin-bottom: 4px;
-}
-
-.markdown-content p {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
-}
-
-.markdown-content pre {
-    background-color: var(--v-theme-surface);
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    margin: 12px 0;
-    position: relative;
-}
-
-.markdown-content code {
-    background-color: rgb(var(--v-theme-codeBg));
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-family: 'Fira Code', monospace;
-    font-size: 0.9em;
-    color: var(--v-theme-code);
-}
-
-/* 代码块中的code标签样式 */
-.markdown-content pre code {
-    background-color: transparent;
-    padding: 0;
-    border-radius: 0;
-    font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.85em;
-    color: inherit;
-    display: block;
-    overflow-x: auto;
-    line-height: 1.5;
-}
-
-/* 自定义代码高亮样式 */
-.markdown-content pre {
-    border: 1px solid var(--v-theme-border);
-    background-color: rgb(var(--v-theme-preBg));
-    border-radius: 16px;
-    padding: 16px;
-}
-
-/* 确保highlight.js的样式正确应用 */
-.markdown-content pre code.hljs {
-    background: transparent !important;
-    color: inherit;
-}
-
-/* 亮色主题下的代码高亮 */
-.v-theme--light .markdown-content pre {
-    background-color: #f6f8fa;
-}
-
-/* 暗色主题下的代码块样式 */
-.v-theme--dark .markdown-content pre {
-    background-color: #0d1117 !important;
-    border-color: rgba(255, 255, 255, 0.1);
-}
-
-.v-theme--dark .markdown-content pre code {
-    color: #e6edf3 !important;
-}
-
-/* 暗色主题下的highlight.js样式覆盖 */
-.v-theme--dark .hljs {
-    background: #0d1117 !important;
-    color: #e6edf3 !important;
-}
-
-.v-theme--dark .hljs-keyword,
-.v-theme--dark .hljs-selector-tag,
-.v-theme--dark .hljs-built_in,
-.v-theme--dark .hljs-name,
-.v-theme--dark .hljs-tag {
-    color: #ff7b72 !important;
-}
-
-.v-theme--dark .hljs-string,
-.v-theme--dark .hljs-title,
-.v-theme--dark .hljs-section,
-.v-theme--dark .hljs-attribute,
-.v-theme--dark .hljs-literal,
-.v-theme--dark .hljs-template-tag,
-.v-theme--dark .hljs-template-variable,
-.v-theme--dark .hljs-type,
-.v-theme--dark .hljs-addition {
-    color: #a5d6ff !important;
-}
-
-.v-theme--dark .hljs-comment,
-.v-theme--dark .hljs-quote,
-.v-theme--dark .hljs-deletion,
-.v-theme--dark .hljs-meta {
-    color: #8b949e !important;
-}
-
-.v-theme--dark .hljs-number,
-.v-theme--dark .hljs-regexp,
-.v-theme--dark .hljs-symbol,
-.v-theme--dark .hljs-variable,
-.v-theme--dark .hljs-template-variable,
-.v-theme--dark .hljs-link,
-.v-theme--dark .hljs-selector-attr,
-.v-theme--dark .hljs-selector-pseudo {
-    color: #79c0ff !important;
-}
-
-.v-theme--dark .hljs-function,
-.v-theme--dark .hljs-class,
-.v-theme--dark .hljs-title.class_ {
-    color: #d2a8ff !important;
-}
-
-/* 复制按钮样式 */
-.copy-code-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
-    padding: 6px;
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #666;
-    font-size: 12px;
-    z-index: 10;
-    backdrop-filter: blur(4px);
-}
-
-.copy-code-btn:hover {
-    background: rgba(255, 255, 255, 1);
-    color: #333;
-    transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.copy-code-btn:active {
-    transform: scale(0.95);
-}
-
-.markdown-content pre:hover .copy-code-btn {
-    opacity: 1;
-}
-
-.v-theme--dark .copy-code-btn {
-    background: rgba(45, 45, 45, 0.9);
-    border-color: rgba(255, 255, 255, 0.15);
-    color: #ccc;
-}
-
-.v-theme--dark .copy-code-btn:hover {
-    background: rgba(45, 45, 45, 1);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.markdown-content img {
-    max-width: 100%;
-    border-radius: 8px;
-    margin: 10px 0;
-}
-
-.loading-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    margin-top: 2px;
-}
-
-.loading-text {
-    font-size: 14px;
-    color: var(--v-theme-secondaryText);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-
-    0%,
-    100% {
-        opacity: 0.6;
-    }
-
-    50% {
-        opacity: 1;
-    }
-}
-
-.markdown-content blockquote {
-    border-left: 4px solid var(--v-theme-secondary);
-    padding-left: 16px;
-    color: var(--v-theme-secondaryText);
-    margin: 16px 0;
-}
-
-.markdown-content table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 16px 0;
-}
-
-.markdown-content th,
-.markdown-content td {
-    border: 1px solid var(--v-theme-background);
-    padding: 8px 12px;
-    text-align: left;
-}
-
-.markdown-content th {
-    background-color: var(--v-theme-containerBg);
-}
 
 /* Stats Menu 样式 */
 .stats-menu-card {
