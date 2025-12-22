@@ -185,23 +185,30 @@ class ConfigRoute(Route):
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
-            "/config/provider_sources/<provider_source_id>/models": (
+            "/config/provider_sources/models": (
                 "GET",
                 self.get_provider_source_models,
             ),
-            "/config/provider_sources/<provider_source_id>/update": (
+            "/config/provider_sources/update": (
                 "POST",
                 self.update_provider_source,
             ),
-            "/config/provider_sources/<provider_source_id>/delete": (
+            "/config/provider_sources/delete": (
                 "POST",
                 self.delete_provider_source,
             ),
         }
         self.register_routes()
 
-    async def delete_provider_source(self, provider_source_id: str):
+    async def delete_provider_source(self):
         """删除 provider_source，并更新关联的 providers"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        provider_source_id = post_data.get("id")
+        if not provider_source_id:
+            return Response().error("缺少 provider_source_id").__dict__
 
         provider_sources = self.config.get("provider_sources", [])
         target_idx = next(
@@ -235,15 +242,16 @@ class ConfigRoute(Route):
 
         return Response().ok(message="删除 provider source 成功").__dict__
 
-    async def update_provider_source(self, provider_source_id: str):
+    async def update_provider_source(self):
         """更新或新增 provider_source，并重载关联的 providers"""
-
         post_data = await request.json
         if not post_data:
             return Response().error("缺少配置数据").__dict__
 
         new_source_config = post_data.get("config") or post_data
-        original_id = provider_source_id
+        original_id = post_data.get("original_id")
+        if not original_id:
+            return Response().error("缺少 original_id").__dict__
 
         if not isinstance(new_source_config, dict):
             return Response().error("缺少或错误的配置数据").__dict__
@@ -684,11 +692,15 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
 
-    async def get_provider_source_models(self, provider_source_id: str):
+    async def get_provider_source_models(self):
         """获取指定 provider_source 支持的模型列表
 
         本质上会临时初始化一个 Provider 实例，调用 get_models() 获取模型列表，然后销毁实例
         """
+        provider_source_id = request.args.get("source_id")
+        if not provider_source_id:
+            return Response().error("缺少参数 source_id").__dict__
+
         try:
             from astrbot.core.provider.register import provider_cls_map
 
