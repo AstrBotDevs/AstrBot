@@ -631,7 +631,11 @@ class PluginManager:
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
-        await sync_command_configs()
+        try:
+            await sync_command_configs()
+        except Exception as e:
+            logger.error(f"同步指令配置失败: {e!s}")
+            logger.error(traceback.format_exc())
 
         if not fail_rec:
             return True, None

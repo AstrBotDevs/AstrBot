@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from astrbot.core import db_helper
+from astrbot.core import db_helper, logger
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
@@ -192,12 +192,18 @@ def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
     """收集指令，按需包含子指令。"""
     descriptors: list[CommandDescriptor] = []
     for handler in star_handlers_registry:
-        desc = _build_descriptor(handler)
-        if not desc:
+        try:
+            desc = _build_descriptor(handler)
+            if not desc:
+                continue
+            if not include_sub_commands and desc.is_sub_command:
+                continue
+            descriptors.append(desc)
+        except Exception as e:
+            logger.warning(
+                f"解析指令处理函数 {handler.handler_full_name} 失败，跳过该指令。原因: {e!s}"
+            )
             continue
-        if not include_sub_commands and desc.is_sub_command:
-            continue
-        descriptors.append(desc)
     return descriptors
 
 
