@@ -148,3 +148,10 @@ const emitDeleteSource = (source) => emit('delete-provider-source', source)
   }
 }
 </style>
+
+<style>
+.v-theme--PurpleThemeDark .provider-source-list-item--active {
+  background-color: #2d2d2d;
+  border: none;
+}
+</style>
