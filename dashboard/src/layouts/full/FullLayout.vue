@@ -7,9 +7,11 @@ import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import Chat from '@/components/chat/Chat.vue';
 import { useCustomizerStore } from '@/stores/customizer';
+import { useRouterLoadingStore } from '@/stores/routerLoading';
 
 const customizer = useCustomizerStore();
 const route = useRoute();
+const routerLoadingStore = useRouterLoadingStore();
 
 // 计算是否在聊天页面（非全屏模式）
 const isChatPage = computed(() => {
@@ -60,6 +62,16 @@ onMounted(() => {
     <v-app :theme="useCustomizerStore().uiTheme"
       :class="[customizer.fontTheme, customizer.mini_sidebar ? 'mini-sidebar' : '', customizer.inputBg ? 'inputWithbg' : '']"
     >
+      <!-- 路由切换进度条 -->
+      <v-progress-linear
+        v-if="routerLoadingStore.isLoading"
+        :model-value="routerLoadingStore.progress"
+        color="primary"
+        height="2"
+        fixed
+        top
+        style="z-index: 9999; position: absolute; opacity: 0.3; "
+      />
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main :style="{ 
