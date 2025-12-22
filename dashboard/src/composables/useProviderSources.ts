@@ -398,7 +398,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!confirm(tm('providerSources.deleteConfirm', { id: source.id }))) return
 
     try {
-      await axios.post(`/api/config/provider_sources/${source.id}/delete`)
+      await axios.post('/api/config/provider_sources/delete', { id: source.id })
 
       providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
       providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
@@ -423,7 +423,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     savingSource.value = true
     const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id
     try {
-      const response = await axios.post(`/api/config/provider_sources/${originalId}/update`, {
+      const response = await axios.post('/api/config/provider_sources/update', {
         config: editableProviderSource.value,
         original_id: originalId
       })
@@ -478,7 +478,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     loadingModels.value = true
     try {
       const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-      const response = await axios.get(`/api/config/provider_sources/${sourceId}/models`)
+      const response = await axios.get('/api/config/provider_sources/models', {
+        params: { source_id: sourceId }
+      })
       if (response.data.status === 'ok') {
         const metadataMap = response.data.data.model_metadata || {}
         modelMetadata.value = metadataMap
