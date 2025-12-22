@@ -1,6 +1,6 @@
 {
   "title": "Providers",
-  "subtitle": "Manage model providers",
+  "subtitle": "Can configure chat models in \"Chat Completion\". Additionally, \"Agent Runner\" includes integrations with third-party services like Dify, Coze, and Alibaba Bailian(DashScope).",
   "providers": {
     "title": "Service Providers",
     "settings": "Settings",

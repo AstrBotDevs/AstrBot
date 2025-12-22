@@ -1,6 +1,6 @@
 {
   "title": "模型提供商",
-  "subtitle": "管理模型提供商",
+  "subtitle": "可以在“对话”中配置对话模型。此外，“Agent 执行器”包含了 Dify、Coze、阿里云百炼应用等第三方服务的集成。",
   "providers": {
     "title": "模型提供商",
     "settings": "设置",
