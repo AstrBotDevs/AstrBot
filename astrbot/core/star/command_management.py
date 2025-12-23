@@ -90,6 +90,7 @@ async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescri
 async def rename_command(
     handler_full_name: str,
     new_fragment: str,
+    aliases: list[str] | None = None,
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
@@ -99,9 +100,24 @@ async def rename_command(
     if not new_fragment:
         raise ValueError("指令名不能为空。")
 
+    # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
     if _is_command_in_use(handler_full_name, candidate_full):
-        raise ValueError("新的指令名已被其他指令占用，请换一个名称。")
+        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
+
+    # 校验别名
+    if aliases:
+        for alias in aliases:
+            alias = alias.strip()
+            if not alias:
+                continue
+            alias_full = _compose_command(descriptor.parent_signature, alias)
+            if _is_command_in_use(handler_full_name, alias_full):
+                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
+
+    existing_cfg = await db_helper.get_command_config(handler_full_name)
+    merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
+    merged_extra["resolved_aliases"] = aliases or []
 
     config = await db_helper.upsert_command_config(
         handler_full_name=handler_full_name,
@@ -114,7 +130,7 @@ async def rename_command(
         conflict_key=descriptor.original_command,
         resolution_strategy="manual_rename",
         note=None,
-        extra_data=None,
+        extra_data=merged_extra,
         auto_managed=False,
     )
     _bind_descriptor_with_config(descriptor, config)
@@ -363,14 +379,27 @@ def _apply_config_to_descriptor(
         new_fragment,
     )
 
+    extra = config.extra_data or {}
+    resolved_aliases = extra.get("resolved_aliases")
+    if isinstance(resolved_aliases, list):
+        descriptor.aliases = [str(x) for x in resolved_aliases if str(x).strip()]
+
 
 def _apply_config_to_runtime(
     descriptor: CommandDescriptor,
     config: CommandConfig,
 ) -> None:
     descriptor.handler.enabled = config.enabled
-    if descriptor.filter_ref and descriptor.current_fragment:
-        _set_filter_fragment(descriptor.filter_ref, descriptor.current_fragment)
+    if descriptor.filter_ref:
+        if descriptor.current_fragment:
+            _set_filter_fragment(descriptor.filter_ref, descriptor.current_fragment)
+        extra = config.extra_data or {}
+        resolved_aliases = extra.get("resolved_aliases")
+        if isinstance(resolved_aliases, list):
+            _set_filter_aliases(
+                descriptor.filter_ref,
+                [str(x) for x in resolved_aliases if str(x).strip()],
+            )
 
 
 def _bind_configs_to_descriptors(
@@ -405,6 +434,18 @@ def _set_filter_fragment(
     if fragment == current_value:
         return
     setattr(filter_ref, attr, fragment)
+    if hasattr(filter_ref, "_cmpl_cmd_names"):
+        filter_ref._cmpl_cmd_names = None
+
+
+def _set_filter_aliases(
+    filter_ref: CommandFilter | CommandGroupFilter,
+    aliases: list[str],
+) -> None:
+    current_aliases = getattr(filter_ref, "alias", set())
+    if set(aliases) == current_aliases:
+        return
+    setattr(filter_ref, "alias", set(aliases))
     if hasattr(filter_ref, "_cmpl_cmd_names"):
         filter_ref._cmpl_cmd_names = None
 
