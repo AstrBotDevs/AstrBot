@@ -40,6 +40,7 @@ const updateAlias = (index: number, value: string) => {
 
 const hasAliases = computed(() => (props.aliases || []).some(a => (a ?? '').toString().trim()));
 const showAliasEditor = ref(false);
+const aliasEditorEverOpened = ref(false);
 
 watch(
   () => props.show,
@@ -49,6 +50,10 @@ watch(
     showAliasEditor.value = hasAliases.value;
   },
 );
+
+watch(showAliasEditor, (open) => {
+  if (open) aliasEditorEverOpened.value = true;
+});
 </script>
 
 <template>
@@ -78,9 +83,9 @@ watch(
             <div class="text-subtitle-1">{{ tm('dialogs.rename.aliases') }}</div>
             <v-icon size="20">{{ showAliasEditor ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </div>
-          <v-divider />
-          <v-expand-transition>
-            <div v-show="showAliasEditor" class="px-4 py-3">
+          <v-divider v-if="showAliasEditor" />
+          <v-slide-y-transition>
+            <div v-if="aliasEditorEverOpened" v-show="showAliasEditor" class="px-4 py-3">
               <div v-for="(alias, index) in aliases" :key="index" class="d-flex align-center mb-2">
                 <v-text-field
                   :model-value="alias"
@@ -104,7 +109,7 @@ watch(
                 {{ tm('dialogs.rename.addAlias') }}
               </v-btn>
             </div>
-          </v-expand-transition>
+          </v-slide-y-transition>
         </v-card>
       </v-card-text>
       <v-card-actions>
