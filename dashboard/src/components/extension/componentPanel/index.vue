@@ -288,6 +288,8 @@ watch(viewMode, async (mode) => {
     @update:show="renameDialog.show = $event"
     :new-name="renameDialog.newName"
     @update:new-name="renameDialog.newName = $event"
+    :aliases="renameDialog.aliases"
+    @update:aliases="renameDialog.aliases = $event"
     :command="renameDialog.command"
     :loading="renameDialog.loading"
     @confirm="handleConfirmRename"
