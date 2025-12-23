@@ -400,7 +400,9 @@ class AiocqhttpAdapter(Platform):
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
-                        logger.exception(f"消息段解析失败: type={t}, data={m['data']}. {e}")
+                        logger.exception(
+                            f"消息段解析失败: type={t}, data={m['data']}. {e}"
+                        )
                         continue
 
         abm.timestamp = int(time.time())
