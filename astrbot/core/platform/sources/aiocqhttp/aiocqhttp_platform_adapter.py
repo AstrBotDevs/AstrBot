@@ -387,18 +387,20 @@ class AiocqhttpAdapter(Platform):
                 message_str += "".join(at_parts)
             elif t == "markdown":
                 text = m["data"].get("markdown") or m["data"].get("content", "")
-                abm.message.append(Text(text=text))
+                abm.message.append(Plain(text=text))
                 message_str += text
             else:
                 for m in m_group:
                     try:
                         if t not in ComponentTypes:
-                            logger.warning(f"不支持的消息段类型，已忽略: {t}, data={m['data']}")
+                            logger.warning(
+                                f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
+                            )
                             continue
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
-                        logger.exception(f"消息段解析失败: type={t}, data={m['data']}")
+                        logger.exception(f"消息段解析失败: type={t}, data={m['data']}. {e}")
                         continue
 
         abm.timestamp = int(time.time())
