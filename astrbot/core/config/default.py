@@ -179,6 +179,7 @@ class ChatProviderTemplate(TypedDict):
     model: str
     modalities: list
     custom_extra_body: dict[str, Any]
+    max_context_length: int
 
 
 CHAT_PROVIDER_TEMPLATE = {
@@ -187,6 +188,7 @@ CHAT_PROVIDER_TEMPLATE = {
     "model": "",
     "modalities": [],
     "custom_extra_body": {},
+    "max_context_length": 0,  # 0 表示将从模型元数据自动填充
 }
 
 """
@@ -1992,6 +1994,11 @@ CONFIG_METADATA_2 = {
                         "description": "模型 ID",
                         "type": "string",
                         "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
+                    },
+                    "max_context_length": {
+                        "description": "模型上下文窗口大小",
+                        "type": "int",
+                        "hint": "模型支持的最大上下文长度（Token数）。添加模型时会自动从模型元数据填充，也可以手动修改。留空或为0时将在保存时自动填充。",
                     },
                     "dify_api_key": {
                         "description": "API Key",

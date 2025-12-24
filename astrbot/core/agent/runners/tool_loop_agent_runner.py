@@ -74,10 +74,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
+        self.max_step = 0  # 将在 step_until_done 中设置
+        self.current_step = 0
+
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        messages = self._inject_todolist_if_needed(self.run_context.messages)
+
         payload = {
-            "contexts": self.run_context.messages,
+            "contexts": messages,
             "func_tool": self.req.func_tool,
             "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
@@ -89,6 +94,87 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield resp
         else:
             yield await self.provider.text_chat(**payload)
+
+    def _inject_todolist_if_needed(self, messages: list[Message]) -> list[Message]:
+        """在Agent模式下注入TodoList和资源限制到消息列表"""
+        # 检查是否有 todolist 属性（更安全的方式，避免循环导入）
+        if not hasattr(self.run_context.context, "todolist"):
+            return messages
+
+        todolist = self.run_context.context.todolist
+        if not todolist:
+            return messages
+
+        # 构建注入内容
+        injection_parts = []
+
+        # 1. 资源限制部分
+        if hasattr(self, "max_step") and self.max_step > 0:
+            remaining = self.max_step - getattr(self, "current_step", 0)
+            current = getattr(self, "current_step", 0)
+            injection_parts.append(
+                f"--- 资源限制 ---\n"
+                f"剩余工具调用次数: {remaining}\n"
+                f"已调用次数: {current}\n"
+                f"请注意：请高效规划你的工作，尽量在工具调用次数用完之前完成任务。\n"
+                f"------------------"
+            )
+
+        # 2. TodoList部分
+        lines = ["--- 你当前的任务计划 ---"]
+        for task in todolist:
+            status_icon = {
+                "pending": "[ ]",
+                "in_progress": "[-]",
+                "completed": "[x]",
+            }.get(task.get("status", "pending"), "[ ]")
+            lines.append(f"{status_icon} #{task['id']}: {task['description']}")
+        lines.append("------------------------")
+        injection_parts.append("\n".join(lines))
+
+        # 合并所有注入内容
+        formatted_content = "\n\n".join(injection_parts)
+
+        # 使用智能注入，注入到 user 消息开头
+        return self._smart_inject_user_message(
+            messages, formatted_content, inject_at_start=True
+        )
+
+    def _smart_inject_user_message(
+        self,
+        messages: list[Message],
+        content_to_inject: str,
+        prefix: str = "",
+        inject_at_start: bool = False,
+    ) -> list[Message]:
+        """智能注入用户消息
+
+        Args:
+            messages: 消息列表
+            content_to_inject: 要注入的内容
+            prefix: 前缀文本（仅在新建消息时使用）
+            inject_at_start: 是否注入到 user 消息开头（默认注入到末尾）
+        """
+        messages = list(messages)
+        if messages and messages[-1].role == "user":
+            last_msg = messages[-1]
+            if inject_at_start:
+                # 注入到 user 消息开头
+                messages[-1] = Message(
+                    role="user", content=f"{content_to_inject}\n\n{last_msg.content}"
+                )
+            else:
+                # 注入到 user 消息末尾（默认行为）
+                messages[-1] = Message(
+                    role="user",
+                    content=f"{prefix}{content_to_inject}\n\n{last_msg.content}",
+                )
+        else:
+            # 添加新的 user 消息
+            messages.append(
+                Message(role="user", content=f"{prefix}{content_to_inject}")
+            )
+        return messages
 
     @override
     async def step(self):
@@ -231,9 +317,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, max_step: int
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
-        step_count = 0
-        while not self.done() and step_count < max_step:
-            step_count += 1
+        self.max_step = max_step  # 保存最大步数
+        self.current_step = 0
+
+        while not self.done() and self.current_step < max_step:
+            self.current_step += 1
             async for resp in self.step():
                 yield resp
 
@@ -245,12 +333,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 拔掉所有工具
             if self.req:
                 self.req.func_tool = None
-            # 注入提示词
-            self.run_context.messages.append(
-                Message(
-                    role="user",
-                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
-                )
+            # 智能注入提示词
+            self.run_context.messages = self._smart_inject_user_message(
+                self.run_context.messages,
+                "工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
             )
             # 再执行最后一步
             async for resp in self.step():

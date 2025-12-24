@@ -509,12 +509,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     const newId = `${sourceId}/${modelName}`
 
     const modalities = ['text']
-    if (supportsImageInput(getModelMetadata(modelName))) {
+    const meta = getModelMetadata(modelName)
+    if (supportsImageInput(meta)) {
       modalities.push('image')
     }
-    if (supportsToolCall(getModelMetadata(modelName))) {
+    if (supportsToolCall(meta)) {
       modalities.push('tool_use')
     }
+
+    // 从元数据中提取上下文窗口大小
+    const contextLimit = meta?.limit?.context
+    const maxContextLength = (contextLimit && typeof contextLimit === 'number' && contextLimit > 0)
+      ? contextLimit
+      : 0
 
     const newProvider = {
       id: newId,
@@ -522,7 +529,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       provider_source_id: sourceId,
       model: modelName,
       modalities,
-      custom_extra_body: {}
+      custom_extra_body: {},
+      max_context_length: maxContextLength
     }
 
     try {

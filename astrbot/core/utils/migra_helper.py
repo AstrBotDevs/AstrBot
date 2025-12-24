@@ -52,6 +52,7 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         "modalities",
         "custom_extra_body",
         "enable",
+        "max_context_length",
     }
 
     # Fields that should not go to source
@@ -118,6 +119,34 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         logger.info("Provider-source structure migration completed")
 
 
+def _migra_add_missing_provider_fields(conf: AstrBotConfig) -> None:
+    """
+    Add max_context_length field to existing providers.
+    This ensures old configurations get the new max_context_length field.
+    """
+    providers = conf.get("provider", [])
+    migrated = False
+
+    for provider in providers:
+        # Only process chat_completion providers
+        provider_type = provider.get("provider_type", "")
+        if provider_type != "chat_completion":
+            # For old providers without provider_type, check type field
+            old_type = provider.get("type", "")
+            if "chat_completion" not in old_type:
+                continue
+
+        # Add max_context_length if missing
+        if "max_context_length" not in provider:
+            provider["max_context_length"] = 0
+            migrated = True
+            logger.info(f"Added max_context_length to provider {provider.get('id')}")
+
+    if migrated:
+        conf.save_config()
+        logger.info("Provider max_context_length field migration completed")
+
+
 async def migra(
     db, astrbot_config_mgr, umop_config_router, acm: AstrBotConfigManager
 ) -> None:
@@ -163,4 +192,13 @@ async def migra(
         _migra_provider_to_source_structure(astrbot_config)
     except Exception as e:
         logger.error(f"Migration for provider-source structure failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+    # Add missing fields to existing providers
+    try:
+        _migra_add_missing_provider_fields(astrbot_config)
+        for conf in acm.confs.values():
+            _migra_add_missing_provider_fields(conf)
+    except Exception as e:
+        logger.error(f"Migration for adding missing provider fields failed: {e!s}")
         logger.error(traceback.format_exc())
