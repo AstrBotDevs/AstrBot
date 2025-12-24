@@ -368,14 +368,25 @@ class InternalAgentSubStage(Stage):
         messages: list[dict],
         model_context_limit: int,
         max_messages_to_keep: int = 20,
+        provider: Provider | None = None,
     ) -> list[dict]:
         """
         使用V2上下文管理器处理消息
+
+        Args:
+            messages: 原始消息列表
+            model_context_limit: 模型上下文限制（Token数）
+            max_messages_to_keep: 最大保留消息数
+            provider: LLM提供商实例（用于智能摘要）
+
+        Returns:
+            处理后的消息列表
         """
         from astrbot.core.context_manager import ContextManager
 
         manager = ContextManager(
             model_context_limit=model_context_limit,
+            provider=provider,
         )
 
         return await manager.process(
@@ -471,6 +482,7 @@ class InternalAgentSubStage(Stage):
                     messages=req.contexts,
                     model_context_limit=model_context_limit,
                     max_messages_to_keep=max_messages_to_keep,
+                    provider=provider,
                 )
                 self._fix_messages(req.contexts)
 
