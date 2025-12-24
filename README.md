@@ -1,4 +1,4 @@
-![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
+![astrbot-banner-xmas](https://github.com/user-attachments/assets/bf2341de-ec7a-45a7-a04a-02ad36450e99)
 
 <div align="center">
 
