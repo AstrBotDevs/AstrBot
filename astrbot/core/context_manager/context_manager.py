@@ -61,10 +61,12 @@ class ContextManager:
             return messages
 
         # 阶段1：Token初始统计
-        messages = await self._initial_token_check(messages)
+        needs_compression, initial_token_count = await self._initial_token_check(
+            messages
+        )
 
         # 阶段2：压缩/截断（如果需要）
-        messages = await self._run_compression(messages)
+        messages = await self._run_compression(messages, needs_compression)
 
         # 阶段3：最终处理
         messages = await self._run_final_processing(messages, max_messages_to_keep)
@@ -73,50 +75,36 @@ class ContextManager:
 
     async def _initial_token_check(
         self, messages: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[bool, int | None]:
         """
         阶段1：Token初始统计与触发判断
-        - 使用粗算方法计算Token数（中文0.6，其他0.3）
-        - 计算使用率
-        - 如果超过82%，设置标记以触发压缩/截断
-
-        Args:
-            messages: 原始消息列表
 
         Returns:
-            标记后的消息列表
+            tuple: (是否需要压缩, 初始token数)
         """
         if not messages:
-            return messages
+            return False, None
 
         total_tokens = self.token_counter.count_tokens(messages)
         usage_rate = total_tokens / self.model_context_limit
 
-        if usage_rate > self.threshold:
-            # 标记需要压缩
-            messages = [msg.copy() for msg in messages]
-            messages[0]["_needs_compression"] = True
-            messages[0]["_initial_token_count"] = total_tokens
-
-        return messages
+        needs_compression = usage_rate > self.threshold
+        return needs_compression, total_tokens if needs_compression else None
 
     async def _run_compression(
-        self, messages: list[dict[str, Any]]
+        self, messages: list[dict[str, Any]], needs_compression: bool
     ) -> list[dict[str, Any]]:
         """
         阶段2：压缩/截断处理
 
-        流程：
-        1. 检查是否需要压缩（_needs_compression标记）
-        2. 执行摘要压缩，再判断是否需要对半砍
-
         Args:
-            messages: 标记后的消息列表
+            messages: 消息列表
+            needs_compression: 是否需要压缩
 
         Returns:
             压缩/截断后的消息列表
         """
-        if not messages or not messages[0].get("_needs_compression"):
+        if not needs_compression:
             return messages
 
         # Agent模式：先摘要，再判断

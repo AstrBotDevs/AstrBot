@@ -135,24 +135,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 合并所有注入内容
         formatted_content = "\n\n".join(injection_parts)
 
-        # 使用智能注入
+        # 使用智能注入，注入到 user 消息开头
         return self._smart_inject_user_message(
-            messages, formatted_content, "任务列表已更新，这是你当前的计划：\n"
+            messages, formatted_content, inject_at_start=True
         )
 
     def _smart_inject_user_message(
-        self, messages: list[Message], content_to_inject: str, prefix: str = ""
+        self,
+        messages: list[Message],
+        content_to_inject: str,
+        prefix: str = "",
+        inject_at_start: bool = False,
     ) -> list[Message]:
-        """智能注入用户消息：如果最后一条消息是user，则合并；否则新建"""
+        """智能注入用户消息
+
+        Args:
+            messages: 消息列表
+            content_to_inject: 要注入的内容
+            prefix: 前缀文本（仅在新建消息时使用）
+            inject_at_start: 是否注入到 user 消息开头（默认注入到末尾）
+        """
         messages = list(messages)
         if messages and messages[-1].role == "user":
-            # 前置到最后一条user消息
             last_msg = messages[-1]
-            messages[-1] = Message(
-                role="user", content=f"{content_to_inject}\n\n{last_msg.content}"
-            )
+            if inject_at_start:
+                # 注入到 user 消息开头
+                messages[-1] = Message(
+                    role="user", content=f"{content_to_inject}\n\n{last_msg.content}"
+                )
+            else:
+                # 注入到 user 消息末尾（默认行为）
+                messages[-1] = Message(
+                    role="user",
+                    content=f"{prefix}{content_to_inject}\n\n{last_msg.content}",
+                )
         else:
-            # 添加新的user消息
+            # 添加新的 user 消息
             messages.append(
                 Message(role="user", content=f"{prefix}{content_to_inject}")
             )

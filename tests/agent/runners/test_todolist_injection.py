@@ -29,15 +29,35 @@ class MockToolLoopAgentRunner:
         self.max_step = 0
         self.current_step = 0
 
-    def _smart_inject_user_message(self, messages, content_to_inject, prefix=""):
-        """智能注入用户消息：如果最后一条消息是user，则合并；否则新建"""
+    def _smart_inject_user_message(
+        self,
+        messages,
+        content_to_inject,
+        prefix="",
+        inject_at_start=False,
+    ):
+        """智能注入用户消息：如果最后一条消息是user，则合并；否则新建
+
+        Args:
+            messages: 消息列表
+            content_to_inject: 要注入的内容
+            prefix: 前缀文本（仅在新建消息时使用）
+            inject_at_start: 是否注入到 user 消息开头
+        """
         messages = list(messages)
         if messages and messages[-1].role == "user":
-            # 前置到最后一条user消息
             last_msg = messages[-1]
-            messages[-1] = MockMessage(
-                role="user", content=f"{content_to_inject}\n\n{last_msg.content}"
-            )
+            if inject_at_start:
+                # 注入到 user 消息开头
+                messages[-1] = MockMessage(
+                    role="user", content=f"{content_to_inject}\n\n{last_msg.content}"
+                )
+            else:
+                # 注入到 user 消息末尾（默认行为）
+                messages[-1] = MockMessage(
+                    role="user",
+                    content=f"{prefix}{content_to_inject}\n\n{last_msg.content}",
+                )
         else:
             # 添加新的user消息
             messages.append(
@@ -85,9 +105,9 @@ class MockToolLoopAgentRunner:
         # 合并所有注入内容
         formatted_content = "\n\n".join(injection_parts)
 
-        # 使用智能注入
+        # 使用智能注入，注入到 user 消息开头
         return self._smart_inject_user_message(
-            messages, formatted_content, "任务列表已更新，这是你当前的计划：\n"
+            messages, formatted_content, inject_at_start=True
         )
 
 
@@ -139,7 +159,7 @@ class TestTodoListInjection:
         assert result == messages
 
     def test_inject_todolist_with_last_user_message(self):
-        """测试有最后一条 user 消息的情况"""
+        """测试有最后一条 user 消息的情况，TodoList 注入到开头"""
         self.mock_astr_context.todolist = [
             {"id": 1, "description": "Task 1", "status": "pending"},
             {"id": 2, "description": "Task 2", "status": "in_progress"},
@@ -158,13 +178,15 @@ class TestTodoListInjection:
         assert len(result) == len(messages)
         assert result[-1].role == "user"
 
-        # 检查是否包含了 TodoList 内容
+        # 检查是否包含了 TodoList 内容（在开头）
         content = result[-1].content
         assert "--- 你当前的任务计划 ---" in content
         assert "[ ] #1: Task 1" in content
         assert "[-] #2: Task 2" in content
         assert "[x] #3: Task 3" in content
         assert "------------------------" in content
+        # 用户原始消息应该在 TodoList 后面
+        assert content.startswith("--- 你当前的任务计划")
         assert "What's the weather today?" in content
 
     def test_inject_todolist_without_last_user_message(self):
@@ -185,9 +207,8 @@ class TestTodoListInjection:
         assert len(result) == len(messages) + 1
         assert result[-1].role == "user"
 
-        # 检查新消息的内容
+        # 检查新消息的内容（现在没有前缀了）
         content = result[-1].content
-        assert "任务列表已更新，这是你当前的计划：" in content
         assert "--- 你当前的任务计划 ---" in content
         assert "[ ] #1: Task 1" in content
         assert "[-] #2: Task 2" in content
@@ -209,7 +230,6 @@ class TestTodoListInjection:
 
         # 检查新消息的内容
         content = result[0].content
-        assert "任务列表已更新，这是你当前的计划：" in content
         assert "--- 你当前的任务计划 ---" in content
         assert "[ ] #1: Task 1" in content
         assert "------------------------" in content

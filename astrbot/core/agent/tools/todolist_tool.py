@@ -80,6 +80,10 @@ class TodoListUpdateTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
+        # 检查必填参数
+        if "status" not in kwargs or kwargs.get("status") is None:
+            return "error: 参数缺失，status 是必填参数"
+
         task_id = kwargs.get("task_id")
         status = kwargs.get("status")
         description = kwargs.get("description")

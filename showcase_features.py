@@ -1,15 +1,158 @@
 """
 功能展示脚本：演示 ContextManager 和 TodoList 注入的核心逻辑
 运行方式：python showcase_features.py
+
+复用核心组件逻辑，避免重复实现。
 """
 
 import asyncio
+import json
 from typing import Any
-from unittest.mock import MagicMock
+
+# ============ 复用的核心组件（从 astrbot.core 复制） ============
+
+
+class TokenCounter:
+    """Token计数器：从 astrbot.core.context_manager.token_counter 复制"""
+
+    def count_tokens(self, messages: list[dict[str, Any]]) -> int:
+        total = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                total += self._estimate_tokens(content)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and "text" in part:
+                        total += self._estimate_tokens(part["text"])
+            if "tool_calls" in msg:
+                for tc in msg["tool_calls"]:
+                    tc_str = json.dumps(tc)
+                    total += self._estimate_tokens(tc_str)
+        return total
+
+    def _estimate_tokens(self, text: str) -> int:
+        chinese_count = len([c for c in text if "\u4e00" <= c <= "\u9fff"])
+        other_count = len(text) - chinese_count
+        return int(chinese_count * 0.6 + other_count * 0.3)
+
+
+class ContextCompressor:
+    """上下文压缩器：从 astrbot.core.context_manager.context_compressor 复制"""
+
+    async def compress(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return messages
+
+
+class DefaultCompressor(ContextCompressor):
+    """默认压缩器"""
+
+    async def compress(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return messages
+
+
+class ContextManager:
+    """上下文管理器：从 astrbot.core.context_manager.context_manager 复制"""
+
+    COMPRESSION_THRESHOLD = 0.82
+
+    def __init__(self, model_context_limit: int, provider=None):
+        self.model_context_limit = model_context_limit
+        self.threshold = self.COMPRESSION_THRESHOLD
+        self.token_counter = TokenCounter()
+        if provider:
+            self.compressor = LLMSummaryCompressor(provider)
+        else:
+            self.compressor = DefaultCompressor()
+
+    async def process(
+        self, messages: list[dict[str, Any]], max_messages_to_keep: int = 20
+    ) -> list[dict[str, Any]]:
+        if self.model_context_limit == -1:
+            return messages
+
+        needs_compression, initial_token_count = await self._initial_token_check(
+            messages
+        )
+        messages = await self._run_compression(messages, needs_compression)
+        messages = await self._run_final_processing(messages, max_messages_to_keep)
+        return messages
+
+    async def _initial_token_check(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[bool, int | None]:
+        if not messages:
+            return False, None
+        total_tokens = self.token_counter.count_tokens(messages)
+        usage_rate = total_tokens / self.model_context_limit
+        needs_compression = usage_rate > self.threshold
+        return needs_compression, total_tokens if needs_compression else None
+
+    async def _run_compression(
+        self, messages: list[dict[str, Any]], needs_compression: bool
+    ) -> list[dict[str, Any]]:
+        if not needs_compression:
+            return messages
+        messages = await self._compress_by_summarization(messages)
+        tokens_after = self.token_counter.count_tokens(messages)
+        if tokens_after / self.model_context_limit > self.threshold:
+            messages = self._compress_by_halving(messages)
+        return messages
+
+    async def _compress_by_summarization(
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        return await self.compressor.compress(messages)
+
+    def _compress_by_halving(
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        if len(messages) <= 2:
+            return messages
+        keep_count = len(messages) // 2
+        return messages[:1] + messages[-keep_count:]
+
+    async def _run_final_processing(
+        self, messages: list[dict[str, Any]], max_messages_to_keep: int
+    ) -> list[dict[str, Any]]:
+        return messages
+
+
+class LLMSummaryCompressor(ContextCompressor):
+    """LLM摘要压缩器：从 astrbot.core.context_manager.context_compressor 复制"""
+
+    def __init__(self, provider, keep_recent: int = 4):
+        self.provider = provider
+        self.keep_recent = keep_recent
+
+    async def compress(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if len(messages) <= self.keep_recent + 1:
+            return messages
+        system_msg = (
+            messages[0] if messages and messages[0].get("role") == "system" else None
+        )
+        start_idx = 1 if system_msg else 0
+        messages_to_summarize = messages[start_idx : -self.keep_recent]
+        recent_messages = messages[-self.keep_recent :]
+        if not messages_to_summarize:
+            return messages
+        instruction_message = {"role": "user", "content": INSTRUCTION_TEXT}
+        llm_payload = messages_to_summarize + [instruction_message]
+        try:
+            response = await self.provider.text_chat(messages=llm_payload)
+            summary_content = response.completion_text
+        except Exception:
+            return messages
+        result = []
+        if system_msg:
+            result.append(system_msg)
+        result.append({"role": "system", "content": f"历史会话摘要：{summary_content}"})
+        result.extend(recent_messages)
+        return result
+
 
 # ============ 模拟数据准备 ============
 
-# 长消息历史（10+条消息，包含 user, assistant, tool calls）
 LONG_MESSAGE_HISTORY = [
     {
         "role": "system",
@@ -97,31 +240,32 @@ LONG_MESSAGE_HISTORY = [
     },
 ]
 
-# 示例 TodoList
 EXAMPLE_TODOLIST = [
     {"id": 1, "description": "查询天气信息", "status": "completed"},
     {"id": 2, "description": "设置会议提醒", "status": "in_progress"},
     {"id": 3, "description": "总结今日任务", "status": "pending"},
 ]
 
+INSTRUCTION_TEXT = """请基于我们完整的对话记录，生成一份全面的项目进展与内容总结报告。
+1、报告需要首先明确阐述最初的任务目标、其包含的各个子目标以及当前已完成的子目标清单。
+2、请系统性地梳理对话中涉及的所有核心话题，并总结每个话题的最终讨论结果，同时特别指出当前最新的核心议题及其进展。
+3、请详细分析工具使用情况，包括统计总调用次数，并从工具返回的结果中提炼出最有价值的关键信息。整个总结应结构清晰、内容详实。"""
+
 
 # ============ 辅助函数 ============
 
 
 def print_separator(title: str):
-    """打印分隔线和标题"""
     print("\n" + "=" * 80)
     print(f"  {title}")
     print("=" * 80 + "\n")
 
 
 def print_subsection(title: str):
-    """打印子标题"""
     print(f"\n--- {title} ---\n")
 
 
 def print_messages(messages: list[dict[str, Any]], indent: int = 0):
-    """格式化打印消息列表"""
     prefix = "  " * indent
     for i, msg in enumerate(messages):
         print(f"{prefix}[{i}] role={msg.get('role')}")
@@ -132,20 +276,18 @@ def print_messages(messages: list[dict[str, Any]], indent: int = 0):
             print(f"{prefix}    content: {content}")
         if msg.get("tool_calls"):
             print(f"{prefix}    tool_calls: {len(msg['tool_calls'])} calls")
-        if msg.get("tool_call_id"):
-            print(f"{prefix}    tool_call_id: {msg['tool_call_id']}")
 
 
 def format_todolist(
     todolist: list[dict], max_tool_calls: int = None, current_tool_calls: int = None
 ) -> str:
-    """格式化 TodoList（模拟注入逻辑）"""
+    """格式化 TodoList（复用于 tool_loop_agent_runner.py）"""
     lines = []
     if max_tool_calls is not None and current_tool_calls is not None:
         lines.append("--- 资源限制 ---")
         lines.append(f"剩余工具调用次数: {max_tool_calls - current_tool_calls}")
         lines.append(f"已调用次数: {current_tool_calls}")
-        lines.append("...")
+        lines.append("请注意：请高效规划你的工作，尽量在工具调用次数用完之前完成任务。")
         lines.append("------------------")
         lines.append("")
     lines.append("--- 你当前的任务计划 ---")
@@ -164,117 +306,34 @@ def inject_todolist_to_messages(
     max_tool_calls: int = None,
     current_tool_calls: int = None,
 ) -> list[dict]:
-    """模拟 TodoList 注入逻辑"""
+    """注入 TodoList（复用于 tool_loop_agent_runner.py）"""
     formatted_todolist = format_todolist(todolist, max_tool_calls, current_tool_calls)
     messages = [msg.copy() for msg in messages]
-
     if messages and messages[-1].get("role") == "user":
-        # 场景A：前置到最后一条user消息
         last_msg = messages[-1]
         messages[-1] = {
             "role": "user",
             "content": f"{formatted_todolist}\n\n{last_msg.get('content', '')}",
         }
     else:
-        # 场景B：添加新的user消息
         messages.append(
             {
                 "role": "user",
                 "content": f"任务列表已更新，这是你当前的计划：\n{formatted_todolist}",
             }
         )
-
     return messages
 
 
-# ============ ContextManager 模拟实现 ============
+# ============ Mock Provider ============
 
 
-class MockContextManager:
-    """模拟 ContextManager 的核心逻辑"""
+class MockProvider:
+    """模拟 LLM Provider，用于演示摘要压缩"""
 
-    def __init__(
-        self, model_context_limit: int, is_agent_mode: bool = False, provider=None
-    ):
-        self.model_context_limit = model_context_limit
-        self.is_agent_mode = is_agent_mode
-        self.threshold = 0.82
-        self.provider = provider
-
-    def count_tokens(self, messages: list[dict]) -> int:
-        """粗算Token数（中文0.6，其他0.3）"""
-        total = 0
-        for msg in messages:
-            content = str(msg.get("content", ""))
-            chinese_chars = sum(1 for c in content if "\u4e00" <= c <= "\u9fff")
-            other_chars = len(content) - chinese_chars
-            total += int(chinese_chars * 0.6 + other_chars * 0.3)
-        return total
-
-    async def process_context(self, messages: list[dict]) -> list[dict]:
-        """主处理方法"""
-        total_tokens = self.count_tokens(messages)
-        usage_rate = total_tokens / self.model_context_limit
-
-        print(f"  初始Token数: {total_tokens}")
-        print(f"  上下文限制: {self.model_context_limit}")
-        print(f"  使用率: {usage_rate:.2%}")
-        print(f"  触发阈值: {self.threshold:.0%}")
-
-        if usage_rate > self.threshold:
-            print("  ✓ 超过阈值，触发压缩/截断")
-
-            if self.is_agent_mode:
-                print("  → Agent模式：执行摘要压缩")
-                messages = await self._compress_by_summarization(messages)
-
-                # 第二次检查
-                tokens_after = self.count_tokens(messages)
-                if tokens_after / self.model_context_limit > self.threshold:
-                    print("  → 摘要后仍超过阈值，执行对半砍")
-                    messages = self._compress_by_halving(messages)
-            else:
-                print("  → 普通模式：执行对半砍")
-                messages = self._compress_by_halving(messages)
-        else:
-            print("  ✗ 未超过阈值，无需压缩")
-
-        return messages
-
-    async def _compress_by_summarization(self, messages: list[dict]) -> list[dict]:
-        """摘要压缩（模拟更智能的实现）"""
-        if self.provider:
-            # 确定要摘要的消息（除了system消息）
-            messages_to_summarize = (
-                messages[1:]
-                if messages and messages[0].get("role") == "system"
-                else messages
-            )
-
-            print("\n    【摘要压缩详情】")
-            print("    被摘要的旧消息历史:")
-            print_messages(messages_to_summarize, indent=3)
-
-            # 读取指令文本
-            instruction_text = """请基于我们完整的对话记录，生成一份全面的项目进展与内容总结报告。
-1、报告需要首先明确阐述最初的任务目标、其包含的各个子目标以及当前已完成的子目标清单。
-2、请系统性地梳理对话中涉及的所有核心话题，并总结每个话题的最终讨论结果，同时特别指出当前最新的核心议题及其进展。
-3、请详细分析工具使用情况，包括统计总调用次数，并从工具返回的结果中提炼出最有价值的关键信息。整个总结应结构清晰、内容详实。"""
-
-            print(f"\n    来自 summary_prompt.md 的指令文本:\n    {instruction_text}")
-
-            # 创建指令消息
-            instruction_message = {"role": "user", "content": instruction_text}
-
-            # 发送给模拟Provider的载荷
-            payload = messages_to_summarize + [instruction_message]
-            print(
-                "\n    发送给模拟Provider的载荷 (messages_to_summarize + [instruction_message]):"
-            )
-            print_messages(payload, indent=3)
-
-            # 模拟Provider返回的结构化摘要
-            structured_summary = """【项目进展总结报告】
+    async def text_chat(self, messages: list[dict]) -> "MockResponse":
+        return MockResponse(
+            completion_text="""【项目进展总结报告】
 1. 任务目标：用户需要查询天气信息并设置提醒
    - 已完成子目标：查询北京今日天气（晴天，25度，湿度60%，空气质量良好）
    - 已完成子目标：查询北京明日天气预报（多云转阴，23度，下午可能小雨，降水概率40%）
@@ -287,32 +346,65 @@ class MockContextManager:
 
 3. 工具使用情况：
    - 总调用次数：3次
-   - get_weather：2次（查询今日和明日天气）
-   - set_reminder：1次（设置会议提醒）
-   - 关键信息：天气数据准确，提醒设置成功"""
+   - get_weather：2次
+   - set_reminder：1次"""
+        )
 
-            print(f"\n    模拟Provider返回的结构化摘要:\n    {structured_summary}")
 
-            # 最终被压缩替换后的消息列表
-            compressed_messages = [
-                {"role": "system", "content": messages[0].get("content", "")},
-                {"role": "user", "content": structured_summary},
-                *messages[-2:],  # 保留最后2条
-            ]
+class MockResponse:
+    def __init__(self, completion_text: str):
+        self.completion_text = completion_text
 
-            print("\n    最终被压缩替换后的消息列表:")
-            print_messages(compressed_messages, indent=3)
 
-            return compressed_messages
-        return messages
+# ============ 演示包装类 ============
 
-    def _compress_by_halving(self, messages: list[dict]) -> list[dict]:
-        """对半砍：删除中间50%"""
-        if len(messages) <= 2:
-            return messages
 
-        keep_count = len(messages) // 2
-        return messages[:1] + messages[-keep_count:]
+class DemoContextManager:
+    """演示用 ContextManager 包装类：调用真实组件，添加打印输出"""
+
+    def __init__(self, model_context_limit: int, provider=None):
+        self.real_manager = ContextManager(model_context_limit, provider)
+        self.token_counter = TokenCounter()
+
+    async def process(self, messages: list[dict]) -> list[dict]:
+        total_tokens = self.token_counter.count_tokens(messages)
+        usage_rate = total_tokens / self.real_manager.model_context_limit
+
+        print(f"  初始Token数: {total_tokens}")
+        print(f"  上下文限制: {self.real_manager.model_context_limit}")
+        print(f"  使用率: {usage_rate:.2%}")
+        print(f"  触发阈值: {self.real_manager.threshold:.0%}")
+
+        if usage_rate > self.real_manager.threshold:
+            print("  ✓ 超过阈值，触发压缩/截断")
+
+            if (
+                self.real_manager.compressor.__class__.__name__
+                == "LLMSummaryCompressor"
+            ):
+                print("  → Agent模式：执行摘要压缩")
+                messages_to_summarize = (
+                    messages[1:]
+                    if messages and messages[0].get("role") == "system"
+                    else messages
+                )
+                print("\n    【摘要压缩详情】")
+                print("    被摘要的旧消息历史:")
+                print_messages(messages_to_summarize, indent=3)
+
+            result = await self.real_manager.process(messages)
+
+            tokens_after = self.token_counter.count_tokens(result)
+            if (
+                tokens_after / self.real_manager.model_context_limit
+                > self.real_manager.threshold
+            ):
+                print("  → 摘要后仍超过阈值，执行对半砍")
+        else:
+            print("  ✗ 未超过阈值，无需压缩")
+            result = messages
+
+        return result
 
 
 # ============ 主展示函数 ============
@@ -322,18 +414,16 @@ async def demo_context_manager():
     """演示 ContextManager 的工作流程"""
     print_separator("DEMO 1: ContextManager Workflow")
 
-    # Agent模式（摘要压缩）
     print_subsection("Agent模式（触发摘要压缩）")
 
     print("【输入】完整消息历史:")
     print_messages(LONG_MESSAGE_HISTORY, indent=1)
 
-    print("\n【处理】执行 ContextManager.process_context (AGENT 模式):")
-    mock_provider = MagicMock()
-    cm_agent = MockContextManager(
-        model_context_limit=150, is_agent_mode=True, provider=mock_provider
-    )
-    result_agent = await cm_agent.process_context(LONG_MESSAGE_HISTORY)
+    print("\n【处理】执行 ContextManager.process (AGENT 模式):")
+
+    mock_provider = MockProvider()
+    demo_cm = DemoContextManager(model_context_limit=150, provider=mock_provider)
+    result_agent = await demo_cm.process(LONG_MESSAGE_HISTORY)
 
     print("\n【输出】摘要压缩后的消息历史:")
     print_messages(result_agent, indent=1)
@@ -344,7 +434,6 @@ async def demo_todolist_injection():
     """演示 TodoList 自动注入"""
     print_separator("DEMO 2: TodoList Auto-Injection")
 
-    # 场景A：注入到现有用户消息
     print_subsection("场景 A: 注入到最后的用户消息")
 
     messages_with_user = [
@@ -364,7 +453,6 @@ async def demo_todolist_injection():
         print(f"  {status_icon} #{task['id']}: {task['description']}")
 
     print("\n【处理】执行 TodoList 注入逻辑...")
-    # 模拟资源限制：最大工具调用次数10，当前已调用3次
     max_tool_calls = 10
     current_tool_calls = 3
     result_a = inject_todolist_to_messages(
@@ -377,7 +465,6 @@ async def demo_todolist_injection():
     print("\n【详细】最后一条消息的完整内容:")
     print(f"  {result_a[-1]['content']}")
 
-    # 场景B：创建新用户消息进行注入
     print_subsection("场景 B: 在Tool Call后创建新消息注入")
 
     messages_with_tool = [
@@ -407,9 +494,6 @@ async def demo_todolist_injection():
         print(f"  {status_icon} #{task['id']}: {task['description']}")
 
     print("\n【处理】执行 TodoList 注入逻辑...")
-    # 模拟资源限制：最大工具调用次数10，当前已调用3次
-    max_tool_calls = 10
-    current_tool_calls = 3
     result_b = inject_todolist_to_messages(
         messages_with_tool, EXAMPLE_TODOLIST, max_tool_calls, current_tool_calls
     )
@@ -425,7 +509,6 @@ async def demo_max_step_smart_injection():
     """演示工具耗尽时的智能注入"""
     print_separator("DEMO 3: Max Step Smart Injection")
 
-    # 场景A：最后消息是user，合并注入
     print_subsection("场景 A: 工具耗尽时，最后消息是user（合并注入）")
 
     messages_with_user = [
@@ -474,14 +557,9 @@ async def demo_max_step_smart_injection():
     print("\n【处理】模拟工具耗尽，执行智能注入逻辑...")
     max_step_message = "工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。"
 
-    # 模拟智能注入：最后消息是user，合并
-    result_a = messages_with_user.copy()
+    result_a = inject_todolist_to_messages(messages_with_user, EXAMPLE_TODOLIST, 10, 7)
     if result_a and result_a[-1].get("role") == "user":
-        last_msg = result_a[-1]
-        result_a[-1] = {
-            "role": "user",
-            "content": f"{max_step_message}\n\n{last_msg.get('content', '')}",
-        }
+        result_a[-1]["content"] = f"{max_step_message}\n\n{result_a[-1]['content']}"
 
     print("\n【输出】智能注入后的消息历史:")
     print_messages(result_a, indent=1)
@@ -489,7 +567,6 @@ async def demo_max_step_smart_injection():
     print("\n【详细】最后一条消息的完整内容:")
     print(f"  {result_a[-1]['content']}")
 
-    # 场景B：最后消息不是user，新增消息
     print_subsection("场景 B: 工具耗尽时，最后消息是tool（新增消息注入）")
 
     messages_with_tool = [
@@ -554,8 +631,7 @@ async def demo_max_step_smart_injection():
     print_messages(messages_with_tool, indent=1)
 
     print("\n【处理】模拟工具耗尽，执行智能注入逻辑...")
-    # 模拟智能注入：最后消息不是user，新增
-    result_b = messages_with_tool.copy()
+    result_b = inject_todolist_to_messages(messages_with_tool, EXAMPLE_TODOLIST, 10, 7)
     result_b.append({"role": "user", "content": max_step_message})
 
     print("\n【输出】智能注入后的消息历史:")
@@ -566,7 +642,6 @@ async def demo_max_step_smart_injection():
 
 
 async def main():
-    """主函数"""
     print("\n")
     print("╔" + "═" * 78 + "╗")
     print("║" + " " * 20 + "AstrBot 功能展示脚本" + " " * 38 + "║")
