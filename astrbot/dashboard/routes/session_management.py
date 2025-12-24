@@ -38,6 +38,11 @@ class SessionManagementRoute(Route):
             "/session/list-all-with-status": ("GET", self.list_all_umos_with_status),
             "/session/batch-update-service": ("POST", self.batch_update_service),
             "/session/batch-update-provider": ("POST", self.batch_update_provider),
+            # 分组管理 API
+            "/session/groups": ("GET", self.list_groups),
+            "/session/group/create": ("POST", self.create_group),
+            "/session/group/update": ("POST", self.update_group),
+            "/session/group/delete": ("POST", self.delete_group),
         }
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
@@ -534,7 +539,8 @@ class SessionManagementRoute(Route):
         请求体:
         {
             "umos": ["平台:消息类型:会话ID", ...],  // 可选，如果不传则根据 scope 筛选
-            "scope": "all" | "group" | "private",  // 可选，批量范围
+            "scope": "all" | "group" | "private" | "custom_group",  // 可选，批量范围
+            "group_id": "分组ID",  // 当 scope 为 custom_group 时必填
             "llm_enabled": true/false/null,  // 可选，null表示不修改
             "tts_enabled": true/false/null,  // 可选
             "session_enabled": true/false/null  // 可选
@@ -544,6 +550,7 @@ class SessionManagementRoute(Route):
             data = await request.get_json()
             umos = data.get("umos", [])
             scope = data.get("scope", "")
+            group_id = data.get("group_id", "")
             llm_enabled = data.get("llm_enabled")
             tts_enabled = data.get("tts_enabled")
             session_enabled = data.get("session_enabled")
@@ -554,19 +561,28 @@ class SessionManagementRoute(Route):
 
             # 如果指定了 scope，获取符合条件的所有 umo
             if scope and not umos:
-                async with self.db_helper.get_db() as session:
-                    session: AsyncSession
-                    result = await session.execute(
-                        select(ConversationV2.user_id).distinct()
-                    )
-                    all_umos = [row[0] for row in result.fetchall()]
+                # 如果是自定义分组
+                if scope == "custom_group":
+                    if not group_id:
+                        return Response().error("请指定分组 ID").__dict__
+                    groups = self._get_groups()
+                    if group_id not in groups:
+                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
+                    umos = groups[group_id].get("umos", [])
+                else:
+                    async with self.db_helper.get_db() as session:
+                        session: AsyncSession
+                        result = await session.execute(
+                            select(ConversationV2.user_id).distinct()
+                        )
+                        all_umos = [row[0] for row in result.fetchall()]
 
-                if scope == "group":
-                    umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
-                elif scope == "private":
-                    umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
-                elif scope == "all":
-                    umos = all_umos
+                    if scope == "group":
+                        umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                    elif scope == "private":
+                        umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                    elif scope == "all":
+                        umos = all_umos
 
             if not umos:
                 return Response().error("没有找到符合条件的会话").__dict__
@@ -652,20 +668,30 @@ class SessionManagementRoute(Route):
             provider_type_enum = provider_type_map[provider_type]
 
             # 如果指定了 scope，获取符合条件的所有 umo
+            group_id = data.get("group_id", "")
             if scope and not umos:
-                async with self.db_helper.get_db() as session:
-                    session: AsyncSession
-                    result = await session.execute(
-                        select(ConversationV2.user_id).distinct()
-                    )
-                    all_umos = [row[0] for row in result.fetchall()]
+                # 如果是自定义分组
+                if scope == "custom_group":
+                    if not group_id:
+                        return Response().error("请指定分组 ID").__dict__
+                    groups = self._get_groups()
+                    if group_id not in groups:
+                        return Response().error(f"分组 '{group_id}' 不存在").__dict__
+                    umos = groups[group_id].get("umos", [])
+                else:
+                    async with self.db_helper.get_db() as session:
+                        session: AsyncSession
+                        result = await session.execute(
+                            select(ConversationV2.user_id).distinct()
+                        )
+                        all_umos = [row[0] for row in result.fetchall()]
 
-                if scope == "group":
-                    umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
-                elif scope == "private":
-                    umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
-                elif scope == "all":
-                    umos = all_umos
+                    if scope == "group":
+                        umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                    elif scope == "private":
+                        umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                    elif scope == "all":
+                        umos = all_umos
 
             if not umos:
                 return Response().error("没有找到符合条件的会话").__dict__
@@ -700,3 +726,144 @@ class SessionManagementRoute(Route):
         except Exception as e:
             logger.error(f"批量更新 Provider 失败: {e!s}")
             return Response().error(f"批量更新 Provider 失败: {e!s}").__dict__
+
+    # ==================== 分组管理 API ====================
+
+    def _get_groups(self) -> dict:
+        """获取所有分组"""
+        return sp.get("session_groups", {})
+
+    def _save_groups(self, groups: dict) -> None:
+        """保存分组"""
+        sp.put("session_groups", groups)
+
+    async def list_groups(self):
+        """获取所有分组列表"""
+        try:
+            groups = self._get_groups()
+            # 转换为列表格式，方便前端使用
+            groups_list = []
+            for group_id, group_data in groups.items():
+                groups_list.append({
+                    "id": group_id,
+                    "name": group_data.get("name", ""),
+                    "umos": group_data.get("umos", []),
+                    "umo_count": len(group_data.get("umos", [])),
+                })
+            return Response().ok({"groups": groups_list}).__dict__
+        except Exception as e:
+            logger.error(f"获取分组列表失败: {e!s}")
+            return Response().error(f"获取分组列表失败: {e!s}").__dict__
+
+    async def create_group(self):
+        """创建新分组"""
+        try:
+            data = await request.json
+            name = data.get("name", "").strip()
+            umos = data.get("umos", [])
+
+            if not name:
+                return Response().error("分组名称不能为空").__dict__
+
+            groups = self._get_groups()
+
+            # 生成唯一 ID
+            import uuid
+            group_id = str(uuid.uuid4())[:8]
+
+            groups[group_id] = {
+                "name": name,
+                "umos": umos,
+            }
+
+            self._save_groups(groups)
+
+            return Response().ok({
+                "message": f"分组 '{name}' 创建成功",
+                "group": {
+                    "id": group_id,
+                    "name": name,
+                    "umos": umos,
+                    "umo_count": len(umos),
+                }
+            }).__dict__
+        except Exception as e:
+            logger.error(f"创建分组失败: {e!s}")
+            return Response().error(f"创建分组失败: {e!s}").__dict__
+
+    async def update_group(self):
+        """更新分组（改名、增删成员）"""
+        try:
+            data = await request.json
+            group_id = data.get("id")
+            name = data.get("name")
+            umos = data.get("umos")
+            add_umos = data.get("add_umos", [])
+            remove_umos = data.get("remove_umos", [])
+
+            if not group_id:
+                return Response().error("分组 ID 不能为空").__dict__
+
+            groups = self._get_groups()
+
+            if group_id not in groups:
+                return Response().error(f"分组 '{group_id}' 不存在").__dict__
+
+            group = groups[group_id]
+
+            # 更新名称
+            if name is not None:
+                group["name"] = name.strip()
+
+            # 直接设置 umos 列表
+            if umos is not None:
+                group["umos"] = umos
+            else:
+                # 增量更新
+                current_umos = set(group.get("umos", []))
+                if add_umos:
+                    current_umos.update(add_umos)
+                if remove_umos:
+                    current_umos.difference_update(remove_umos)
+                group["umos"] = list(current_umos)
+
+            self._save_groups(groups)
+
+            return Response().ok({
+                "message": f"分组 '{group['name']}' 更新成功",
+                "group": {
+                    "id": group_id,
+                    "name": group["name"],
+                    "umos": group["umos"],
+                    "umo_count": len(group["umos"]),
+                }
+            }).__dict__
+        except Exception as e:
+            logger.error(f"更新分组失败: {e!s}")
+            return Response().error(f"更新分组失败: {e!s}").__dict__
+
+    async def delete_group(self):
+        """删除分组"""
+        try:
+            data = await request.json
+            group_id = data.get("id")
+
+            if not group_id:
+                return Response().error("分组 ID 不能为空").__dict__
+
+            groups = self._get_groups()
+
+            if group_id not in groups:
+                return Response().error(f"分组 '{group_id}' 不存在").__dict__
+
+            group_name = groups[group_id].get("name", group_id)
+            del groups[group_id]
+
+            self._save_groups(groups)
+
+            return Response().ok({
+                "message": f"分组 '{group_name}' 已删除"
+            }).__dict__
+        except Exception as e:
+            logger.error(f"删除分组失败: {e!s}")
+            return Response().error(f"删除分组失败: {e!s}").__dict__
