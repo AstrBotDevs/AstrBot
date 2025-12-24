@@ -174,6 +174,8 @@ class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
 
     role: Literal["assistant"] = "assistant"
+    reasoning_content: str | None = None
+    """The reasoning content from the assistant, if available (e.g., DeepSeek thinking mode)."""
 
 
 class ToolCallMessageSegment(Message):
