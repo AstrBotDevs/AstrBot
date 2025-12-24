@@ -797,13 +797,29 @@ class ProviderGoogleGenAI(Provider):
         self.chosen_api_key = key
         self._init_client()
 
-    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
+    async def assemble_context(
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
+        extra_content_blocks: list[dict] | None = None,
+    ):
         """组装上下文。"""
+        # 构建内容块列表
+        content_blocks = []
+
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        if text:
+            content_blocks.append({"type": "text", "text": text})
+        elif image_urls:
+            # 如果没有文本但有图片，添加占位文本
+            content_blocks.append({"type": "text", "text": "[图片]"})
+
+        # 2. 额外的内容块（系统提醒、指令等）
+        if extra_content_blocks:
+            content_blocks.extend(extra_content_blocks)
+
+        # 3. 图片内容
         if image_urls:
-            user_content = {
-                "role": "user",
-                "content": [{"type": "text", "text": text if text else "[图片]"}],
-            }
             for image_url in image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
@@ -816,14 +832,19 @@ class ProviderGoogleGenAI(Provider):
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append(
+                content_blocks.append(
                     {
                         "type": "image_url",
                         "image_url": {"url": image_data},
                     },
                 )
-            return user_content
-        return {"role": "user", "content": text}
+
+        # 如果只有文本且没有额外内容块，返回简单格式以保持向后兼容
+        if len(content_blocks) == 1 and content_blocks[0]["type"] == "text":
+            return {"role": "user", "content": content_blocks[0]["text"]}
+
+        # 否则返回多模态格式
+        return {"role": "user", "content": content_blocks}
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""

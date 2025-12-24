@@ -388,48 +388,71 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
+    async def assemble_context(
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
+        extra_content_blocks: list[dict] | None = None,
+    ):
         """组装上下文，支持文本和图片"""
-        if not image_urls:
-            return {"role": "user", "content": text}
-
         content = []
-        content.append({"type": "text", "text": text})
 
-        for image_url in image_urls:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        if text:
+            content.append({"type": "text", "text": text})
+        elif image_urls:
+            # 如果没有文本但有图片，添加占位文本
+            content.append({"type": "text", "text": "[图片]"})
 
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                continue
+        # 2. 额外的内容块（系统提醒、指令等）
+        if extra_content_blocks:
+            # 过滤出文本块，因为 Anthropic 主要支持文本和图片
+            text_blocks = [
+                block for block in extra_content_blocks if block.get("type") == "text"
+            ]
+            content.extend(text_blocks)
 
-            # Get mime type for the image
-            mime_type, _ = guess_type(image_url)
-            if not mime_type:
-                mime_type = "image/jpeg"  # Default to JPEG if can't determine
+        # 3. 图片内容
+        if image_urls:
+            for image_url in image_urls:
+                if image_url.startswith("http"):
+                    image_path = await download_image_by_url(image_url)
+                    image_data = await self.encode_image_bs64(image_path)
+                elif image_url.startswith("file:///"):
+                    image_path = image_url.replace("file:///", "")
+                    image_data = await self.encode_image_bs64(image_path)
+                else:
+                    image_data = await self.encode_image_bs64(image_url)
 
-            content.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": (
-                            image_data.split("base64,")[1]
-                            if "base64," in image_data
-                            else image_data
-                        ),
+                if not image_data:
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    continue
+
+                # Get mime type for the image
+                mime_type, _ = guess_type(image_url)
+                if not mime_type:
+                    mime_type = "image/jpeg"  # Default to JPEG if can't determine
+
+                content.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": (
+                                image_data.split("base64,")[1]
+                                if "base64," in image_data
+                                else image_data
+                            ),
+                        },
                     },
-                },
-            )
+                )
 
+        # 如果只有一个文本块且没有图片，返回简单格式以保持向后兼容
+        if len(content) == 1 and content[0]["type"] == "text":
+            return {"role": "user", "content": content[0]["text"]}
+
+        # 否则返回多模态格式
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> str:

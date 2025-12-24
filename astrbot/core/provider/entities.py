@@ -92,6 +92,8 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
+    extra_content_blocks: list[dict] = field(default_factory=list)
+    """额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
@@ -166,13 +168,21 @@ class ProviderRequest:
 
     async def assemble_context(self) -> dict:
         """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
+        # 构建内容块列表
+        content_blocks = []
+
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        if self.prompt and self.prompt.strip():
+            content_blocks.append({"type": "text", "text": self.prompt})
+        elif self.image_urls:
+            # 如果没有文本但有图片，添加占位文本
+            content_blocks.append({"type": "text", "text": "[图片]"})
+
+        # 2. 额外的内容块（系统提醒、指令等）
+        content_blocks.extend(self.extra_content_blocks)
+
+        # 3. 图片内容
         if self.image_urls:
-            user_content = {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": self.prompt if self.prompt else "[图片]"},
-                ],
-            }
             for image_url in self.image_urls:
                 if image_url.startswith("http"):
                     image_path = await download_image_by_url(image_url)
@@ -185,11 +195,21 @@ class ProviderRequest:
                 if not image_data:
                     logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
-                user_content["content"].append(
+                content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},
                 )
-            return user_content
-        return {"role": "user", "content": self.prompt}
+
+        # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
+        if (
+            len(content_blocks) == 1
+            and content_blocks[0]["type"] == "text"
+            and not self.extra_content_blocks
+            and not self.image_urls
+        ):
+            return {"role": "user", "content": content_blocks[0]["text"]}
+
+        # 否则返回多模态格式
+        return {"role": "user", "content": content_blocks}
 
     async def _encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
