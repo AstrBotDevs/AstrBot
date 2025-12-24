@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="session-management-page">
     <v-container fluid class="pa-0">
       <v-card flat>
@@ -454,6 +454,13 @@ export default {
       quickEditNameDialog: false,
       quickEditNameTarget: null,
       quickEditNameValue: '',
+      // 批量操作
+      batchScope: 'selected',
+      batchLlmStatus: null,
+      batchTtsStatus: null,
+      batchChatProvider: null,
+      batchTtsProvider: null,
+      batchUpdating: false,
 
       // 提示信息
       snackbar: false,
@@ -528,6 +535,30 @@ export default {
         label: `${kb.emoji || '📚'} ${kb.kb_name}`,
         value: kb.kb_id
       }))
+    },
+    batchScopeOptions() {
+      return [
+        { label: this.tm('batchOperations.scopeSelected'), value: 'selected' },
+        { label: this.tm('batchOperations.scopeAll'), value: 'all' },
+        { label: this.tm('batchOperations.scopeGroup'), value: 'group' },
+        { label: this.tm('batchOperations.scopePrivate'), value: 'private' },
+      ]
+    },
+
+    statusOptions() {
+      return [
+        { label: this.tm('status.enabled'), value: true },
+        { label: this.tm('status.disabled'), value: false },
+      ]
+    },
+
+    canApplyBatch() {
+      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null || 
+                         this.batchChatProvider !== null || this.batchTtsProvider !== null
+      if (this.batchScope === 'selected') {
+        return hasChanges && this.selectedItems.length > 0
+      }
+      return hasChanges
     },
   },
 

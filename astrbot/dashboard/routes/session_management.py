@@ -35,6 +35,9 @@ class SessionManagementRoute(Route):
             "/session/delete-rule": ("POST", self.delete_session_rule),
             "/session/batch-delete-rule": ("POST", self.batch_delete_session_rule),
             "/session/active-umos": ("GET", self.list_umos),
+            "/session/list-all-with-status": ("GET", self.list_all_umos_with_status),
+            "/session/batch-update-service": ("POST", self.batch_update_service),
+            "/session/batch-update-provider": ("POST", self.batch_update_provider),
         }
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
@@ -391,3 +394,309 @@ class SessionManagementRoute(Route):
         except Exception as e:
             logger.error(f"获取 UMO 列表失败: {e!s}")
             return Response().error(f"获取 UMO 列表失败: {e!s}").__dict__
+
+    async def list_all_umos_with_status(self):
+        """获取所有有对话记录的 UMO 及其服务状态（支持分页、搜索、筛选）
+
+        Query 参数:
+            page: 页码，默认为 1
+            page_size: 每页数量，默认为 20
+            search: 搜索关键词
+            message_type: 筛选消息类型 (group/private/all)
+            platform: 筛选平台
+        """
+        try:
+            page = request.args.get("page", 1, type=int)
+            page_size = request.args.get("page_size", 20, type=int)
+            search = request.args.get("search", "", type=str).strip()
+            message_type = request.args.get("message_type", "all", type=str)
+            platform = request.args.get("platform", "", type=str)
+
+            if page < 1:
+                page = 1
+            if page_size < 1:
+                page_size = 20
+            if page_size > 100:
+                page_size = 100
+
+            # 从 Conversation 表获取所有 distinct user_id (即 umo)
+            async with self.db_helper.get_db() as session:
+                session: AsyncSession
+                result = await session.execute(
+                    select(ConversationV2.user_id)
+                    .distinct()
+                    .order_by(ConversationV2.user_id)
+                )
+                all_umos = [row[0] for row in result.fetchall()]
+
+            # 获取所有 umo 的规则配置
+            umo_rules, _ = await self._get_umo_rules(page=1, page_size=99999, search="")
+
+            # 构建带状态的 umo 列表
+            umos_with_status = []
+            for umo in all_umos:
+                parts = umo.split(":")
+                umo_platform = parts[0] if len(parts) >= 1 else "unknown"
+                umo_message_type = parts[1] if len(parts) >= 2 else "unknown"
+                umo_session_id = parts[2] if len(parts) >= 3 else umo
+
+                # 筛选消息类型
+                if message_type != "all":
+                    if message_type == "group" and umo_message_type not in ["group", "GroupMessage"]:
+                        continue
+                    if message_type == "private" and umo_message_type not in ["private", "FriendMessage", "friend"]:
+                        continue
+
+                # 筛选平台
+                if platform and umo_platform != platform:
+                    continue
+
+                # 获取服务配置
+                rules = umo_rules.get(umo, {})
+                svc_config = rules.get("session_service_config", {})
+
+                custom_name = svc_config.get("custom_name", "") if svc_config else ""
+                session_enabled = svc_config.get("session_enabled", True) if svc_config else True
+                llm_enabled = svc_config.get("llm_enabled", True) if svc_config else True
+                tts_enabled = svc_config.get("tts_enabled", True) if svc_config else True
+
+                # 搜索过滤
+                if search:
+                    search_lower = search.lower()
+                    if search_lower not in umo.lower() and search_lower not in custom_name.lower():
+                        continue
+
+                # 获取 provider 配置
+                chat_provider_key = f"provider_perf_{ProviderType.CHAT_COMPLETION.value}"
+                tts_provider_key = f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}"
+                stt_provider_key = f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}"
+
+                umos_with_status.append({
+                    "umo": umo,
+                    "platform": umo_platform,
+                    "message_type": umo_message_type,
+                    "session_id": umo_session_id,
+                    "custom_name": custom_name,
+                    "session_enabled": session_enabled,
+                    "llm_enabled": llm_enabled,
+                    "tts_enabled": tts_enabled,
+                    "has_rules": umo in umo_rules,
+                    "chat_provider": rules.get(chat_provider_key),
+                    "tts_provider": rules.get(tts_provider_key),
+                    "stt_provider": rules.get(stt_provider_key),
+                })
+
+            # 分页
+            total = len(umos_with_status)
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            paginated = umos_with_status[start_idx:end_idx]
+
+            # 获取可用的平台列表
+            platforms = list({u["platform"] for u in umos_with_status})
+
+            # 获取可用的 providers
+            provider_manager = self.core_lifecycle.provider_manager
+            available_chat_providers = [
+                {"id": p.meta().id, "name": p.meta().id, "model": p.meta().model}
+                for p in provider_manager.provider_insts
+            ]
+            available_tts_providers = [
+                {"id": p.meta().id, "name": p.meta().id, "model": p.meta().model}
+                for p in provider_manager.tts_provider_insts
+            ]
+            available_stt_providers = [
+                {"id": p.meta().id, "name": p.meta().id, "model": p.meta().model}
+                for p in provider_manager.stt_provider_insts
+            ]
+
+            return (
+                Response()
+                .ok({
+                    "sessions": paginated,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "platforms": platforms,
+                    "available_chat_providers": available_chat_providers,
+                    "available_tts_providers": available_tts_providers,
+                    "available_stt_providers": available_stt_providers,
+                })
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"获取会话状态列表失败: {e!s}")
+            return Response().error(f"获取会话状态列表失败: {e!s}").__dict__
+
+    async def batch_update_service(self):
+        """批量更新多个 UMO 的服务状态 (LLM/TTS/Session)
+
+        请求体:
+        {
+            "umos": ["平台:消息类型:会话ID", ...],  // 可选，如果不传则根据 scope 筛选
+            "scope": "all" | "group" | "private",  // 可选，批量范围
+            "llm_enabled": true/false/null,  // 可选，null表示不修改
+            "tts_enabled": true/false/null,  // 可选
+            "session_enabled": true/false/null  // 可选
+        }
+        """
+        try:
+            data = await request.get_json()
+            umos = data.get("umos", [])
+            scope = data.get("scope", "")
+            llm_enabled = data.get("llm_enabled")
+            tts_enabled = data.get("tts_enabled")
+            session_enabled = data.get("session_enabled")
+
+            # 如果没有任何修改
+            if llm_enabled is None and tts_enabled is None and session_enabled is None:
+                return Response().error("至少需要指定一个要修改的状态").__dict__
+
+            # 如果指定了 scope，获取符合条件的所有 umo
+            if scope and not umos:
+                async with self.db_helper.get_db() as session:
+                    session: AsyncSession
+                    result = await session.execute(
+                        select(ConversationV2.user_id).distinct()
+                    )
+                    all_umos = [row[0] for row in result.fetchall()]
+
+                if scope == "group":
+                    umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                elif scope == "private":
+                    umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                elif scope == "all":
+                    umos = all_umos
+
+            if not umos:
+                return Response().error("没有找到符合条件的会话").__dict__
+
+            # 批量更新
+            success_count = 0
+            failed_umos = []
+
+            for umo in umos:
+                try:
+                    # 获取现有配置
+                    session_config = sp.get(
+                        "session_service_config", {}, scope="umo", scope_id=umo
+                    ) or {}
+
+                    # 更新状态
+                    if llm_enabled is not None:
+                        session_config["llm_enabled"] = llm_enabled
+                    if tts_enabled is not None:
+                        session_config["tts_enabled"] = tts_enabled
+                    if session_enabled is not None:
+                        session_config["session_enabled"] = session_enabled
+
+                    # 保存
+                    sp.put("session_service_config", session_config, scope="umo", scope_id=umo)
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"更新 {umo} 服务状态失败: {e!s}")
+                    failed_umos.append(umo)
+
+            status_changes = []
+            if llm_enabled is not None:
+                status_changes.append(f"LLM={'启用' if llm_enabled else '禁用'}")
+            if tts_enabled is not None:
+                status_changes.append(f"TTS={'启用' if tts_enabled else '禁用'}")
+            if session_enabled is not None:
+                status_changes.append(f"会话={'启用' if session_enabled else '禁用'}")
+
+            return (
+                Response()
+                .ok({
+                    "message": f"已更新 {success_count} 个会话 ({', '.join(status_changes)})",
+                    "success_count": success_count,
+                    "failed_count": len(failed_umos),
+                    "failed_umos": failed_umos,
+                })
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"批量更新服务状态失败: {e!s}")
+            return Response().error(f"批量更新服务状态失败: {e!s}").__dict__
+
+    async def batch_update_provider(self):
+        """批量更新多个 UMO 的 Provider 配置
+
+        请求体:
+        {
+            "umos": ["平台:消息类型:会话ID", ...],  // 可选
+            "scope": "all" | "group" | "private",  // 可选
+            "provider_type": "chat_completion" | "text_to_speech" | "speech_to_text",
+            "provider_id": "provider_id"
+        }
+        """
+        try:
+            data = await request.get_json()
+            umos = data.get("umos", [])
+            scope = data.get("scope", "")
+            provider_type = data.get("provider_type")
+            provider_id = data.get("provider_id")
+
+            if not provider_type or not provider_id:
+                return Response().error("缺少必要参数: provider_type, provider_id").__dict__
+
+            # 转换 provider_type
+            provider_type_map = {
+                "chat_completion": ProviderType.CHAT_COMPLETION,
+                "text_to_speech": ProviderType.TEXT_TO_SPEECH,
+                "speech_to_text": ProviderType.SPEECH_TO_TEXT,
+            }
+            if provider_type not in provider_type_map:
+                return Response().error(f"不支持的 provider_type: {provider_type}").__dict__
+
+            provider_type_enum = provider_type_map[provider_type]
+
+            # 如果指定了 scope，获取符合条件的所有 umo
+            if scope and not umos:
+                async with self.db_helper.get_db() as session:
+                    session: AsyncSession
+                    result = await session.execute(
+                        select(ConversationV2.user_id).distinct()
+                    )
+                    all_umos = [row[0] for row in result.fetchall()]
+
+                if scope == "group":
+                    umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                elif scope == "private":
+                    umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                elif scope == "all":
+                    umos = all_umos
+
+            if not umos:
+                return Response().error("没有找到符合条件的会话").__dict__
+
+            # 批量更新
+            success_count = 0
+            failed_umos = []
+            provider_manager = self.core_lifecycle.provider_manager
+
+            for umo in umos:
+                try:
+                    await provider_manager.set_provider(
+                        provider_id=provider_id,
+                        provider_type=provider_type_enum,
+                        umo=umo,
+                    )
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"更新 {umo} Provider 失败: {e!s}")
+                    failed_umos.append(umo)
+
+            return (
+                Response()
+                .ok({
+                    "message": f"已更新 {success_count} 个会话的 {provider_type} 为 {provider_id}",
+                    "success_count": success_count,
+                    "failed_count": len(failed_umos),
+                    "failed_umos": failed_umos,
+                })
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"批量更新 Provider 失败: {e!s}")
+            return Response().error(f"批量更新 Provider 失败: {e!s}").__dict__
