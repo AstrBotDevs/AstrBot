@@ -112,6 +112,24 @@
     "enabled": "Enabled",
     "disabled": "Disabled"
   },
+  "batchOperations": {
+    "title": "Batch Operations",
+    "hint": "Quick batch modify session settings",
+    "scope": "Apply to",
+    "scopeSelected": "Selected sessions",
+    "scopeAll": "All sessions",
+    "scopeGroup": "All groups",
+    "scopePrivate": "All private chats",
+    "llmStatus": "LLM Status",
+    "ttsStatus": "TTS Status",
+    "chatProvider": "Chat Model",
+    "ttsProvider": "TTS Model",
+    "apply": "Apply Changes"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
   "messages": {
     "refreshSuccess": "Data refreshed",
     "loadError": "Failed to load data",

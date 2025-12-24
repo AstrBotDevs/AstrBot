@@ -111,6 +111,47 @@
           </v-data-table-server>
         </v-card-text>
       </v-card>
+      <!-- 批量操作面板 -->
+      <v-card flat class="mt-4">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <span class="text-h6">{{ tm('batchOperations.title') }}</span>
+          <v-chip size="small" class="ml-2" color="info" variant="outlined">
+            {{ tm('batchOperations.hint') }}
+          </v-chip>
+        </v-card-title>
+        <v-card-text>
+          <v-row dense>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchScope" :items="batchScopeOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.scope')" hide-details variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchLlmStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchTtsStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchChatProvider" :items="chatProviderOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+          </v-row>
+          <v-row dense class="mt-3">
+            <v-col cols="12" class="d-flex justify-end">
+              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges"
+                :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
+                {{ tm('batchOperations.apply') }}
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-card-text>
+      </v-card>
 
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
@@ -1102,6 +1143,77 @@ export default {
         this.showError(error.response?.data?.message || this.tm('messages.saveError'))
       }
       this.saving = false
+    },
+
+    async applyBatchChanges() {
+      this.batchUpdating = true
+      try {
+        const scope = this.batchScope
+        let umos = []
+
+        if (scope === 'selected') {
+          umos = this.selectedItems.map(item => item.umo)
+          if (umos.length === 0) {
+            this.showError('请先选择要操作的会话')
+            this.batchUpdating = false
+            return
+          }
+        }
+
+        const tasks = []
+
+        if (this.batchLlmStatus !== null || this.batchTtsStatus !== null) {
+          const serviceData = { scope, umos }
+          if (this.batchLlmStatus !== null) {
+            serviceData.llm_enabled = this.batchLlmStatus
+          }
+          if (this.batchTtsStatus !== null) {
+            serviceData.tts_enabled = this.batchTtsStatus
+          }
+          tasks.push(axios.post('/api/session/batch-update-service', serviceData))
+        }
+
+        if (this.batchChatProvider !== null) {
+          tasks.push(axios.post('/api/session/batch-update-provider', {
+            scope,
+            umos,
+            provider_type: 'chat_completion',
+            provider_id: this.batchChatProvider || null
+          }))
+        }
+
+        if (this.batchTtsProvider !== null) {
+          tasks.push(axios.post('/api/session/batch-update-provider', {
+            scope,
+            umos,
+            provider_type: 'text_to_speech',
+            provider_id: this.batchTtsProvider || null
+          }))
+        }
+
+        if (tasks.length === 0) {
+          this.showError('请至少选择一项要修改的配置')
+          this.batchUpdating = false
+          return
+        }
+
+        const results = await Promise.all(tasks)
+        const allOk = results.every(r => r.data.status === 'ok')
+
+        if (allOk) {
+          this.showSuccess('批量更新成功')
+          this.batchLlmStatus = null
+          this.batchTtsStatus = null
+          this.batchChatProvider = null
+          this.batchTtsProvider = null
+          await this.loadData()
+        } else {
+          this.showError('部分更新失败')
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '批量更新失败')
+      }
+      this.batchUpdating = false
     },
   },
 }
