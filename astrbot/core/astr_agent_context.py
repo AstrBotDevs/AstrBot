@@ -16,6 +16,8 @@ class AstrAgentContext:
     """The message event associated with the agent context."""
     extra: dict[str, str] = Field(default_factory=dict)
     """Customized extra data."""
+    todolist: list[dict] = Field(default_factory=list)
+    """Agent's internal todo list for task management."""
 
 
 AgentContextWrapper = ContextWrapper[AstrAgentContext]

@@ -646,6 +646,25 @@ class ProviderManager:
             npid = new_config.get("id", None)
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
+
+            # 自动填充上下文窗口大小（如果为空且元数据中有）
+            if not new_config.get("max_context_length"):
+                from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+                model_name = new_config.get("model", "")
+                if model_name and model_name in LLM_METADATAS:
+                    meta = LLM_METADATAS[model_name]
+                    context_limit = meta.get("limit", {}).get("context")
+                    if (
+                        context_limit
+                        and isinstance(context_limit, int)
+                        and context_limit > 0
+                    ):
+                        new_config["max_context_length"] = context_limit
+                        logger.info(
+                            f"Auto-filled max_context_length={context_limit} for model {model_name}"
+                        )
+
             config = self.acm.default_conf
             for provider in config["provider"]:
                 if (
@@ -670,6 +689,25 @@ class ProviderManager:
             npid = new_config.get("id", None)
             if not npid:
                 raise ValueError("New provider config must have an 'id' field")
+
+            # 自动填充上下文窗口大小（如果为空且元数据中有）
+            if not new_config.get("max_context_length"):
+                from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+                model_name = new_config.get("model", "")
+                if model_name and model_name in LLM_METADATAS:
+                    meta = LLM_METADATAS[model_name]
+                    context_limit = meta.get("limit", {}).get("context")
+                    if (
+                        context_limit
+                        and isinstance(context_limit, int)
+                        and context_limit > 0
+                    ):
+                        new_config["max_context_length"] = context_limit
+                        logger.info(
+                            f"Auto-filled max_context_length={context_limit} for model {model_name}"
+                        )
+
             config = self.acm.default_conf
             for provider in config["provider"]:
                 if provider.get("id", None) == npid:

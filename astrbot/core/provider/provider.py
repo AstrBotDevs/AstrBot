@@ -73,6 +73,7 @@ class Provider(AbstractProvider):
     ) -> None:
         super().__init__(provider_config)
         self.provider_settings = provider_settings
+        self.max_context_length = self.provider_settings.get("max_context_length", -1)
 
     @abc.abstractmethod
     def get_current_key(self) -> str:

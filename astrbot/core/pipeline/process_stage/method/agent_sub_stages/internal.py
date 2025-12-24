@@ -7,6 +7,10 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tools import (
+    TODOLIST_ADD_TOOL,
+    TODOLIST_UPDATE_TOOL,
+)
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
@@ -214,6 +218,13 @@ class InternalAgentSubStage(Stage):
                 )
                 req.func_tool = None
 
+    def _add_internal_tools(self, req: ProviderRequest):
+        """Add internal tools to the request"""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(TODOLIST_ADD_TOOL)
+        req.func_tool.add_tool(TODOLIST_UPDATE_TOOL)
+
     def _plugin_tool_fix(
         self,
         event: AstrMessageEvent,
@@ -225,6 +236,8 @@ class InternalAgentSubStage(Stage):
             for tool in req.func_tool.tools:
                 mp = tool.handler_module_path
                 if not mp:
+                    # Internal tools without handler_module_path should always be included
+                    new_tool_set.add_tool(tool)
                     continue
                 plugin = star_map.get(mp)
                 if not plugin:
@@ -350,6 +363,25 @@ class InternalAgentSubStage(Stage):
                 fixed_messages.append(message)
         return fixed_messages
 
+    async def _process_with_context_manager(
+        self,
+        messages: list[dict],
+        model_context_limit: int,
+        max_messages_to_keep: int = 20,
+    ) -> list[dict]:
+        """
+        使用V2上下文管理器处理消息
+        """
+        from astrbot.core.context_manager import ContextManager
+
+        manager = ContextManager(
+            model_context_limit=model_context_limit,
+        )
+
+        return await manager.process(
+            messages=messages, max_messages_to_keep=max_messages_to_keep
+        )
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -424,14 +456,30 @@ class InternalAgentSubStage(Stage):
             # apply knowledge base feature
             await self._apply_kb(event, req)
 
-            # truncate contexts to fit max length
+            # V2 上下文管理
             if req.contexts:
-                req.contexts = self._truncate_contexts(req.contexts)
+                from astrbot.core.config import app_config
+
+                model_context_limit = app_config.get_model_context_limit(
+                    provider.get_model()
+                )
+                max_messages_to_keep = app_config.get_max_send_bot_messages(
+                    provider.get_model()
+                )
+
+                req.contexts = await self._process_with_context_manager(
+                    messages=req.contexts,
+                    model_context_limit=model_context_limit,
+                    max_messages_to_keep=max_messages_to_keep,
+                )
                 self._fix_messages(req.contexts)
 
             # session_id
             if not req.session_id:
                 req.session_id = event.unified_msg_origin
+
+            # add internal tools
+            self._add_internal_tools(req)
 
             # check provider modalities, if provider does not support image/tool_use, clear them in request.
             self._modalities_fix(provider, req)
