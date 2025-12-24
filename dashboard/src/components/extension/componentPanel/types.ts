@@ -52,6 +52,7 @@ export interface RenameDialogState {
   show: boolean;
   command: CommandItem | null;
   newName: string;
+  aliases: string[];
   loading: boolean;
 }
 

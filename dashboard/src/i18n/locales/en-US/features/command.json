@@ -45,6 +45,8 @@
     "rename": {
       "title": "Rename Command",
       "newName": "New command name",
+      "aliases": "Manage aliases",
+      "addAlias": "Add alias",
       "cancel": "Cancel",
       "confirm": "Confirm"
     },
