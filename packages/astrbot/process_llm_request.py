@@ -242,6 +242,6 @@ class ProcessLLMRequest:
         # 统一包裹所有系统提醒
         if system_parts:
             system_content = (
-                "<system_reminder>" + "".join(system_parts) + "</system_reminder>"
+                "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
             )
             req.extra_content_blocks.append({"type": "text", "text": system_content})

@@ -839,8 +839,14 @@ class ProviderGoogleGenAI(Provider):
                     },
                 )
 
-        # 如果只有文本且没有额外内容块，返回简单格式以保持向后兼容
-        if len(content_blocks) == 1 and content_blocks[0]["type"] == "text":
+        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        if (
+            text
+            and not extra_content_blocks
+            and not image_urls
+            and len(content_blocks) == 1
+            and content_blocks[0]["type"] == "text"
+        ):
             return {"role": "user", "content": content_blocks[0]["text"]}
 
         # 否则返回多模态格式
