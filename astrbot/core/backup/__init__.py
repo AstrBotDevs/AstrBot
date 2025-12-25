@@ -5,10 +5,10 @@
 
 # 从 constants 模块导入共享常量
 from .constants import (
-    BACKUP_DIRECTORIES,
     BACKUP_MANIFEST_VERSION,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
+    get_backup_directories,
 )
 
 # 导入导出器和导入器
@@ -21,6 +21,6 @@ __all__ = [
     "ImportPreCheckResult",
     "MAIN_DB_MODELS",
     "KB_METADATA_MODELS",
-    "BACKUP_DIRECTORIES",
+    "get_backup_directories",
     "BACKUP_MANIFEST_VERSION",
 ]
