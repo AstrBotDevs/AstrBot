@@ -447,9 +447,16 @@ class SessionManagementRoute(Route):
 
                 # 筛选消息类型
                 if message_type != "all":
-                    if message_type == "group" and umo_message_type not in ["group", "GroupMessage"]:
+                    if message_type == "group" and umo_message_type not in [
+                        "group",
+                        "GroupMessage",
+                    ]:
                         continue
-                    if message_type == "private" and umo_message_type not in ["private", "FriendMessage", "friend"]:
+                    if message_type == "private" and umo_message_type not in [
+                        "private",
+                        "FriendMessage",
+                        "friend",
+                    ]:
                         continue
 
                 # 筛选平台
@@ -461,35 +468,48 @@ class SessionManagementRoute(Route):
                 svc_config = rules.get("session_service_config", {})
 
                 custom_name = svc_config.get("custom_name", "") if svc_config else ""
-                session_enabled = svc_config.get("session_enabled", True) if svc_config else True
-                llm_enabled = svc_config.get("llm_enabled", True) if svc_config else True
-                tts_enabled = svc_config.get("tts_enabled", True) if svc_config else True
+                session_enabled = (
+                    svc_config.get("session_enabled", True) if svc_config else True
+                )
+                llm_enabled = (
+                    svc_config.get("llm_enabled", True) if svc_config else True
+                )
+                tts_enabled = (
+                    svc_config.get("tts_enabled", True) if svc_config else True
+                )
 
                 # 搜索过滤
                 if search:
                     search_lower = search.lower()
-                    if search_lower not in umo.lower() and search_lower not in custom_name.lower():
+                    if (
+                        search_lower not in umo.lower()
+                        and search_lower not in custom_name.lower()
+                    ):
                         continue
 
                 # 获取 provider 配置
-                chat_provider_key = f"provider_perf_{ProviderType.CHAT_COMPLETION.value}"
+                chat_provider_key = (
+                    f"provider_perf_{ProviderType.CHAT_COMPLETION.value}"
+                )
                 tts_provider_key = f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}"
                 stt_provider_key = f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}"
 
-                umos_with_status.append({
-                    "umo": umo,
-                    "platform": umo_platform,
-                    "message_type": umo_message_type,
-                    "session_id": umo_session_id,
-                    "custom_name": custom_name,
-                    "session_enabled": session_enabled,
-                    "llm_enabled": llm_enabled,
-                    "tts_enabled": tts_enabled,
-                    "has_rules": umo in umo_rules,
-                    "chat_provider": rules.get(chat_provider_key),
-                    "tts_provider": rules.get(tts_provider_key),
-                    "stt_provider": rules.get(stt_provider_key),
-                })
+                umos_with_status.append(
+                    {
+                        "umo": umo,
+                        "platform": umo_platform,
+                        "message_type": umo_message_type,
+                        "session_id": umo_session_id,
+                        "custom_name": custom_name,
+                        "session_enabled": session_enabled,
+                        "llm_enabled": llm_enabled,
+                        "tts_enabled": tts_enabled,
+                        "has_rules": umo in umo_rules,
+                        "chat_provider": rules.get(chat_provider_key),
+                        "tts_provider": rules.get(tts_provider_key),
+                        "stt_provider": rules.get(stt_provider_key),
+                    }
+                )
 
             # 分页
             total = len(umos_with_status)
@@ -517,16 +537,18 @@ class SessionManagementRoute(Route):
 
             return (
                 Response()
-                .ok({
-                    "sessions": paginated,
-                    "total": total,
-                    "page": page,
-                    "page_size": page_size,
-                    "platforms": platforms,
-                    "available_chat_providers": available_chat_providers,
-                    "available_tts_providers": available_tts_providers,
-                    "available_stt_providers": available_stt_providers,
-                })
+                .ok(
+                    {
+                        "sessions": paginated,
+                        "total": total,
+                        "page": page,
+                        "page_size": page_size,
+                        "platforms": platforms,
+                        "available_chat_providers": available_chat_providers,
+                        "available_tts_providers": available_tts_providers,
+                        "available_stt_providers": available_stt_providers,
+                    }
+                )
                 .__dict__
             )
         except Exception as e:
@@ -578,9 +600,17 @@ class SessionManagementRoute(Route):
                         all_umos = [row[0] for row in result.fetchall()]
 
                     if scope == "group":
-                        umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
+                        ]
                     elif scope == "private":
-                        umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":private:" in u.lower() or ":friend" in u.lower()
+                        ]
                     elif scope == "all":
                         umos = all_umos
 
@@ -594,9 +624,10 @@ class SessionManagementRoute(Route):
             for umo in umos:
                 try:
                     # 获取现有配置
-                    session_config = sp.get(
-                        "session_service_config", {}, scope="umo", scope_id=umo
-                    ) or {}
+                    session_config = (
+                        sp.get("session_service_config", {}, scope="umo", scope_id=umo)
+                        or {}
+                    )
 
                     # 更新状态
                     if llm_enabled is not None:
@@ -607,7 +638,12 @@ class SessionManagementRoute(Route):
                         session_config["session_enabled"] = session_enabled
 
                     # 保存
-                    sp.put("session_service_config", session_config, scope="umo", scope_id=umo)
+                    sp.put(
+                        "session_service_config",
+                        session_config,
+                        scope="umo",
+                        scope_id=umo,
+                    )
                     success_count += 1
                 except Exception as e:
                     logger.error(f"更新 {umo} 服务状态失败: {e!s}")
@@ -623,12 +659,14 @@ class SessionManagementRoute(Route):
 
             return (
                 Response()
-                .ok({
-                    "message": f"已更新 {success_count} 个会话 ({', '.join(status_changes)})",
-                    "success_count": success_count,
-                    "failed_count": len(failed_umos),
-                    "failed_umos": failed_umos,
-                })
+                .ok(
+                    {
+                        "message": f"已更新 {success_count} 个会话 ({', '.join(status_changes)})",
+                        "success_count": success_count,
+                        "failed_count": len(failed_umos),
+                        "failed_umos": failed_umos,
+                    }
+                )
                 .__dict__
             )
         except Exception as e:
@@ -654,7 +692,11 @@ class SessionManagementRoute(Route):
             provider_id = data.get("provider_id")
 
             if not provider_type or not provider_id:
-                return Response().error("缺少必要参数: provider_type, provider_id").__dict__
+                return (
+                    Response()
+                    .error("缺少必要参数: provider_type, provider_id")
+                    .__dict__
+                )
 
             # 转换 provider_type
             provider_type_map = {
@@ -663,7 +705,11 @@ class SessionManagementRoute(Route):
                 "speech_to_text": ProviderType.SPEECH_TO_TEXT,
             }
             if provider_type not in provider_type_map:
-                return Response().error(f"不支持的 provider_type: {provider_type}").__dict__
+                return (
+                    Response()
+                    .error(f"不支持的 provider_type: {provider_type}")
+                    .__dict__
+                )
 
             provider_type_enum = provider_type_map[provider_type]
 
@@ -687,9 +733,17 @@ class SessionManagementRoute(Route):
                         all_umos = [row[0] for row in result.fetchall()]
 
                     if scope == "group":
-                        umos = [u for u in all_umos if ":group:" in u.lower() or ":groupmessage:" in u.lower()]
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":group:" in u.lower() or ":groupmessage:" in u.lower()
+                        ]
                     elif scope == "private":
-                        umos = [u for u in all_umos if ":private:" in u.lower() or ":friend" in u.lower()]
+                        umos = [
+                            u
+                            for u in all_umos
+                            if ":private:" in u.lower() or ":friend" in u.lower()
+                        ]
                     elif scope == "all":
                         umos = all_umos
 
@@ -715,12 +769,14 @@ class SessionManagementRoute(Route):
 
             return (
                 Response()
-                .ok({
-                    "message": f"已更新 {success_count} 个会话的 {provider_type} 为 {provider_id}",
-                    "success_count": success_count,
-                    "failed_count": len(failed_umos),
-                    "failed_umos": failed_umos,
-                })
+                .ok(
+                    {
+                        "message": f"已更新 {success_count} 个会话的 {provider_type} 为 {provider_id}",
+                        "success_count": success_count,
+                        "failed_count": len(failed_umos),
+                        "failed_umos": failed_umos,
+                    }
+                )
                 .__dict__
             )
         except Exception as e:
@@ -744,12 +800,14 @@ class SessionManagementRoute(Route):
             # 转换为列表格式，方便前端使用
             groups_list = []
             for group_id, group_data in groups.items():
-                groups_list.append({
-                    "id": group_id,
-                    "name": group_data.get("name", ""),
-                    "umos": group_data.get("umos", []),
-                    "umo_count": len(group_data.get("umos", [])),
-                })
+                groups_list.append(
+                    {
+                        "id": group_id,
+                        "name": group_data.get("name", ""),
+                        "umos": group_data.get("umos", []),
+                        "umo_count": len(group_data.get("umos", [])),
+                    }
+                )
             return Response().ok({"groups": groups_list}).__dict__
         except Exception as e:
             logger.error(f"获取分组列表失败: {e!s}")
@@ -769,6 +827,7 @@ class SessionManagementRoute(Route):
 
             # 生成唯一 ID
             import uuid
+
             group_id = str(uuid.uuid4())[:8]
 
             groups[group_id] = {
@@ -778,15 +837,21 @@ class SessionManagementRoute(Route):
 
             self._save_groups(groups)
 
-            return Response().ok({
-                "message": f"分组 '{name}' 创建成功",
-                "group": {
-                    "id": group_id,
-                    "name": name,
-                    "umos": umos,
-                    "umo_count": len(umos),
-                }
-            }).__dict__
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": f"分组 '{name}' 创建成功",
+                        "group": {
+                            "id": group_id,
+                            "name": name,
+                            "umos": umos,
+                            "umo_count": len(umos),
+                        },
+                    }
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(f"创建分组失败: {e!s}")
             return Response().error(f"创建分组失败: {e!s}").__dict__
@@ -829,15 +894,21 @@ class SessionManagementRoute(Route):
 
             self._save_groups(groups)
 
-            return Response().ok({
-                "message": f"分组 '{group['name']}' 更新成功",
-                "group": {
-                    "id": group_id,
-                    "name": group["name"],
-                    "umos": group["umos"],
-                    "umo_count": len(group["umos"]),
-                }
-            }).__dict__
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": f"分组 '{group['name']}' 更新成功",
+                        "group": {
+                            "id": group_id,
+                            "name": group["name"],
+                            "umos": group["umos"],
+                            "umo_count": len(group["umos"]),
+                        },
+                    }
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(f"更新分组失败: {e!s}")
             return Response().error(f"更新分组失败: {e!s}").__dict__
@@ -861,9 +932,7 @@ class SessionManagementRoute(Route):
 
             self._save_groups(groups)
 
-            return Response().ok({
-                "message": f"分组 '{group_name}' 已删除"
-            }).__dict__
+            return Response().ok({"message": f"分组 '{group_name}' 已删除"}).__dict__
         except Exception as e:
             logger.error(f"删除分组失败: {e!s}")
             return Response().error(f"删除分组失败: {e!s}").__dict__
