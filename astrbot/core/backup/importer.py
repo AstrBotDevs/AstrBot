@@ -24,9 +24,9 @@ from astrbot.core.db import BaseDatabase
 
 # 从共享常量模块导入
 from .constants import (
-    BACKUP_DIRECTORIES,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
+    get_backup_directories,
 )
 
 if TYPE_CHECKING:
@@ -709,13 +709,14 @@ class AstrBotImporter:
             return dir_stats
 
         backed_up_dirs = manifest.get("directories", [])
+        backup_directories = get_backup_directories()
 
         for dir_name in backed_up_dirs:
-            if dir_name not in BACKUP_DIRECTORIES:
+            if dir_name not in backup_directories:
                 result.add_warning(f"未知的目录类型: {dir_name}")
                 continue
 
-            target_dir = Path(self.data_root).parent / BACKUP_DIRECTORIES[dir_name]
+            target_dir = Path(backup_directories[dir_name])
             archive_prefix = f"directories/{dir_name}/"
 
             file_count = 0

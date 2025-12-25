@@ -20,10 +20,10 @@ from astrbot.core.db import BaseDatabase
 
 # 从共享常量模块导入
 from .constants import (
-    BACKUP_DIRECTORIES,
     BACKUP_MANIFEST_VERSION,
     KB_METADATA_MODELS,
     MAIN_DB_MODELS,
+    get_backup_directories,
 )
 
 if TYPE_CHECKING:
@@ -308,11 +308,12 @@ class AstrBotExporter:
             dict: 每个目录的统计信息 {dir_name: {"files": count, "size": bytes}}
         """
         stats: dict[str, dict[str, int]] = {}
+        backup_directories = get_backup_directories()
 
-        for dir_name, dir_path in BACKUP_DIRECTORIES.items():
-            full_path = Path(self.data_root).parent / dir_path
+        for dir_name, dir_path in backup_directories.items():
+            full_path = Path(dir_path)
             if not full_path.exists():
-                logger.debug(f"目录不存在，跳过: {dir_path}")
+                logger.debug(f"目录不存在，跳过: {full_path}")
                 continue
 
             file_count = 0

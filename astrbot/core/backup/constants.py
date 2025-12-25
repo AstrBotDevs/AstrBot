@@ -21,6 +21,14 @@ from astrbot.core.knowledge_base.models import (
     KBMedia,
     KnowledgeBase,
 )
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_config_path,
+    get_astrbot_plugin_data_path,
+    get_astrbot_plugin_path,
+    get_astrbot_t2i_templates_path,
+    get_astrbot_temp_path,
+    get_astrbot_webchat_path,
+)
 
 # ============================================================
 # 共享常量 - 确保导出和导入端配置一致
@@ -46,17 +54,24 @@ KB_METADATA_MODELS: dict[str, type[SQLModel]] = {
     "kb_media": KBMedia,
 }
 
-# 需要备份的目录列表
-# 键：备份文件中的目录名称
-# 值：相对于项目根目录的实际路径
-BACKUP_DIRECTORIES: dict[str, str] = {
-    "plugins": "data/plugins",  # 插件本体
-    "plugin_data": "data/plugin_data",  # 插件数据
-    "config": "data/config",  # 配置目录
-    "t2i_templates": "data/t2i_templates",  # T2I 模板
-    "webchat": "data/webchat",  # WebChat 数据
-    "temp": "data/temp",  # 临时文件
-}
+
+def get_backup_directories() -> dict[str, str]:
+    """获取需要备份的目录列表
+
+    使用 astrbot_path 模块动态获取路径，支持通过环境变量 ASTRBOT_ROOT 自定义根目录。
+
+    Returns:
+        dict: 键为备份文件中的目录名称，值为目录的绝对路径
+    """
+    return {
+        "plugins": get_astrbot_plugin_path(),  # 插件本体
+        "plugin_data": get_astrbot_plugin_data_path(),  # 插件数据
+        "config": get_astrbot_config_path(),  # 配置目录
+        "t2i_templates": get_astrbot_t2i_templates_path(),  # T2I 模板
+        "webchat": get_astrbot_webchat_path(),  # WebChat 数据
+        "temp": get_astrbot_temp_path(),  # 临时文件
+    }
+
 
 # 备份清单版本号
 BACKUP_MANIFEST_VERSION = "1.1"
