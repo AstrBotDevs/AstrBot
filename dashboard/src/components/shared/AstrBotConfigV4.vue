@@ -8,6 +8,7 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 
@@ -277,6 +278,13 @@ function getSpecialSubtype(value) {
                 <v-switch v-else-if="itemMeta?.type === 'bool'" v-model="createSelectorModel(itemKey).value"
                   color="primary" inset density="compact" hide-details
                   style="display: flex; justify-content: end;"></v-switch>
+
+                <TemplateListEditor
+                  v-else-if="itemMeta?.type === 'template_list'"
+                  v-model="createSelectorModel(itemKey).value"
+                  :templates="itemMeta?.templates || {}"
+                  class="config-field"
+                />
 
                 <!-- List item for JSON selector -->
                 <ListConfigItem v-else-if="itemMeta?.type === 'list'" v-model="createSelectorModel(itemKey).value"

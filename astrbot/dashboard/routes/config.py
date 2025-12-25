@@ -61,6 +61,37 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             if value is None:
                 data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
+            if meta["type"] == "template_list":
+                if not isinstance(value, list):
+                    errors.append(
+                        f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
+                    )
+                    continue
+                templates = meta.get("templates", {}) if isinstance(meta.get("templates"), dict) else {}
+                for idx, item in enumerate(value):
+                    if not isinstance(item, dict):
+                        errors.append(
+                            f"错误的类型 {path}{key}[{idx}]: 期望是 dict, 得到了 {type(item).__name__}",
+                        )
+                        continue
+                    template_key = item.get("__template_key") or item.get("template")
+                    if not template_key:
+                        errors.append(
+                            f"缺少模板选择 {path}{key}[{idx}]: 需要 __template_key",
+                        )
+                        continue
+                    template_meta = templates.get(template_key)
+                    if not template_meta:
+                        errors.append(
+                            f"未知模板 {path}{key}[{idx}]: {template_key}",
+                        )
+                        continue
+                    validate(
+                        item,
+                        template_meta.get("items", {}),
+                        path=f"{path}{key}[{idx}].",
+                    )
+                continue
             if meta["type"] == "list" and not isinstance(value, list):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",

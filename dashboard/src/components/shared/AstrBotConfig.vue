@@ -6,6 +6,7 @@ import ObjectEditor from './ObjectEditor.vue'
 import ProviderSelector from './ProviderSelector.vue'
 import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
+import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n } from '@/i18n/composables'
 import axios from 'axios'
 import { useToast } from '@/utils/toast'
@@ -159,6 +160,30 @@ function hasVisibleItemsAfter(items, currentIndex) {
           </div>
         </div>
 
+        <!-- Template List -->
+        <div v-else-if="metadata[metadataKey].items[key]?.type === 'template_list'" class="nested-object w-100">
+          <div v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="nested-container">
+            <div class="config-section mb-2">
+              <v-list-item-title class="config-title">
+                <span v-if="metadata[metadataKey].items[key]?.description">
+                  {{ metadata[metadataKey].items[key]?.description }}
+                  <span class="property-key">({{ key }})</span>
+                </span>
+                <span v-else>{{ key }}</span>
+              </v-list-item-title>
+              <v-list-item-subtitle class="config-hint">
+                <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" class="important-hint">‼️</span>
+                {{ metadata[metadataKey].items[key]?.hint }}
+              </v-list-item-subtitle>
+            </div>
+            <TemplateListEditor
+              v-model="iterable[key]"
+              :templates="metadata[metadataKey].items[key]?.templates || {}"
+              class="config-field"
+            />
+          </div>
+        </div>
+
         <!-- Regular Property -->
         <template v-else>
           <v-row v-if="!metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="config-row">
@@ -211,6 +236,12 @@ function hasVisibleItemsAfter(items, currentIndex) {
                     v-model="iterable[key]"
                   />
                 </div>
+                <TemplateListEditor
+                  v-else-if="metadata[metadataKey].items[key]?.type === 'template_list' && !metadata[metadataKey].items[key]?.invisible"
+                  v-model="iterable[key]"
+                  :templates="metadata[metadataKey].items[key]?.templates || {}"
+                  class="config-field"
+                />
                 <!-- Numeric input with get_embedding_dim button -->
                 <div v-else-if="metadata[metadataKey].items[key]?._special === 'get_embedding_dim'"
                   class="d-flex align-center gap-2">
@@ -418,6 +449,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
               class="config-field"
               hide-details
             ></v-select>
+
+            <TemplateListEditor
+              v-else-if="metadata[metadataKey]?.type === 'template_list' && !metadata[metadataKey]?.invisible"
+              v-model="iterable[metadataKey]"
+              :templates="metadata[metadataKey]?.templates || {}"
+              class="config-field"
+            />
 
             <!-- String input -->
             <v-text-field
