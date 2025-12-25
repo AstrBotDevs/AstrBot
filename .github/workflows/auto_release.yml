@@ -63,7 +63,6 @@ jobs:
         with:
           bodyFile: ${{ env.changelog }}
           artifacts: "dashboard/dist.zip"
-          token: ${{ secrets.GITHUB_TOKEN }}
       
   build-and-publish-to-pypi:
     # 构建并发布到 PyPI
