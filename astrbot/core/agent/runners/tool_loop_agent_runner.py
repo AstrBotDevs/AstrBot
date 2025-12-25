@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 import typing as T
 
@@ -12,6 +13,7 @@ from mcp.types import (
 )
 
 from astrbot import logger
+from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
@@ -24,7 +26,7 @@ from astrbot.core.provider.provider import Provider
 
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
-from ..response import AgentResponseData
+from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
@@ -69,14 +71,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         self.run_context.messages = messages
 
+        self.stats = AgentStats()
+        self.stats.start_time = time.time()
+
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        payload = {
+            "contexts": self.run_context.messages,
+            "func_tool": self.req.func_tool,
+            "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
+            "session_id": self.req.session_id,
+        }
+
         if self.streaming:
-            stream = self.provider.text_chat_stream(**self.req.__dict__)
+            stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:  # type: ignore
                 yield resp
         else:
-            yield await self.provider.text_chat(**self.req.__dict__)
+            yield await self.provider.text_chat(**payload)
 
     @override
     async def step(self):
@@ -98,6 +110,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         async for llm_response in self._iter_llm_responses():
             if llm_response.is_chunk:
+                # update ttft
+                if self.stats.time_to_first_token == 0:
+                    self.stats.time_to_first_token = time.time() - self.stats.start_time
+
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -121,6 +137,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 continue
             llm_resp_result = llm_response
+
+            if not llm_response.is_chunk and llm_response.usage:
+                # only count the token usage of the final response for computation purpose
+                self.stats.token_usage += llm_response.usage
             break  # got final response
 
         if not llm_resp_result:
@@ -132,6 +152,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
+            self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
             yield AgentResponse(
                 type="err",
@@ -146,11 +167,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # 如果没有工具调用，转换到完成状态
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
+            self.stats.end_time = time.time()
             # record the final assistant message
             self.run_context.messages.append(
                 Message(
                     role="assistant",
-                    content=llm_resp.completion_text or "",
+                    content=llm_resp.completion_text or "*No response*",
                 ),
             )
             try:
@@ -175,23 +197,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
             tool_call_result_blocks = []
-            for tool_call_name in llm_resp.tools_call_name:
-                yield AgentResponse(
-                    type="tool_call",
-                    data=AgentResponseData(
-                        chain=MessageChain(type="tool_call").message(
-                            f"🔨 调用工具: {tool_call_name}"
-                        ),
-                    ),
-                )
             async for result in self._handle_function_tools(self.req, llm_resp):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
                 elif isinstance(result, MessageChain):
                     if result.type is None:
-                        result.type = "tool_call_result"
+                        # should not happen
+                        continue
+                    if result.type == "tool_direct_result":
+                        ar_type = "tool_call_result"
+                    else:
+                        ar_type = result.type
                     yield AgentResponse(
-                        type="tool_call_result",
+                        type=ar_type,
                         data=AgentResponseData(chain=result),
                     )
             # 将结果添加到上下文中
@@ -219,6 +237,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
+        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
+        if not self.done():
+            logger.warning(
+                f"Agent reached max steps ({max_step}), forcing a final response."
+            )
+            # 拔掉所有工具
+            if self.req:
+                self.req.func_tool = None
+            # 注入提示词
+            self.run_context.messages.append(
+                Message(
+                    role="user",
+                    content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                )
+            )
+            # 再执行最后一步
+            async for resp in self.step():
+                yield resp
+
     async def _handle_function_tools(
         self,
         req: ProviderRequest,
@@ -234,6 +271,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            yield MessageChain(
+                type="tool_call",
+                chain=[
+                    Json(
+                        data={
+                            "id": func_tool_id,
+                            "name": func_tool_name,
+                            "args": func_tool_args,
+                            "ts": time.time(),
+                        }
+                    )
+                ],
+            )
             try:
                 if not req.func_tool:
                     return
@@ -307,7 +357,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     content=res.content[0].text,
                                 ),
                             )
-                            yield MessageChain().message(res.content[0].text)
                         elif isinstance(res.content[0], ImageContent):
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
@@ -329,7 +378,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         content=resource.text,
                                     ),
                                 )
-                                yield MessageChain().message(resource.text)
                             elif (
                                 isinstance(resource, BlobResourceContents)
                                 and resource.mimeType
@@ -353,20 +401,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         content="返回的数据类型不受支持",
                                     ),
                                 )
-                                yield MessageChain().message("返回的数据类型不受支持。")
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop。
                         # 发送消息逻辑在 ToolExecutor 中处理了。
                         logger.warning(
-                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户，此工具调用不会被记录到历史中。"
+                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户。"
                         )
                         self._transition_state(AgentState.DONE)
+                        self.stats.end_time = time.time()
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content="*工具没有返回值或者将结果直接发送给了用户*",
+                            ),
+                        )
                     else:
                         # 不应该出现其他类型
                         logger.warning(
-                            f"Tool 返回了不支持的类型: {type(resp)}，将忽略。",
+                            f"Tool 返回了不支持的类型: {type(resp)}。",
+                        )
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content="*工具返回了不支持的类型，请告诉用户检查这个工具的定义和实现。*",
+                            ),
                         )
 
                 try:
@@ -387,6 +449,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         content=f"error: {e!s}",
                     ),
                 )
+
+        # yield the last tool call result
+        if tool_call_result_blocks:
+            last_tcr_content = str(tool_call_result_blocks[-1].content)
+            yield MessageChain(
+                type="tool_call_result",
+                chain=[
+                    Json(
+                        data={
+                            "id": func_tool_id,
+                            "ts": time.time(),
+                            "result": last_tcr_content,
+                        }
+                    )
+                ],
+            )
 
         # 处理函数调用响应
         if tool_call_result_blocks:

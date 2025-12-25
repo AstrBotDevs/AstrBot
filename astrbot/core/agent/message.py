@@ -3,7 +3,7 @@
 
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
+from pydantic import BaseModel, GetCoreSchemaHandler, model_serializer, model_validator
 from pydantic_core import core_schema
 
 
@@ -122,10 +122,12 @@ class ToolCall(BaseModel):
     extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        data = handler(self)
         if self.extra_content is None:
-            kwargs.setdefault("exclude", set()).add("extra_content")
-        return super().model_dump(**kwargs)
+            data.pop("extra_content", None)
+        return data
 
 
 class ToolCallPart(BaseModel):

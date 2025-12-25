@@ -41,7 +41,13 @@ export function useSessions(chatboxMode: boolean = false) {
                     selectedSessions.value = [pendingSessionId.value];
                     pendingSessionId.value = null;
                 }
-            } else if (!currSessionId.value && sessions.value.length > 0) {
+            } else if (currSessionId.value) {
+                // 如果当前有选中的会话，确保它在列表中并被选中
+                const session = sessions.value.find(s => s.session_id === currSessionId.value);
+                if (session) {
+                    selectedSessions.value = [currSessionId.value];
+                }
+            } else if (sessions.value.length > 0) {
                 // 默认选择第一个会话
                 const firstSession = sessions.value[0];
                 selectedSessions.value = [firstSession.session_id];
@@ -65,6 +71,10 @@ export function useSessions(chatboxMode: boolean = false) {
             router.push(`${basePath}/${sessionId}`);
             
             await getSessions();
+            
+            // 确保新创建的会话被选中高亮
+            selectedSessions.value = [sessionId];
+            
             return sessionId;
         } catch (err) {
             console.error(err);

@@ -321,7 +321,12 @@ class InternalAgentSubStage(Stage):
             elif isinstance(req.tool_calls_result, list):
                 for tcr in req.tool_calls_result:
                     messages.extend(tcr.to_openai_messages())
-        messages.append({"role": "assistant", "content": llm_response.completion_text})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": llm_response.completion_text or "*No response*",
+            }
+        )
         messages = list(filter(lambda item: "_no_save" not in item, messages))
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,

@@ -1,6 +1,6 @@
 {
   "title": "模型提供商",
-  "subtitle": "管理模型提供商",
+  "subtitle": "可以在“对话”中配置对话模型。此外，“Agent 执行器”包含了 Dify、Coze、阿里云百炼应用等第三方服务的集成。",
   "providers": {
     "title": "模型提供商",
     "settings": "设置",
@@ -86,5 +86,50 @@
     "confirm": {
       "delete": "确定要删除模型提供商 {id} 吗?"
     }
+  },
+  "providerTypes": {
+    "title": "提供商类型"
+  },
+  "providerSources": {
+    "title": "提供商源",
+    "empty": "暂无提供商源",
+    "selectHint": "请选择一个提供商源",
+    "save": "保存配置",
+    "saveAndFetchModels": "保存并获取模型",
+    "fetchModels": "获取模型列表",
+    "saveSuccess": "提供商源保存成功",
+    "saveError": "提供商源保存失败",
+    "deleteConfirm": "确定要删除提供商源 {id} 吗？这将同时删除关联的所有模型配置。",
+    "deleteSuccess": "提供商源删除成功",
+    "deleteError": "提供商源删除失败",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "advancedConfig": "高级配置...",
+    "fields": {
+      "name": "名称",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    }
+  },
+  "models": {
+    "available": "可用模型",
+    "configured": "已配置的模型",
+    "empty": "暂无已配置的模型，点击上方的\"获取模型列表\"添加",
+    "noModelsFound": "未找到可用模型",
+    "fetchError": "获取模型列表失败",
+    "addSuccess": "模型 {model} 添加成功",
+    "deleteConfirm": "确定要删除模型 {id} 吗？",
+    "deleteSuccess": "模型删除成功",
+    "deleteError": "模型删除失败",
+    "testSuccess": "模型 {id} 测试通过",
+    "testError": "模型测试失败",
+    "searchPlaceholder": "搜索模型或 ID",
+    "manualAddButton": "自定义模型",
+    "manualDialogTitle": "添加自定义模型",
+    "manualDialogModelLabel": "模型 ID（如 gpt-4.1-mini）",
+    "manualDialogPreviewLabel": "显示 ID（自动生成）",
+    "manualDialogPreviewHint": "生成规则：源ID/模型ID",
+    "manualModelRequired": "请输入模型 ID",
+    "manualModelExists": "该模型已存在"
   }
 } 

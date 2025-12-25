@@ -41,7 +41,8 @@
     "editTitle": "Edit Title",
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
-    "reply": "Reply"
+    "reply": "Reply",
+    "providerConfig": "AI Configuration"
   },
   "conversation": {
     "newConversation": "New Conversation",
@@ -79,6 +80,14 @@
   "time": {
     "today": "Today",
     "yesterday": "Yesterday"
+  },
+  "stats": {
+    "tokens": "Tokens",
+    "inputTokens": "Input Tokens",
+    "outputTokens": "Output Tokens",
+    "cachedTokens": "Cached Tokens",
+    "duration": "Duration",
+    "ttft": "Time to First Token"
   },
   "connection": {
     "title": "Connection Status Notice",

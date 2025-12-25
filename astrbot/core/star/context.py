@@ -267,6 +267,10 @@ class Context:
     ):
         """通过 ID 获取对应的 LLM Provider。"""
         prov = self.provider_manager.inst_map.get(provider_id)
+        if provider_id and not prov:
+            logger.warning(
+                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+            )
         return prov
 
     def get_all_providers(self) -> list[Provider]:

@@ -1,6 +1,6 @@
 {
-  "title": "Service Provider Management",
-  "subtitle": "Manage model service providers",
+  "title": "Providers",
+  "subtitle": "Can configure chat models in \"Chat Completion\". Additionally, \"Agent Runner\" includes integrations with third-party services like Dify, Coze, and Alibaba Bailian(DashScope).",
   "providers": {
     "title": "Service Providers",
     "settings": "Settings",
@@ -85,5 +85,50 @@
     "confirm": {
       "delete": "Are you sure you want to delete service provider {id}?"
     }
+  },
+  "providerTypes": {
+    "title": "Provider Types"
+  },
+  "providerSources": {
+    "title": "Provider Sources",
+    "empty": "No provider sources",
+    "selectHint": "Please select a provider source",
+    "save": "Save Configuration",
+    "saveAndFetchModels": "Save and Fetch Models",
+    "fetchModels": "Fetch Model List",
+    "saveSuccess": "Provider source saved successfully",
+    "saveError": "Failed to save provider source",
+    "deleteConfirm": "Are you sure you want to delete provider source {id}? This will also delete all associated model configurations.",
+    "deleteSuccess": "Provider source deleted successfully",
+    "deleteError": "Failed to delete provider source",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "advancedConfig": "Advanced Configuration...",
+    "fields": {
+      "name": "Name",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL"
+    }
+  },
+  "models": {
+    "available": "Available Models",
+    "configured": "Configured Models",
+    "empty": "No configured models yet. Click \"Fetch Models\" above to add.",
+    "noModelsFound": "No available models found",
+    "fetchError": "Failed to fetch models",
+    "addSuccess": "Model {model} added successfully",
+    "deleteConfirm": "Are you sure you want to delete model {id}?",
+    "deleteSuccess": "Model deleted successfully",
+    "deleteError": "Failed to delete model",
+    "testSuccess": "Model {id} test passed",
+    "testError": "Model test failed",
+    "searchPlaceholder": "Search models or ID",
+    "manualAddButton": "Custom Model",
+    "manualDialogTitle": "Add Custom Model",
+    "manualDialogModelLabel": "Model ID (e.g. gpt-4.1-mini)",
+    "manualDialogPreviewLabel": "Display ID (auto generated)",
+    "manualDialogPreviewHint": "Generated as sourceId/modelId",
+    "manualModelRequired": "Please enter a model ID",
+    "manualModelExists": "Model already exists"
   }
 } 
