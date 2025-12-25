@@ -16,7 +16,7 @@
         </v-btn>
       </v-row>
 
-      <div>
+      <div class="px-4">
         <v-row v-if="(config_data.platform || []).length === 0">
           <v-col cols="12" class="text-center pa-8">
             <v-icon size="64" color="grey-lighten-1">mdi-connection</v-icon>
@@ -24,55 +24,54 @@
           </v-col>
         </v-row>
 
-        <v-row v-else>
-          <v-col v-for="(platform, index) in config_data.platform || []" :key="index" cols="12" md="6" lg="4" xl="3">
-            <item-card :item="platform" title-field="id" enabled-field="enable"
-              :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
-              @delete="deletePlatform" @edit="editPlatform">
-              <template #item-details="{ item }">
-                <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
-                <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
-                  <!-- 状态 chip - 只在非 running 状态时显示 -->
-                  <v-chip
-                    v-if="getPlatformStat(item.id)?.status !== 'running'"
-                    size="small"
-                    :color="getStatusColor(getPlatformStat(item.id)?.status)"
-                    variant="tonal"
-                    class="status-chip"
-                  >
-                    <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
-                    {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
-                  </v-chip>
-                  <!-- 错误数量提示 -->
-                  <v-chip
-                    v-if="getPlatformStat(item.id)?.error_count > 0"
-                    size="small"
-                    color="error"
-                    variant="tonal"
-                    class="error-chip"
-                    :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
-                    @click.stop="showErrorDetails(item)"
-                  >
-                    <v-icon size="small" start>mdi-bug</v-icon>
-                    {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
-                  </v-chip>
-                </div>
-                <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
-                  <v-chip
-                    size="small"
-                    color="primary"
-                    variant="tonal"
-                    class="webhook-chip"
-                    @click.stop="openWebhookDialog(item.webhook_uuid)"
-                  >
-                    <v-icon size="small" start>mdi-webhook</v-icon>
-                    {{ tm('viewWebhook') }}
-                  </v-chip>
-                </div>
-              </template>
-            </item-card>
-          </v-col>
-        </v-row>
+        <div v-else class="item-grid">
+          <item-card v-for="(platform, index) in config_data.platform || []" :key="index"
+            :item="platform" title-field="id" enabled-field="enable"
+            :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
+            @delete="deletePlatform" @edit="editPlatform">
+            <template #item-details="{ item }">
+              <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
+              <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
+                <!-- 状态 chip - 只在非 running 状态时显示 -->
+                <v-chip
+                  v-if="getPlatformStat(item.id)?.status !== 'running'"
+                  size="small"
+                  :color="getStatusColor(getPlatformStat(item.id)?.status)"
+                  variant="tonal"
+                  class="status-chip"
+                >
+                  <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
+                  {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
+                </v-chip>
+                <!-- 错误数量提示 -->
+                <v-chip
+                  v-if="getPlatformStat(item.id)?.error_count > 0"
+                  size="small"
+                  color="error"
+                  variant="tonal"
+                  class="error-chip"
+                  :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
+                  @click.stop="showErrorDetails(item)"
+                >
+                  <v-icon size="small" start>mdi-bug</v-icon>
+                  {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
+                </v-chip>
+              </div>
+              <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                <v-chip
+                  size="small"
+                  color="primary"
+                  variant="tonal"
+                  class="webhook-chip"
+                  @click.stop="openWebhookDialog(item.webhook_uuid)"
+                >
+                  <v-icon size="small" start>mdi-webhook</v-icon>
+                  {{ tm('viewWebhook') }}
+                </v-chip>
+              </div>
+            </template>
+          </item-card>
+        </div>
       </div>
 
       <!-- 日志部分 -->
@@ -451,6 +450,13 @@ export default {
   padding: 20px;
   padding-top: 8px;
   padding-bottom: 40px;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+  width: 100%;
 }
 
 .webhook-info {
