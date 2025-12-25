@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
@@ -372,28 +373,24 @@ class Context:
     def add_llm_tools(self, *tools: FunctionTool) -> None:
         """添加 LLM 工具。"""
         tool_name = {tool.name for tool in self.provider_manager.llm_tools.func_list}
-        module_path = ""
         for tool in tools:
-            if not module_path:
-                _parts = []
-                module_part = tool.__module__.split(".")
-                flags = ["packages", "plugins"]
-                for i, part in enumerate(module_part):
-                    _parts.append(part)
-                    if part in flags and i + 1 < len(module_part):
-                        _parts.append(module_part[i + 1])
-                        break
-                tool.handler_module_path = ".".join(_parts)
-                module_path = tool.handler_module_path
-            else:
-                tool.handler_module_path = module_path
-            logger.info(
-                f"plugin(module_path {module_path}) added LLM tool: {tool.name}"
-            )
-
+            # Set `handler_module_path` moved to astrbot/core/star/star_manager.py,
+            # search `ft.__module__ == metadata.module_path`
+            logger.info(f"plugin added LLM tool: {tool.name} ({tool.__module__})")
             if tool.name in tool_name:
                 logger.warning("替换已存在的 LLM 工具: " + tool.name)
                 self.provider_manager.llm_tools.remove_func(tool.name)
+
+            # create a fake empty awaitable hander to register the tool into handler registry
+            # then it can show in the web panel
+            from astrbot.core.star.register.star_handler import get_handler_or_create
+
+            fake_handler = lambda: asyncio.sleep(0)  # noqa: E731
+            fake_handler.__name__ = tool.name
+            fake_handler.__module__ = tool.__module__
+            fake_handler.__doc__ = tool.description
+            get_handler_or_create(fake_handler, EventType.OnCallingFuncToolEvent)
+
             self.provider_manager.llm_tools.func_list.append(tool)
 
     def register_web_api(
