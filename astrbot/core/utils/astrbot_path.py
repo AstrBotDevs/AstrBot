@@ -61,3 +61,13 @@ def get_astrbot_webchat_path() -> str:
 def get_astrbot_temp_path() -> str:
     """获取Astrbot临时文件目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "temp"))
+
+
+def get_astrbot_knowledge_base_path() -> str:
+    """获取Astrbot知识库根目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "knowledge_base"))
+
+
+def get_astrbot_backups_path() -> str:
+    """获取Astrbot备份目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "backups"))

@@ -21,6 +21,7 @@ from sqlalchemy import delete
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 # 从共享常量模块导入
 from .constants import (
@@ -175,16 +176,12 @@ class AstrBotImporter:
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = "data/cmd_config.json",
-        attachments_dir: str = "data/attachments",
-        kb_root_dir: str = "data/knowledge_base",
-        data_root: str = "data",
+        kb_root_dir: str = get_astrbot_knowledge_base_path(),
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
-        self.attachments_dir = attachments_dir
         self.kb_root_dir = kb_root_dir
-        self.data_root = data_root
 
     def pre_check(self, zip_path: str) -> ImportPreCheckResult:
         """预检查备份文件
@@ -653,8 +650,8 @@ class AstrBotImporter:
         """导入附件文件"""
         count = 0
 
-        # 确保附件目录存在
-        Path(self.attachments_dir).mkdir(parents=True, exist_ok=True)
+        attachments_dir = Path(self.config_path).parent / "attachments"
+        attachments_dir.mkdir(parents=True, exist_ok=True)
 
         attachment_prefix = "files/attachments/"
         for name in zf.namelist():
@@ -671,9 +668,7 @@ class AstrBotImporter:
                     if original_path:
                         target_path = Path(original_path)
                     else:
-                        target_path = Path(self.attachments_dir) / os.path.basename(
-                            name
-                        )
+                        target_path = attachments_dir / os.path.basename(name)
 
                     target_path.parent.mkdir(parents=True, exist_ok=True)
                     with zf.open(name) as src, open(target_path, "wb") as dst:

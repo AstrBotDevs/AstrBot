@@ -135,7 +135,6 @@ class TestAstrBotExporter:
             main_db=mock_main_db,
             kb_manager=mock_kb_manager,
             config_path=str(temp_data_dir / "cmd_config.json"),
-            attachments_dir=str(temp_data_dir / "attachments"),
         )
         assert exporter.main_db is mock_main_db
         assert exporter.kb_manager is mock_kb_manager
@@ -223,7 +222,6 @@ class TestAstrBotExporter:
             main_db=mock_main_db,
             kb_manager=None,
             config_path=str(temp_data_dir / "cmd_config.json"),
-            attachments_dir=str(temp_data_dir / "attachments"),
         )
 
         zip_path = await exporter.export_all(output_dir=str(temp_backup_dir))
@@ -249,7 +247,6 @@ class TestAstrBotImporter:
             main_db=mock_main_db,
             kb_manager=mock_kb_manager,
             config_path=str(temp_data_dir / "cmd_config.json"),
-            attachments_dir=str(temp_data_dir / "attachments"),
         )
         assert importer.main_db is mock_main_db
         assert importer.kb_manager is mock_kb_manager
@@ -728,7 +725,6 @@ class TestBackupIntegration:
             main_db=mock_db,
             kb_manager=None,
             config_path=str(config_path),
-            attachments_dir=str(attachments_dir),
         )
 
         zip_path = await exporter.export_all(output_dir=str(backup_dir))

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.astrbot_path import get_astrbot_backups_path
 
 # 从共享常量模块导入
 from .constants import (
@@ -53,19 +54,15 @@ class AstrBotExporter:
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = "data/cmd_config.json",
-        attachments_dir: str = "data/attachments",
-        data_root: str = "data",
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
-        self.attachments_dir = attachments_dir
-        self.data_root = data_root
         self._checksums: dict[str, str] = {}
 
     async def export_all(
         self,
-        output_dir: str = "data/backups",
+        output_dir: str | None = None,
         progress_callback: Any | None = None,
     ) -> str:
         """导出所有数据到 ZIP 文件
@@ -77,6 +74,9 @@ class AstrBotExporter:
         Returns:
             str: 生成的 ZIP 文件路径
         """
+        if output_dir is None:
+            output_dir = get_astrbot_backups_path()
+
         # 确保输出目录存在
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
