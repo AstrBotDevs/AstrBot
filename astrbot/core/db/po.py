@@ -293,6 +293,41 @@ class CommandConflict(SQLModel, table=True):
     )
 
 
+class ApiKey(SQLModel, table=True):
+    """API Key table for external API access."""
+
+    __tablename__ = "api_keys"  # type: ignore
+
+    id: int | None = Field(
+        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
+    )
+    key_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    api_key: str = Field(nullable=False, max_length=255, index=True)
+    """The actual API key (hashed)"""
+    username: str = Field(nullable=False, max_length=255)
+    """WebUI username who created this API key"""
+    name: str | None = Field(default=None, max_length=255)
+    """Optional name/description for the API key"""
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime | None = Field(default=None)
+    """Expiration time (not implemented yet)"""
+    last_used_at: datetime | None = Field(default=None)
+    """Last time this API key was used"""
+
+    __table_args__ = (
+        UniqueConstraint(
+            "key_id",
+            name="uix_api_key_id",
+        ),
+    )
+
+
 @dataclass
 class Conversation:
     """LLM 对话类

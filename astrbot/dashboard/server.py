@@ -23,8 +23,7 @@ from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.t2i import T2iRoute
-
-APP: Quart
+from .routes.v1 import *
 
 
 class AstrBotDashboard:
@@ -36,9 +35,9 @@ class AstrBotDashboard:
         webui_dir: str | None = None,
     ) -> None:
         self.core_lifecycle = core_lifecycle
+        self.db = db
         self.config = core_lifecycle.astrbot_config
 
-        # 参数指定webui目录
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
@@ -47,15 +46,14 @@ class AstrBotDashboard:
             )
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
-        APP = self.app  # noqa
-        self.app.config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+        # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+        self.app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
         cast(DefaultJSONProvider, self.app.json).sort_keys = False
         self.app.before_request(self.auth_middleware)
-        # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
+
+        # Internal API
         self.ur = UpdateRoute(
             self.context,
             core_lifecycle.astrbot_updator,
@@ -85,12 +83,20 @@ class AstrBotDashboard:
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
+        self.api_key_route = ApiKeyRoute(self.context, core_lifecycle, db)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
             view_func=self.srv_plug_route,
             methods=["GET", "POST"],
         )
+
+        # External API
+        self.v1_chat_route = V1ChatRoute(self.context, core_lifecycle, db)
+        self.v1_knowledge_base_route = V1KnowledgeBaseRoute(
+            self.context, core_lifecycle
+        )
+        self.v1_provider_route = V1ProviderRoute(self.context, core_lifecycle)
 
         self.shutdown_event = shutdown_event
 
@@ -111,21 +117,43 @@ class AstrBotDashboard:
         allowed_endpoints = ["/api/auth/login", "/api/file", "/api/platform/webhook"]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        # 声明 JWT
-        token = request.headers.get("Authorization")
-        if not token:
+
+        # 对于 /v1 路由，支持 API Key 认证
+        is_v1_route = request.path.startswith("/api/v1")
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        token = token.removeprefix("Bearer ")
+
+        auth_value = auth_header.removeprefix("Bearer ")
+
+        # 尝试 API Key 认证（仅对 /v1 路由）
+        if is_v1_route:
+            from .services.api_key import ApiKeyService
+
+            api_key_service = ApiKeyService(self.core_lifecycle, self.db)
+            api_key_obj = await api_key_service.verify_api_key(auth_value)
+            if api_key_obj:
+                g.username = api_key_obj.username
+                g.api_key_id = api_key_obj.key_id
+                return None
+
+        # JWT 认证（用于 WebUI 和 /v1 路由的备选方案）
         try:
-            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
+            payload = jwt.decode(auth_value, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401
             return r
         except jwt.InvalidTokenError:
+            if is_v1_route:
+                # 对于 /v1 路由，如果 JWT 也失败，返回错误
+                r = jsonify(Response().error("API Key 或 Token 无效").__dict__)
+                r.status_code = 401
+                return r
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
