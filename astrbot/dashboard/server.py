@@ -110,7 +110,12 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
-        allowed_endpoints = ["/api/auth/login", "/api/file", "/api/platform/webhook"]
+        allowed_endpoints = [
+            "/api/auth/login",
+            "/api/file",
+            "/api/platform/webhook",
+            "/api/stat/start-time",
+        ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
         # 声明 JWT
