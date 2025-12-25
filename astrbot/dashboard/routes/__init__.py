@@ -1,3 +1,4 @@
+from .api_key import ApiKeyRoute
 from .auth import AuthRoute
 from .chat import ChatRoute
 from .command import CommandRoute
@@ -16,6 +17,7 @@ from .tools import ToolsRoute
 from .update import UpdateRoute
 
 __all__ = [
+    "ApiKeyRoute",
     "AuthRoute",
     "ChatRoute",
     "CommandRoute",

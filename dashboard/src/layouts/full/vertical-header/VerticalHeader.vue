@@ -18,6 +18,7 @@ import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import AboutPage from '@/views/AboutPage.vue';
+import ApiKeyDialog from '@/components/shared/ApiKeyDialog.vue';
 
 enableKatex();
 enableMermaid();
@@ -30,6 +31,7 @@ let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
+let apiKeyDialog = ref(false);
 const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
@@ -439,6 +441,18 @@ const changeLanguage = async (langCode: string) => {
         </template>
       </v-list-item>
 
+      <!-- API Key 管理按钮 -->
+      <v-list-item
+        @click="apiKeyDialog = true"
+        class="styled-menu-item"
+        rounded="md"
+      >
+        <template v-slot:prepend>
+          <v-icon>mdi-key</v-icon>
+        </template>
+        <v-list-item-title>API Keys</v-list-item-title>
+      </v-list-item>
+
       <!-- 账户按钮 -->
       <v-list-item
         @click="dialog = true"
@@ -649,6 +663,9 @@ const changeLanguage = async (langCode: string) => {
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- API Key 管理对话框 -->
+    <ApiKeyDialog v-model="apiKeyDialog" />
   </v-app-bar>
 </template>
 

@@ -18,22 +18,18 @@ class T2iRoute(Route):
         self.config = core_lifecycle.astrbot_config
         self.manager = TemplateManager()
         # 使用列表保证路由注册顺序，避免 /<name> 路由优先匹配 /reset_default
-        self.routes = [
-            ("/t2i/templates", ("GET", self.list_templates)),
-            ("/t2i/templates/active", ("GET", self.get_active_template)),
-            ("/t2i/templates/create", ("POST", self.create_template)),
-            ("/t2i/templates/reset_default", ("POST", self.reset_default_template)),
-            ("/t2i/templates/set_active", ("POST", self.set_active_template)),
-            # 动态路由应该在静态路由之后注册
-            (
-                "/t2i/templates/<name>",
-                [
-                    ("GET", self.get_template),
-                    ("PUT", self.update_template),
-                    ("DELETE", self.delete_template),
-                ],
-            ),
-        ]
+        self.routes = {
+            "/t2i/templates": ("GET", self.list_templates),
+            "/t2i/templates/active": ("GET", self.get_active_template),
+            "/t2i/templates/create": ("POST", self.create_template),
+            "/t2i/templates/reset_default": ("POST", self.reset_default_template),
+            "/t2i/templates/set_active": ("POST", self.set_active_template),
+            "/t2i/templates/<name>": [
+                ("GET", self.get_template),
+                ("PUT", self.update_template),
+                ("DELETE", self.delete_template),
+            ],
+        }
         self.register_routes()
 
     async def list_templates(self):
