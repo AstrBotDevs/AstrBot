@@ -56,10 +56,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             "api_base",
             "https://api.fish-audio.cn/v1",
         )
+        self.timeout: int = int(provider_config.get("timeout", 20))
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config["model"])
+        self.set_model(provider_config.get("model", None))
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
@@ -135,17 +136,20 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
-        async with AsyncClient(base_url=self.api_base).stream(
+        async with AsyncClient(base_url=self.api_base, timeout=self.timeout).stream(
             "POST",
             "/tts",
             headers=self.headers,
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
-            if response.headers["content-type"] == "audio/wav":
+            if response.status_code == 200 and response.headers.get(
+                "content-type", ""
+            ).startswith("audio/"):
                 with open(path, "wb") as f:
                     async for chunk in response.aiter_bytes():
                         f.write(chunk)
                 return path
-            body = await response.aread()
-            text = body.decode("utf-8", errors="replace")
-            raise Exception(f"Fish Audio API请求失败: {text}")
+            error_text = await response.aread()
+            raise Exception(
+                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}"
+            )
