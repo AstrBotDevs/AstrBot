@@ -11,6 +11,7 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.message import ContentPart
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -398,7 +399,7 @@ class ProviderAnthropic(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_user_content_parts: list[dict] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文，支持文本和图片"""
         content = []
@@ -417,9 +418,7 @@ class ProviderAnthropic(Provider):
         if extra_user_content_parts:
             # 过滤出文本块，因为 Anthropic 主要支持文本和图片
             text_blocks = [
-                block
-                for block in extra_user_content_parts
-                if block.get("type") == "text"
+                block for block in extra_user_content_parts if block.type == "text"
             ]
             content.extend(text_blocks)
 

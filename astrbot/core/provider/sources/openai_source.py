@@ -17,7 +17,7 @@ from openai.types.completion_usage import CompletionUsage
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
@@ -348,7 +348,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
-        extra_user_content_parts: list[dict] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -629,7 +629,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_user_content_parts: list[dict] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         # 构建内容块列表
@@ -647,7 +647,8 @@ class ProviderOpenAIOfficial(Provider):
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
-            content_blocks.extend(extra_user_content_parts)
+            for part in extra_user_content_parts:
+                content_blocks.append(part.model_dump())
 
         # 3. 图片内容
         if image_urls:

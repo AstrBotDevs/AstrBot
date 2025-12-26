@@ -4,7 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import TypeAlias, Union
 
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -103,7 +103,7 @@ class Provider(AbstractProvider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
-        extra_user_content_parts: list[dict] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。

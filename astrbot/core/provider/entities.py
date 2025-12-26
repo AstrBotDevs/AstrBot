@@ -93,9 +93,7 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
-    extra_user_content_parts: list[dict] | list[ContentPart] = field(
-        default_factory=list
-    )
+    extra_user_content_parts: list[ContentPart] = field(default_factory=list)
     """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
@@ -184,12 +182,7 @@ class ProviderRequest:
         # 2. 额外的内容块（系统提醒、指令等）
         if self.extra_user_content_parts:
             for part in self.extra_user_content_parts:
-                if hasattr(part, "model_dump"):
-                    # ContentPart 对象，需要 model_dump
-                    content_blocks.append(part.model_dump())
-                else:
-                    # 已经是 dict
-                    content_blocks.append(part)
+                content_blocks.append(part.model_dump())
 
         # 3. 图片内容
         if self.image_urls:

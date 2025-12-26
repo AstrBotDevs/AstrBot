@@ -13,6 +13,7 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.message import ContentPart
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -807,7 +808,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_user_content_parts: list[dict] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文。"""
         # 构建内容块列表
@@ -825,7 +826,8 @@ class ProviderGoogleGenAI(Provider):
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
-            content_blocks.extend(extra_user_content_parts)
+            for part in extra_user_content_parts:
+                content_blocks.append(part.model_dump())
 
         # 3. 图片内容
         if image_urls:
