@@ -4,7 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import TypeAlias, Union
 
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -103,6 +103,7 @@ class Provider(AbstractProvider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
         **kwargs,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
@@ -114,6 +115,7 @@ class Provider(AbstractProvider):
             tools: tool set
             contexts: 上下文，和 prompt 二选一使用
             tool_calls_result: 回传给 LLM 的工具调用结果。参考: https://platform.openai.com/docs/guides/function-calling
+            extra_user_content_parts: 额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）
             kwargs: 其他参数
 
         Notes:
