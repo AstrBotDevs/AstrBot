@@ -11,6 +11,7 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
+from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -68,7 +69,7 @@ class ProviderAnthropic(Provider):
                 blocks = []
                 if isinstance(message["content"], str):
                     blocks.append({"type": "text", "text": message["content"]})
-                if "tool_calls" in message:
+                if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
                         blocks.append(  # noqa: PERF401
                             {
@@ -132,6 +133,9 @@ class ProviderAnthropic(Provider):
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
+        if "max_tokens" not in payloads:
+            payloads["max_tokens"] = 1024
+
         completion = await self.client.messages.create(
             **payloads, stream=False, extra_body=extra_body
         )
@@ -180,6 +184,9 @@ class ProviderAnthropic(Provider):
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
+
+        if "max_tokens" not in payloads:
+            payloads["max_tokens"] = 1024
 
         async with self.client.messages.stream(
             **payloads, extra_body=extra_body
@@ -296,13 +303,16 @@ class ProviderAnthropic(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
         new_record = None
         if prompt is not None:
-            new_record = await self.assemble_context(prompt, image_urls)
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_user_content_parts
+            )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
             context_query.append(new_record)
@@ -342,21 +352,24 @@ class ProviderAnthropic(Provider):
 
     async def text_chat_stream(
         self,
-        prompt,
+        prompt=None,
         session_id=None,
-        image_urls=...,
+        image_urls=None,
         func_tool=None,
-        contexts=...,
+        contexts=None,
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_user_content_parts=None,
         **kwargs,
     ):
         if contexts is None:
             contexts = []
         new_record = None
         if prompt is not None:
-            new_record = await self.assemble_context(prompt, image_urls)
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_user_content_parts
+            )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
             context_query.append(new_record)
@@ -388,15 +401,15 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
-    async def assemble_context(self, text: str, image_urls: list[str] | None = None):
+    async def assemble_context(
+        self,
+        text: str,
+        image_urls: list[str] | None = None,
+        extra_user_content_parts: list[ContentPart] | None = None,
+    ):
         """组装上下文，支持文本和图片"""
-        if not image_urls:
-            return {"role": "user", "content": text}
 
-        content = []
-        content.append({"type": "text", "text": text})
-
-        for image_url in image_urls:
+        async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
                 image_path = await download_image_by_url(image_url)
                 image_data = await self.encode_image_bs64(image_path)
@@ -408,28 +421,68 @@ class ProviderAnthropic(Provider):
 
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                continue
+                return None
 
             # Get mime type for the image
             mime_type, _ = guess_type(image_url)
             if not mime_type:
                 mime_type = "image/jpeg"  # Default to JPEG if can't determine
 
-            content.append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": (
-                            image_data.split("base64,")[1]
-                            if "base64," in image_data
-                            else image_data
-                        ),
-                    },
+            return {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": (
+                        image_data.split("base64,")[1]
+                        if "base64," in image_data
+                        else image_data
+                    ),
                 },
-            )
+            }
 
+        content = []
+
+        # 1. 用户原始发言（OpenAI 建议：用户发言在前）
+        if text:
+            content.append({"type": "text", "text": text})
+        elif image_urls:
+            # 如果没有文本但有图片，添加占位文本
+            content.append({"type": "text", "text": "[图片]"})
+        elif extra_user_content_parts:
+            # 如果只有额外内容块，也需要添加占位文本
+            content.append({"type": "text", "text": " "})
+
+        # 2. 额外的内容块（系统提醒、指令等）
+        if extra_user_content_parts:
+            for block in extra_user_content_parts:
+                if isinstance(block, TextPart):
+                    content.append({"type": "text", "text": block.text})
+                elif isinstance(block, ImageURLPart):
+                    image_dict = await resolve_image_url(block.image_url.url)
+                    if image_dict:
+                        content.append(image_dict)
+                else:
+                    raise ValueError(f"不支持的额外内容块类型: {type(block)}")
+
+        # 3. 图片内容
+        if image_urls:
+            for image_url in image_urls:
+                image_dict = await resolve_image_url(image_url)
+                if image_dict:
+                    content.append(image_dict)
+
+        # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
+        if (
+            text
+            and not extra_user_content_parts
+            and not image_urls
+            and len(content) == 1
+            and content[0]["type"] == "text"
+        ):
+            return {"role": "user", "content": content[0]["text"]}
+
+        # 否则返回多模态格式
         return {"role": "user", "content": content}
 
     async def encode_image_bs64(self, image_url: str) -> str:

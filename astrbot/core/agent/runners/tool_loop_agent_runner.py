@@ -77,10 +77,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
-            "contexts": self.run_context.messages,
+            "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
             "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
+            "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
 
         if self.streaming:

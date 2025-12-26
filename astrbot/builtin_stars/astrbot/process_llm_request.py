@@ -7,6 +7,7 @@ from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.agent.message import TextPart
 from astrbot.core.provider.func_tool_manager import ToolSet
 
 
@@ -85,7 +86,9 @@ class ProcessLLMRequest:
                 req.image_urls,
             )
             if caption:
-                req.prompt = f"(Image Caption: {caption})\n\n{req.prompt}"
+                req.extra_user_content_parts.append(
+                    TextPart(text=f"<image_caption>{caption}</image_caption>")
+                )
                 req.image_urls = []
         except Exception as e:
             logger.error(f"处理图片描述失败: {e}")
@@ -129,13 +132,14 @@ class ProcessLLMRequest:
             else:
                 req.prompt = prefix + req.prompt
 
+        # 收集系统提醒信息
+        system_parts = []
+
         # user identifier
         if cfg.get("identifier"):
             user_id = event.message_obj.sender.user_id
             user_nickname = event.message_obj.sender.nickname
-            req.prompt = (
-                f"\n[User ID: {user_id}, Nickname: {user_nickname}]\n{req.prompt}"
-            )
+            system_parts.append(f"User ID: {user_id}, Nickname: {user_nickname}")
 
         # group name identifier
         if cfg.get("group_name_display") and event.message_obj.group_id:
@@ -146,7 +150,7 @@ class ProcessLLMRequest:
                 return
             group_name = event.message_obj.group.group_name
             if group_name:
-                req.system_prompt += f"\nGroup name: {group_name}\n"
+                system_parts.append(f"Group name: {group_name}")
 
         # time info
         if cfg.get("datetime_system_prompt"):
@@ -162,7 +166,7 @@ class ProcessLLMRequest:
                 current_time = (
                     datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
                 )
-            req.system_prompt += f"\nCurrent datetime: {current_time}\n"
+            system_parts.append(f"Current datetime: {current_time}")
 
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if req.conversation:
@@ -225,10 +229,17 @@ class ProcessLLMRequest:
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
-            # 3. 将所有部分组合成文本并直接注入到当前消息中
+            # 3. 将所有部分组合成文本并添加到 extra_user_content_parts 中
             # 确保引用内容被正确的标签包裹
             quoted_content = "\n".join(content_parts)
             # 确保所有内容都在<Quoted Message>标签内
             quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
 
-            req.prompt = f"{quoted_text}\n\n{req.prompt}"
+            req.extra_user_content_parts.append(TextPart(text=quoted_text))
+
+        # 统一包裹所有系统提醒
+        if system_parts:
+            system_content = (
+                "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
+            )
+            req.extra_user_content_parts.append(TextPart(text=system_content))
