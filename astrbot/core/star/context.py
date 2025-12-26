@@ -377,7 +377,7 @@ class Context:
             if not module_path:
                 _parts = []
                 module_part = tool.__module__.split(".")
-                flags = ["packages", "plugins"]
+                flags = ["builtin_stars", "plugins"]
                 for i, part in enumerate(module_part):
                     _parts.append(part)
                     if part in flags and i + 1 < len(module_part):

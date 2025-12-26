@@ -390,7 +390,7 @@ class InternalAgentSubStage(Stage):
                     return
 
                 req.prompt = event.message_str[len(provider_wake_prefix) :]
-                # func_tool selection 现在已经转移到 packages/astrbot 插件中进行选择。
+                # func_tool selection 现在已经转移到 astrbot/builtin_stars/astrbot 插件中进行选择。
                 # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
                 for comp in event.message_obj.message:
                     if isinstance(comp, Image):
