@@ -22,6 +22,7 @@
     "axios-mock-adapter": "^1.22.0",
     "chance": "1.1.11",
     "date-fns": "2.30.0",
+    "event-source-polyfill": "^1.0.31",
     "highlight.js": "^11.11.1",
     "js-md5": "^0.8.3",
     "katex": "^0.16.27",
