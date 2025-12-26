@@ -432,13 +432,33 @@ class ProviderAnthropic(Provider):
                         # 兼容直接传 URL 字符串的情况
                         url = str(image_url_data)
 
-                    if url and url.startswith("data:"):
+                    # 处理不同格式的 URL
+                    if url:
                         try:
-                            # 提取 MIME 类型和 base64 数据
-                            mime_type = url.split(":")[1].split(";")[0]
-                            base64_data = (
-                                url.split("base64,")[1] if "base64," in url else url
-                            )
+                            if url.startswith("data:"):
+                                # 已经是 data URI，直接提取
+                                mime_type = url.split(":")[1].split(";")[0]
+                                base64_data = (
+                                    url.split("base64,")[1] if "base64," in url else url
+                                )
+                            elif url.startswith("http"):
+                                # HTTP URL，需要下载并转换
+                                image_path = await download_image_by_url(url)
+                                image_data = await self.encode_image_bs64(image_path)
+                                mime_type = image_data.split(":")[1].split(";")[0]
+                                base64_data = image_data.split("base64,")[1]
+                            elif url.startswith("file:///"):
+                                # 文件路径，需要读取并转换
+                                image_path = url.replace("file:///", "")
+                                image_data = await self.encode_image_bs64(image_path)
+                                mime_type = image_data.split(":")[1].split(";")[0]
+                                base64_data = image_data.split("base64,")[1]
+                            else:
+                                # 假设是本地文件路径
+                                image_data = await self.encode_image_bs64(url)
+                                mime_type = image_data.split(":")[1].split(";")[0]
+                                base64_data = image_data.split("base64,")[1]
+
                             content.append(
                                 {
                                     "type": "image",
@@ -450,9 +470,9 @@ class ProviderAnthropic(Provider):
                                 }
                             )
                         except Exception as e:
-                            logger.warning(f"转换 image_url 到 Anthropic 格式失败: {e}")
-                    else:
-                        logger.warning(f"image_url 不是有效的 data URI: {url[:50]}...")
+                            logger.warning(
+                                f"转换 image_url 到 Anthropic 格式失败: {e}, url={url[:50]}..."
+                            )
 
                 else:
                     # 其他类型（如 audio_url）Anthropic 不支持，记录警告
