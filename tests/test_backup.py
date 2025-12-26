@@ -19,13 +19,13 @@ from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
     AstrBotImporter,
     ImportResult,
-    compare_versions,
-    parse_version,
+    _get_major_version,
 )
 from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
     ConversationV2,
 )
+from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.routes.backup import (
     generate_unique_filename,
     secure_filename,
@@ -272,14 +272,13 @@ class TestAstrBotImporter:
         """测试小版本不同被允许（仅警告）"""
         importer = AstrBotImporter(main_db=MagicMock())
 
-        # 解析当前版本
-        current_parts = parse_version(VERSION)
-        if len(current_parts) >= 2:
-            # 构造一个同主版本但小版本不同的版本
-            minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
-            manifest = {"astrbot_version": minor_diff_version}
-            # 不应该抛出异常
-            importer._validate_version(manifest)
+        # 获取当前主版本
+        major_version = _get_major_version(VERSION)
+        # 构造一个同主版本但小版本不同的版本
+        minor_diff_version = f"{major_version}.999"
+        manifest = {"astrbot_version": minor_diff_version}
+        # 不应该抛出异常
+        importer._validate_version(manifest)
 
     def test_validate_version_missing(self):
         """测试缺少版本信息"""
@@ -421,50 +420,66 @@ class TestSecureFilename:
 
 
 class TestVersionComparison:
-    """版本比较函数测试"""
+    """版本比较函数测试 - 使用 VersionComparator"""
 
-    def test_parse_version_simple(self):
-        """测试解析简单版本号"""
-        assert parse_version("1.0") == (1, 0)
-        assert parse_version("2.1") == (2, 1)
+    def test_get_major_version_simple(self):
+        """测试提取简单主版本号"""
+        assert _get_major_version("1.0") == "1.0"
+        assert _get_major_version("2.1") == "2.1"
+        assert _get_major_version("4.9.1") == "4.9"
 
-    def test_parse_version_multi_digit(self):
-        """测试解析多位数版本号"""
-        assert parse_version("1.10") == (1, 10)
-        assert parse_version("1.10.2") == (1, 10, 2)
-        assert parse_version("10.20.30") == (10, 20, 30)
+    def test_get_major_version_with_prefix(self):
+        """测试带 v 前缀的版本号"""
+        assert _get_major_version("v1.0") == "1.0"
+        assert _get_major_version("V4.9.1") == "4.9"
 
-    def test_parse_version_invalid(self):
-        """测试解析无效版本号"""
-        assert parse_version("invalid") == (0,)
-        assert parse_version("") == (0,)
-        assert parse_version("1.x.2") == (0,)
+    def test_get_major_version_with_prerelease(self):
+        """测试带预发布标签的版本号"""
+        assert _get_major_version("4.9.1-beta") == "4.9"
+        assert _get_major_version("4.9.1-alpha.1") == "4.9"
+        assert _get_major_version("4.9.1+build123") == "4.9"
+
+    def test_get_major_version_single_part(self):
+        """测试单部分版本号"""
+        assert _get_major_version("1") == "1.0"
+
+    def test_get_major_version_empty(self):
+        """测试空版本号"""
+        assert _get_major_version("") == "0.0"
 
     def test_compare_versions_equal(self):
         """测试版本相等"""
-        assert compare_versions("1.0", "1.0") == 0
-        assert compare_versions("1.0.0", "1.0") == 0
-        assert compare_versions("2.10", "2.10") == 0
+        assert VersionComparator.compare_version("1.0", "1.0") == 0
+        assert VersionComparator.compare_version("1.0.0", "1.0") == 0
+        assert VersionComparator.compare_version("2.10", "2.10") == 0
 
     def test_compare_versions_less_than(self):
         """测试版本小于"""
-        assert compare_versions("1.0", "1.1") == -1
-        assert compare_versions("1.9", "1.10") == -1  # 关键测试：多位数版本比较
-        assert compare_versions("1.2", "1.10") == -1
-        assert compare_versions("1.0", "2.0") == -1
+        assert VersionComparator.compare_version("1.0", "1.1") == -1
+        assert VersionComparator.compare_version("1.9", "1.10") == -1  # 关键测试：多位数版本比较
+        assert VersionComparator.compare_version("1.2", "1.10") == -1
+        assert VersionComparator.compare_version("1.0", "2.0") == -1
 
     def test_compare_versions_greater_than(self):
         """测试版本大于"""
-        assert compare_versions("1.1", "1.0") == 1
-        assert compare_versions("1.10", "1.9") == 1  # 关键测试：多位数版本比较
-        assert compare_versions("1.10", "1.2") == 1
-        assert compare_versions("2.0", "1.0") == 1
+        assert VersionComparator.compare_version("1.1", "1.0") == 1
+        assert VersionComparator.compare_version("1.10", "1.9") == 1  # 关键测试：多位数版本比较
+        assert VersionComparator.compare_version("1.10", "1.2") == 1
+        assert VersionComparator.compare_version("2.0", "1.0") == 1
 
     def test_compare_versions_different_lengths(self):
         """测试不同长度版本比较"""
-        assert compare_versions("1.0", "1.0.0") == 0
-        assert compare_versions("1.0", "1.0.1") == -1
-        assert compare_versions("1.0.1", "1.0") == 1
+        assert VersionComparator.compare_version("1.0", "1.0.0") == 0
+        assert VersionComparator.compare_version("1.0", "1.0.1") == -1
+        assert VersionComparator.compare_version("1.0.1", "1.0") == 1
+
+    def test_compare_versions_prerelease(self):
+        """测试预发布版本比较"""
+        # 预发布版本低于正式版本
+        assert VersionComparator.compare_version("1.0.0-alpha", "1.0.0") == -1
+        assert VersionComparator.compare_version("1.0.0", "1.0.0-beta") == 1
+        # alpha < beta
+        assert VersionComparator.compare_version("1.0.0-alpha", "1.0.0-beta") == -1
 
 
 class TestImportPreCheckResult:
@@ -568,10 +583,8 @@ class TestPreCheck:
     def test_pre_check_minor_version_diff(self, mock_main_db, tmp_path):
         """测试预检查小版本差异"""
         # 构造一个同主版本但小版本不同的版本
-        current_parts = parse_version(VERSION)
-        # VERSION 应该至少有两个部分（如 4.9）
-        assert len(current_parts) >= 2, f"VERSION {VERSION} 应该有至少两个部分"
-        minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
+        major_version = _get_major_version(VERSION)
+        minor_diff_version = f"{major_version}.999"
 
         zip_path = tmp_path / "backup.zip"
         manifest = {
@@ -628,10 +641,8 @@ class TestVersionCompatibility:
 
     def test_check_version_compatibility_minor_diff(self, mock_main_db):
         """测试小版本差异"""
-        current_parts = parse_version(VERSION)
-        # VERSION 应该至少有两个部分（如 4.9）
-        assert len(current_parts) >= 2, f"VERSION {VERSION} 应该有至少两个部分"
-        minor_diff_version = f"{current_parts[0]}.{current_parts[1]}.999"
+        major_version = _get_major_version(VERSION)
+        minor_diff_version = f"{major_version}.999"
 
         importer = AstrBotImporter(main_db=mock_main_db)
         result = importer._check_version_compatibility(minor_diff_version)

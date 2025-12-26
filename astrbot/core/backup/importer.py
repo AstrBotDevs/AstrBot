@@ -25,6 +25,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
     get_astrbot_knowledge_base_path,
 )
+from astrbot.core.utils.version_comparator import VersionComparator
 
 # 从共享常量模块导入
 from .constants import (
@@ -37,49 +38,25 @@ if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 
 
-def parse_version(version_str: str) -> tuple[int, ...]:
-    """将版本字符串解析为数值元组用于比较
+def _get_major_version(version_str: str) -> str:
+    """提取版本的主版本部分（前两位）
 
     Args:
-        version_str: 版本字符串，如 "1.0", "1.10", "2.0.1"
+        version_str: 版本字符串，如 "4.9.1", "4.10.0-beta"
 
     Returns:
-        数值元组，如 (1, 0), (1, 10), (2, 0, 1)
+        主版本字符串，如 "4.9", "4.10"
     """
-    try:
-        parts = version_str.split(".")
-        return tuple(int(p) for p in parts)
-    except (ValueError, AttributeError):
-        # 解析失败时返回 (0,)，确保能够比较
-        return (0,)
-
-
-def compare_versions(v1: str, v2: str) -> int:
-    """比较两个版本号
-
-    Args:
-        v1: 第一个版本字符串
-        v2: 第二个版本字符串
-
-    Returns:
-        -1 如果 v1 < v2
-         0 如果 v1 == v2
-         1 如果 v1 > v2
-    """
-    t1 = parse_version(v1)
-    t2 = parse_version(v2)
-
-    # 补齐长度以便比较
-    max_len = max(len(t1), len(t2))
-    t1 = t1 + (0,) * (max_len - len(t1))
-    t2 = t2 + (0,) * (max_len - len(t2))
-
-    if t1 < t2:
-        return -1
-    elif t1 > t2:
-        return 1
-    else:
-        return 0
+    if not version_str:
+        return "0.0"
+    # 移除 v 前缀和预发布标签
+    version = version_str.lower().replace("v", "").split("-")[0].split("+")[0]
+    parts = [p for p in version.split(".") if p]  # 过滤空字符串
+    if len(parts) >= 2:
+        return f"{parts[0]}.{parts[1]}"
+    elif len(parts) == 1 and parts[0]:
+        return f"{parts[0]}.0"
+    return "0.0"
 
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
@@ -270,22 +247,12 @@ class AstrBotImporter:
                 "message": "备份文件缺少版本信息",
             }
 
-        backup_parts = parse_version(backup_version)
-        current_parts = parse_version(VERSION)
+        # 提取主版本（前两位）进行比较
+        backup_major = _get_major_version(backup_version)
+        current_major = _get_major_version(VERSION)
 
-        # 补齐到至少 2 位用于主版本比较
-        backup_major = (
-            backup_parts[:2]
-            if len(backup_parts) >= 2
-            else backup_parts + (0,) * (2 - len(backup_parts))
-        )
-        current_major = (
-            current_parts[:2]
-            if len(current_parts) >= 2
-            else current_parts + (0,) * (2 - len(current_parts))
-        )
-
-        if backup_major != current_major:
+        # 比较主版本
+        if VersionComparator.compare_version(backup_major, current_major) != 0:
             return {
                 "status": "major_diff",
                 "can_import": False,
@@ -296,10 +263,8 @@ class AstrBotImporter:
             }
 
         # 比较完整版本
-        backup_full = backup_parts + (0,) * (3 - len(backup_parts))
-        current_full = current_parts + (0,) * (3 - len(current_parts))
-
-        if backup_full != current_full:
+        version_cmp = VersionComparator.compare_version(backup_version, VERSION)
+        if version_cmp != 0:
             return {
                 "status": "minor_diff",
                 "can_import": True,
@@ -706,7 +671,7 @@ class AstrBotImporter:
 
         # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
         backup_version = manifest.get("version", "1.0")
-        if compare_versions(backup_version, "1.1") < 0:
+        if VersionComparator.compare_version(backup_version, "1.1") < 0:
             logger.info("备份版本不支持目录备份，跳过目录导入")
             return dir_stats
 
