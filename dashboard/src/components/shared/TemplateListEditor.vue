@@ -102,136 +102,10 @@
                         </v-list-item>
                       </v-col>
                       <v-col cols="12" sm="6" class="config-input">
-                        <div class="w-100">
-                          <template v-if="childMeta?._special === 'select_provider'">
-                            <ProviderSelector v-model="entry[itemKey][childKey]" :provider-type="'chat_completion'" />
-                          </template>
-                          <template v-else-if="childMeta?._special === 'select_provider_stt'">
-                            <ProviderSelector v-model="entry[itemKey][childKey]" :provider-type="'speech_to_text'" />
-                          </template>
-                          <template v-else-if="childMeta?._special === 'select_provider_tts'">
-                            <ProviderSelector v-model="entry[itemKey][childKey]" :provider-type="'text_to_speech'" />
-                          </template>
-                          <template v-else-if="childMeta?._special === 'select_persona'">
-                            <PersonaSelector v-model="entry[itemKey][childKey]" />
-                          </template>
-                          <template v-else-if="childMeta?._special === 'select_knowledgebase'">
-                            <KnowledgeBaseSelector v-model="entry[itemKey][childKey]" />
-                          </template>
-                          <div
-                            v-else-if="childMeta?.type === 'list' && childMeta?.options && childMeta?.render_type === 'checkbox'"
-                            class="d-flex flex-wrap gap-20"
-                          >
-                            <v-checkbox
-                              v-for="(option, optionIndex) in childMeta.options"
-                              :key="optionIndex"
-                              v-model="entry[itemKey][childKey]"
-                              :label="childMeta.labels ? childMeta.labels[optionIndex] : option"
-                              :value="option"
-                              class="mr-2"
-                              color="primary"
-                              hide-details
-                            ></v-checkbox>
-                          </div>
-                          <v-combobox
-                            v-else-if="childMeta?.type === 'list' && childMeta?.options"
-                            v-model="entry[itemKey][childKey]"
-                            :items="childMeta.options"
-                            :disabled="childMeta?.readonly"
-                            density="compact"
-                            variant="outlined"
-                            class="config-field"
-                            hide-details
-                            chips
-                            multiple
-                          ></v-combobox>
-                          <v-select
-                            v-else-if="childMeta?.options"
-                            v-model="entry[itemKey][childKey]"
-                            :items="childMeta.options"
-                            :disabled="childMeta?.readonly"
-                            density="compact"
-                            variant="outlined"
-                            class="config-field"
-                            hide-details
-                          ></v-select>
-                          <div v-else-if="childMeta?.editor_mode" class="editor-container">
-                            <VueMonacoEditor
-                              :theme="childMeta?.editor_theme || 'vs-light'"
-                              :language="childMeta?.editor_language || 'json'"
-                              style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);"
-                              v-model:value="entry[itemKey][childKey]"
-                            >
-                            </VueMonacoEditor>
-                          </div>
-                          <v-text-field
-                            v-else-if="childMeta?.type === 'string'"
-                            v-model="entry[itemKey][childKey]"
-                            density="compact"
-                            variant="outlined"
-                            class="config-field"
-                            hide-details
-                          ></v-text-field>
-                          <div
-                            v-else-if="childMeta?.type === 'int' || childMeta?.type === 'float'"
-                            class="d-flex align-center gap-3"
-                          >
-                            <v-slider
-                              v-if="childMeta?.slider"
-                              v-model.number="entry[itemKey][childKey]"
-                              :min="childMeta?.slider?.min ?? 0"
-                              :max="childMeta?.slider?.max ?? 100"
-                              :step="childMeta?.slider?.step ?? 1"
-                              color="primary"
-                              density="compact"
-                              hide-details
-                              class="flex-grow-1"
-                            ></v-slider>
-                            <v-text-field
-                              v-model.number="entry[itemKey][childKey]"
-                              density="compact"
-                              variant="outlined"
-                              class="config-field"
-                              type="number"
-                              hide-details
-                              style="max-width: 140px;"
-                            ></v-text-field>
-                          </div>
-                          <v-textarea
-                            v-else-if="childMeta?.type === 'text'"
-                            v-model="entry[itemKey][childKey]"
-                            variant="outlined"
-                            rows="3"
-                            class="config-field"
-                            hide-details
-                          ></v-textarea>
-                          <v-switch
-                            v-else-if="childMeta?.type === 'bool'"
-                            v-model="entry[itemKey][childKey]"
-                            color="primary"
-                            inset
-                            density="compact"
-                            hide-details
-                          ></v-switch>
-                          <ListConfigItem
-                            v-else-if="childMeta?.type === 'list'"
-                            v-model="entry[itemKey][childKey]"
-                            class="config-field"
-                          />
-                          <ObjectEditor
-                            v-else-if="childMeta?.type === 'dict'"
-                            v-model="entry[itemKey][childKey]"
-                            class="config-field"
-                          />
-                          <v-text-field
-                            v-else
-                            v-model="entry[itemKey][childKey]"
-                            density="compact"
-                            variant="outlined"
-                            class="config-field"
-                            hide-details
-                          ></v-text-field>
-                        </div>
+                        <ConfigItemRenderer
+                          v-model="entry[itemKey][childKey]"
+                          :item-meta="childMeta"
+                        />
                       </v-col>
                     </v-row>
                     <v-divider
@@ -257,137 +131,10 @@
                     </v-list-item>
                   </v-col>
                   <v-col cols="12" sm="6" class="config-input">
-                    <div class="w-100">
-                      <template v-if="itemMeta?._special === 'select_provider'">
-                        <ProviderSelector v-model="entry[itemKey]" :provider-type="'chat_completion'" />
-                      </template>
-                      <template v-else-if="itemMeta?._special === 'select_provider_stt'">
-                        <ProviderSelector v-model="entry[itemKey]" :provider-type="'speech_to_text'" />
-                      </template>
-                      <template v-else-if="itemMeta?._special === 'select_provider_tts'">
-                        <ProviderSelector v-model="entry[itemKey]" :provider-type="'text_to_speech'" />
-                      </template>
-                      <template v-else-if="itemMeta?._special === 'select_persona'">
-                        <PersonaSelector v-model="entry[itemKey]" />
-                      </template>
-                      <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
-                        <KnowledgeBaseSelector v-model="entry[itemKey]" />
-                      </template>
-
-                      <div
-                        v-else-if="itemMeta?.type === 'list' && itemMeta?.options && itemMeta?.render_type === 'checkbox'"
-                        class="d-flex flex-wrap gap-20"
-                      >
-                        <v-checkbox
-                          v-for="(option, optionIndex) in itemMeta.options"
-                          :key="optionIndex"
-                          v-model="entry[itemKey]"
-                          :label="itemMeta.labels ? itemMeta.labels[optionIndex] : option"
-                          :value="option"
-                          class="mr-2"
-                          color="primary"
-                          hide-details
-                        ></v-checkbox>
-                      </div>
-                      <v-combobox
-                        v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
-                        v-model="entry[itemKey]"
-                        :items="itemMeta.options"
-                        :disabled="itemMeta?.readonly"
-                        density="compact"
-                        variant="outlined"
-                        class="config-field"
-                        hide-details
-                        chips
-                        multiple
-                      ></v-combobox>
-                      <v-select
-                        v-else-if="itemMeta?.options"
-                        v-model="entry[itemKey]"
-                        :items="itemMeta.options"
-                        :disabled="itemMeta?.readonly"
-                        density="compact"
-                        variant="outlined"
-                        class="config-field"
-                        hide-details
-                      ></v-select>
-                      <div v-else-if="itemMeta?.editor_mode" class="editor-container">
-                        <VueMonacoEditor
-                          :theme="itemMeta?.editor_theme || 'vs-light'"
-                          :language="itemMeta?.editor_language || 'json'"
-                          style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);"
-                          v-model:value="entry[itemKey]"
-                        >
-                        </VueMonacoEditor>
-                      </div>
-                      <v-text-field
-                        v-else-if="itemMeta?.type === 'string'"
-                        v-model="entry[itemKey]"
-                        density="compact"
-                        variant="outlined"
-                        class="config-field"
-                        hide-details
-                      ></v-text-field>
-                      <div
-                        v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-                        class="d-flex align-center gap-3"
-                      >
-                        <v-slider
-                          v-if="itemMeta?.slider"
-                          v-model.number="entry[itemKey]"
-                          :min="itemMeta?.slider?.min ?? 0"
-                          :max="itemMeta?.slider?.max ?? 100"
-                          :step="itemMeta?.slider?.step ?? 1"
-                          color="primary"
-                          density="compact"
-                          hide-details
-                          class="flex-grow-1"
-                        ></v-slider>
-                        <v-text-field
-                          v-model.number="entry[itemKey]"
-                          density="compact"
-                          variant="outlined"
-                          class="config-field"
-                          type="number"
-                          hide-details
-                          style="max-width: 140px;"
-                        ></v-text-field>
-                      </div>
-                      <v-textarea
-                        v-else-if="itemMeta?.type === 'text'"
-                        v-model="entry[itemKey]"
-                        variant="outlined"
-                        rows="3"
-                        class="config-field"
-                        hide-details
-                      ></v-textarea>
-                      <v-switch
-                        v-else-if="itemMeta?.type === 'bool'"
-                        v-model="entry[itemKey]"
-                        color="primary"
-                        inset
-                        density="compact"
-                        hide-details
-                      ></v-switch>
-                      <ListConfigItem
-                        v-else-if="itemMeta?.type === 'list'"
-                        v-model="entry[itemKey]"
-                        class="config-field"
-                      />
-                      <ObjectEditor
-                        v-else-if="itemMeta?.type === 'dict'"
-                        v-model="entry[itemKey]"
-                        class="config-field"
-                      />
-                      <v-text-field
-                        v-else
-                        v-model="entry[itemKey]"
-                        density="compact"
-                        variant="outlined"
-                        class="config-field"
-                        hide-details
-                      ></v-text-field>
-                    </div>
+                    <ConfigItemRenderer
+                      v-model="entry[itemKey]"
+                      :item-meta="itemMeta"
+                    />
                   </v-col>
                 </v-row>
                 <v-divider
@@ -405,12 +152,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import ListConfigItem from './ListConfigItem.vue'
-import ObjectEditor from './ObjectEditor.vue'
-import ProviderSelector from './ProviderSelector.vue'
-import PersonaSelector from './PersonaSelector.vue'
-import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
+import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import { useI18n } from '@/i18n/composables'
 
 const props = defineProps({

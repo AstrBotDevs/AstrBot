@@ -1,13 +1,7 @@
 <script setup>
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
-import ListConfigItem from './ListConfigItem.vue'
-import ObjectEditor from './ObjectEditor.vue'
-import ProviderSelector from './ProviderSelector.vue'
-import PersonaSelector from './PersonaSelector.vue'
-import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
-import PluginSetSelector from './PluginSetSelector.vue'
-import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
@@ -216,125 +210,19 @@ function getSpecialSubtype(value) {
               </v-list-item>
             </v-col>
             <v-col cols="12" sm="6" class="config-input">
-              <div class="w-100" v-if="!itemMeta?._special">
-                <!-- Select input for JSON selector -->
-                <v-select v-if="itemMeta?.options" v-model="createSelectorModel(itemKey).value"
-                  :items="(() => {
-                    const labels = getTranslatedLabels(itemMeta);
-                    return labels 
-                      ? itemMeta.options.map((value, index) => ({ title: labels[index] || value, value: value }))
-                      : itemMeta.options;
-                  })()" 
-                  :disabled="itemMeta?.readonly" density="compact" variant="outlined"
-                  class="config-field" hide-details></v-select>
-
-                <!-- Code Editor for JSON selector -->
-                <div v-else-if="itemMeta?.editor_mode" class="editor-container">
-                  <VueMonacoEditor :theme="itemMeta?.editor_theme || 'vs-light'"
-                    :language="itemMeta?.editor_language || 'json'"
-                    style="min-height: 100px; flex-grow: 1; border: 1px solid rgba(0, 0, 0, 0.1);"
-                    v-model:value="createSelectorModel(itemKey).value">
-                  </VueMonacoEditor>
-                  <v-btn icon size="small" variant="text" color="primary" class="editor-fullscreen-btn"
-                    @click="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
-                    :title="t('core.common.editor.fullscreen')">
-                    <v-icon>mdi-fullscreen</v-icon>
-                  </v-btn>
-                </div>
-
-                <!-- String input for JSON selector -->
-                <v-text-field v-else-if="itemMeta?.type === 'string'" v-model="createSelectorModel(itemKey).value"
-                  density="compact" variant="outlined" class="config-field" hide-details></v-text-field>
-
-                <!-- Numeric input with optional slider for JSON selector -->
-                <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
-                  <v-slider
-                    v-if="itemMeta?.slider"
-                    v-model.number="createSelectorModel(itemKey).value"
-                    :min="itemMeta?.slider?.min ?? 0"
-                    :max="itemMeta?.slider?.max ?? 100"
-                    :step="itemMeta?.slider?.step ?? 1"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    style="flex: 3"
-                  ></v-slider>
-                  <v-text-field
-                    v-model.number="createSelectorModel(itemKey).value"
-                    density="compact"
-                    variant="outlined"
-                    class="config-field"
-                    style="flex: 2"
-                    type="number"
-                    hide-details
-                  ></v-text-field>
-                </div>
-
-                <!-- Text area for JSON selector -->
-                <v-textarea v-else-if="itemMeta?.type === 'text'" v-model="createSelectorModel(itemKey).value"
-                  variant="outlined" rows="3" class="config-field" hide-details></v-textarea>
-
-                <!-- Boolean switch for JSON selector -->
-                <v-switch v-else-if="itemMeta?.type === 'bool'" v-model="createSelectorModel(itemKey).value"
-                  color="primary" inset density="compact" hide-details
-                  style="display: flex; justify-content: end;"></v-switch>
-
-                <TemplateListEditor
-                  v-else-if="itemMeta?.type === 'template_list'"
-                  v-model="createSelectorModel(itemKey).value"
-                  :templates="itemMeta?.templates || {}"
-                  class="config-field"
-                />
-
-                <!-- List item for JSON selector -->
-                <ListConfigItem v-else-if="itemMeta?.type === 'list'" v-model="createSelectorModel(itemKey).value"
-                  button-text="修改" class="config-field" />
-
-                <!-- Object editor for JSON selector -->
-                <ObjectEditor v-else-if="itemMeta?.type === 'dict'" v-model="createSelectorModel(itemKey).value"
-                  class="config-field" />
-
-                <!-- Fallback for JSON selector -->
-                <v-text-field v-else v-model="createSelectorModel(itemKey).value" density="compact" variant="outlined"
-                  class="config-field" hide-details></v-text-field>
-              </div>
-
-              <!-- Special handling for specific metadata types -->
-              <div v-else-if="itemMeta?._special === 'select_provider'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'" />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_provider_stt'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'speech_to_text'" />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_provider_tts'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'text_to_speech'" />
-              </div>
-              <div v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
-                <ProviderSelector
-                  v-model="createSelectorModel(itemKey).value"
-                  :provider-type="'agent_runner'"
-                  :provider-subtype="getSpecialSubtype(itemMeta?._special)"
-                />
-              </div>
-              <div v-else-if="itemMeta?._special === 'provider_pool'">
-                <ProviderSelector v-model="createSelectorModel(itemKey).value" :provider-type="'chat_completion'"
-                  button-text="选择提供商池..." />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_persona'">
-                <PersonaSelector v-model="createSelectorModel(itemKey).value" />
-              </div>
-              <div v-else-if="itemMeta?._special === 'persona_pool'">
-                <PersonaSelector v-model="createSelectorModel(itemKey).value" button-text="选择人格池..." />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_knowledgebase'">
-                <KnowledgeBaseSelector v-model="createSelectorModel(itemKey).value" />
-              </div>
-              <div v-else-if="itemMeta?._special === 'select_plugin_set'">
-                <PluginSetSelector v-model="createSelectorModel(itemKey).value" />
-              </div>
-              <div v-else-if="itemMeta?._special === 't2i_template'">
-                <T2ITemplateEditor />
-              </div>
+              <TemplateListEditor
+                v-if="itemMeta?.type === 'template_list'"
+                v-model="createSelectorModel(itemKey).value"
+                :templates="itemMeta?.templates || {}"
+                class="config-field"
+              />
+              <ConfigItemRenderer
+                v-else
+                v-model="createSelectorModel(itemKey).value"
+                :item-meta="itemMeta"
+                :show-fullscreen-btn="!!itemMeta?.editor_mode"
+                @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
+              />
             </v-col>
           </v-row>
 
