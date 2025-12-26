@@ -50,7 +50,9 @@ class PluginManager:
         """存储插件的路径。即 data/plugins"""
         self.plugin_config_path = get_astrbot_config_path()
         """存储插件配置的路径。data/config"""
-        self.reserved_plugin_path = os.path.join(get_astrbot_path(), "astrbot", "builtin_stars")
+        self.reserved_plugin_path = os.path.join(
+            get_astrbot_path(), "astrbot", "builtin_stars"
+        )
         """保留插件的路径。在 astrbot/builtin_stars 目录下"""
         self.conf_schema_fname = "_conf_schema.json"
         self.logo_fname = "logo.png"
