@@ -1,6 +1,7 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
 import axios from 'axios';
+import { EventSourcePolyfill } from 'event-source-polyfill';
 </script>
 
 <template>
@@ -99,7 +100,16 @@ export default {
       }
 
       console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
-      this.eventSource = new EventSource('/api/live-log');
+      
+      const token = localStorage.getItem('token');
+
+      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+        headers: {
+            'Authorization': token ? `Bearer ${token}` : ''
+        },
+        heartbeatTimeout: 300000, 
+        withCredentials: true 
+      });
 
       this.eventSource.onopen = () => {
         console.log('日志流连接成功！');
@@ -124,7 +134,13 @@ export default {
       };
 
       this.eventSource.onerror = (err) => {
-        console.warn('日志流连接错误:', err);
+
+        if (err.status === 401) {
+            console.error('鉴权失败 (401)，可能是 Token 过期了。');
+
+        } else {
+            console.warn('日志流连接错误:', err);
+        }
         
         if (this.eventSource) {
             this.eventSource.close();
@@ -166,6 +182,7 @@ export default {
       let hasUpdate = false;
 
       newLogs.forEach(log => {
+
         const exists = this.localLogCache.some(existing => 
           existing.time === log.time && 
           existing.data === log.data &&
