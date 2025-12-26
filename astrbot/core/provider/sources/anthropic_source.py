@@ -416,11 +416,47 @@ class ProviderAnthropic(Provider):
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
-            # 过滤出文本块，因为 Anthropic 主要支持文本和图片
-            text_blocks = [
-                block for block in extra_user_content_parts if block.type == "text"
-            ]
-            content.extend(text_blocks)
+            for block in extra_user_content_parts:
+                block_type = block.get("type")
+
+                if block_type == "text":
+                    # 文本直接添加
+                    content.append(block)
+
+                elif block_type == "image_url":
+                    # 转换 OpenAI 格式的图片为 Anthropic 格式
+                    image_url_data = block.get("image_url", {})
+                    if isinstance(image_url_data, dict):
+                        url = image_url_data.get("url", "")
+                    else:
+                        # 兼容直接传 URL 字符串的情况
+                        url = str(image_url_data)
+
+                    if url and url.startswith("data:"):
+                        try:
+                            # 提取 MIME 类型和 base64 数据
+                            mime_type = url.split(":")[1].split(";")[0]
+                            base64_data = (
+                                url.split("base64,")[1] if "base64," in url else url
+                            )
+                            content.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": mime_type,
+                                        "data": base64_data,
+                                    },
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(f"转换 image_url 到 Anthropic 格式失败: {e}")
+                    else:
+                        logger.warning(f"image_url 不是有效的 data URI: {url[:50]}...")
+
+                else:
+                    # 其他类型（如 audio_url）Anthropic 不支持，记录警告
+                    logger.debug(f"Anthropic 不支持的内容类型 '{block_type}'，已忽略")
 
         # 3. 图片内容
         if image_urls:
