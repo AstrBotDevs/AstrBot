@@ -103,7 +103,7 @@ typeCheckingMode = "basic"
 pythonVersion = "3.10"
 reportMissingTypeStubs = false
 reportMissingImports = false
-include = ["astrbot", "packages"]
+include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 
 [build-system]

@@ -58,7 +58,7 @@ def is_plugin_path(pathname):
         return False
 
     norm_path = os.path.normpath(pathname)
-    return ("data/plugins" in norm_path) or ("packages/" in norm_path)
+    return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
 
 
 def get_short_level_name(level_name):

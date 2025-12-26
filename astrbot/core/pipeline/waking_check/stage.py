@@ -136,7 +136,7 @@ class WakingCheckStage(Stage):
         ):
             if (
                 self.disable_builtin_commands
-                and handler.handler_module_path == "packages.builtin_commands.main"
+                and handler.handler_module_path == "astrbot.builtin_stars.builtin_commands.main"
             ):
                 logger.debug("skipping builtin command")
                 continue
