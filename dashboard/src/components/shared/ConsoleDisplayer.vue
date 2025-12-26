@@ -5,7 +5,6 @@ import axios from 'axios';
 
 <template>
   <div>
-    <!-- 添加筛选级别控件 -->
     <div class="filter-controls mb-2" v-if="showLevelBtns">
       <v-chip-group v-model="selectedLevels" column multiple>
         <v-chip v-for="level in logLevels" :key="level" :color="getLevelColor(level)" filter variant="flat" size="small"
@@ -48,6 +47,10 @@ export default {
       localLogCache: [],
       eventSource: null,
       retryTimer: null,
+      retryAttempts: 0,           
+      maxRetryAttempts: 10,       
+      baseRetryDelay: 1000,       
+      lastEventId: null,          
     }
   },
   computed: {
@@ -80,21 +83,39 @@ export default {
   beforeUnmount() {
     if (this.eventSource) {
       this.eventSource.close();
+      this.eventSource = null;
     }
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
+      this.retryTimer = null;
     }
+    this.retryAttempts = 0;
   },
   methods: {
     connectSSE() {
       if (this.eventSource) {
         this.eventSource.close();
+        this.eventSource = null;
       }
 
+      console.log(`正在连接日志流... (尝试次数: ${this.retryAttempts})`);
       this.eventSource = new EventSource('/api/live-log');
+
+      this.eventSource.onopen = () => {
+        console.log('日志流连接成功！');
+        this.retryAttempts = 0;
+
+        if (!this.lastEventId) {
+            this.fetchLogHistory();
+        }
+      };
 
       this.eventSource.onmessage = (event) => {
         try {
+          if (event.lastEventId) {
+            this.lastEventId = event.lastEventId;
+          }
+
           const payload = JSON.parse(event.data);
           this.processNewLogs([payload]);
         } catch (e) {
@@ -103,12 +124,39 @@ export default {
       };
 
       this.eventSource.onerror = (err) => {
-        this.eventSource.close();
+        console.warn('日志流连接错误:', err);
         
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+        }
+
+        if (this.retryAttempts >= this.maxRetryAttempts) {
+            console.error('❌ 已达到最大重试次数，停止重连。请刷新页面重试。');
+            return; 
+        }
+
+        const delay = Math.min(
+            this.baseRetryDelay * Math.pow(2, this.retryAttempts),
+            30000
+        );
+        
+        console.log(`⏳ ${delay}ms 后尝试第 ${this.retryAttempts + 1} 次重连...`);
+
+        if (this.retryTimer) {
+          clearTimeout(this.retryTimer);
+          this.retryTimer = null;
+        }
+
         this.retryTimer = setTimeout(async () => {
-          await this.fetchLogHistory();
+          this.retryAttempts++;
+          
+          if (!this.lastEventId) {
+             await this.fetchLogHistory();
+          }
+          
           this.connectSSE();
-        }, 1000);
+        }, delay);
       };
     },
 
@@ -118,7 +166,11 @@ export default {
       let hasUpdate = false;
 
       newLogs.forEach(log => {
-        const exists = this.localLogCache.some(existing => existing.time === log.time);
+        const exists = this.localLogCache.some(existing => 
+          existing.time === log.time && 
+          existing.data === log.data &&
+          existing.level === log.level
+        );
         
         if (!exists) {
             this.localLogCache.push(log);
