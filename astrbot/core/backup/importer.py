@@ -21,7 +21,10 @@ from sqlalchemy import delete
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_knowledge_base_path,
+)
 
 # 从共享常量模块导入
 from .constants import (
@@ -77,6 +80,10 @@ def compare_versions(v1: str, v2: str) -> int:
         return 1
     else:
         return 0
+
+
+CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+KB_PATH = get_astrbot_knowledge_base_path()
 
 
 @dataclass
@@ -175,8 +182,8 @@ class AstrBotImporter:
         self,
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
-        config_path: str = "data/cmd_config.json",
-        kb_root_dir: str = get_astrbot_knowledge_base_path(),
+        config_path: str = CMD_CONFIG_FILE_PATH,
+        kb_root_dir: str = KB_PATH,
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager

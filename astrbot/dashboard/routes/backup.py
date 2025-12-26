@@ -15,7 +15,10 @@ from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import AstrBotImporter
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_backups_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_backups_path,
+    get_astrbot_data_path,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -80,6 +83,7 @@ class BackupRoute(Route):
         self.db = db
         self.core_lifecycle = core_lifecycle
         self.backup_dir = get_astrbot_backups_path()
+        self.data_dir = get_astrbot_data_path()
 
         # 任务状态跟踪
         self.backup_tasks: dict[str, dict] = {}
@@ -264,7 +268,7 @@ class BackupRoute(Route):
             exporter = AstrBotExporter(
                 main_db=self.db,
                 kb_manager=kb_manager,
-                config_path="data/cmd_config.json",
+                config_path=os.path.join(self.data_dir, "cmd_config.json"),
             )
 
             # 创建进度回调
@@ -373,7 +377,7 @@ class BackupRoute(Route):
             importer = AstrBotImporter(
                 main_db=self.db,
                 kb_manager=kb_manager,
-                config_path="data/cmd_config.json",
+                config_path=os.path.join(self.data_dir, "cmd_config.json"),
             )
 
             # 执行预检查
@@ -456,7 +460,7 @@ class BackupRoute(Route):
             importer = AstrBotImporter(
                 main_db=self.db,
                 kb_manager=kb_manager,
-                config_path="data/cmd_config.json",
+                config_path=os.path.join(self.data_dir, "cmd_config.json"),
             )
 
             # 创建进度回调

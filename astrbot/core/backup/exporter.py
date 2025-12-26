@@ -17,7 +17,10 @@ from sqlalchemy import select
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
-from astrbot.core.utils.astrbot_path import get_astrbot_backups_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_backups_path,
+    get_astrbot_data_path,
+)
 
 # 从共享常量模块导入
 from .constants import (
@@ -29,6 +32,8 @@ from .constants import (
 
 if TYPE_CHECKING:
     from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 
 
 class AstrBotExporter:
@@ -53,7 +58,7 @@ class AstrBotExporter:
         self,
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
-        config_path: str = "data/cmd_config.json",
+        config_path: str = CMD_CONFIG_FILE_PATH,
     ):
         self.main_db = main_db
         self.kb_manager = kb_manager
