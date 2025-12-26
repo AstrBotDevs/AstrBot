@@ -169,6 +169,15 @@ class Message(BaseModel):
             )
         return self
 
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        data = handler(self)
+        if self.tool_calls is None:
+            data.pop("tool_calls", None)
+        if self.tool_call_id is None:
+            data.pop("tool_call_id", None)
+        return data
+
 
 class AssistantMessageSegment(Message):
     """A message segment from the assistant."""
