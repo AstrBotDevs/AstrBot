@@ -56,7 +56,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             "api_base",
             "https://api.fish-audio.cn/v1",
         )
-        self.timeout: int = int(provider_config.get("timeout", 20))
+        try:
+            self.timeout: int = int(provider_config.get("timeout", 20))
+        except ValueError:
+            self.timeout = 20
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
@@ -149,7 +152,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
                     async for chunk in response.aiter_bytes():
                         f.write(chunk)
                 return path
-            error_text = await response.aread()
+            error_bytes = await response.aread()
+            error_text = error_bytes.decode("utf-8", errors="replace")[:1024]
             raise Exception(
                 f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}"
             )
