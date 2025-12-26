@@ -13,7 +13,7 @@ from google.genai.errors import APIError
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart
+from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
@@ -811,6 +811,24 @@ class ProviderGoogleGenAI(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文。"""
+
+        async def resolve_image_part(image_url: str) -> dict | None:
+            if image_url.startswith("http"):
+                image_path = await download_image_by_url(image_url)
+                image_data = await self.encode_image_bs64(image_path)
+            elif image_url.startswith("file:///"):
+                image_path = image_url.replace("file:///", "")
+                image_data = await self.encode_image_bs64(image_path)
+            else:
+                image_data = await self.encode_image_bs64(image_url)
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+            return {
+                "type": "image_url",
+                "image_url": {"url": image_data},
+            }
+
         # 构建内容块列表
         content_blocks = []
 
@@ -827,28 +845,21 @@ class ProviderGoogleGenAI(Provider):
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
             for part in extra_user_content_parts:
-                content_blocks.append(part.model_dump())
+                if isinstance(part, TextPart):
+                    content_blocks.append({"type": "text", "text": part.text})
+                elif isinstance(part, ImageURLPart):
+                    image_part = await resolve_image_part(part.image_url.url)
+                    if image_part:
+                        content_blocks.append(image_part)
+                else:
+                    raise ValueError(f"不支持的额外内容块类型: {type(part)}")
 
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self.encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self.encode_image_bs64(image_path)
-                else:
-                    image_data = await self.encode_image_bs64(image_url)
-                if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                    continue
-                content_blocks.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": image_data},
-                    },
-                )
+                image_part = await resolve_image_part(image_url)
+                if image_part:
+                    content_blocks.append(image_part)
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (

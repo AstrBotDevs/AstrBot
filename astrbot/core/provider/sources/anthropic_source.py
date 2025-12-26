@@ -11,7 +11,7 @@ from anthropic.types.usage import Usage
 
 from astrbot import logger
 from astrbot.api.provider import Provider
-from astrbot.core.agent.message import ContentPart
+from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
@@ -402,6 +402,39 @@ class ProviderAnthropic(Provider):
         extra_user_content_parts: list[ContentPart] | None = None,
     ):
         """组装上下文，支持文本和图片"""
+
+        async def resolve_image_url(image_url: str) -> dict | None:
+            if image_url.startswith("http"):
+                image_path = await download_image_by_url(image_url)
+                image_data = await self.encode_image_bs64(image_path)
+            elif image_url.startswith("file:///"):
+                image_path = image_url.replace("file:///", "")
+                image_data = await self.encode_image_bs64(image_path)
+            else:
+                image_data = await self.encode_image_bs64(image_url)
+
+            if not image_data:
+                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                return None
+
+            # Get mime type for the image
+            mime_type, _ = guess_type(image_url)
+            if not mime_type:
+                mime_type = "image/jpeg"  # Default to JPEG if can't determine
+
+            return {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": (
+                        image_data.split("base64,")[1]
+                        if "base64," in image_data
+                        else image_data
+                    ),
+                },
+            }
+
         content = []
 
         # 1. 用户原始发言（OpenAI 建议：用户发言在前）
@@ -417,102 +450,21 @@ class ProviderAnthropic(Provider):
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_user_content_parts:
             for block in extra_user_content_parts:
-                block_type = block.get("type")
-
-                if block_type == "text":
-                    # 文本直接添加
-                    content.append(block)
-
-                elif block_type == "image_url":
-                    # 转换 OpenAI 格式的图片为 Anthropic 格式
-                    image_url_data = block.get("image_url", {})
-                    if isinstance(image_url_data, dict):
-                        url = image_url_data.get("url", "")
-                    else:
-                        # 兼容直接传 URL 字符串的情况
-                        url = str(image_url_data)
-
-                    # 处理不同格式的 URL
-                    if url:
-                        try:
-                            if url.startswith("data:"):
-                                # 已经是 data URI，直接提取
-                                mime_type = url.split(":")[1].split(";")[0]
-                                base64_data = (
-                                    url.split("base64,")[1] if "base64," in url else url
-                                )
-                            elif url.startswith("http"):
-                                # HTTP URL，需要下载并转换
-                                image_path = await download_image_by_url(url)
-                                image_data = await self.encode_image_bs64(image_path)
-                                mime_type = image_data.split(":")[1].split(";")[0]
-                                base64_data = image_data.split("base64,")[1]
-                            elif url.startswith("file:///"):
-                                # 文件路径，需要读取并转换
-                                image_path = url.replace("file:///", "")
-                                image_data = await self.encode_image_bs64(image_path)
-                                mime_type = image_data.split(":")[1].split(";")[0]
-                                base64_data = image_data.split("base64,")[1]
-                            else:
-                                # 假设是本地文件路径
-                                image_data = await self.encode_image_bs64(url)
-                                mime_type = image_data.split(":")[1].split(";")[0]
-                                base64_data = image_data.split("base64,")[1]
-
-                            content.append(
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": mime_type,
-                                        "data": base64_data,
-                                    },
-                                }
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"转换 image_url 到 Anthropic 格式失败: {e}, url={url[:50]}..."
-                            )
-
+                if isinstance(block, TextPart):
+                    content.append({"type": "text", "text": block.text})
+                elif isinstance(block, ImageURLPart):
+                    image_dict = await resolve_image_url(block.image_url.url)
+                    if image_dict:
+                        content.append(image_dict)
                 else:
-                    # 其他类型（如 audio_url）Anthropic 不支持，记录警告
-                    logger.debug(f"Anthropic 不支持的内容类型 '{block_type}'，已忽略")
+                    raise ValueError(f"不支持的额外内容块类型: {type(block)}")
 
         # 3. 图片内容
         if image_urls:
             for image_url in image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self.encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self.encode_image_bs64(image_path)
-                else:
-                    image_data = await self.encode_image_bs64(image_url)
-
-                if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                    continue
-
-                # Get mime type for the image
-                mime_type, _ = guess_type(image_url)
-                if not mime_type:
-                    mime_type = "image/jpeg"  # Default to JPEG if can't determine
-
-                content.append(
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": mime_type,
-                            "data": (
-                                image_data.split("base64,")[1]
-                                if "base64," in image_data
-                                else image_data
-                            ),
-                        },
-                    },
-                )
+                image_dict = await resolve_image_url(image_url)
+                if image_dict:
+                    content.append(image_dict)
 
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
