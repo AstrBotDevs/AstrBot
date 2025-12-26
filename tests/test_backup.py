@@ -456,14 +456,18 @@ class TestVersionComparison:
     def test_compare_versions_less_than(self):
         """测试版本小于"""
         assert VersionComparator.compare_version("1.0", "1.1") == -1
-        assert VersionComparator.compare_version("1.9", "1.10") == -1  # 关键测试：多位数版本比较
+        assert (
+            VersionComparator.compare_version("1.9", "1.10") == -1
+        )  # 关键测试：多位数版本比较
         assert VersionComparator.compare_version("1.2", "1.10") == -1
         assert VersionComparator.compare_version("1.0", "2.0") == -1
 
     def test_compare_versions_greater_than(self):
         """测试版本大于"""
         assert VersionComparator.compare_version("1.1", "1.0") == 1
-        assert VersionComparator.compare_version("1.10", "1.9") == 1  # 关键测试：多位数版本比较
+        assert (
+            VersionComparator.compare_version("1.10", "1.9") == 1
+        )  # 关键测试：多位数版本比较
         assert VersionComparator.compare_version("1.10", "1.2") == 1
         assert VersionComparator.compare_version("2.0", "1.0") == 1
 
