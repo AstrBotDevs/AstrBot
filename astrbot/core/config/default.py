@@ -887,7 +887,6 @@ CONFIG_METADATA_2 = {
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
                         "gm_native_coderunner": False,
-                        "ds_thinking_tool_call": False,
                         "gm_url_context": False,
                         "gm_safety_settings": {
                             "harassment": "BLOCK_MEDIUM_AND_ABOVE",
@@ -2517,12 +2516,6 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                    },
-                    "provider_settings.ds_thinking_tool_call": {
-                        "description": "思考中调用工具",
-                        "type": "bool",
-                        "condition": {"provider": "deepseek"},
-                        "hint": "启用后，DeepSeek 模型可以在思考过程中调用工具，实现多轮思考-工具调用循环。仅对 DeepSeek 模型生效。",
                     },
                     "provider_settings.identifier": {
                         "description": "用户识别",
