@@ -680,7 +680,7 @@ class ProviderGoogleGenAI(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_content_blocks=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -688,7 +688,7 @@ class ProviderGoogleGenAI(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_content_blocks
+                prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -735,7 +735,7 @@ class ProviderGoogleGenAI(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_content_blocks=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -743,7 +743,7 @@ class ProviderGoogleGenAI(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_content_blocks
+                prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -807,7 +807,7 @@ class ProviderGoogleGenAI(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_content_blocks: list[dict] | None = None,
+        extra_user_content_parts: list[dict] | None = None,
     ):
         """组装上下文。"""
         # 构建内容块列表
@@ -819,13 +819,13 @@ class ProviderGoogleGenAI(Provider):
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
-        elif extra_content_blocks:
+        elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
-        if extra_content_blocks:
-            content_blocks.extend(extra_content_blocks)
+        if extra_user_content_parts:
+            content_blocks.extend(extra_user_content_parts)
 
         # 3. 图片内容
         if image_urls:
@@ -851,7 +851,7 @@ class ProviderGoogleGenAI(Provider):
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
-            and not extra_content_blocks
+            and not extra_user_content_parts
             and not image_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"

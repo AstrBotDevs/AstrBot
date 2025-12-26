@@ -296,7 +296,7 @@ class ProviderAnthropic(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_content_blocks=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -304,7 +304,7 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_content_blocks
+                prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -353,7 +353,7 @@ class ProviderAnthropic(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_content_blocks=None,
+        extra_user_content_parts=None,
         **kwargs,
     ):
         if contexts is None:
@@ -361,7 +361,7 @@ class ProviderAnthropic(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_content_blocks
+                prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -398,7 +398,7 @@ class ProviderAnthropic(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_content_blocks: list[dict] | None = None,
+        extra_user_content_parts: list[dict] | None = None,
     ):
         """组装上下文，支持文本和图片"""
         content = []
@@ -409,15 +409,17 @@ class ProviderAnthropic(Provider):
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
             content.append({"type": "text", "text": "[图片]"})
-        elif extra_content_blocks:
+        elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content.append({"type": "text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
-        if extra_content_blocks:
+        if extra_user_content_parts:
             # 过滤出文本块，因为 Anthropic 主要支持文本和图片
             text_blocks = [
-                block for block in extra_content_blocks if block.get("type") == "text"
+                block
+                for block in extra_user_content_parts
+                if block.get("type") == "text"
             ]
             content.extend(text_blocks)
 
@@ -460,7 +462,7 @@ class ProviderAnthropic(Provider):
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
-            and not extra_content_blocks
+            and not extra_user_content_parts
             and not image_urls
             and len(content) == 1
             and content[0]["type"] == "text"

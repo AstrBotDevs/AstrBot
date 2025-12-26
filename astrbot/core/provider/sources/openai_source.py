@@ -348,7 +348,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
-        extra_content_blocks: list[dict] | None = None,
+        extra_user_content_parts: list[dict] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -357,7 +357,7 @@ class ProviderOpenAIOfficial(Provider):
         new_record = None
         if prompt is not None:
             new_record = await self.assemble_context(
-                prompt, image_urls, extra_content_blocks
+                prompt, image_urls, extra_user_content_parts
             )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
@@ -479,7 +479,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
-        extra_content_blocks=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -489,7 +489,7 @@ class ProviderOpenAIOfficial(Provider):
             system_prompt,
             tool_calls_result,
             model=model,
-            extra_content_blocks=extra_content_blocks,
+            extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
 
@@ -629,7 +629,7 @@ class ProviderOpenAIOfficial(Provider):
         self,
         text: str,
         image_urls: list[str] | None = None,
-        extra_content_blocks: list[dict] | None = None,
+        extra_user_content_parts: list[dict] | None = None,
     ) -> dict:
         """组装成符合 OpenAI 格式的 role 为 user 的消息段"""
         # 构建内容块列表
@@ -641,13 +641,13 @@ class ProviderOpenAIOfficial(Provider):
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
-        elif extra_content_blocks:
+        elif extra_user_content_parts:
             # 如果只有额外内容块，也需要添加占位文本
             content_blocks.append({"type": "text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
-        if extra_content_blocks:
-            content_blocks.extend(extra_content_blocks)
+        if extra_user_content_parts:
+            content_blocks.extend(extra_user_content_parts)
 
         # 3. 图片内容
         if image_urls:
@@ -673,7 +673,7 @@ class ProviderOpenAIOfficial(Provider):
         # 如果只有主文本且没有额外内容块和图片，返回简单格式以保持向后兼容
         if (
             text
-            and not extra_content_blocks
+            and not extra_user_content_parts
             and not image_urls
             and len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"

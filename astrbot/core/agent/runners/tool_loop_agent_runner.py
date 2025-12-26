@@ -81,7 +81,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "func_tool": self.req.func_tool,
             "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
-            "extra_content_blocks": self.req.extra_content_blocks,
+            "extra_user_content_parts": self.req.extra_user_content_parts,
         }
 
         if self.streaming:

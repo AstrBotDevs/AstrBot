@@ -7,6 +7,7 @@ from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.agent.message import TextPart
 from astrbot.core.provider.func_tool_manager import ToolSet
 
 
@@ -85,11 +86,8 @@ class ProcessLLMRequest:
                 req.image_urls,
             )
             if caption:
-                req.extra_content_blocks.append(
-                    {
-                        "type": "text",
-                        "text": f"<image_caption>{caption}</image_caption>",
-                    }
+                req.extra_user_content_parts.append(
+                    TextPart(text=f"<image_caption>{caption}</image_caption>")
                 )
                 req.image_urls = []
         except Exception as e:
@@ -231,17 +229,17 @@ class ProcessLLMRequest:
                 except BaseException as e:
                     logger.error(f"处理引用图片失败: {e}")
 
-            # 3. 将所有部分组合成文本并添加到 extra_content_blocks 中
+            # 3. 将所有部分组合成文本并添加到 extra_user_content_parts 中
             # 确保引用内容被正确的标签包裹
             quoted_content = "\n".join(content_parts)
             # 确保所有内容都在<Quoted Message>标签内
             quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
 
-            req.extra_content_blocks.append({"type": "text", "text": quoted_text})
+            req.extra_user_content_parts.append(TextPart(text=quoted_text))
 
         # 统一包裹所有系统提醒
         if system_parts:
             system_content = (
                 "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
             )
-            req.extra_content_blocks.append({"type": "text", "text": system_content})
+            req.extra_user_content_parts.append(TextPart(text=system_content))

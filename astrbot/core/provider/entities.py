@@ -14,6 +14,7 @@ import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.agent.message import (
     AssistantMessageSegment,
+    ContentPart,
     ToolCall,
     ToolCallMessageSegment,
 )
@@ -92,8 +93,10 @@ class ProviderRequest:
     """会话 ID"""
     image_urls: list[str] = field(default_factory=list)
     """图片 URL 列表"""
-    extra_content_blocks: list[dict] = field(default_factory=list)
-    """额外的内容块列表，用于在用户消息后添加额外的文本块（如系统提醒、指令等）"""
+    extra_user_content_parts: list[dict] | list[ContentPart] = field(
+        default_factory=list
+    )
+    """额外的用户消息内容部分列表，用于在用户消息后添加额外的内容块（如系统提醒、指令等）。支持 dict 或 ContentPart 对象"""
     func_tool: ToolSet | None = None
     """可用的函数工具"""
     contexts: list[dict] = field(default_factory=list)
@@ -179,7 +182,14 @@ class ProviderRequest:
             content_blocks.append({"type": "text", "text": "[图片]"})
 
         # 2. 额外的内容块（系统提醒、指令等）
-        content_blocks.extend(self.extra_content_blocks)
+        if self.extra_user_content_parts:
+            for part in self.extra_user_content_parts:
+                if hasattr(part, "model_dump"):
+                    # ContentPart 对象，需要 model_dump
+                    content_blocks.append(part.model_dump())
+                else:
+                    # 已经是 dict
+                    content_blocks.append(part)
 
         # 3. 图片内容
         if self.image_urls:
@@ -203,7 +213,7 @@ class ProviderRequest:
         if (
             len(content_blocks) == 1
             and content_blocks[0]["type"] == "text"
-            and not self.extra_content_blocks
+            and not self.extra_user_content_parts
             and not self.image_urls
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
