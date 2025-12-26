@@ -19,6 +19,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      mermaid: 'mermaid/dist/mermaid.js',
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
