@@ -296,13 +296,16 @@ class ProviderAnthropic(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_content_blocks=None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
             contexts = []
         new_record = None
         if prompt is not None:
-            new_record = await self.assemble_context(prompt, image_urls)
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_content_blocks
+            )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
             context_query.append(new_record)
@@ -350,13 +353,16 @@ class ProviderAnthropic(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_content_blocks=None,
         **kwargs,
     ):
         if contexts is None:
             contexts = []
         new_record = None
         if prompt is not None:
-            new_record = await self.assemble_context(prompt, image_urls)
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_content_blocks
+            )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
             context_query.append(new_record)
@@ -403,6 +409,9 @@ class ProviderAnthropic(Provider):
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
             content.append({"type": "text", "text": "[图片]"})
+        elif extra_content_blocks:
+            # 如果只有额外内容块，也需要添加占位文本
+            content.append({"type": "text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_content_blocks:

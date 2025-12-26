@@ -348,6 +348,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt: str | None = None,
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
+        extra_content_blocks: list[dict] | None = None,
         **kwargs,
     ) -> tuple:
         """准备聊天所需的有效载荷和上下文"""
@@ -355,7 +356,9 @@ class ProviderOpenAIOfficial(Provider):
             contexts = []
         new_record = None
         if prompt is not None:
-            new_record = await self.assemble_context(prompt, image_urls)
+            new_record = await self.assemble_context(
+                prompt, image_urls, extra_content_blocks
+            )
         context_query = self._ensure_message_to_dicts(contexts)
         if new_record:
             context_query.append(new_record)
@@ -476,6 +479,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_content_blocks=None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -485,6 +489,7 @@ class ProviderOpenAIOfficial(Provider):
             system_prompt,
             tool_calls_result,
             model=model,
+            extra_content_blocks=extra_content_blocks,
             **kwargs,
         )
 
@@ -636,6 +641,9 @@ class ProviderOpenAIOfficial(Provider):
         elif image_urls:
             # 如果没有文本但有图片，添加占位文本
             content_blocks.append({"type": "text", "text": "[图片]"})
+        elif extra_content_blocks:
+            # 如果只有额外内容块，也需要添加占位文本
+            content_blocks.append({"type": "text", "text": " "})
 
         # 2. 额外的内容块（系统提醒、指令等）
         if extra_content_blocks:
