@@ -184,7 +184,8 @@ class ProviderCommands:
                 event.set_result(MessageEventResult().message("请输入序号。"))
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的序号。"))
+                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
@@ -198,7 +199,8 @@ class ProviderCommands:
                 event.set_result(MessageEventResult().message("请输入序号。"))
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的序号。"))
+                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
@@ -209,8 +211,8 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(MessageEventResult().message("无效的序号。"))
-
+                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                return
             provider = self.context.get_all_providers()[idx - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
