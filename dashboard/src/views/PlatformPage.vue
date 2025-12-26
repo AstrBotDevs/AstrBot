@@ -30,43 +30,41 @@
             :bglogo="getPlatformIcon(platform.type || platform.id)" @toggle-enabled="platformStatusChange"
             @delete="deletePlatform" @edit="editPlatform">
             <template #item-details="{ item }">
-              <!-- 平台运行状态 - 只在非运行状态或有错误时显示 -->
-              <div class="platform-status-row mb-2" v-if="getPlatformStat(item.id) && (getPlatformStat(item.id)?.status !== 'running' || getPlatformStat(item.id)?.error_count > 0)">
-                <!-- 状态 chip - 只在非 running 状态时显示 -->
+              <div class="d-flex flex-row align-center flex-wrap gap-2 mt-1">
+                <!-- 平台运行状态 -->
                 <v-chip
-                  v-if="getPlatformStat(item.id)?.status !== 'running'"
-                  size="small"
+                  v-if="getPlatformStat(item.id)?.status !== 'running' && getPlatformStat(item.id)?.status !== undefined"
+                  size="x-small"
                   :color="getStatusColor(getPlatformStat(item.id)?.status)"
                   variant="tonal"
-                  class="status-chip"
+                  class="status-chip px-2"
                 >
-                  <v-icon size="small" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
-                  {{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}
+                  <v-icon size="14" start>{{ getStatusIcon(getPlatformStat(item.id)?.status) }}</v-icon>
+                  <span class="text-caption" style="font-size: 10px !important;">{{ tm('runtimeStatus.' + (getPlatformStat(item.id)?.status || 'unknown')) }}</span>
                 </v-chip>
                 <!-- 错误数量提示 -->
                 <v-chip
                   v-if="getPlatformStat(item.id)?.error_count > 0"
-                  size="small"
+                  size="x-small"
                   color="error"
                   variant="tonal"
-                  class="error-chip"
-                  :class="{ 'ms-2': getPlatformStat(item.id)?.status !== 'running' }"
+                  class="error-chip px-2"
                   @click.stop="showErrorDetails(item)"
                 >
-                  <v-icon size="small" start>mdi-bug</v-icon>
-                  {{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}
+                  <v-icon size="14" start>mdi-bug</v-icon>
+                  <span class="text-caption" style="font-size: 10px !important;">{{ getPlatformStat(item.id)?.error_count }} {{ tm('runtimeStatus.errors') }}</span>
                 </v-chip>
-              </div>
-              <div v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid" class="webhook-info">
+                <!-- Webhook -->
                 <v-chip
-                  size="small"
+                  v-if="getPlatformStat(item.id)?.unified_webhook && item.webhook_uuid"
+                  size="x-small"
                   color="primary"
                   variant="tonal"
-                  class="webhook-chip"
+                  class="webhook-chip px-2"
                   @click.stop="openWebhookDialog(item.webhook_uuid)"
                 >
-                  <v-icon size="small" start>mdi-webhook</v-icon>
-                  {{ tm('viewWebhook') }}
+                  <v-icon size="14" start>mdi-webhook</v-icon>
+                  <span class="text-caption" style="font-size: 10px !important;">{{ tm('viewWebhook') }}</span>
                 </v-chip>
               </div>
             </template>
@@ -459,28 +457,17 @@ export default {
   width: 100%;
 }
 
-.webhook-info {
-  margin-top: 4px;
+.gap-2 {
+  gap: 8px;
 }
 
-.webhook-chip {
-  cursor: pointer;
-}
-
-.platform-status-row {
-  display: flex;
+.status-chip, .error-chip, .webhook-chip {
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
 }
 
-.status-chip {
-  font-size: 12px;
-}
-
-.error-chip {
+.error-chip, .webhook-chip {
   cursor: pointer;
-  font-size: 12px;
 }
 
 .error-details {
