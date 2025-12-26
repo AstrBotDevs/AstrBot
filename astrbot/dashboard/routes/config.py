@@ -46,6 +46,46 @@ def try_cast(value: Any, type_: str):
             return None
 
 
+def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+    if not isinstance(value, expected_type):
+        errors.append(
+            f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
+            f"得到了 {type(value).__name__}"
+        )
+        return False
+    return True
+
+
+def _validate_template_list(value, meta, path_key, errors, validate_fn):
+    if not _expect_type(value, list, path_key, errors, "list"):
+        return
+
+    templates = meta.get("templates")
+    if not isinstance(templates, dict):
+        templates = {}
+
+    for idx, item in enumerate(value):
+        item_path = f"{path_key}[{idx}]"
+        if not _expect_type(item, dict, item_path, errors, "dict"):
+            continue
+
+        template_key = item.get("__template_key") or item.get("template")
+        if not template_key:
+            errors.append(f"缺少模板选择 {item_path}: 需要 __template_key")
+            continue
+
+        template_meta = templates.get(template_key)
+        if not template_meta:
+            errors.append(f"未知模板 {item_path}: {template_key}")
+            continue
+
+        validate_fn(
+            item,
+            template_meta.get("items", {}),
+            path=f"{item_path}.",
+        )
+
+
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
@@ -61,41 +101,11 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             if value is None:
                 data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
+
             if meta["type"] == "template_list":
-                if not isinstance(value, list):
-                    errors.append(
-                        f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
-                    )
-                    continue
-                templates = (
-                    meta.get("templates", {})
-                    if isinstance(meta.get("templates"), dict)
-                    else {}
-                )
-                for idx, item in enumerate(value):
-                    if not isinstance(item, dict):
-                        errors.append(
-                            f"错误的类型 {path}{key}[{idx}]: 期望是 dict, 得到了 {type(item).__name__}",
-                        )
-                        continue
-                    template_key = item.get("__template_key") or item.get("template")
-                    if not template_key:
-                        errors.append(
-                            f"缺少模板选择 {path}{key}[{idx}]: 需要 __template_key",
-                        )
-                        continue
-                    template_meta = templates.get(template_key)
-                    if not template_meta:
-                        errors.append(
-                            f"未知模板 {path}{key}[{idx}]: {template_key}",
-                        )
-                        continue
-                    validate(
-                        item,
-                        template_meta.get("items", {}),
-                        path=f"{path}{key}[{idx}].",
-                    )
+                _validate_template_list(value, meta, f"{path}{key}", errors, validate)
                 continue
+
             if meta["type"] == "list" and not isinstance(value, list):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",

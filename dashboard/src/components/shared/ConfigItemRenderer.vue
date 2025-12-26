@@ -205,7 +205,6 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import ListConfigItem from './ListConfigItem.vue'
 import ObjectEditor from './ObjectEditor.vue'
@@ -214,7 +213,6 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
-const TemplateListEditor = defineAsyncComponent(() => import('./TemplateListEditor.vue'))
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({

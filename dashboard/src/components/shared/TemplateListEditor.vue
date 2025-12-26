@@ -216,6 +216,7 @@ function buildDefaults(itemsMeta = {}) {
 }
 
 function applyDefaults(target, itemsMeta = {}) {
+  let changed = false
   for (const [k, meta] of Object.entries(itemsMeta)) {
     if (!meta || !meta.type) continue
     const hasDefault = Object.prototype.hasOwnProperty.call(meta, 'default')
@@ -224,28 +225,50 @@ function applyDefaults(target, itemsMeta = {}) {
     if (meta.type === 'object') {
       if (!target[k] || typeof target[k] !== 'object') {
         target[k] = buildDefaults(meta.items || {})
+        changed = true
       } else {
-        applyDefaults(target[k], meta.items || {})
+        if (applyDefaults(target[k], meta.items || {})) {
+          changed = true
+        }
       }
     } else if (!(k in target)) {
       target[k] = fallback
+      changed = true
     }
   }
+  return changed
 }
 
 function ensureEntryDefaults() {
   if (!Array.isArray(props.modelValue)) return
-  props.modelValue.forEach((entry, idx) => {
+  
+  let totalChanged = false
+  const nextValue = props.modelValue.map((entry, idx) => {
     const template = getTemplate(entry)
-    if (!template || !template.items) return
-    applyDefaults(entry, template.items)
-    if (!Object.prototype.hasOwnProperty.call(entry, '__template_key')) {
-      entry.__template_key = ''
+    if (!template || !template.items) return entry
+    
+    // 我们必须克隆以避免就地修改
+    const newEntry = JSON.parse(JSON.stringify(entry))
+    let entryChanged = applyDefaults(newEntry, template.items)
+    
+    if (!Object.prototype.hasOwnProperty.call(newEntry, '__template_key')) {
+      newEntry.__template_key = ''
+      entryChanged = true
     }
+    
     if (!(idx in expandedEntries.value)) {
       expandedEntries.value[idx] = false
     }
+    
+    if (entryChanged) {
+      totalChanged = true
+    }
+    return newEntry
   })
+  
+  if (totalChanged) {
+    emit('update:modelValue', nextValue)
+  }
 }
 
 watch(
