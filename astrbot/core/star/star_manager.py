@@ -163,7 +163,6 @@ class PluginManager:
             for p in _p:
                 p["reserved"] = True
             plugins.extend(_p)
-        print(plugins)
         return plugins
 
     async def _check_plugin_dept_update(self, target_plugin: str | None = None):
