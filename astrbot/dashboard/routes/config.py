@@ -67,7 +67,11 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                         f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
                     )
                     continue
-                templates = meta.get("templates", {}) if isinstance(meta.get("templates"), dict) else {}
+                templates = (
+                    meta.get("templates", {})
+                    if isinstance(meta.get("templates"), dict)
+                    else {}
+                )
                 for idx, item in enumerate(value):
                     if not isinstance(item, dict):
                         errors.append(
