@@ -544,6 +544,7 @@ class ProviderOpenAIOfficial(Provider):
         system_prompt=None,
         tool_calls_result=None,
         model=None,
+        extra_user_content_parts=None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -554,6 +555,7 @@ class ProviderOpenAIOfficial(Provider):
             system_prompt,
             tool_calls_result,
             model=model,
+            extra_user_content_parts=extra_user_content_parts,
             **kwargs,
         )
 
