@@ -1,5 +1,5 @@
 <script setup>
-import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
@@ -11,6 +11,10 @@ const { t } = useI18n();
 
 const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
+
+// 侧边栏分组展开状态持久化
+const openedItems = ref(JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]'));
+watch(openedItems, (val) => localStorage.setItem('sidebar_openedItems', JSON.stringify(val)), { deep: true });
 
 // Apply customization on mount and listen for storage changes
 const handleStorageChange = (e) => {
@@ -243,7 +247,7 @@ function openChangelogDialog() {
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
-      <v-list class="pa-4 listitem flex-grow-1">
+      <v-list class="pa-4 listitem flex-grow-1" v-model:opened="openedItems" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="i">
           <NavItem :item="item" class="leftPadding" />
         </template>
