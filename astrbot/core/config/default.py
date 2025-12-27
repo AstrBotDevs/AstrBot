@@ -1869,7 +1869,7 @@ CONFIG_METADATA_2 = {
                             "surprised",
                             "calm",
                             "fluent",
-                            "whisper"
+                            "whisper",
                         ],
                     },
                     "minimax-voice-latex": {
