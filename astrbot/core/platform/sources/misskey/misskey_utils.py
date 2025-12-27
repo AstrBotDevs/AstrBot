@@ -338,7 +338,6 @@ def create_base_message(
     client_self_id: str,
     is_chat: bool = False,
     room_id: str | None = None,
-    unique_session: bool = False,
 ) -> AstrBotMessage:
     """创建基础消息对象"""
     message = AstrBotMessage()
@@ -353,8 +352,6 @@ def create_base_message(
     if room_id:
         session_prefix = "room"
         session_id = f"{session_prefix}%{room_id}"
-        if unique_session:
-            session_id += f"_{sender_info['sender_id']}"
         message.type = MessageType.GROUP_MESSAGE
         message.group_id = room_id
     elif is_chat:

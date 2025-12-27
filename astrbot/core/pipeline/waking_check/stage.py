@@ -4,6 +4,7 @@ from astrbot import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
@@ -53,11 +54,32 @@ class WakingCheckStage(Stage):
         self.disable_builtin_commands = self.ctx.astrbot_config.get(
             "disable_builtin_commands", False
         )
+        self.unique_session = self.ctx.astrbot_config["platform_settings"].get(
+            "unique_session",
+            False,
+        )
 
     async def process(
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        # apply unique session
+        if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
+            if event.get_platform_name() in ["aiocqhttp", "slack"]:
+                event.session_id = f"{event.get_sender_id()}_{event.get_group_id()}"
+            elif event.get_platform_name() in [
+                "dingtalk",
+                "qq_official",
+                "qq_official_webhook",
+            ]:
+                event.session_id = event.get_sender_id()
+            elif event.get_platform_name() == "lark":
+                event.session_id = f"{event.get_sender_id()}%{event.get_group_id()}"
+            elif event.get_platform_name() == "misskey":
+                event.session_id = f"{event.get_group_id()}_{event.get_sender_id()}"
+            elif event.get_platform_name() == "wechatpadpro":
+                event.session_id = f"{event.get_group_id()}#{event.get_sender_id()}"
+
         if (
             self.ignore_bot_self_message
             and event.get_self_id() == event.get_sender_id()
