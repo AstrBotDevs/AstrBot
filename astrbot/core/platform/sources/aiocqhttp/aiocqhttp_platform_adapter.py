@@ -41,7 +41,6 @@ class AiocqhttpAdapter(Platform):
         super().__init__(platform_config, event_queue)
 
         self.settings = platform_settings
-        self.unique_session = platform_settings["unique_session"]
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
 
@@ -136,14 +135,11 @@ class AiocqhttpAdapter(Platform):
             abm.group_id = str(event.group_id)
         else:
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = str(abm.sender.user_id) + "_" + str(event.group_id)
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
         abm.message_str = ""
         abm.message = []
         abm.timestamp = int(time.time())
@@ -164,16 +160,11 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
         else:
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = (
-                str(abm.sender.user_id) + "_" + str(event.group_id)
-            )  # 也保留群组 id
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
         abm.message_str = ""
         abm.message = []
         abm.raw_message = event
@@ -210,16 +201,11 @@ class AiocqhttpAdapter(Platform):
             abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = (
-                abm.sender.user_id + "_" + str(event.group_id)
-            )  # 也保留群组 id
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
 
         abm.message_id = str(event.message_id)
         abm.message = []
