@@ -1286,7 +1286,7 @@ CONFIG_METADATA_2 = {
                         "minimax-is-timber-weight": False,
                         "minimax-voice-id": "female-shaonv",
                         "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
-                        "minimax-voice-emotion": "neutral",
+                        "minimax-voice-emotion": "auto",
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
@@ -1858,15 +1858,18 @@ CONFIG_METADATA_2 = {
                     "minimax-voice-emotion": {
                         "type": "string",
                         "description": "情绪",
-                        "hint": "控制合成语音的情绪",
+                        "hint": "控制合成语音的情绪。当为 auto 时，将根据文本内容自动选择情绪。",
                         "options": [
+                            "auto",
                             "happy",
                             "sad",
                             "angry",
                             "fearful",
                             "disgusted",
                             "surprised",
-                            "neutral",
+                            "calm",
+                            "fluent",
+                            "whisper"
                         ],
                     },
                     "minimax-voice-latex": {
