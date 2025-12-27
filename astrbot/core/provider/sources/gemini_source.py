@@ -370,6 +370,58 @@ class ProviderGoogleGenAI(Provider):
 
         return gemini_contents
 
+    def _split_chunk_content(
+        self, chunk: types.GenerateContentResponse
+    ) -> tuple[str | None, str | None]:
+        """
+        从流式响应 chunk 中提取推理内容和可见文本。
+        
+        添加防御性检查，安全访问可能不存在的属性。
+        
+        Args:
+            chunk: Gemini API 返回的流式响应 chunk
+            
+        Returns:
+            tuple[str | None, str | None]: (reasoning_text, visible_text)
+            - reasoning_text: 思维链内容（part.thought=True 的部分）
+            - visible_text: 可见输出内容（part.thought=False 的部分）
+        """
+        # 防御性检查：candidates 是否存在且非空
+        if not chunk.candidates:
+            return None, None
+        
+        candidate = chunk.candidates[0]
+        
+        # 防御性检查：使用 getattr 安全访问 content
+        content = getattr(candidate, "content", None)
+        if content is None:
+            return None, None
+        
+        # 防御性检查：使用 getattr 安全访问 parts
+        parts = getattr(content, "parts", None)
+        
+        if parts:
+            text_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            
+            for part in parts:
+                # 安全访问 thought 和 text 属性
+                is_thought = getattr(part, "thought", False)
+                part_text = getattr(part, "text", None)
+                
+                if is_thought and part_text:
+                    reasoning_parts.append(part_text)
+                elif not is_thought and part_text:
+                    text_parts.append(part_text)
+            
+            reasoning_text = "".join(reasoning_parts) if reasoning_parts else None
+            visible_text = "".join(text_parts) if text_parts else None
+            return reasoning_text, visible_text
+        
+        # 回退：当 parts 为空但 chunk.text 存在时
+        chunk_text = getattr(chunk, "text", None)
+        return None, chunk_text or None
+
     def _extract_reasoning_content(self, candidate: types.Candidate) -> str:
         """Extract reasoning content from candidate parts"""
         if not candidate.content or not candidate.content.parts:
@@ -604,20 +656,31 @@ class ProviderGoogleGenAI(Provider):
         async for chunk in result:
             llm_response = LLMResponse("assistant", is_chunk=True)
 
+            # 使用辅助函数进行防御性检查和内容提取
+            reasoning_text, visible_text = self._split_chunk_content(chunk)
+            
+            # 如果 candidates 为空，跳过
             if not chunk.candidates:
                 logger.warning(f"收到的 chunk 中 candidates 为空: {chunk}")
                 continue
-            if not chunk.candidates[0].content:
+            
+            candidate = chunk.candidates[0]
+            
+            # 防御性检查 content
+            content = getattr(candidate, "content", None)
+            if content is None:
                 logger.warning(f"收到的 chunk 中 content 为空: {chunk}")
                 continue
 
-            if chunk.candidates[0].content.parts and any(
-                part.function_call for part in chunk.candidates[0].content.parts
+            # 检查是否包含函数调用
+            parts = getattr(content, "parts", None)
+            if parts and any(
+                getattr(part, "function_call", None) for part in parts
             ):
                 llm_response = LLMResponse("assistant", is_chunk=False)
                 llm_response.raw_completion = chunk
                 llm_response.result_chain = self._process_content_parts(
-                    chunk.candidates[0],
+                    candidate,
                     llm_response,
                 )
                 llm_response.id = chunk.response_id
@@ -626,54 +689,34 @@ class ProviderGoogleGenAI(Provider):
                 yield llm_response
                 return
 
-            _f = False
+            has_content = False
 
-            # 遍历 parts，分别处理思维链和实际输出
-            if chunk.candidates[0].content.parts:
-                chunk_text_parts = []
-                chunk_reasoning_parts = []
-                for part in chunk.candidates[0].content.parts:
-                    if part.thought:
-                        # 思维链内容
-                        if part.text:
-                            chunk_reasoning_parts.append(part.text)
-                    elif part.text:
-                        # 实际输出内容
-                        chunk_text_parts.append(part.text)
+            # 处理思维链内容
+            if reasoning_text:
+                has_content = True
+                accumulated_reasoning += reasoning_text
+                llm_response.reasoning_content = reasoning_text
 
-                # 处理思维链内容
-                if chunk_reasoning_parts:
-                    _f = True
-                    reasoning_text = "".join(chunk_reasoning_parts)
-                    accumulated_reasoning += reasoning_text
-                    llm_response.reasoning_content = reasoning_text
-
-                # 处理实际输出内容
-                if chunk_text_parts:
-                    _f = True
-                    text_content = "".join(chunk_text_parts)
-                    accumulated_text += text_content
-                    llm_response.result_chain = MessageChain(
-                        chain=[Comp.Plain(text_content)]
-                    )
-            elif chunk.text:
-                # 当 content.parts 为空但 chunk.text 存在时，回退使用 chunk.text
-                _f = True
-                accumulated_text += chunk.text
+            # 处理实际输出内容
+            if visible_text:
+                has_content = True
+                accumulated_text += visible_text
                 llm_response.result_chain = MessageChain(
-                    chain=[Comp.Plain(chunk.text)]
+                    chain=[Comp.Plain(visible_text)]
                 )
 
-            if _f:
+            if has_content:
                 yield llm_response
 
-            if chunk.candidates[0].finish_reason:
+            # 检查是否为最终 chunk
+            finish_reason = getattr(candidate, "finish_reason", None)
+            if finish_reason:
                 # Process the final chunk for potential tool calls or other content
-                if chunk.candidates[0].content.parts:
+                if parts:
                     final_response = LLMResponse("assistant", is_chunk=False)
                     final_response.raw_completion = chunk
                     final_response.result_chain = self._process_content_parts(
-                        chunk.candidates[0],
+                        candidate,
                         final_response,
                     )
                     final_response.id = chunk.response_id
