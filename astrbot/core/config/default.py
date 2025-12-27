@@ -3049,4 +3049,5 @@ DEFAULT_VALUE_MAP = {
     "text": "",
     "list": [],
     "object": {},
+    "template_list": [],
 }

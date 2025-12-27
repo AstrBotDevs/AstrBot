@@ -65,6 +65,12 @@
     "fullscreen": "全屏编辑",
     "editingTitle": "编辑内容"
   },
+  "templateList": {
+    "addEntry": "添加条目",
+    "empty": "暂无条目，请选择模板添加",
+    "missingTemplate": "找不到对应模板，请删除后重新添加。",
+    "unknownTemplate": "未指定模板"
+  },
   "list": {
     "addItemPlaceholder": "添加新项，按回车确认添加",
     "addButton": "添加",
