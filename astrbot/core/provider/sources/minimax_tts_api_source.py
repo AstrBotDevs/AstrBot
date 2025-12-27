@@ -51,13 +51,16 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             "voice_id": ""
             if self.is_timber_weight
             else provider_config.get("minimax-voice-id", ""),
-            "emotion": provider_config.get("minimax-voice-emotion", "neutral"),
+            "emotion": provider_config.get("minimax-voice-emotion", "auto"),
             "latex_read": provider_config.get("minimax-voice-latex", False),
             "english_normalization": provider_config.get(
                 "minimax-voice-english-normalization",
                 False,
             ),
         }
+
+        if self.voice_setting["emotion"] == "auto":
+            self.voice_setting.pop("emotion", None)
 
         self.audio_setting: dict = {
             "sample_rate": 32000,
