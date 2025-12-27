@@ -656,6 +656,13 @@ class ProviderGoogleGenAI(Provider):
                     llm_response.result_chain = MessageChain(
                         chain=[Comp.Plain(text_content)]
                     )
+            elif chunk.text:
+                # 当 content.parts 为空但 chunk.text 存在时，回退使用 chunk.text
+                _f = True
+                accumulated_text += chunk.text
+                llm_response.result_chain = MessageChain(
+                    chain=[Comp.Plain(chunk.text)]
+                )
 
             if _f:
                 yield llm_response
