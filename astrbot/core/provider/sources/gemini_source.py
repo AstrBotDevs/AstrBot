@@ -439,6 +439,9 @@ class ProviderGoogleGenAI(Provider):
         ):
             chain.append(Comp.Plain("这是图片"))
         for part in result_parts:
+            # 跳过思考内容（thought=True），只处理实际输出
+            if part.thought:
+                continue
             if part.text:
                 chain.append(Comp.Plain(part.text))
             elif (
@@ -625,16 +628,35 @@ class ProviderGoogleGenAI(Provider):
 
             _f = False
 
-            # 提取 reasoning content
-            reasoning = self._extract_reasoning_content(chunk.candidates[0])
-            if reasoning:
-                _f = True
-                accumulated_reasoning += reasoning
-                llm_response.reasoning_content = reasoning
-            if chunk.text:
-                _f = True
-                accumulated_text += chunk.text
-                llm_response.result_chain = MessageChain(chain=[Comp.Plain(chunk.text)])
+            # 遍历 parts，分别处理思维链和实际输出
+            if chunk.candidates[0].content.parts:
+                chunk_text_parts = []
+                chunk_reasoning_parts = []
+                for part in chunk.candidates[0].content.parts:
+                    if part.thought:
+                        # 思维链内容
+                        if part.text:
+                            chunk_reasoning_parts.append(part.text)
+                    elif part.text:
+                        # 实际输出内容
+                        chunk_text_parts.append(part.text)
+
+                # 处理思维链内容
+                if chunk_reasoning_parts:
+                    _f = True
+                    reasoning_text = "".join(chunk_reasoning_parts)
+                    accumulated_reasoning += reasoning_text
+                    llm_response.reasoning_content = reasoning_text
+
+                # 处理实际输出内容
+                if chunk_text_parts:
+                    _f = True
+                    text_content = "".join(chunk_text_parts)
+                    accumulated_text += text_content
+                    llm_response.result_chain = MessageChain(
+                        chain=[Comp.Plain(text_content)]
+                    )
+
             if _f:
                 yield llm_response
 
