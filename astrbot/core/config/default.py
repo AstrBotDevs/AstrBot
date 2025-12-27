@@ -932,13 +932,14 @@ CONFIG_METADATA_2 = {
                     "DeepSeek": {
                         "id": "deepseek",
                         "provider": "deepseek",
-                        "type": "openai_chat_completion",
+                        "type": "deepseek_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "custom_headers": {},
+                        "ds_thinking_tool_call": False,
                     },
                     "Zhipu": {
                         "id": "zhipu",
@@ -1708,6 +1709,11 @@ CONFIG_METADATA_2 = {
                         "description": "启用原生代码执行器",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效",
+                    },
+                    "ds_thinking_tool_call": {
+                        "description": "思考中调用工具",
+                        "type": "bool",
+                        "hint": "启用后，DeepSeek 模型可以在思考过程中调用工具，实现多轮思考-工具调用循环。",
                     },
                     "gm_url_context": {
                         "description": "启用URL上下文功能",

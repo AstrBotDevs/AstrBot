@@ -275,6 +275,10 @@ class ProviderManager:
                 from .sources.openai_source import (
                     ProviderOpenAIOfficial as ProviderOpenAIOfficial,
                 )
+            case "deepseek_chat_completion":
+                from .sources.deepseek_source import (
+                    ProviderDeepSeek as ProviderDeepSeek,
+                )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
