@@ -230,7 +230,7 @@ export default {
       save_message: "",
       save_message_success: "success",
 
-      showConsole: false,
+      showConsole: localStorage.getItem('platformPage_showConsole') === 'true',
 
       showWebhookDialog: false,
       currentWebhookUuid: '',
@@ -248,6 +248,10 @@ export default {
   },
 
   watch: {
+    showConsole(newValue) {
+      localStorage.setItem('platformPage_showConsole', newValue.toString());
+    },
+
     showIdConflictDialog(newValue) {
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);
