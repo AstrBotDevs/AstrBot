@@ -285,7 +285,9 @@ class BackupRoute(Route):
                         "filename": filename,
                         "size": stat.st_size,
                         "created_at": stat.st_mtime,
-                        "type": manifest.get("origin", "exported"),  # 老版本没有 origin 默认为 exported
+                        "type": manifest.get(
+                            "origin", "exported"
+                        ),  # 老版本没有 origin 默认为 exported
                         "astrbot_version": manifest.get("astrbot_version", "未知"),
                         "exported_at": manifest.get("exported_at"),
                     }
