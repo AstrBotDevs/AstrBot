@@ -110,9 +110,23 @@
 
                         <!-- 步骤1.5: 上传中 -->
                         <div v-else-if="importStatus === 'uploading'" class="text-center py-8">
-                            <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
+                            <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.import.uploading') }}</h3>
-                            <p class="text-grey">{{ t('features.settings.backup.import.uploadWait') }}</p>
+                            <p class="text-grey mb-2">
+                                {{ uploadProgress.message || t('features.settings.backup.import.uploadWait') }}
+                            </p>
+                            <p class="text-grey-darken-1 mb-4">
+                                {{ formatFileSize(uploadProgress.uploaded) }} / {{ formatFileSize(uploadProgress.total) }}
+                                ({{ uploadProgress.percent }}%)
+                            </p>
+                            <v-progress-linear
+                                :model-value="uploadProgress.percent"
+                                :max="100"
+                                class="mt-2"
+                                color="primary"
+                                height="8"
+                                rounded
+                            ></v-progress-linear>
                         </div>
 
                         <!-- 步骤2: 确认导入 -->
@@ -307,13 +321,25 @@ const importError = ref('')
 const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
+// 分片上传状态
+const CHUNK_SIZE = 1024 * 1024  // 1MB
+const uploadId = ref('')
+const uploadProgress = ref({
+    uploaded: 0,
+    total: 0,
+    percent: 0,
+    message: ''
+})
+
 // 备份列表
 const loadingList = ref(false)
 const backupList = ref([])
 
 // 计算属性
 const isProcessing = computed(() => {
-    return exportStatus.value === 'processing' || importStatus.value === 'processing'
+    return exportStatus.value === 'processing' ||
+           importStatus.value === 'processing' ||
+           importStatus.value === 'uploading'
 })
 
 // 版本检查相关的计算属性
@@ -445,23 +471,76 @@ const uploadAndCheck = async () => {
     if (!importFile.value) return
 
     importStatus.value = 'uploading'
+    const file = importFile.value
 
     try {
-        // 步骤1: 上传文件
-        const formData = new FormData()
-        formData.append('file', importFile.value)
-
-        const uploadResponse = await axios.post('/api/backup/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        })
-
-        if (uploadResponse.data.status !== 'ok') {
-            throw new Error(uploadResponse.data.message)
+        // 计算分片数量
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+        
+        // 初始化上传进度
+        uploadProgress.value = {
+            uploaded: 0,
+            total: file.size,
+            percent: 0,
+            message: t('features.settings.backup.import.uploadInit')
         }
 
-        uploadedFilename.value = uploadResponse.data.data.filename
+        // 步骤1: 初始化分片上传
+        const initResponse = await axios.post('/api/backup/upload/init', {
+            filename: file.name,
+            total_size: file.size,
+            total_chunks: totalChunks
+        })
 
-        // 步骤2: 预检查
+        if (initResponse.data.status !== 'ok') {
+            throw new Error(initResponse.data.message)
+        }
+
+        uploadId.value = initResponse.data.data.upload_id
+        const targetFilename = initResponse.data.data.filename
+
+        // 步骤2: 分片上传
+        uploadProgress.value.message = t('features.settings.backup.import.uploadingChunks')
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE
+            const end = Math.min(start + CHUNK_SIZE, file.size)
+            const chunk = file.slice(start, end)
+
+            const formData = new FormData()
+            formData.append('upload_id', uploadId.value)
+            formData.append('chunk_index', i.toString())
+            formData.append('chunk', chunk)
+
+            const chunkResponse = await axios.post('/api/backup/upload/chunk', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            })
+
+            if (chunkResponse.data.status !== 'ok') {
+                throw new Error(chunkResponse.data.message)
+            }
+
+            // 更新进度
+            uploadProgress.value.uploaded = end
+            uploadProgress.value.percent = Math.round((end / file.size) * 100)
+        }
+
+        // 步骤3: 完成上传
+        uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
+
+        const completeResponse = await axios.post('/api/backup/upload/complete', {
+            upload_id: uploadId.value
+        })
+
+        if (completeResponse.data.status !== 'ok') {
+            throw new Error(completeResponse.data.message)
+        }
+
+        uploadedFilename.value = completeResponse.data.data.filename
+
+        // 步骤4: 预检查
+        uploadProgress.value.message = t('features.settings.backup.import.checking')
+
         const checkResponse = await axios.post('/api/backup/check', {
             filename: uploadedFilename.value
         })
@@ -483,6 +562,17 @@ const uploadAndCheck = async () => {
         importStatus.value = 'confirm'
 
     } catch (error) {
+        // 上传失败时尝试清理已上传的分片
+        if (uploadId.value) {
+            try {
+                await axios.post('/api/backup/upload/abort', {
+                    upload_id: uploadId.value
+                })
+            } catch (abortError) {
+                console.error('Failed to abort upload:', abortError)
+            }
+        }
+        
         importStatus.value = 'failed'
         importError.value = error.response?.data?.message || error.message || 'Upload failed'
     }
@@ -548,7 +638,18 @@ const pollImportProgress = async () => {
 }
 
 // 重置导入状态
-const resetImport = () => {
+const resetImport = async () => {
+    // 如果有进行中的上传，先取消
+    if (uploadId.value && importStatus.value === 'uploading') {
+        try {
+            await axios.post('/api/backup/upload/abort', {
+                upload_id: uploadId.value
+            })
+        } catch (error) {
+            console.error('Failed to abort upload:', error)
+        }
+    }
+    
     importStatus.value = 'idle'
     importFile.value = null
     importTaskId.value = null
@@ -556,6 +657,8 @@ const resetImport = () => {
     importError.value = ''
     uploadedFilename.value = ''
     checkResult.value = null
+    uploadId.value = ''
+    uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' }
 }
 
 // 下载备份
@@ -632,9 +735,9 @@ const restartAstrBot = () => {
 }
 
 // 重置所有状态
-const resetAll = () => {
+const resetAll = async () => {
     resetExport()
-    resetImport()
+    await resetImport()
     activeTab.value = 'export'
 }
 

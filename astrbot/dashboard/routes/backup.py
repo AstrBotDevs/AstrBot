@@ -3,6 +3,8 @@
 import asyncio
 import os
 import re
+import shutil
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -21,6 +23,10 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .route import Response, Route, RouteContext
+
+# 分片上传常量
+CHUNK_SIZE = 1024 * 1024  # 1MB
+UPLOAD_EXPIRE_SECONDS = 3600  # 上传会话过期时间（1小时）
 
 
 def secure_filename(filename: str) -> str:
@@ -84,16 +90,25 @@ class BackupRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.backup_dir = get_astrbot_backups_path()
         self.data_dir = get_astrbot_data_path()
+        self.chunks_dir = os.path.join(self.backup_dir, ".chunks")
 
         # 任务状态跟踪
         self.backup_tasks: dict[str, dict] = {}
         self.backup_progress: dict[str, dict] = {}
 
+        # 分片上传会话跟踪
+        # upload_id -> {filename, total_chunks, received_chunks, created_at, chunk_dir}
+        self.upload_sessions: dict[str, dict] = {}
+
         # 注册路由
         self.routes = {
             "/backup/list": ("GET", self.list_backups),
             "/backup/export": ("POST", self.export_backup),
-            "/backup/upload": ("POST", self.upload_backup),  # 上传文件
+            "/backup/upload": ("POST", self.upload_backup),  # 上传文件（兼容小文件）
+            "/backup/upload/init": ("POST", self.upload_init),  # 分片上传初始化
+            "/backup/upload/chunk": ("POST", self.upload_chunk),  # 上传分片
+            "/backup/upload/complete": ("POST", self.upload_complete),  # 完成分片上传
+            "/backup/upload/abort": ("POST", self.upload_abort),  # 取消上传
             "/backup/check": ("POST", self.check_backup),  # 预检查
             "/backup/import": ("POST", self.import_backup),  # 确认导入
             "/backup/progress": ("GET", self.get_progress),
@@ -101,6 +116,9 @@ class BackupRoute(Route):
             "/backup/delete": ("POST", self.delete_backup),
         }
         self.register_routes()
+
+        # 启动清理过期上传会话的任务
+        asyncio.create_task(self._cleanup_expired_uploads())
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
         """初始化任务状态"""
@@ -172,6 +190,37 @@ class BackupRoute(Route):
             )
 
         return _callback
+
+    async def _cleanup_expired_uploads(self):
+        """定期清理过期的上传会话"""
+        while True:
+            try:
+                await asyncio.sleep(300)  # 每5分钟检查一次
+                current_time = time.time()
+                expired_sessions = []
+
+                for upload_id, session in self.upload_sessions.items():
+                    if current_time - session["created_at"] > UPLOAD_EXPIRE_SECONDS:
+                        expired_sessions.append(upload_id)
+
+                for upload_id in expired_sessions:
+                    await self._cleanup_upload_session(upload_id)
+                    logger.info(f"清理过期的上传会话: {upload_id}")
+
+            except Exception as e:
+                logger.error(f"清理过期上传会话失败: {e}")
+
+    async def _cleanup_upload_session(self, upload_id: str):
+        """清理上传会话"""
+        if upload_id in self.upload_sessions:
+            session = self.upload_sessions[upload_id]
+            chunk_dir = session.get("chunk_dir")
+            if chunk_dir and os.path.exists(chunk_dir):
+                try:
+                    shutil.rmtree(chunk_dir)
+                except Exception as e:
+                    logger.warning(f"清理分片目录失败: {e}")
+            del self.upload_sessions[upload_id]
 
     async def list_backups(self):
         """获取备份列表
@@ -344,6 +393,269 @@ class BackupRoute(Route):
             logger.error(f"上传备份文件失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"上传备份文件失败: {e!s}").__dict__
+
+    async def upload_init(self):
+        """初始化分片上传
+
+        创建一个上传会话，返回 upload_id 供后续分片上传使用。
+
+        JSON Body:
+        - filename: 原始文件名
+        - total_size: 文件总大小（字节）
+        - total_chunks: 分片总数
+
+        返回:
+        - upload_id: 上传会话 ID
+        - chunk_size: 建议的分片大小
+        """
+        try:
+            data = await request.json
+            filename = data.get("filename")
+            total_size = data.get("total_size", 0)
+            total_chunks = data.get("total_chunks", 0)
+
+            if not filename:
+                return Response().error("缺少 filename 参数").__dict__
+
+            if not filename.endswith(".zip"):
+                return Response().error("请上传 ZIP 格式的备份文件").__dict__
+
+            if total_chunks <= 0:
+                return Response().error("无效的分片数量").__dict__
+
+            # 生成上传 ID
+            upload_id = str(uuid.uuid4())
+
+            # 创建分片存储目录
+            chunk_dir = os.path.join(self.chunks_dir, upload_id)
+            Path(chunk_dir).mkdir(parents=True, exist_ok=True)
+
+            # 清洗文件名
+            safe_filename = secure_filename(filename)
+            unique_filename = generate_unique_filename(safe_filename)
+
+            # 创建上传会话
+            self.upload_sessions[upload_id] = {
+                "filename": unique_filename,
+                "original_filename": filename,
+                "total_size": total_size,
+                "total_chunks": total_chunks,
+                "received_chunks": set(),
+                "created_at": time.time(),
+                "chunk_dir": chunk_dir,
+            }
+
+            logger.info(
+                f"初始化分片上传: upload_id={upload_id}, "
+                f"filename={unique_filename}, total_chunks={total_chunks}"
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "upload_id": upload_id,
+                        "chunk_size": CHUNK_SIZE,
+                        "filename": unique_filename,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"初始化分片上传失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"初始化分片上传失败: {e!s}").__dict__
+
+    async def upload_chunk(self):
+        """上传分片
+
+        上传单个分片数据。
+
+        Form Data:
+        - upload_id: 上传会话 ID
+        - chunk_index: 分片索引（从 0 开始）
+        - chunk: 分片数据
+
+        返回:
+        - received: 已接收的分片数量
+        - total: 分片总数
+        """
+        try:
+            form = await request.form
+            files = await request.files
+
+            upload_id = form.get("upload_id")
+            chunk_index_str = form.get("chunk_index")
+
+            if not upload_id or chunk_index_str is None:
+                return Response().error("缺少必要参数").__dict__
+
+            try:
+                chunk_index = int(chunk_index_str)
+            except ValueError:
+                return Response().error("无效的分片索引").__dict__
+
+            if "chunk" not in files:
+                return Response().error("缺少分片数据").__dict__
+
+            # 验证上传会话
+            if upload_id not in self.upload_sessions:
+                return Response().error("上传会话不存在或已过期").__dict__
+
+            session = self.upload_sessions[upload_id]
+
+            # 验证分片索引
+            if chunk_index < 0 or chunk_index >= session["total_chunks"]:
+                return Response().error("分片索引超出范围").__dict__
+
+            # 保存分片
+            chunk_file = files["chunk"]
+            chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
+            await chunk_file.save(chunk_path)
+
+            # 记录已接收的分片
+            session["received_chunks"].add(chunk_index)
+
+            received_count = len(session["received_chunks"])
+            total_chunks = session["total_chunks"]
+
+            logger.debug(
+                f"接收分片: upload_id={upload_id}, "
+                f"chunk={chunk_index + 1}/{total_chunks}"
+            )
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "received": received_count,
+                        "total": total_chunks,
+                        "chunk_index": chunk_index,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"上传分片失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"上传分片失败: {e!s}").__dict__
+
+    async def upload_complete(self):
+        """完成分片上传
+
+        合并所有分片为完整文件。
+
+        JSON Body:
+        - upload_id: 上传会话 ID
+
+        返回:
+        - filename: 合并后的文件名
+        - size: 文件大小
+        """
+        try:
+            data = await request.json
+            upload_id = data.get("upload_id")
+
+            if not upload_id:
+                return Response().error("缺少 upload_id 参数").__dict__
+
+            # 验证上传会话
+            if upload_id not in self.upload_sessions:
+                return Response().error("上传会话不存在或已过期").__dict__
+
+            session = self.upload_sessions[upload_id]
+
+            # 检查是否所有分片都已接收
+            received = session["received_chunks"]
+            total = session["total_chunks"]
+
+            if len(received) != total:
+                missing = set(range(total)) - received
+                return (
+                    Response()
+                    .error(f"分片不完整，缺少: {sorted(missing)[:10]}...")
+                    .__dict__
+                )
+
+            # 合并分片
+            chunk_dir = session["chunk_dir"]
+            filename = session["filename"]
+
+            Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
+            output_path = os.path.join(self.backup_dir, filename)
+
+            try:
+                with open(output_path, "wb") as outfile:
+                    for i in range(total):
+                        chunk_path = os.path.join(chunk_dir, f"{i}.part")
+                        with open(chunk_path, "rb") as chunk_file:
+                            # 分块读取，避免内存溢出
+                            while True:
+                                data_block = chunk_file.read(8192)
+                                if not data_block:
+                                    break
+                                outfile.write(data_block)
+
+                file_size = os.path.getsize(output_path)
+
+                logger.info(
+                    f"分片上传完成: {filename}, size={file_size}, chunks={total}"
+                )
+
+                # 清理分片目录
+                await self._cleanup_upload_session(upload_id)
+
+                return (
+                    Response()
+                    .ok(
+                        {
+                            "filename": filename,
+                            "original_filename": session["original_filename"],
+                            "size": file_size,
+                        }
+                    )
+                    .__dict__
+                )
+            except Exception as e:
+                # 如果合并失败，删除不完整的文件
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                raise e
+
+        except Exception as e:
+            logger.error(f"完成分片上传失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"完成分片上传失败: {e!s}").__dict__
+
+    async def upload_abort(self):
+        """取消分片上传
+
+        取消上传并清理已上传的分片。
+
+        JSON Body:
+        - upload_id: 上传会话 ID
+        """
+        try:
+            data = await request.json
+            upload_id = data.get("upload_id")
+
+            if not upload_id:
+                return Response().error("缺少 upload_id 参数").__dict__
+
+            if upload_id not in self.upload_sessions:
+                # 会话已不存在，可能已过期或已完成
+                return Response().ok(message="上传已取消").__dict__
+
+            # 清理会话
+            await self._cleanup_upload_session(upload_id)
+
+            logger.info(f"取消分片上传: {upload_id}")
+
+            return Response().ok(message="上传已取消").__dict__
+        except Exception as e:
+            logger.error(f"取消上传失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"取消上传失败: {e!s}").__dict__
 
     async def check_backup(self):
         """预检查备份文件
