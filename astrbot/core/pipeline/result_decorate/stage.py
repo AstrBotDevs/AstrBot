@@ -264,7 +264,7 @@ class ResultDecorateStage(Stage):
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider
             )
-            if not tts_provider:
+            if should_tts and not tts_provider:
                 logger.warning(
                     f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
                 )

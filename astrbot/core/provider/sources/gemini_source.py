@@ -335,7 +335,7 @@ class ProviderGoogleGenAI(Provider):
                             reasoning_content = part.get("think") or None
                             thinking_signature = part.get("encrypted") or None
                         else:
-                            text += part.get("text")
+                            text += str(part.get("text"))
 
                     if thinking_signature and isinstance(thinking_signature, str):
                         try:

@@ -373,7 +373,7 @@ class ProviderOpenAIOfficial(Provider):
                 new_content = []  # not including think part
                 for part in message["content"]:
                     if part.get("type") == "think":
-                        reasoning_content += part.get("think")
+                        reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
                 message["content"] = new_content
