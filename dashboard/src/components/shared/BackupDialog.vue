@@ -395,9 +395,9 @@ const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
 // 分片上传状态
-const CHUNK_SIZE = 1024 * 1024  // 1MB
 const CONCURRENT_UPLOADS = 5     // 并发上传数
 const uploadId = ref('')
+const chunkSize = ref(0)         // 分片大小（从后端获取）
 const uploadProgress = ref({
     uploaded: 0,
     total: 0,
@@ -554,22 +554,22 @@ const resetExport = () => {
  * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
  * 因此分片到达顺序不影响最终结果。
  */
-const uploadChunksInParallel = async (file, totalChunks, currentUploadId) => {
+const uploadChunksInParallel = async (file, totalChunks, currentUploadId, currentChunkSize) => {
     // 跟踪已完成的字节数（使用原子操作避免并发问题）
     let completedBytes = 0
     const chunkSizes = []
     
-    // 预计算每个分片的大小
+    // 预计算每个分片的大小（使用后端返回的 chunk_size）
     for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE
-        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const start = i * currentChunkSize
+        const end = Math.min(start + currentChunkSize, file.size)
         chunkSizes[i] = end - start
     }
 
     // 上传单个分片的函数
     const uploadSingleChunk = async (chunkIndex) => {
-        const start = chunkIndex * CHUNK_SIZE
-        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const start = chunkIndex * currentChunkSize
+        const end = Math.min(start + currentChunkSize, file.size)
         const chunk = file.slice(start, end)
 
         const formData = new FormData()
@@ -625,9 +625,6 @@ const uploadAndCheck = async () => {
     const file = importFile.value
 
     try {
-        // 计算分片数量
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
-        
         // 初始化上传进度
         uploadProgress.value = {
             uploaded: 0,
@@ -636,11 +633,10 @@ const uploadAndCheck = async () => {
             message: t('features.settings.backup.import.uploadInit')
         }
 
-        // 步骤1: 初始化分片上传
+        // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
         const initResponse = await axios.post('/api/backup/upload/init', {
             filename: file.name,
-            total_size: file.size,
-            total_chunks: totalChunks
+            total_size: file.size
         })
 
         if (initResponse.data.status !== 'ok') {
@@ -648,11 +644,13 @@ const uploadAndCheck = async () => {
         }
 
         uploadId.value = initResponse.data.data.upload_id
+        chunkSize.value = initResponse.data.data.chunk_size
+        const totalChunks = initResponse.data.data.total_chunks
 
         // 步骤2: 并行分片上传（5个并发连接）
         uploadProgress.value.message = t('features.settings.backup.import.uploadingChunks')
         
-        await uploadChunksInParallel(file, totalChunks, uploadId.value)
+        await uploadChunksInParallel(file, totalChunks, uploadId.value, chunkSize.value)
 
         // 步骤3: 完成上传
         uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
@@ -787,6 +785,7 @@ const resetImport = async () => {
     uploadedFilename.value = ''
     checkResult.value = null
     uploadId.value = ''
+    chunkSize.value = 0
     uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' }
 }
 

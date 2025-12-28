@@ -63,17 +63,16 @@ def secure_filename(filename: str) -> str:
 
 
 def generate_unique_filename(original_filename: str) -> str:
-    """生成唯一的文件名，添加时间戳后缀避免重名
+    """生成唯一的文件名，在原文件名后添加时间戳后缀避免重名
 
     Args:
         original_filename: 原始文件名（已清洗）
 
     Returns:
-        唯一的文件名
+        添加了时间戳后缀的唯一文件名，格式为 {原文件名}_{YYYYMMDD_HHMMSS}.{扩展名}
     """
     name, ext = os.path.splitext(original_filename)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 如果文件名已经包含时间戳格式，直接使用；否则添加时间戳后缀
     return f"{name}_{timestamp}{ext}"
 
 
@@ -101,8 +100,11 @@ class BackupRoute(Route):
         self.backup_progress: dict[str, dict] = {}
 
         # 分片上传会话跟踪
-        # upload_id -> {filename, total_chunks, received_chunks, created_at, chunk_dir}
+        # upload_id -> {filename, total_chunks, received_chunks, last_activity, chunk_dir}
         self.upload_sessions: dict[str, dict] = {}
+
+        # 后台清理任务句柄
+        self._cleanup_task: asyncio.Task | None = None
 
         # 注册路由
         self.routes = {
@@ -121,9 +123,6 @@ class BackupRoute(Route):
             "/backup/rename": ("POST", self.rename_backup),  # 重命名备份
         }
         self.register_routes()
-
-        # 启动清理过期上传会话的任务
-        asyncio.create_task(self._cleanup_expired_uploads())
 
     def _init_task(self, task_id: str, task_type: str, status: str = "pending") -> None:
         """初始化任务状态"""
@@ -196,8 +195,20 @@ class BackupRoute(Route):
 
         return _callback
 
+    def _ensure_cleanup_task_started(self):
+        """确保后台清理任务已启动（在异步上下文中延迟启动）"""
+        if self._cleanup_task is None or self._cleanup_task.done():
+            try:
+                self._cleanup_task = asyncio.create_task(self._cleanup_expired_uploads())
+            except RuntimeError:
+                # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
+                pass
+
     async def _cleanup_expired_uploads(self):
-        """定期清理过期的上传会话"""
+        """定期清理过期的上传会话
+
+        基于 last_activity 字段判断过期，避免清理活跃的上传会话。
+        """
         while True:
             try:
                 await asyncio.sleep(300)  # 每5分钟检查一次
@@ -205,13 +216,18 @@ class BackupRoute(Route):
                 expired_sessions = []
 
                 for upload_id, session in self.upload_sessions.items():
-                    if current_time - session["created_at"] > UPLOAD_EXPIRE_SECONDS:
+                    # 使用 last_activity 判断过期，而非 created_at
+                    last_activity = session.get("last_activity", session["created_at"])
+                    if current_time - last_activity > UPLOAD_EXPIRE_SECONDS:
                         expired_sessions.append(upload_id)
 
                 for upload_id in expired_sessions:
                     await self._cleanup_upload_session(upload_id)
                     logger.info(f"清理过期的上传会话: {upload_id}")
 
+            except asyncio.CancelledError:
+                # 任务被取消，正常退出
+                break
             except Exception as e:
                 logger.error(f"清理过期上传会话失败: {e}")
 
@@ -249,6 +265,9 @@ class BackupRoute(Route):
         return None  # 无法读取，不是有效备份
 
     async def list_backups(self):
+        # 确保后台清理任务已启动
+        self._ensure_cleanup_task_started()
+
         """获取备份列表
 
         Query 参数:
@@ -446,17 +465,16 @@ class BackupRoute(Route):
         JSON Body:
         - filename: 原始文件名
         - total_size: 文件总大小（字节）
-        - total_chunks: 分片总数
 
         返回:
         - upload_id: 上传会话 ID
-        - chunk_size: 建议的分片大小
+        - chunk_size: 分片大小（由后端决定）
+        - total_chunks: 分片总数（由后端根据 total_size 和 chunk_size 计算）
         """
         try:
             data = await request.json
             filename = data.get("filename")
             total_size = data.get("total_size", 0)
-            total_chunks = data.get("total_chunks", 0)
 
             if not filename:
                 return Response().error("缺少 filename 参数").__dict__
@@ -464,8 +482,13 @@ class BackupRoute(Route):
             if not filename.endswith(".zip"):
                 return Response().error("请上传 ZIP 格式的备份文件").__dict__
 
-            if total_chunks <= 0:
-                return Response().error("无效的分片数量").__dict__
+            if total_size <= 0:
+                return Response().error("无效的文件大小").__dict__
+
+            # 由后端计算分片总数，确保前后端一致
+            import math
+
+            total_chunks = math.ceil(total_size / CHUNK_SIZE)
 
             # 生成上传 ID
             upload_id = str(uuid.uuid4())
@@ -479,13 +502,15 @@ class BackupRoute(Route):
             unique_filename = generate_unique_filename(safe_filename)
 
             # 创建上传会话
+            current_time = time.time()
             self.upload_sessions[upload_id] = {
                 "filename": unique_filename,
                 "original_filename": filename,
                 "total_size": total_size,
                 "total_chunks": total_chunks,
                 "received_chunks": set(),
-                "created_at": time.time(),
+                "created_at": current_time,
+                "last_activity": current_time,  # 用于判断会话是否活跃
                 "chunk_dir": chunk_dir,
             }
 
@@ -500,6 +525,7 @@ class BackupRoute(Route):
                     {
                         "upload_id": upload_id,
                         "chunk_size": CHUNK_SIZE,
+                        "total_chunks": total_chunks,
                         "filename": unique_filename,
                     }
                 )
@@ -557,8 +583,9 @@ class BackupRoute(Route):
             chunk_path = os.path.join(session["chunk_dir"], f"{chunk_index}.part")
             await chunk_file.save(chunk_path)
 
-            # 记录已接收的分片
+            # 记录已接收的分片，并更新最后活动时间
             session["received_chunks"].add(chunk_index)
+            session["last_activity"] = time.time()  # 刷新活动时间，防止活跃上传被清理
 
             received_count = len(session["received_chunks"])
             total_chunks = session["total_chunks"]
