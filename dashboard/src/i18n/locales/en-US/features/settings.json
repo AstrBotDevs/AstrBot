@@ -97,7 +97,9 @@
     "list": {
       "empty": "No backup files",
       "refresh": "Refresh List",
-      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone."
+      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone.",
+      "uploaded": "Uploaded",
+      "restore": "Restore this backup"
     }
   }
 }

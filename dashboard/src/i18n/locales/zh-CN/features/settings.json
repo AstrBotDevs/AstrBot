@@ -97,7 +97,9 @@
     "list": {
       "empty": "暂无备份文件",
       "refresh": "刷新列表",
-      "confirmDelete": "确定要删除这个备份文件吗？此操作不可撤销。"
+      "confirmDelete": "确定要删除这个备份文件吗？此操作不可撤销。",
+      "uploaded": "已上传",
+      "restore": "恢复此备份"
     }
   }
 }

@@ -1,12 +1,14 @@
 """备份管理 API 路由"""
 
 import asyncio
+import json
 import os
 import re
 import shutil
 import time
 import traceback
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -60,7 +62,7 @@ def secure_filename(filename: str) -> str:
 
 
 def generate_unique_filename(original_filename: str) -> str:
-    """生成唯一的文件名，添加时间戳前缀
+    """生成唯一的文件名，添加时间戳后缀避免重名
 
     Args:
         original_filename: 原始文件名（已清洗）
@@ -68,9 +70,10 @@ def generate_unique_filename(original_filename: str) -> str:
     Returns:
         唯一的文件名
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     name, ext = os.path.splitext(original_filename)
-    return f"uploaded_{timestamp}_{name}{ext}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 如果文件名已经包含时间戳格式，直接使用；否则添加时间戳后缀
+    return f"{name}_{timestamp}{ext}"
 
 
 class BackupRoute(Route):
@@ -222,6 +225,25 @@ class BackupRoute(Route):
                     logger.warning(f"清理分片目录失败: {e}")
             del self.upload_sessions[upload_id]
 
+    def _get_backup_origin(self, zip_path: str) -> str:
+        """从备份文件的 manifest.json 中读取 origin 字段
+
+        Args:
+            zip_path: ZIP 文件路径
+
+        Returns:
+            str: "exported" 或 "uploaded"，如果无法读取则默认返回 "exported"
+        """
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                if "manifest.json" in zf.namelist():
+                    manifest_data = zf.read("manifest.json")
+                    manifest = json.loads(manifest_data.decode("utf-8"))
+                    return manifest.get("origin", "exported")
+        except Exception as e:
+            logger.debug(f"读取备份 manifest 失败: {e}")
+        return "exported"  # 旧版备份没有 origin 字段，默认为 exported
+
     async def list_backups(self):
         """获取备份列表
 
@@ -239,16 +261,26 @@ class BackupRoute(Route):
             # 获取所有备份文件
             backup_files = []
             for filename in os.listdir(self.backup_dir):
-                if filename.endswith(".zip") and filename.startswith("astrbot_backup_"):
-                    file_path = os.path.join(self.backup_dir, filename)
-                    stat = os.stat(file_path)
-                    backup_files.append(
-                        {
-                            "filename": filename,
-                            "size": stat.st_size,
-                            "created_at": stat.st_mtime,
-                        }
-                    )
+                # 只处理 .zip 文件，排除隐藏文件和目录
+                if not filename.endswith(".zip") or filename.startswith("."):
+                    continue
+
+                file_path = os.path.join(self.backup_dir, filename)
+                if not os.path.isfile(file_path):
+                    continue
+
+                stat = os.stat(file_path)
+                # 从 manifest.json 读取 origin 字段来判断备份类型
+                origin = self._get_backup_origin(file_path)
+
+                backup_files.append(
+                    {
+                        "filename": filename,
+                        "size": stat.st_size,
+                        "created_at": stat.st_mtime,
+                        "type": origin,
+                    }
+                )
 
             # 按创建时间倒序排序
             backup_files.sort(key=lambda x: x["created_at"], reverse=True)
@@ -540,6 +572,35 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"上传分片失败: {e!s}").__dict__
 
+    def _mark_backup_as_uploaded(self, zip_path: str) -> None:
+        """修改备份文件的 manifest.json，将 origin 设置为 uploaded
+
+        使用 zipfile 的 append 模式添加新的 manifest.json，
+        ZIP 规范中后添加的同名文件会覆盖先前的文件。
+
+        Args:
+            zip_path: ZIP 文件路径
+        """
+        try:
+            # 读取原有 manifest
+            manifest = {"origin": "uploaded", "uploaded_at": datetime.now().isoformat()}
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                if "manifest.json" in zf.namelist():
+                    manifest_data = zf.read("manifest.json")
+                    manifest = json.loads(manifest_data.decode("utf-8"))
+                    manifest["origin"] = "uploaded"
+                    manifest["uploaded_at"] = datetime.now().isoformat()
+
+            # 使用 append 模式添加新的 manifest.json
+            # ZIP 规范中，后添加的同名文件会覆盖先前的
+            with zipfile.ZipFile(zip_path, "a") as zf:
+                new_manifest = json.dumps(manifest, ensure_ascii=False, indent=2)
+                zf.writestr("manifest.json", new_manifest)
+
+            logger.debug(f"已标记备份为上传来源: {zip_path}")
+        except Exception as e:
+            logger.warning(f"标记备份来源失败: {e}")
+
     async def upload_complete(self):
         """完成分片上传
 
@@ -597,6 +658,9 @@ class BackupRoute(Route):
                                 outfile.write(data_block)
 
                 file_size = os.path.getsize(output_path)
+
+                # 标记备份为上传来源（修改 manifest.json 中的 origin 字段）
+                self._mark_backup_as_uploaded(output_path)
 
                 logger.info(
                     f"分片上传完成: {filename}, size={file_size}, chunks={total}"

@@ -256,15 +256,28 @@
                                 :key="backup.filename"
                             >
                                 <template v-slot:prepend>
-                                    <v-icon color="primary">mdi-zip-box</v-icon>
+                                    <v-icon :color="backup.type === 'uploaded' ? 'orange' : 'primary'">
+                                        {{ backup.type === 'uploaded' ? 'mdi-upload' : 'mdi-zip-box' }}
+                                    </v-icon>
                                 </template>
 
                                 <v-list-item-title>{{ backup.filename }}</v-list-item-title>
                                 <v-list-item-subtitle>
                                     {{ formatFileSize(backup.size) }} · {{ formatDate(backup.created_at) }}
+                                    <v-chip v-if="backup.type === 'uploaded'" size="x-small" color="orange" variant="tonal" class="ml-2">
+                                        {{ t('features.settings.backup.list.uploaded') }}
+                                    </v-chip>
                                 </v-list-item-subtitle>
 
                                 <template v-slot:append>
+                                    <v-btn
+                                        icon="mdi-restore"
+                                        variant="text"
+                                        size="small"
+                                        color="success"
+                                        :title="t('features.settings.backup.list.restore')"
+                                        @click="restoreFromList(backup.filename)"
+                                    ></v-btn>
                                     <v-btn icon="mdi-download" variant="text" size="small" @click="downloadBackup(backup.filename)"></v-btn>
                                     <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="deleteBackup(backup.filename)"></v-btn>
                                 </template>
@@ -723,6 +736,37 @@ const downloadBackup = (filename) => {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+}
+
+// 从列表中恢复备份
+const restoreFromList = async (filename) => {
+    // 切换到导入标签页并设置文件名
+    uploadedFilename.value = filename
+    
+    // 预检查
+    try {
+        const checkResponse = await axios.post('/api/backup/check', {
+            filename: filename
+        })
+
+        if (checkResponse.data.status !== 'ok') {
+            throw new Error(checkResponse.data.message)
+        }
+
+        checkResult.value = checkResponse.data.data
+        
+        if (!checkResult.value.valid) {
+            alert(checkResult.value.error || t('features.settings.backup.import.invalidBackup'))
+            return
+        }
+
+        // 切换到导入标签页并显示确认
+        activeTab.value = 'import'
+        importStatus.value = 'confirm'
+
+    } catch (error) {
+        alert(error.response?.data?.message || error.message || 'Check failed')
+    }
 }
 
 // 删除备份
