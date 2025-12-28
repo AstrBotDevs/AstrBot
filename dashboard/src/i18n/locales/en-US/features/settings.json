@@ -106,7 +106,8 @@
       "renameHint": "Filename can only contain letters, numbers, underscores, hyphens and dots",
       "renameRequired": "Please enter a filename",
       "renameInvalidChars": "Filename contains invalid characters",
-      "renameFailed": "Rename failed"
+      "renameFailed": "Rename failed",
+      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
     }
   }
 }

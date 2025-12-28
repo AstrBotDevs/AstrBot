@@ -226,24 +226,26 @@ class BackupRoute(Route):
                     logger.warning(f"清理分片目录失败: {e}")
             del self.upload_sessions[upload_id]
 
-    def _get_backup_origin(self, zip_path: str) -> str:
-        """从备份文件的 manifest.json 中读取 origin 字段
+    def _get_backup_manifest(self, zip_path: str) -> dict | None:
+        """从备份文件读取 manifest.json
 
         Args:
             zip_path: ZIP 文件路径
 
         Returns:
-            str: "exported" 或 "uploaded"，如果无法读取则默认返回 "exported"
+            dict | None: manifest 内容，如果不是有效备份则返回 None
         """
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 if "manifest.json" in zf.namelist():
                     manifest_data = zf.read("manifest.json")
-                    manifest = json.loads(manifest_data.decode("utf-8"))
-                    return manifest.get("origin", "exported")
+                    return json.loads(manifest_data.decode("utf-8"))
+                else:
+                    # 没有 manifest.json，不是有效的 AstrBot 备份
+                    return None
         except Exception as e:
             logger.debug(f"读取备份 manifest 失败: {e}")
-        return "exported"  # 旧版备份没有 origin 字段，默认为 exported
+        return None  # 无法读取，不是有效备份
 
     async def list_backups(self):
         """获取备份列表
@@ -270,16 +272,22 @@ class BackupRoute(Route):
                 if not os.path.isfile(file_path):
                     continue
 
-                stat = os.stat(file_path)
-                # 从 manifest.json 读取 origin 字段来判断备份类型
-                origin = self._get_backup_origin(file_path)
+                # 读取 manifest.json 获取备份信息
+                # 如果返回 None，说明不是有效的 AstrBot 备份，跳过
+                manifest = self._get_backup_manifest(file_path)
+                if manifest is None:
+                    logger.debug(f"跳过无效备份文件: {filename}")
+                    continue
 
+                stat = os.stat(file_path)
                 backup_files.append(
                     {
                         "filename": filename,
                         "size": stat.st_size,
                         "created_at": stat.st_mtime,
-                        "type": origin,
+                        "type": manifest.get("origin", "exported"),  # 老版本没有 origin 默认为 exported
+                        "astrbot_version": manifest.get("astrbot_version", "未知"),
+                        "exported_at": manifest.get("exported_at"),
                     }
                 )
 

@@ -264,7 +264,10 @@
                                 <v-list-item-title>{{ backup.filename }}</v-list-item-title>
                                 <v-list-item-subtitle>
                                     {{ formatFileSize(backup.size) }} · {{ formatDate(backup.created_at) }}
-                                    <v-chip v-if="backup.type === 'uploaded'" size="x-small" color="orange" variant="tonal" class="ml-2">
+                                    <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
+                                        v{{ backup.astrbot_version }}
+                                    </v-chip>
+                                    <v-chip v-if="backup.type === 'uploaded'" size="x-small" color="orange" variant="tonal" class="ml-1">
                                         {{ t('features.settings.backup.list.uploaded') }}
                                     </v-chip>
                                 </v-list-item-subtitle>
@@ -297,6 +300,12 @@
                                 {{ t('features.settings.backup.list.refresh') }}
                             </v-btn>
                         </div>
+
+                        <!-- 提示信息 -->
+                        <p class="text-caption text-grey text-center mt-4">
+                            <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
+                            {{ t('features.settings.backup.list.ftpHint') }}
+                        </p>
                     </v-window-item>
                 </v-window>
             </v-card-text>

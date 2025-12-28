@@ -106,7 +106,8 @@
       "renameHint": "文件名只能包含字母、数字、下划线、连字符和点",
       "renameRequired": "请输入文件名",
       "renameInvalidChars": "文件名包含非法字符",
-      "renameFailed": "重命名失败"
+      "renameFailed": "重命名失败",
+      "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录"
     }
   }
 }
