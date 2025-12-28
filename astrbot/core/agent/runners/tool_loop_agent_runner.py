@@ -13,6 +13,7 @@ from mcp.types import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.message import TextPart, ThinkPart
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -169,13 +170,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.final_llm_resp = llm_resp
             self._transition_state(AgentState.DONE)
             self.stats.end_time = time.time()
+
             # record the final assistant message
-            self.run_context.messages.append(
-                Message(
-                    role="assistant",
-                    content=llm_resp.completion_text or "*No response*",
-                ),
-            )
+            parts = []
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content,
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
+            self.run_context.messages.append(Message(role="assistant", content=parts))
+
+            # call the on_agent_done hook
             try:
                 await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
             except Exception as e:
@@ -214,10 +222,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         data=AgentResponseData(chain=result),
                     )
             # 将结果添加到上下文中
+            parts = []
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content,
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_to_calls_model(),
-                    content=llm_resp.completion_text,
+                    content=parts,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )

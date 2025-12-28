@@ -74,28 +74,6 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
-    def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
-        """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
-
-        - 仅在 provider_config.xai_native_search 为 True 时生效
-        - 默认注入 {"mode": "auto"}
-        - 允许通过 kwargs 使用 xai_search_mode 覆盖（on/auto/off）
-        """
-        if not bool(self.provider_config.get("xai_native_search", False)):
-            return
-
-        mode = kwargs.get("xai_search_mode", "auto")
-        mode = str(mode).lower()
-        if mode not in ("auto", "on", "off"):
-            mode = "auto"
-
-        # off 时不注入，保持与未开启一致
-        if mode == "off":
-            return
-
-        # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
-        payloads["search_parameters"] = {"mode": mode}
-
     async def get_models(self):
         try:
             models_str = []
@@ -381,10 +359,26 @@ class ProviderOpenAIOfficial(Provider):
 
         payloads = {"messages": context_query, "model": model}
 
-        # xAI origin search tool inject
-        self._maybe_inject_xai_search(payloads, **kwargs)
+        self._finally_convert_payload(payloads)
 
         return payloads, context_query
+
+    def _finally_convert_payload(self, payloads: dict):
+        """Finally convert the payload. Such as think part conversion, tool inject."""
+        for message in payloads.get("messages", []):
+            if message.get("role") == "assistant" and isinstance(
+                message.get("content"), list
+            ):
+                reasoning_content = ""
+                new_content = []  # not including think part
+                for part in message["content"]:
+                    if part.get("type") == "think":
+                        reasoning_content += part.get("think")
+                    else:
+                        new_content.append(part)
+                message["content"] = new_content
+                # reasoning key is "reasoning_content"
+                message["reasoning_content"] = reasoning_content
 
     async def _handle_api_error(
         self,

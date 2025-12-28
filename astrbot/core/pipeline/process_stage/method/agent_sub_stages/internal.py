@@ -6,6 +6,7 @@ import json
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
@@ -294,6 +295,7 @@ class InternalAgentSubStage(Stage):
         event: AstrMessageEvent,
         req: ProviderRequest,
         llm_response: LLMResponse | None,
+        all_messages: list[Message],
     ):
         if (
             not req
@@ -307,31 +309,23 @@ class InternalAgentSubStage(Stage):
             logger.debug("LLM 响应为空，不保存记录。")
             return
 
-        if req.contexts is None:
-            req.contexts = []
+        # using agent context messages to save to history
+        message_to_save = []
+        for message in all_messages:
+            if message.role == "system":
+                # we do not save system messages to history
+                continue
+            if message.role in ["assistant", "user"] and getattr(
+                message, "_no_save", None
+            ):
+                # we do not save user and assistant messages that are marked as _no_save
+                continue
+            message_to_save.append(message.model_dump())
 
-        # 历史上下文
-        messages = copy.deepcopy(req.contexts)
-        # 这一轮对话请求的用户输入
-        messages.append(await req.assemble_context())
-        # 这一轮对话的 LLM 响应
-        if req.tool_calls_result:
-            if not isinstance(req.tool_calls_result, list):
-                messages.extend(req.tool_calls_result.to_openai_messages())
-            elif isinstance(req.tool_calls_result, list):
-                for tcr in req.tool_calls_result:
-                    messages.extend(tcr.to_openai_messages())
-        messages.append(
-            {
-                "role": "assistant",
-                "content": llm_response.completion_text or "*No response*",
-            }
-        )
-        messages = list(filter(lambda item: "_no_save" not in item, messages))
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
             req.conversation.cid,
-            history=messages,
+            history=message_to_save,
         )
 
     def _fix_messages(self, messages: list[dict]) -> list[dict]:
@@ -513,7 +507,12 @@ class InternalAgentSubStage(Stage):
             # 恢复备份的 contexts
             req.contexts = backup_contexts
 
-            await self._save_to_history(event, req, agent_runner.get_final_llm_resp())
+            await self._save_to_history(
+                event,
+                req,
+                agent_runner.get_final_llm_resp(),
+                agent_runner.run_context.messages,
+            )
 
         # 异步处理 WebChat 特殊情况
         if event.get_platform_name() == "webchat":

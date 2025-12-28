@@ -321,9 +321,40 @@ class ProviderGoogleGenAI(Provider):
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
-                if content:
+                if isinstance(content, str):
                     parts = [types.Part.from_text(text=content)]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
+                elif isinstance(content, list):
+                    parts = []
+                    reasoning_content = None
+                    thinking_signature = None
+                    text = ""
+                    for part in content:
+                        # for most cases, assistant content only contains two parts: think and text
+                        if part.get("type") == "think":
+                            reasoning_content = part.get("think") or None
+                            thinking_signature = part.get("encrypted") or None
+                        else:
+                            text += part.get("text")
+
+                    if thinking_signature and isinstance(thinking_signature, str):
+                        try:
+                            thinking_signature = base64.b64decode(thinking_signature)
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to decode google gemini thinking signature: {e}",
+                                exc_info=True,
+                            )
+                            thinking_signature = None
+                    parts.append(
+                        types.Part(
+                            text=text,
+                            thought_signature=thinking_signature,
+                            thought=reasoning_content,
+                        )
+                    )
+                    append_or_extend(gemini_contents, parts, types.ModelContent)
+
                 elif not native_tool_enabled and "tool_calls" in message:
                     parts = []
                     for tool in message["tool_calls"]:
@@ -441,7 +472,8 @@ class ProviderGoogleGenAI(Provider):
         for part in result_parts:
             if part.text:
                 chain.append(Comp.Plain(part.text))
-            elif (
+
+            if (
                 part.function_call
                 and part.function_call.name is not None
                 and part.function_call.args is not None
@@ -458,13 +490,18 @@ class ProviderGoogleGenAI(Provider):
                     llm_response.tools_call_extra_content[tool_call_id] = {
                         "google": {"thought_signature": ts_bs64}
                     }
-            elif (
+
+            if (
                 part.inline_data
                 and part.inline_data.mime_type
                 and part.inline_data.mime_type.startswith("image/")
                 and part.inline_data.data
             ):
                 chain.append(Comp.Image.fromBytes(part.inline_data.data))
+
+            if ts := part.thought_signature:
+                # only keep the last thinking signature
+                llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
         return MessageChain(chain=chain)
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
