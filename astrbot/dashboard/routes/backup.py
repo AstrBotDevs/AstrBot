@@ -117,6 +117,7 @@ class BackupRoute(Route):
             "/backup/progress": ("GET", self.get_progress),
             "/backup/download": ("GET", self.download_backup),
             "/backup/delete": ("POST", self.delete_backup),
+            "/backup/rename": ("POST", self.rename_backup),  # 重命名备份
         }
         self.register_routes()
 
@@ -963,3 +964,69 @@ class BackupRoute(Route):
             logger.error(f"删除备份失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"删除备份失败: {e!s}").__dict__
+
+    async def rename_backup(self):
+        """重命名备份文件
+
+        Body:
+        - filename: 当前文件名 (必填)
+        - new_name: 新文件名 (必填，不含扩展名)
+        """
+        try:
+            data = await request.json
+            filename = data.get("filename")
+            new_name = data.get("new_name")
+
+            if not filename:
+                return Response().error("缺少参数 filename").__dict__
+
+            if not new_name:
+                return Response().error("缺少参数 new_name").__dict__
+
+            # 安全检查 - 防止路径遍历
+            if ".." in filename or "/" in filename or "\\" in filename:
+                return Response().error("无效的文件名").__dict__
+
+            # 清洗新文件名（移除路径和危险字符）
+            new_name = secure_filename(new_name)
+
+            # 移除新文件名中的扩展名（如果有的话）
+            if new_name.endswith(".zip"):
+                new_name = new_name[:-4]
+
+            # 验证新文件名不为空
+            if not new_name or new_name.replace("_", "") == "":
+                return Response().error("新文件名无效").__dict__
+
+            # 强制使用 .zip 扩展名
+            new_filename = f"{new_name}.zip"
+
+            # 检查原文件是否存在
+            old_path = os.path.join(self.backup_dir, filename)
+            if not os.path.exists(old_path):
+                return Response().error("备份文件不存在").__dict__
+
+            # 检查新文件名是否已存在
+            new_path = os.path.join(self.backup_dir, new_filename)
+            if os.path.exists(new_path):
+                return Response().error(f"文件名 '{new_filename}' 已存在").__dict__
+
+            # 执行重命名
+            os.rename(old_path, new_path)
+
+            logger.info(f"备份文件重命名: {filename} -> {new_filename}")
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "old_filename": filename,
+                        "new_filename": new_filename,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"重命名备份失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"重命名备份失败: {e!s}").__dict__

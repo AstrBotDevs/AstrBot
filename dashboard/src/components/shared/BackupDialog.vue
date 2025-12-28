@@ -278,6 +278,13 @@
                                         :title="t('features.settings.backup.list.restore')"
                                         @click="restoreFromList(backup.filename)"
                                     ></v-btn>
+                                    <v-btn
+                                        icon="mdi-pencil"
+                                        variant="text"
+                                        size="small"
+                                        :title="t('features.settings.backup.list.rename')"
+                                        @click="openRenameDialog(backup.filename)"
+                                    ></v-btn>
                                     <v-btn icon="mdi-download" variant="text" size="small" @click="downloadBackup(backup.filename)"></v-btn>
                                     <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="deleteBackup(backup.filename)"></v-btn>
                                 </template>
@@ -298,6 +305,50 @@
                 <v-spacer></v-spacer>
                 <v-btn color="grey" variant="text" @click="handleClose" :disabled="isProcessing">
                     {{ t('core.common.close') }}
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+
+    <!-- 重命名对话框 -->
+    <v-dialog v-model="renameDialogOpen" max-width="450" persistent>
+        <v-card>
+            <v-card-title>
+                <v-icon class="mr-2">mdi-pencil</v-icon>
+                {{ t('features.settings.backup.list.renameTitle') }}
+            </v-card-title>
+            <v-card-text>
+                <v-text-field
+                    v-model="renameNewName"
+                    :label="t('features.settings.backup.list.newName')"
+                    :rules="[renameValidationRule]"
+                    :error-messages="renameError"
+                    variant="outlined"
+                    density="comfortable"
+                    autofocus
+                    @keyup.enter="confirmRename"
+                >
+                    <template v-slot:append-inner>
+                        <span class="text-grey">.zip</span>
+                    </template>
+                </v-text-field>
+                <p class="text-caption text-grey mt-1">
+                    {{ t('features.settings.backup.list.renameHint') }}
+                </p>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="grey" variant="text" @click="closeRenameDialog">
+                    {{ t('core.common.cancel') }}
+                </v-btn>
+                <v-btn
+                    color="primary"
+                    variant="flat"
+                    @click="confirmRename"
+                    :loading="renameLoading"
+                    :disabled="!renameNewName || !!renameError"
+                >
+                    {{ t('core.common.confirm') }}
                 </v-btn>
             </v-card-actions>
         </v-card>
@@ -348,6 +399,13 @@ const uploadProgress = ref({
 // 备份列表
 const loadingList = ref(false)
 const backupList = ref([])
+
+// 重命名对话框状态
+const renameDialogOpen = ref(false)
+const renameOldFilename = ref('')
+const renameNewName = ref('')
+const renameLoading = ref(false)
+const renameError = ref('')
 
 // 计算属性
 const isProcessing = computed(() => {
@@ -782,6 +840,68 @@ const deleteBackup = async (filename) => {
         }
     } catch (error) {
         alert(error.message || 'Delete failed')
+    }
+}
+
+// 重命名相关函数
+const openRenameDialog = (filename) => {
+    renameOldFilename.value = filename
+    // 移除 .zip 后缀，只显示文件名部分
+    renameNewName.value = filename.replace(/\.zip$/i, '')
+    renameError.value = ''
+    renameDialogOpen.value = true
+}
+
+const closeRenameDialog = () => {
+    renameDialogOpen.value = false
+    renameOldFilename.value = ''
+    renameNewName.value = ''
+    renameError.value = ''
+}
+
+// 文件名验证规则
+const renameValidationRule = (value) => {
+    if (!value) return t('features.settings.backup.list.renameRequired')
+    // 检查是否包含非法字符
+    if (/[\\/:*?"<>|]/.test(value)) {
+        return t('features.settings.backup.list.renameInvalidChars')
+    }
+    // 检查是否包含路径遍历字符
+    if (value.includes('..')) {
+        return t('features.settings.backup.list.renameInvalidChars')
+    }
+    return true
+}
+
+const confirmRename = async () => {
+    if (!renameNewName.value || renameError.value) return
+    
+    // 前端验证
+    const validationResult = renameValidationRule(renameNewName.value)
+    if (validationResult !== true) {
+        renameError.value = validationResult
+        return
+    }
+
+    renameLoading.value = true
+    renameError.value = ''
+
+    try {
+        const response = await axios.post('/api/backup/rename', {
+            filename: renameOldFilename.value,
+            new_name: renameNewName.value
+        })
+
+        if (response.data.status === 'ok') {
+            closeRenameDialog()
+            loadBackupList()
+        } else {
+            renameError.value = response.data.message || t('features.settings.backup.list.renameFailed')
+        }
+    } catch (error) {
+        renameError.value = error.response?.data?.message || error.message || t('features.settings.backup.list.renameFailed')
+    } finally {
+        renameLoading.value = false
     }
 }
 

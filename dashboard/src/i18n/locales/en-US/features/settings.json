@@ -99,7 +99,14 @@
       "refresh": "Refresh List",
       "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone.",
       "uploaded": "Uploaded",
-      "restore": "Restore this backup"
+      "restore": "Restore this backup",
+      "rename": "Rename",
+      "renameTitle": "Rename Backup File",
+      "newName": "New Filename",
+      "renameHint": "Filename can only contain letters, numbers, underscores, hyphens and dots",
+      "renameRequired": "Please enter a filename",
+      "renameInvalidChars": "Filename contains invalid characters",
+      "renameFailed": "Rename failed"
     }
   }
 }
