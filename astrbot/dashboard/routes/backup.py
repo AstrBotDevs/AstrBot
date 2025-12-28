@@ -12,6 +12,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+import jwt
 from quart import request, send_file
 
 from astrbot.core import logger
@@ -924,11 +925,32 @@ class BackupRoute(Route):
 
         Query 参数:
         - filename: 备份文件名 (必填)
+        - token: JWT token (必填，用于浏览器原生下载鉴权)
+
+        注意: 此路由已被添加到 auth_middleware 白名单中，
+              使用 URL 参数中的 token 进行鉴权，以支持浏览器原生下载。
         """
         try:
             filename = request.args.get("filename")
+            token = request.args.get("token")
+
             if not filename:
                 return Response().error("缺少参数 filename").__dict__
+
+            if not token:
+                return Response().error("缺少参数 token").__dict__
+
+            # 验证 JWT token
+            try:
+                jwt_secret = self.config.get("dashboard", {}).get("jwt_secret")
+                if not jwt_secret:
+                    return Response().error("服务器配置错误").__dict__
+
+                jwt.decode(token, jwt_secret, algorithms=["HS256"])
+            except jwt.ExpiredSignatureError:
+                return Response().error("Token 已过期，请刷新页面后重试").__dict__
+            except jwt.InvalidTokenError:
+                return Response().error("Token 无效").__dict__
 
             # 安全检查 - 防止路径遍历
             if ".." in filename or "/" in filename or "\\" in filename:

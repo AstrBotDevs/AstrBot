@@ -115,6 +115,7 @@ class AstrBotDashboard:
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
+            "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None

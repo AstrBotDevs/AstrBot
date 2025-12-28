@@ -792,8 +792,15 @@ const resetImport = async () => {
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
 const downloadBackup = (filename) => {
+    // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
+    const token = localStorage.getItem('token')
+    if (!token) {
+        alert(t('core.common.unauthorized'))
+        return
+    }
+    
     // 直接使用浏览器下载，这样可以看到原生下载进度条
-    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}`
+    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
     
     // 创建隐藏的 a 标签触发下载
     const link = document.createElement('a')
