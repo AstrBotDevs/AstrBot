@@ -199,7 +199,9 @@ class BackupRoute(Route):
         """确保后台清理任务已启动（在异步上下文中延迟启动）"""
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
-                self._cleanup_task = asyncio.create_task(self._cleanup_expired_uploads())
+                self._cleanup_task = asyncio.create_task(
+                    self._cleanup_expired_uploads()
+                )
             except RuntimeError:
                 # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
                 pass
