@@ -47,7 +47,6 @@ class WeChatPadProAdapter(Platform):
         self._shutdown_event = None
         self.wxnewpass = None
         self.settings = platform_settings
-        self.unique_session = platform_settings.get("unique_session", False)
 
         self.metadata = PlatformMetadata(
             name="wechatpadpro",
@@ -509,11 +508,10 @@ class WeChatPadProAdapter(Platform):
                 if accurate_nickname:
                     abm.sender.nickname = accurate_nickname
 
-            # 对于群聊，session_id 可以是群聊 ID 或发送者 ID + 群聊 ID (如果 unique_session 为 True)
-            if self.unique_session:
-                abm.session_id = f"{from_user_name}#{abm.sender.user_id}"
+            if abm.type == MessageType.GROUP_MESSAGE:
+                abm.session_id = abm.group_id
             else:
-                abm.session_id = from_user_name
+                abm.session_id = abm.sender.user_id
 
             msg_source = raw_message.get("msg_source", "")
             if self.wxid in msg_source:

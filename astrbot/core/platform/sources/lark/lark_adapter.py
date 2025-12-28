@@ -44,8 +44,6 @@ class LarkPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
 
-        self.unique_session = platform_settings["unique_session"]
-
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
         self.domain = platform_config.get("domain", lark.FEISHU_DOMAIN)
@@ -317,14 +315,8 @@ class LarkPlatformAdapter(Platform):
             user_id=event.event.sender.sender_id.open_id,
             nickname=event.event.sender.sender_id.open_id[:8],
         )
-        # 独立会话
-        if not self.unique_session:
-            if abm.type == MessageType.GROUP_MESSAGE:
-                abm.session_id = abm.group_id
-            else:
-                abm.session_id = abm.sender.user_id
-        elif abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = f"{abm.sender.user_id}%{abm.group_id}"  # 也保留群组id
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id
 

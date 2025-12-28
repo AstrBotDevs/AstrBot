@@ -79,7 +79,6 @@ class WebChatAdapter(Platform):
         super().__init__(platform_config, event_queue)
 
         self.settings = platform_settings
-        self.unique_session = platform_settings["unique_session"]
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.imgs_dir, exist_ok=True)
 

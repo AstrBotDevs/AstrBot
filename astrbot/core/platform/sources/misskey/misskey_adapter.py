@@ -91,8 +91,6 @@ class MisskeyPlatformAdapter(Platform):
         except Exception:
             self.max_download_bytes = None
 
-        self.unique_session = platform_settings["unique_session"]
-
         self.api: MisskeyAPI | None = None
         self._running = False
         self.client_self_id = ""
@@ -641,7 +639,6 @@ class MisskeyPlatformAdapter(Platform):
             sender_info,
             self.client_self_id,
             is_chat=False,
-            unique_session=self.unique_session,
         )
         cache_user_info(
             self._user_cache,
@@ -690,7 +687,6 @@ class MisskeyPlatformAdapter(Platform):
             sender_info,
             self.client_self_id,
             is_chat=True,
-            unique_session=self.unique_session,
         )
         cache_user_info(
             self._user_cache,
@@ -720,7 +716,6 @@ class MisskeyPlatformAdapter(Platform):
             self.client_self_id,
             is_chat=False,
             room_id=room_id,
-            unique_session=self.unique_session,
         )
 
         cache_user_info(

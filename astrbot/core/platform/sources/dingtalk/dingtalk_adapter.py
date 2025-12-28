@@ -50,8 +50,6 @@ class DingtalkPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
 
-        self.unique_session = platform_settings["unique_session"]
-
         self.client_id = platform_config["client_id"]
         self.client_secret = platform_config["client_secret"]
 
@@ -129,10 +127,7 @@ class DingtalkPlatformAdapter(Platform):
                     if id := self._id_to_sid(user.dingtalk_id):
                         abm.message.append(At(qq=id))
             abm.group_id = message.conversation_id
-            if self.unique_session:
-                abm.session_id = abm.sender.user_id
-            else:
-                abm.session_id = abm.group_id
+            abm.session_id = abm.group_id
         else:
             abm.session_id = abm.sender.user_id
 
