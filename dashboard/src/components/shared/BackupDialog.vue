@@ -710,28 +710,19 @@ const resetImport = async () => {
     uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' }
 }
 
-// 下载备份
-const downloadBackup = async (filename) => {
-    try {
-        const response = await axios.get('/api/backup/download', {
-            params: { filename },
-            responseType: 'blob'
-        })
-        
-        // 创建 Blob URL 并触发下载
-        const blob = new Blob([response.data], { type: 'application/zip' })
-        const url = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = filename
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(url)
-    } catch (error) {
-        console.error('Download failed:', error)
-        alert(t('features.settings.backup.export.failed') + ': ' + (error.message || 'Unknown error'))
-    }
+// 下载备份（使用浏览器原生下载，可显示下载进度）
+const downloadBackup = (filename) => {
+    // 直接使用浏览器下载，这样可以看到原生下载进度条
+    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}`
+    
+    // 创建隐藏的 a 标签触发下载
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
 }
 
 // 删除备份
