@@ -251,11 +251,11 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
         ptd = usage.prompt_tokens_details
         cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
-        prompt_tokens = usage.prompt_tokens or 0
-        completion_tokens = usage.completion_tokens or 0
+        prompt_tokens = 0 if usage.prompt_tokens is None else usage.prompt_tokens
+        completion_tokens = 0 if usage.completion_tokens is None else usage.completion_tokens
         return TokenUsage(
             input_other=prompt_tokens - cached,
-            input_cached=ptd.cached_tokens if ptd and ptd.cached_tokens else 0,
+            input_cached=cached,
             output=completion_tokens,
         )
 
