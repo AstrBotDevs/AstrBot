@@ -323,6 +323,7 @@ const checkResult = ref(null)     // 预检查结果
 
 // 分片上传状态
 const CHUNK_SIZE = 1024 * 1024  // 1MB
+const CONCURRENT_UPLOADS = 5     // 并发上传数
 const uploadId = ref('')
 const uploadProgress = ref({
     uploaded: 0,
@@ -466,6 +467,76 @@ const resetExport = () => {
     exportError.value = ''
 }
 
+/**
+ * 并发上传分片
+ *
+ * 使用并发控制同时上传多个分片，提升上传速度。
+ * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
+ * 因此分片到达顺序不影响最终结果。
+ */
+const uploadChunksInParallel = async (file, totalChunks, currentUploadId) => {
+    // 跟踪已完成的字节数（使用原子操作避免并发问题）
+    let completedBytes = 0
+    const chunkSizes = []
+    
+    // 预计算每个分片的大小
+    for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        chunkSizes[i] = end - start
+    }
+
+    // 上传单个分片的函数
+    const uploadSingleChunk = async (chunkIndex) => {
+        const start = chunkIndex * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const chunk = file.slice(start, end)
+
+        const formData = new FormData()
+        formData.append('upload_id', currentUploadId)
+        formData.append('chunk_index', chunkIndex.toString())
+        formData.append('chunk', chunk)
+
+        const response = await axios.post('/api/backup/upload/chunk', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+
+        if (response.data.status !== 'ok') {
+            throw new Error(response.data.message)
+        }
+
+        // 更新进度（累加已完成字节）
+        completedBytes += chunkSizes[chunkIndex]
+        uploadProgress.value.uploaded = completedBytes
+        uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100)
+
+        return response
+    }
+
+    // 创建分片索引队列
+    const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i)
+    const activePromises = []
+
+    // 处理队列中的分片
+    while (pendingChunks.length > 0 || activePromises.length > 0) {
+        // 填充并发槽位
+        while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
+            const chunkIndex = pendingChunks.shift()
+            const promise = uploadSingleChunk(chunkIndex).then(() => {
+                // 完成后从活动列表移除
+                const idx = activePromises.indexOf(promise)
+                if (idx > -1) activePromises.splice(idx, 1)
+            })
+            activePromises.push(promise)
+        }
+
+        // 等待至少一个完成
+        if (activePromises.length > 0) {
+            await Promise.race(activePromises)
+        }
+    }
+}
+
 // 上传并检查
 const uploadAndCheck = async () => {
     if (!importFile.value) return
@@ -497,33 +568,11 @@ const uploadAndCheck = async () => {
         }
 
         uploadId.value = initResponse.data.data.upload_id
-        const targetFilename = initResponse.data.data.filename
 
-        // 步骤2: 分片上传
+        // 步骤2: 并行分片上传（5个并发连接）
         uploadProgress.value.message = t('features.settings.backup.import.uploadingChunks')
-
-        for (let i = 0; i < totalChunks; i++) {
-            const start = i * CHUNK_SIZE
-            const end = Math.min(start + CHUNK_SIZE, file.size)
-            const chunk = file.slice(start, end)
-
-            const formData = new FormData()
-            formData.append('upload_id', uploadId.value)
-            formData.append('chunk_index', i.toString())
-            formData.append('chunk', chunk)
-
-            const chunkResponse = await axios.post('/api/backup/upload/chunk', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            })
-
-            if (chunkResponse.data.status !== 'ok') {
-                throw new Error(chunkResponse.data.message)
-            }
-
-            // 更新进度
-            uploadProgress.value.uploaded = end
-            uploadProgress.value.percent = Math.round((end / file.size) * 100)
-        }
+        
+        await uploadChunksInParallel(file, totalChunks, uploadId.value)
 
         // 步骤3: 完成上传
         uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
