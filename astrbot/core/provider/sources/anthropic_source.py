@@ -233,7 +233,6 @@ class ProviderAnthropic(Provider):
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
-                print(f"event: {event}")
                 if event.type == "message_start":
                     # the usage contains input token usage
                     id = event.message.id
