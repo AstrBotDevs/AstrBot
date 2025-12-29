@@ -143,9 +143,9 @@ class SatoriPlatformAdapter(Platform):
 
         try:
             websocket = await connect(
-                self.endpoint, 
+                self.endpoint,
                 additional_headers={},
-                max_size=10 * 1024 * 1024  # 10MB
+                max_size=10 * 1024 * 1024,  # 10MB
             )
 
             self.ws = websocket
