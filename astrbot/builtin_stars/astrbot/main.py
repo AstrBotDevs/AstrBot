@@ -100,16 +100,8 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.on_llm_response()
-    async def inject_reasoning(self, event: AstrMessageEvent, resp: LLMResponse):
-        """在 LLM 响应后基于配置注入思考过程文本 / 在 LLM 响应后记录对话"""
-        umo = event.unified_msg_origin
-        cfg = self.context.get_config(umo).get("provider_settings", {})
-        show_reasoning = cfg.get("display_reasoning_text", False)
-        if show_reasoning and resp.reasoning_content:
-            resp.completion_text = (
-                f"🤔 思考: {resp.reasoning_content}\n\n{resp.completion_text}"
-            )
-
+    async def record_llm_resp_to_ltm(self, event: AstrMessageEvent, resp: LLMResponse):
+        """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.after_req_llm(event, resp)

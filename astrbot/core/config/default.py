@@ -905,6 +905,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
+                        "anth_thinking_config": {"budget": 0},
                     },
                     "Moonshot": {
                         "id": "moonshot",
@@ -920,7 +921,7 @@ CONFIG_METADATA_2 = {
                     "xAI": {
                         "id": "xai",
                         "provider": "xai",
-                        "type": "openai_chat_completion",
+                        "type": "xai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
@@ -1784,6 +1785,17 @@ CONFIG_METADATA_2 = {
                                     "MEDIUM",
                                     "HIGH",
                                 ],
+                            },
+                        },
+                    },
+                    "anth_thinking_config": {
+                        "description": "Thinking Config",
+                        "type": "object",
+                        "items": {
+                            "budget": {
+                                "description": "Thinking Budget",
+                                "type": "int",
+                                "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
                             },
                         },
                     },

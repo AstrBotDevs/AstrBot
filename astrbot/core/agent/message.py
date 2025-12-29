@@ -12,7 +12,7 @@ class ContentPart(BaseModel):
 
     __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
-    type: str
+    type: Literal["text", "think", "image_url", "audio_url"]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -61,6 +61,28 @@ class TextPart(ContentPart):
 
     type: str = "text"
     text: str
+
+
+class ThinkPart(ContentPart):
+    """
+    >>> ThinkPart(think="I think I need to think about this.").model_dump()
+    {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
+    """
+
+    type: str = "think"
+    think: str
+    encrypted: str | None = None
+    """Encrypted thinking content, or signature."""
+
+    def merge_in_place(self, other: Any) -> bool:
+        if not isinstance(other, ThinkPart):
+            return False
+        if self.encrypted:
+            return False
+        self.think += other.think
+        if other.encrypted:
+            self.encrypted = other.encrypted
+        return True
 
 
 class ImageURLPart(ContentPart):
