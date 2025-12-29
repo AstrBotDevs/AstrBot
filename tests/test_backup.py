@@ -195,6 +195,7 @@ class TestAstrBotExporter:
 
         assert manifest["version"] == BACKUP_MANIFEST_VERSION
         assert manifest["astrbot_version"] == VERSION
+        assert manifest["origin"] == "exported"  # 验证备份来源标记
         assert "exported_at" in manifest
         assert "tables" in manifest
         assert "statistics" in manifest
@@ -412,11 +413,19 @@ class TestSecureFilename:
     def test_generate_unique_filename(self):
         """测试生成唯一文件名"""
         result = generate_unique_filename("backup.zip")
-        # 应包含 uploaded_ 前缀和时间戳
-        assert result.startswith("uploaded_")
-        assert result.endswith("_backup.zip")
+        # 应包含原文件名和时间戳后缀
+        assert result.startswith("backup_")
+        assert result.endswith(".zip")
         # 应包含时间戳格式 YYYYMMDD_HHMMSS
-        assert re.search(r"uploaded_\d{8}_\d{6}_backup\.zip", result)
+        assert re.search(r"backup_\d{8}_\d{6}\.zip", result)
+
+    def test_generate_unique_filename_with_complex_name(self):
+        """测试复杂文件名生成唯一文件名"""
+        result = generate_unique_filename("my_backup_file.zip")
+        # 应在原文件名后添加时间戳
+        assert result.startswith("my_backup_file_")
+        assert result.endswith(".zip")
+        assert re.search(r"my_backup_file_\d{8}_\d{6}\.zip", result)
 
 
 class TestVersionComparison:
@@ -750,6 +759,7 @@ class TestBackupIntegration:
             # 读取 manifest
             manifest = json.loads(zf.read("manifest.json"))
             assert manifest["astrbot_version"] == VERSION
+            assert manifest["origin"] == "exported"  # 验证备份来源标记
 
             # 读取配置
             config = json.loads(zf.read("config/cmd_config.json"))

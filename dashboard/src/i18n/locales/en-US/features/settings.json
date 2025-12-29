@@ -64,6 +64,10 @@
       "uploadAndCheck": "Upload & Check",
       "uploading": "Uploading...",
       "uploadWait": "Please wait, uploading backup file...",
+      "uploadInit": "Initializing upload...",
+      "uploadingChunks": "Uploading chunks...",
+      "uploadComplete": "Upload complete, merging file...",
+      "checking": "Checking backup file...",
       "invalidBackup": "Invalid backup file",
       "backupContents": "Backup Contents",
       "tables": "tables",
@@ -93,7 +97,17 @@
     "list": {
       "empty": "No backup files",
       "refresh": "Refresh List",
-      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone."
+      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone.",
+      "uploaded": "Uploaded",
+      "restore": "Restore this backup",
+      "rename": "Rename",
+      "renameTitle": "Rename Backup File",
+      "newName": "New Filename",
+      "renameHint": "Filename can only contain letters, numbers, underscores, hyphens and dots",
+      "renameRequired": "Please enter a filename",
+      "renameInvalidChars": "Filename contains invalid characters",
+      "renameFailed": "Rename failed",
+      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
     }
   }
 }
