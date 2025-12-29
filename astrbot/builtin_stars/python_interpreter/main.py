@@ -157,9 +157,8 @@ class Main(star.Star):
     async def is_docker_available(self) -> bool:
         """Check if docker is available"""
         try:
-            docker = aiodocker.Docker()
-            await docker.version()
-            await docker.close()
+            async with aiodocker.Docker() as docker:
+                await docker.version()
             return True
         except BaseException as e:
             logger.info(f"检查 Docker 可用性: {e}")
@@ -279,14 +278,14 @@ class Main(star.Star):
     @pi.command("repull")
     async def pi_repull(self, event: AstrMessageEvent):
         """重新拉取沙箱镜像"""
-        docker = aiodocker.Docker()
-        image_name = await self.get_image_name()
-        try:
-            await docker.images.get(image_name)
-            await docker.images.delete(image_name, force=True)
-        except aiodocker.exceptions.DockerError:
-            pass
-        await docker.images.pull(image_name)
+        async with aiodocker.Docker() as docker:
+            image_name = await self.get_image_name()
+            try:
+                await docker.images.get(image_name)
+                await docker.images.delete(image_name, force=True)
+            except aiodocker.exceptions.DockerError:
+                pass
+            await docker.images.pull(image_name)
         yield event.plain_result("重新拉取沙箱镜像成功。")
 
     @pi.command("file")
@@ -371,137 +370,137 @@ class Main(star.Star):
         obs = ""
         n = 5
 
-        for i in range(n):
-            if i > 0:
-                logger.info(f"Try {i + 1}/{n}")
+        async with aiodocker.Docker() as docker:
+            for i in range(n):
+                if i > 0:
+                    logger.info(f"Try {i + 1}/{n}")
 
-            PROMPT_ = PROMPT.format(
-                prompt=plain_text,
-                extra_input=extra_inputs,
-                extra_prompt=obs,
-            )
-            provider = self.context.get_using_provider()
-            llm_response = await provider.text_chat(
-                prompt=PROMPT_,
-                session_id=f"{event.session_id}_{magic_code}_{i!s}",
-            )
-
-            logger.debug(
-                "code interpreter llm gened code:" + llm_response.completion_text,
-            )
-
-            # 整理代码并保存
-            code_clean = await self.tidy_code(llm_response.completion_text)
-            with open(os.path.join(workplace_path, "exec.py"), "w") as f:
-                f.write(code_clean)
-
-            # 启动容器
-            docker = aiodocker.Docker()
-
-            # 检查有没有image
-            image_name = await self.get_image_name()
-            try:
-                await docker.images.get(image_name)
-            except aiodocker.exceptions.DockerError:
-                # 拉取镜像
-                logger.info(f"未找到沙箱镜像，正在尝试拉取 {image_name}...")
-                await docker.images.pull(image_name)
-
-            yield event.plain_result(
-                f"使用沙箱执行代码中，请稍等...(尝试次数: {i + 1}/{n})",
-            )
-
-            self.docker_host_astrbot_abs_path = self.config.get(
-                "docker_host_astrbot_abs_path",
-                "",
-            )
-            if self.docker_host_astrbot_abs_path:
-                host_shared = os.path.join(
-                    self.docker_host_astrbot_abs_path,
-                    self.shared_path,
+                PROMPT_ = PROMPT.format(
+                    prompt=plain_text,
+                    extra_input=extra_inputs,
+                    extra_prompt=obs,
                 )
-                host_output = os.path.join(
-                    self.docker_host_astrbot_abs_path,
-                    output_path,
-                )
-                host_workplace = os.path.join(
-                    self.docker_host_astrbot_abs_path,
-                    workplace_path,
+                provider = self.context.get_using_provider()
+                llm_response = await provider.text_chat(
+                    prompt=PROMPT_,
+                    session_id=f"{event.session_id}_{magic_code}_{i!s}",
                 )
 
-            else:
-                host_shared = os.path.abspath(self.shared_path)
-                host_output = os.path.abspath(output_path)
-                host_workplace = os.path.abspath(workplace_path)
+                logger.debug(
+                    "code interpreter llm gened code:" + llm_response.completion_text,
+                )
 
-            logger.debug(
-                f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}",
-            )
+                # 整理代码并保存
+                code_clean = await self.tidy_code(llm_response.completion_text)
+                with open(os.path.join(workplace_path, "exec.py"), "w") as f:
+                    f.write(code_clean)
 
-            container = await docker.containers.run(
-                {
-                    "Image": image_name,
-                    "Cmd": ["python", "exec.py"],
-                    "Memory": 512 * 1024 * 1024,
-                    "NanoCPUs": 1000000000,
-                    "HostConfig": {
-                        "Binds": [
-                            f"{host_shared}:/astrbot_sandbox/shared:ro",
-                            f"{host_output}:/astrbot_sandbox/output:rw",
-                            f"{host_workplace}:/astrbot_sandbox:rw",
-                        ],
-                    },
-                    "Env": [f"MAGIC_CODE={magic_code}"],
-                    "AutoRemove": True,
-                },
-            )
+                # 检查有没有image
+                image_name = await self.get_image_name()
+                try:
+                    await docker.images.get(image_name)
+                except aiodocker.exceptions.DockerError:
+                    # 拉取镜像
+                    logger.info(f"未找到沙箱镜像，正在尝试拉取 {image_name}...")
+                    await docker.images.pull(image_name)
 
-            logger.debug(f"Container {container.id} created.")
-            logs = await self.run_container(container)
+                yield event.plain_result(
+                    f"使用沙箱执行代码中，请稍等...(尝试次数: {i + 1}/{n})",
+                )
 
-            logger.debug(f"Container {container.id} finished.")
-            logger.debug(f"Container {container.id} logs: {logs}")
-
-            # 发送结果
-            pattern = r"\[ASTRBOT_(TEXT|IMAGE|FILE)_OUTPUT#\w+\]: (.*)"
-            ok = False
-            traceback = ""
-            for idx, log in enumerate(logs):
-                match = re.match(pattern, log)
-                if match:
-                    ok = True
-                    if match.group(1) == "TEXT":
-                        yield event.plain_result(match.group(2))
-                    elif match.group(1) == "IMAGE":
-                        image_path = os.path.join(workplace_path, match.group(2))
-                        logger.debug(f"Sending image: {image_path}")
-                        yield event.image_result(image_path)
-                    elif match.group(1) == "FILE":
-                        file_path = os.path.join(workplace_path, match.group(2))
-                        # logger.debug(f"Sending file: {file_path}")
-                        # file_s3_url = await self.file_upload(file_path)
-                        # logger.info(f"文件上传到 AstrBot 云节点: {file_s3_url}")
-                        file_name = os.path.basename(file_path)
-                        chain: list[BaseMessageComponent] = [
-                            File(name=file_name, file=file_path)
-                        ]
-                        yield event.set_result(MessageEventResult(chain=chain))
-
-                elif "Traceback (most recent call last)" in log or "[Error]: " in log:
-                    traceback = "\n".join(logs[idx:])
-
-            if not ok:
-                if traceback:
-                    obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occurred:\n\n{traceback}\n Need to improve/fix the code."
-                else:
-                    logger.warning(
-                        f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}",
+                self.docker_host_astrbot_abs_path = self.config.get(
+                    "docker_host_astrbot_abs_path",
+                    "",
+                )
+                if self.docker_host_astrbot_abs_path:
+                    host_shared = os.path.join(
+                        self.docker_host_astrbot_abs_path,
+                        self.shared_path,
                     )
-                    break
-            else:
-                # 成功了
-                self.user_file_msg_buffer.pop(event.get_session_id())
-                return
+                    host_output = os.path.join(
+                        self.docker_host_astrbot_abs_path,
+                        output_path,
+                    )
+                    host_workplace = os.path.join(
+                        self.docker_host_astrbot_abs_path,
+                        workplace_path,
+                    )
+
+                else:
+                    host_shared = os.path.abspath(self.shared_path)
+                    host_output = os.path.abspath(output_path)
+                    host_workplace = os.path.abspath(workplace_path)
+
+                logger.debug(
+                    f"host_shared: {host_shared}, host_output: {host_output}, host_workplace: {host_workplace}",
+                )
+
+                container = await docker.containers.run(
+                    {
+                        "Image": image_name,
+                        "Cmd": ["python", "exec.py"],
+                        "Memory": 512 * 1024 * 1024,
+                        "NanoCPUs": 1000000000,
+                        "HostConfig": {
+                            "Binds": [
+                                f"{host_shared}:/astrbot_sandbox/shared:ro",
+                                f"{host_output}:/astrbot_sandbox/output:rw",
+                                f"{host_workplace}:/astrbot_sandbox:rw",
+                            ],
+                        },
+                        "Env": [f"MAGIC_CODE={magic_code}"],
+                        "AutoRemove": True,
+                    },
+                )
+
+                logger.debug(f"Container {container.id} created.")
+                logs = await self.run_container(container)
+
+                logger.debug(f"Container {container.id} finished.")
+                logger.debug(f"Container {container.id} logs: {logs}")
+
+                # 发送结果
+                pattern = r"\[ASTRBOT_(TEXT|IMAGE|FILE)_OUTPUT#\w+\]: (.*)"
+                ok = False
+                traceback = ""
+                for idx, log in enumerate(logs):
+                    match = re.match(pattern, log)
+                    if match:
+                        ok = True
+                        if match.group(1) == "TEXT":
+                            yield event.plain_result(match.group(2))
+                        elif match.group(1) == "IMAGE":
+                            image_path = os.path.join(workplace_path, match.group(2))
+                            logger.debug(f"Sending image: {image_path}")
+                            yield event.image_result(image_path)
+                        elif match.group(1) == "FILE":
+                            file_path = os.path.join(workplace_path, match.group(2))
+                            # logger.debug(f"Sending file: {file_path}")
+                            # file_s3_url = await self.file_upload(file_path)
+                            # logger.info(f"文件上传到 AstrBot 云节点: {file_s3_url}")
+                            file_name = os.path.basename(file_path)
+                            chain: list[BaseMessageComponent] = [
+                                File(name=file_name, file=file_path)
+                            ]
+                            yield event.set_result(MessageEventResult(chain=chain))
+
+                    elif (
+                        "Traceback (most recent call last)" in log or "[Error]: " in log
+                    ):
+                        traceback = "\n".join(logs[idx:])
+
+                if not ok:
+                    if traceback:
+                        obs = f"## Observation \n When execute the code: ```python\n{code_clean}\n```\n\n Error occurred:\n\n{traceback}\n Need to improve/fix the code."
+                    else:
+                        logger.warning(
+                            f"未从沙箱输出中捕获到合法的输出。沙箱输出日志: {logs}",
+                        )
+                        break
+                else:
+                    # 成功了
+                    self.user_file_msg_buffer.pop(event.get_session_id())
+                    return
 
         yield event.plain_result(
             "经过多次尝试后，未从沙箱输出中捕获到合法的输出，请更换问法或者查看日志。",
