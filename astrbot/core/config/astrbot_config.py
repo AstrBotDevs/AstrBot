@@ -80,6 +80,8 @@ class AstrBotConfig(dict):
                 if v["type"] == "object":
                     conf[k] = {}
                     _parse_schema(v["items"], conf[k])
+                elif v["type"] == "template_list":
+                    conf[k] = default
                 else:
                     conf[k] = default
 

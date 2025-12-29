@@ -65,6 +65,12 @@
     "fullscreen": "Fullscreen Edit",
     "editingTitle": "Editing Content"
   },
+  "templateList": {
+    "addEntry": "Add Entry",
+    "empty": "No entries yet, pick a template to add",
+    "missingTemplate": "Template not found, please remove and add again.",
+    "unknownTemplate": "Template not specified"
+  },
   "list": {
     "addItemPlaceholder": "Add new item, press Enter to confirm",
     "addButton": "Add",
@@ -84,7 +90,6 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "delete": "Delete",
-    "copy": "Copy",
     "edit": "Edit",
     "copy": "Copy",
     "noData": "No data available"
