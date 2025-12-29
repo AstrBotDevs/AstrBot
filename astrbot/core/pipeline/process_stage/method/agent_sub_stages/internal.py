@@ -349,179 +349,190 @@ class InternalAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         req: ProviderRequest | None = None
 
-        provider = self._select_provider(event)
-        if provider is None:
-            return
-        if not isinstance(provider, Provider):
-            logger.error(f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。")
-            return
-
-        streaming_response = self.streaming_response
-        if (enable_streaming := event.get_extra("enable_streaming")) is not None:
-            streaming_response = bool(enable_streaming)
-
-        logger.debug("ready to request llm provider")
-        async with session_lock_manager.acquire_lock(event.unified_msg_origin):
-            logger.debug("acquired session lock for llm request")
-            if event.get_extra("provider_request"):
-                req = event.get_extra("provider_request")
-                assert isinstance(req, ProviderRequest), (
-                    "provider_request 必须是 ProviderRequest 类型。"
+        try:
+            provider = self._select_provider(event)
+            if provider is None:
+                return
+            if not isinstance(provider, Provider):
+                logger.error(
+                    f"选择的提供商类型无效({type(provider)})，跳过 LLM 请求处理。"
                 )
+                return
 
-                if req.conversation:
-                    req.contexts = json.loads(req.conversation.history)
+            streaming_response = self.streaming_response
+            if (enable_streaming := event.get_extra("enable_streaming")) is not None:
+                streaming_response = bool(enable_streaming)
 
-            else:
-                req = ProviderRequest()
-                req.prompt = ""
-                req.image_urls = []
-                if sel_model := event.get_extra("selected_model"):
-                    req.model = sel_model
-                if provider_wake_prefix and not event.message_str.startswith(
-                    provider_wake_prefix
-                ):
+            logger.debug("ready to request llm provider")
+            async with session_lock_manager.acquire_lock(event.unified_msg_origin):
+                logger.debug("acquired session lock for llm request")
+                if event.get_extra("provider_request"):
+                    req = event.get_extra("provider_request")
+                    assert isinstance(req, ProviderRequest), (
+                        "provider_request 必须是 ProviderRequest 类型。"
+                    )
+
+                    if req.conversation:
+                        req.contexts = json.loads(req.conversation.history)
+
+                else:
+                    req = ProviderRequest()
+                    req.prompt = ""
+                    req.image_urls = []
+                    if sel_model := event.get_extra("selected_model"):
+                        req.model = sel_model
+                    if provider_wake_prefix and not event.message_str.startswith(
+                        provider_wake_prefix
+                    ):
+                        return
+
+                    req.prompt = event.message_str[len(provider_wake_prefix) :]
+                    # func_tool selection 现在已经转移到 astrbot/builtin_stars/astrbot 插件中进行选择。
+                    # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
+                    for comp in event.message_obj.message:
+                        if isinstance(comp, Image):
+                            image_path = await comp.convert_to_file_path()
+                            req.image_urls.append(image_path)
+
+                    conversation = await self._get_session_conv(event)
+                    req.conversation = conversation
+                    req.contexts = json.loads(conversation.history)
+
+                    event.set_extra("provider_request", req)
+
+                # fix contexts json str
+                if isinstance(req.contexts, str):
+                    req.contexts = json.loads(req.contexts)
+
+                # apply file extract
+                if self.file_extract_enabled:
+                    try:
+                        await self._apply_file_extract(event, req)
+                    except Exception as e:
+                        logger.error(f"Error occurred while applying file extract: {e}")
+
+                if not req.prompt and not req.image_urls:
                     return
 
-                req.prompt = event.message_str[len(provider_wake_prefix) :]
-                # func_tool selection 现在已经转移到 astrbot/builtin_stars/astrbot 插件中进行选择。
-                # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
-                for comp in event.message_obj.message:
-                    if isinstance(comp, Image):
-                        image_path = await comp.convert_to_file_path()
-                        req.image_urls.append(image_path)
+                # call event hook
+                if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    return
 
-                conversation = await self._get_session_conv(event)
-                req.conversation = conversation
-                req.contexts = json.loads(conversation.history)
+                # apply knowledge base feature
+                await self._apply_kb(event, req)
 
-                event.set_extra("provider_request", req)
+                # truncate contexts to fit max length
+                if req.contexts:
+                    req.contexts = self._truncate_contexts(req.contexts)
+                    self._fix_messages(req.contexts)
 
-            # fix contexts json str
-            if isinstance(req.contexts, str):
-                req.contexts = json.loads(req.contexts)
+                # session_id
+                if not req.session_id:
+                    req.session_id = event.unified_msg_origin
 
-            # apply file extract
-            if self.file_extract_enabled:
-                try:
-                    await self._apply_file_extract(event, req)
-                except Exception as e:
-                    logger.error(f"Error occurred while applying file extract: {e}")
+                # check provider modalities, if provider does not support image/tool_use, clear them in request.
+                self._modalities_fix(provider, req)
 
-            if not req.prompt and not req.image_urls:
-                return
+                # filter tools, only keep tools from this pipeline's selected plugins
+                self._plugin_tool_fix(event, req)
 
-            # call event hook
-            if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                return
-
-            # apply knowledge base feature
-            await self._apply_kb(event, req)
-
-            # truncate contexts to fit max length
-            if req.contexts:
-                req.contexts = self._truncate_contexts(req.contexts)
-                self._fix_messages(req.contexts)
-
-            # session_id
-            if not req.session_id:
-                req.session_id = event.unified_msg_origin
-
-            # check provider modalities, if provider does not support image/tool_use, clear them in request.
-            self._modalities_fix(provider, req)
-
-            # filter tools, only keep tools from this pipeline's selected plugins
-            self._plugin_tool_fix(event, req)
-
-            stream_to_general = (
-                self.unsupported_streaming_strategy == "turn_off"
-                and not event.platform_meta.support_streaming_message
-            )
-            # 备份 req.contexts
-            backup_contexts = copy.deepcopy(req.contexts)
-
-            # run agent
-            agent_runner = AgentRunner()
-            logger.debug(
-                f"handle provider[id: {provider.provider_config['id']}] request: {req}",
-            )
-            astr_agent_ctx = AstrAgentContext(
-                context=self.ctx.plugin_manager.context,
-                event=event,
-            )
-            await agent_runner.reset(
-                provider=provider,
-                request=req,
-                run_context=AgentContextWrapper(
-                    context=astr_agent_ctx,
-                    tool_call_timeout=self.tool_call_timeout,
-                ),
-                tool_executor=FunctionToolExecutor(),
-                agent_hooks=MAIN_AGENT_HOOKS,
-                streaming=streaming_response,
-            )
-
-            if streaming_response and not stream_to_general:
-                # 流式响应
-                event.set_result(
-                    MessageEventResult()
-                    .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                    .set_async_stream(
-                        run_agent(
-                            agent_runner,
-                            self.max_step,
-                            self.show_tool_use,
-                            show_reasoning=self.show_reasoning,
-                        ),
-                    ),
+                stream_to_general = (
+                    self.unsupported_streaming_strategy == "turn_off"
+                    and not event.platform_meta.support_streaming_message
                 )
-                yield
-                if agent_runner.done():
-                    if final_llm_resp := agent_runner.get_final_llm_resp():
-                        if final_llm_resp.completion_text:
-                            chain = (
-                                MessageChain()
-                                .message(final_llm_resp.completion_text)
-                                .chain
-                            )
-                        elif final_llm_resp.result_chain:
-                            chain = final_llm_resp.result_chain.chain
-                        else:
-                            chain = MessageChain().chain
-                        event.set_result(
-                            MessageEventResult(
-                                chain=chain,
-                                result_content_type=ResultContentType.STREAMING_FINISH,
+                # 备份 req.contexts
+                backup_contexts = copy.deepcopy(req.contexts)
+
+                # run agent
+                agent_runner = AgentRunner()
+                logger.debug(
+                    f"handle provider[id: {provider.provider_config['id']}] request: {req}",
+                )
+                astr_agent_ctx = AstrAgentContext(
+                    context=self.ctx.plugin_manager.context,
+                    event=event,
+                )
+                await agent_runner.reset(
+                    provider=provider,
+                    request=req,
+                    run_context=AgentContextWrapper(
+                        context=astr_agent_ctx,
+                        tool_call_timeout=self.tool_call_timeout,
+                    ),
+                    tool_executor=FunctionToolExecutor(),
+                    agent_hooks=MAIN_AGENT_HOOKS,
+                    streaming=streaming_response,
+                )
+
+                if streaming_response and not stream_to_general:
+                    # 流式响应
+                    event.set_result(
+                        MessageEventResult()
+                        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                        .set_async_stream(
+                            run_agent(
+                                agent_runner,
+                                self.max_step,
+                                self.show_tool_use,
+                                show_reasoning=self.show_reasoning,
                             ),
-                        )
-            else:
-                async for _ in run_agent(
-                    agent_runner,
-                    self.max_step,
-                    self.show_tool_use,
-                    stream_to_general,
-                    show_reasoning=self.show_reasoning,
-                ):
+                        ),
+                    )
                     yield
+                    if agent_runner.done():
+                        if final_llm_resp := agent_runner.get_final_llm_resp():
+                            if final_llm_resp.completion_text:
+                                chain = (
+                                    MessageChain()
+                                    .message(final_llm_resp.completion_text)
+                                    .chain
+                                )
+                            elif final_llm_resp.result_chain:
+                                chain = final_llm_resp.result_chain.chain
+                            else:
+                                chain = MessageChain().chain
+                            event.set_result(
+                                MessageEventResult(
+                                    chain=chain,
+                                    result_content_type=ResultContentType.STREAMING_FINISH,
+                                ),
+                            )
+                else:
+                    async for _ in run_agent(
+                        agent_runner,
+                        self.max_step,
+                        self.show_tool_use,
+                        stream_to_general,
+                        show_reasoning=self.show_reasoning,
+                    ):
+                        yield
 
-            # 恢复备份的 contexts
-            req.contexts = backup_contexts
+                # 恢复备份的 contexts
+                req.contexts = backup_contexts
 
-            await self._save_to_history(
-                event,
-                req,
-                agent_runner.get_final_llm_resp(),
-                agent_runner.run_context.messages,
+                await self._save_to_history(
+                    event,
+                    req,
+                    agent_runner.get_final_llm_resp(),
+                    agent_runner.run_context.messages,
+                )
+
+            # 异步处理 WebChat 特殊情况
+            if event.get_platform_name() == "webchat":
+                asyncio.create_task(self._handle_webchat(event, req, provider))
+
+            asyncio.create_task(
+                Metric.upload(
+                    llm_tick=1,
+                    model_name=agent_runner.provider.get_model(),
+                    provider_type=agent_runner.provider.meta().type,
+                ),
             )
 
-        # 异步处理 WebChat 特殊情况
-        if event.get_platform_name() == "webchat":
-            asyncio.create_task(self._handle_webchat(event, req, provider))
-
-        asyncio.create_task(
-            Metric.upload(
-                llm_tick=1,
-                model_name=agent_runner.provider.get_model(),
-                provider_type=agent_runner.provider.meta().type,
-            ),
-        )
+        except Exception as e:
+            logger.error(f"Error occurred while processing agent: {e}")
+            await event.send(
+                MessageChain().message(
+                    f"Error occurred while processing agent request: {e}"
+                )
+            )
