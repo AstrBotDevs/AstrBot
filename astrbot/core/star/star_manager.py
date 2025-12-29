@@ -944,6 +944,25 @@ class PluginManager:
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
+
+        # 检查是否已安装同名插件，先终止旧插件
+        existing_plugin = None
+        for star in self.context.get_all_stars():
+            if star.root_dir_name == dir_name:
+                existing_plugin = star
+                break
+
+        if existing_plugin:
+            logger.info(f"检测到插件 {existing_plugin.name} 已安装，正在终止旧插件...")
+            try:
+                await self._terminate_plugin(existing_plugin)
+            except Exception:
+                logger.warning(traceback.format_exc())
+            if existing_plugin.name and existing_plugin.module_path:
+                await self._unbind_plugin(
+                    existing_plugin.name, existing_plugin.module_path
+                )
+
         self.updator.unzip_file(zip_file_path, desti_dir)
 
         # remove the zip
