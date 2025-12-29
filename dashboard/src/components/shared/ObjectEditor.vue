@@ -64,6 +64,16 @@
                   hide-details
                   color="primary"
                 ></v-switch>
+                <v-text-field
+                  v-if="pair.type === 'json'"
+                  v-model="pair.value"
+                  density="compact"
+                  variant="outlined"
+                  hide-details="auto"
+                  placeholder="JSON"
+                  @blur="updateJSON(index, pair.value)"
+                  :error-messages="pair.jsonError"
+                ></v-text-field>
               </v-col>
               <v-col cols="1" class="pl-2">
                 <v-btn
@@ -98,7 +108,7 @@
           ></v-text-field>
           <v-select
             v-model="newValueType"
-            :items="['string', 'number', 'boolean']"
+            :items="['string', 'number', 'boolean', 'json']"
             label="值类型"
             density="compact"
             variant="outlined"
@@ -168,10 +178,12 @@ watch(() => props.modelValue, (newValue) => {
 function initializeLocalKeyValuePairs() {
   localKeyValuePairs.value = []
   for (const [key, value] of Object.entries(props.modelValue)) {
+    let _type = (typeof value) === 'object' ? 'json':(typeof value)
+    let _value = _type === 'json'?JSON.stringify(value):value
     localKeyValuePairs.value.push({
       key: key,
-      value: value,
-      type: typeof value // Store the original type
+      value: _value,
+      type: _type
     })
   }
 }
@@ -201,6 +213,9 @@ function addKeyValuePair() {
       case 'boolean':
         defaultValue = false
         break
+      case 'json':
+        defaultValue = "{}"
+        break
       default: // string
         defaultValue = ""
         break
@@ -212,6 +227,15 @@ function addKeyValuePair() {
       type: newValueType.value
     })
     newKey.value = ''
+  }
+}
+
+function updateJSON(index, newValue) {
+  try {
+    JSON.parse(newValue)
+    localKeyValuePairs.value[index].jsonError = ''
+  } catch (e) {
+    localKeyValuePairs.value[index].jsonError = 'JSON 格式错误'
   }
 }
 
@@ -241,6 +265,7 @@ function updateKey(index, newKey) {
 function confirmDialog() {
   const updatedValue = {}
   for (const pair of localKeyValuePairs.value) {
+    if (pair.type === 'json' && pair.jsonError) return
     let convertedValue = pair.value
     // 根据声明的类型进行转换
     switch (pair.type) {
@@ -255,6 +280,9 @@ function confirmDialog() {
         // 注意：在 JavaScript 中，只有严格的 false, 0, "", null, undefined, NaN 会被转换为 false
         // 这里直接赋值 pair.value 应该是安全的，因为 v-model 绑定的就是布尔值
         // convertedValue = Boolean(pair.value)
+        break
+      case 'json':
+        convertedValue = JSON.parse(pair.value)
         break
       case 'string':
       default:
