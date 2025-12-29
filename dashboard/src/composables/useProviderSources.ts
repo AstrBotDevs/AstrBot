@@ -508,12 +508,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
     const newId = `${sourceId}/${modelName}`
 
-    const modalities = ['text']
-    if (supportsImageInput(getModelMetadata(modelName))) {
-      modalities.push('image')
-    }
-    if (supportsToolCall(getModelMetadata(modelName))) {
-      modalities.push('tool_use')
+    const metadata = getModelMetadata(modelName)
+    let modalities: string[]
+    
+    if (!metadata) {
+      modalities = ['text', 'image', 'tool_use']
+    } else {
+      modalities = ['text']
+      if (supportsImageInput(metadata)) {
+        modalities.push('image')
+      }
+      if (supportsToolCall(metadata)) {
+        modalities.push('tool_use')
+      }
     }
 
     const newProvider = {
