@@ -1,8 +1,27 @@
 import asyncio
+import locale
 import logging
 import sys
 
 logger = logging.getLogger("astrbot")
+
+
+def _robust_decode(line: bytes) -> str:
+    """解码字节流，兼容不同平台的编码"""
+    try:
+        return line.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        pass
+    try:
+        return line.decode(locale.getpreferredencoding(False)).strip()
+    except UnicodeDecodeError:
+        pass
+    if sys.platform.startswith("win"):
+        try:
+            return line.decode("gbk").strip()
+        except UnicodeDecodeError:
+            pass
+    return line.decode("utf-8", errors="replace").strip()
 
 
 class PipInstaller:
@@ -42,7 +61,7 @@ class PipInstaller:
 
             assert process.stdout is not None
             async for line in process.stdout:
-                logger.info(line.decode().strip())
+                logger.info(_robust_decode(line))
 
             await process.wait()
 
