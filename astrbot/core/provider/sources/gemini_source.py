@@ -326,13 +326,11 @@ class ProviderGoogleGenAI(Provider):
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 elif isinstance(content, list):
                     parts = []
-                    reasoning_content = None
                     thinking_signature = None
                     text = ""
                     for part in content:
                         # for most cases, assistant content only contains two parts: think and text
                         if part.get("type") == "think":
-                            reasoning_content = part.get("think") or None
                             thinking_signature = part.get("encrypted") or None
                         else:
                             text += str(part.get("text"))
@@ -350,7 +348,6 @@ class ProviderGoogleGenAI(Provider):
                         types.Part(
                             text=text,
                             thought_signature=thinking_signature,
-                            thought=reasoning_content,
                         )
                     )
                     append_or_extend(gemini_contents, parts, types.ModelContent)
