@@ -74,6 +74,7 @@
   "list": {
     "addItemPlaceholder": "添加新项，按回车确认添加",
     "addButton": "添加",
+    "addMore": "添加更多",
     "batchImport": "批量导入",
     "batchImportTitle": "批量导入",
     "batchImportLabel": "每行一个项目",

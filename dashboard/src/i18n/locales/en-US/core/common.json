@@ -74,6 +74,7 @@
   "list": {
     "addItemPlaceholder": "Add new item, press Enter to confirm",
     "addButton": "Add",
+    "addMore": "Add More",
     "batchImport": "Batch Import",
     "batchImportTitle": "Batch Import",
     "batchImportLabel": "One item per line",
