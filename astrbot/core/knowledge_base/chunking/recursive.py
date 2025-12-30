@@ -149,8 +149,10 @@ class RecursiveCharacterChunker(BaseChunker):
             分割后的文本块列表
 
         """
-        chunk_size = chunk_size or self.chunk_size
-        overlap = overlap or self.chunk_overlap
+        if chunk_size is None:
+            chunk_size = self.chunk_size
+        if overlap is None:
+            overlap = self.chunk_overlap
         result = []
         for i in range(0, len(text), chunk_size - overlap):
             end = min(i + chunk_size, len(text))
