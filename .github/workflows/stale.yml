@@ -35,7 +35,7 @@ jobs:
           days-before-pr-close: -1
 
           # 不活跃判定与关闭策略: 先标记 stale, 再延迟关闭
-          days-before-issue-stale: 90
+          days-before-issue-stale: 60
           days-before-issue-close: 30
 
           stale-issue-label: 'stale'
