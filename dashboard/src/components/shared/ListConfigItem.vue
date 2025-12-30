@@ -23,7 +23,7 @@
       </div>
     </div>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ preferSingleItem ? '添加更多' : (buttonText || t('core.common.list.modifyButton')) }}
+      {{ preferSingleItem ? t('core.common.list.addMore') : (buttonText || t('core.common.list.modifyButton')) }}
     </v-btn>
   </div>
 
@@ -48,6 +48,14 @@
             :placeholder="t('core.common.list.inputPlaceholder')"
             class="flex-grow-1">
           </v-text-field>
+          <v-btn
+            @click="addItem"
+            variant="tonal"
+            color="primary"
+            size="small"
+            :disabled="!newItem.trim()">
+            {{ t('core.common.list.addButton') }}
+          </v-btn>
           <v-btn 
             @click="showBatchImport = true" 
             variant="tonal" 
