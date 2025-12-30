@@ -153,6 +153,12 @@ class RecursiveCharacterChunker(BaseChunker):
             chunk_size = self.chunk_size
         if overlap is None:
             overlap = self.chunk_overlap
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than 0")
+        if overlap < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        if overlap >= chunk_size:
+            raise ValueError("chunk_overlap must be less than chunk_size")
         result = []
         for i in range(0, len(text), chunk_size - overlap):
             end = min(i + chunk_size, len(text))
