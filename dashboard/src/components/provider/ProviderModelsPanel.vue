@@ -82,13 +82,26 @@
                   {{ tm('availability.test') }}
                   <template #activator="{ props }">
                     <v-btn
-                      icon="mdi-wrench"
+                      icon="mdi-connection"
                       size="small"
                       variant="text"
                       :disabled="!entry.provider.enable"
                       :loading="isProviderTesting(entry.provider.id)"
                       v-bind="props"
                       @click.stop="emit('test-provider', entry.provider)"
+                    ></v-btn>
+                  </template>
+                </v-tooltip>
+
+                <v-tooltip location="top" max-width="300">
+                  {{ tm('models.configure') }}
+                  <template #activator="{ props }">
+                    <v-btn
+                      icon="mdi-cog"
+                      size="small"
+                      variant="text"
+                      v-bind="props"
+                      @click.stop="emit('open-provider-edit', entry.provider)"
                     ></v-btn>
                   </template>
                 </v-tooltip>
