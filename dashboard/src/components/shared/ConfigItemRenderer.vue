@@ -188,6 +188,7 @@
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
+      :item-meta="itemMeta"
       @update:model-value="emitUpdate"
       class="config-field"
     />
