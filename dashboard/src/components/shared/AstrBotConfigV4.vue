@@ -219,7 +219,7 @@ function getSpecialSubtype(value) {
               <ConfigItemRenderer
                 v-else
                 v-model="createSelectorModel(itemKey).value"
-                :item-meta="itemMeta"
+                :item-meta="itemMeta || null"
                 :show-fullscreen-btn="!!itemMeta?.editor_mode"
                 @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
               />

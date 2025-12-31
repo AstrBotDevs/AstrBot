@@ -223,7 +223,7 @@ const props = defineProps({
   },
   itemMeta: {
     type: Object,
-    required: true
+    default: null
   },
   loading: {
     type: Boolean,

@@ -203,9 +203,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
 
             <v-col cols="12" sm="6" class="config-input">
               <ConfigItemRenderer
-                v-if="metadata[metadataKey].items[key]"
                 v-model="iterable[key]"
-                :item-meta="metadata[metadataKey].items[key]"
+                :item-meta="metadata[metadataKey].items[key] || null"
                 :loading="loadingEmbeddingDim"
                 :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
                 @get-embedding-dim="getEmbeddingDimensions(iterable)"
