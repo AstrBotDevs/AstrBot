@@ -272,6 +272,8 @@ class LLMResponse:
     """Tool call extra content. tool_call_id -> extra_content dict"""
     reasoning_content: str = ""
     """The reasoning content extracted from the LLM, if any."""
+    reasoning_signature: str | None = None
+    """The signature of the reasoning content, if any."""
 
     raw_completion: (
         ChatCompletion | GenerateContentResponse | AnthropicMessage | None
@@ -292,12 +294,14 @@ class LLMResponse:
     def __init__(
         self,
         role: str,
-        completion_text: str = "",
+        completion_text: str | None = None,
         result_chain: MessageChain | None = None,
         tools_call_args: list[dict[str, Any]] | None = None,
         tools_call_name: list[str] | None = None,
         tools_call_ids: list[str] | None = None,
         tools_call_extra_content: dict[str, dict[str, Any]] | None = None,
+        reasoning_content: str | None = None,
+        reasoning_signature: str | None = None,
         raw_completion: ChatCompletion
         | GenerateContentResponse
         | AnthropicMessage
@@ -317,6 +321,8 @@ class LLMResponse:
             raw_completion (ChatCompletion, optional): 原始响应, OpenAI 格式. Defaults to None.
 
         """
+        if reasoning_content is None:
+            reasoning_content = ""
         if tools_call_args is None:
             tools_call_args = []
         if tools_call_name is None:
@@ -333,6 +339,8 @@ class LLMResponse:
         self.tools_call_name = tools_call_name
         self.tools_call_ids = tools_call_ids
         self.tools_call_extra_content = tools_call_extra_content
+        self.reasoning_content = reasoning_content
+        self.reasoning_signature = reasoning_signature
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 

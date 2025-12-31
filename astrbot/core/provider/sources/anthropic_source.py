@@ -48,6 +48,8 @@ class ProviderAnthropic(Provider):
             base_url=self.base_url,
         )
 
+        self.thinking_config = provider_config.get("anth_thinking_config", {})
+
         self.set_model(provider_config.get("model", "unknown"))
 
     def _prepare_payload(self, messages: list[dict]):
@@ -64,11 +66,32 @@ class ProviderAnthropic(Provider):
         new_messages = []
         for message in messages:
             if message["role"] == "system":
-                system_prompt = message["content"]
+                system_prompt = message["content"] or "<empty system prompt>"
             elif message["role"] == "assistant":
                 blocks = []
-                if isinstance(message["content"], str):
+                reasoning_content = ""
+                thinking_signature = ""
+                if isinstance(message["content"], str) and message["content"].strip():
                     blocks.append({"type": "text", "text": message["content"]})
+                elif isinstance(message["content"], list):
+                    for part in message["content"]:
+                        if part.get("type") == "think":
+                            # only pick the last think part for now
+                            reasoning_content = part.get("think")
+                            thinking_signature = part.get("encrypted")
+                        else:
+                            blocks.append(part)
+
+                if reasoning_content and thinking_signature:
+                    blocks.insert(
+                        0,
+                        {
+                            "type": "thinking",
+                            "thinking": reasoning_content,
+                            "signature": thinking_signature,
+                        },
+                    )
+
                 if "tool_calls" in message and isinstance(message["tool_calls"], list):
                     for tool_call in message["tool_calls"]:
                         blocks.append(  # noqa: PERF401
@@ -100,7 +123,7 @@ class ProviderAnthropic(Provider):
                             {
                                 "type": "tool_result",
                                 "tool_use_id": message["tool_call_id"],
-                                "content": message["content"],
+                                "content": message["content"] or "<empty response>",
                             },
                         ],
                     },
@@ -135,6 +158,11 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
+        if self.thinking_config.get("budget"):
+            payloads["thinking"] = {
+                "budget_tokens": self.thinking_config.get("budget"),
+                "type": "enabled",
+            }
 
         completion = await self.client.messages.create(
             **payloads, stream=False, extra_body=extra_body
@@ -152,6 +180,11 @@ class ProviderAnthropic(Provider):
             if content_block.type == "text":
                 completion_text = str(content_block.text).strip()
                 llm_response.completion_text = completion_text
+
+            if content_block.type == "thinking":
+                reasoning_content = str(content_block.thinking).strip()
+                llm_response.reasoning_content = reasoning_content
+                llm_response.reasoning_signature = content_block.signature
 
             if content_block.type == "tool_use":
                 llm_response.tools_call_args.append(content_block.input)
@@ -184,9 +217,16 @@ class ProviderAnthropic(Provider):
         id = None
         usage = TokenUsage()
         extra_body = self.provider_config.get("custom_extra_body", {})
+        reasoning_content = ""
+        reasoning_signature = ""
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
+        if self.thinking_config.get("budget"):
+            payloads["thinking"] = {
+                "budget_tokens": self.thinking_config.get("budget"),
+                "type": "enabled",
+            }
 
         async with self.client.messages.stream(
             **payloads, extra_body=extra_body
@@ -226,6 +266,21 @@ class ProviderAnthropic(Provider):
                             usage=usage,
                             id=id,
                         )
+                    elif event.delta.type == "thinking_delta":
+                        # 思考增量
+                        reasoning = event.delta.thinking
+                        if reasoning:
+                            yield LLMResponse(
+                                role="assistant",
+                                reasoning_content=reasoning,
+                                is_chunk=True,
+                                usage=usage,
+                                id=id,
+                                reasoning_signature=reasoning_signature or None,
+                            )
+                            reasoning_content += reasoning
+                    elif event.delta.type == "signature_delta":
+                        reasoning_signature = event.delta.signature
                     elif event.delta.type == "input_json_delta":
                         # 工具调用参数增量
                         if event.index in tool_use_buffer:
@@ -282,6 +337,8 @@ class ProviderAnthropic(Provider):
             is_chunk=False,
             usage=usage,
             id=id,
+            reasoning_content=reasoning_content,
+            reasoning_signature=reasoning_signature or None,
         )
 
         if final_tool_calls:

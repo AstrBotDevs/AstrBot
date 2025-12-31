@@ -74,28 +74,6 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
-    def _maybe_inject_xai_search(self, payloads: dict, **kwargs):
-        """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
-
-        - 仅在 provider_config.xai_native_search 为 True 时生效
-        - 默认注入 {"mode": "auto"}
-        - 允许通过 kwargs 使用 xai_search_mode 覆盖（on/auto/off）
-        """
-        if not bool(self.provider_config.get("xai_native_search", False)):
-            return
-
-        mode = kwargs.get("xai_search_mode", "auto")
-        mode = str(mode).lower()
-        if mode not in ("auto", "on", "off"):
-            mode = "auto"
-
-        # off 时不注入，保持与未开启一致
-        if mode == "off":
-            return
-
-        # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
-        payloads["search_parameters"] = {"mode": mode}
-
     async def get_models(self):
         try:
             models_str = []
@@ -133,10 +111,6 @@ class ProviderOpenAIOfficial(Provider):
             extra_body.update(custom_extra_body)
 
         model = payloads.get("model", "").lower()
-
-        # 针对 deepseek 模型的特殊处理：deepseek-reasoner调用必须移除 tools ，否则将被切换至 deepseek-chat
-        if model == "deepseek-reasoner" and "tools" in payloads:
-            del payloads["tools"]
 
         completion = await self.client.chat.completions.create(
             **payloads,
@@ -251,10 +225,14 @@ class ProviderOpenAIOfficial(Provider):
     def _extract_usage(self, usage: CompletionUsage) -> TokenUsage:
         ptd = usage.prompt_tokens_details
         cached = ptd.cached_tokens if ptd and ptd.cached_tokens else 0
+        prompt_tokens = 0 if usage.prompt_tokens is None else usage.prompt_tokens
+        completion_tokens = (
+            0 if usage.completion_tokens is None else usage.completion_tokens
+        )
         return TokenUsage(
-            input_other=usage.prompt_tokens - cached,
-            input_cached=ptd.cached_tokens if ptd and ptd.cached_tokens else 0,
-            output=usage.completion_tokens,
+            input_other=prompt_tokens - cached,
+            input_cached=cached,
+            output=completion_tokens,
         )
 
     async def _parse_openai_completion(
@@ -381,10 +359,26 @@ class ProviderOpenAIOfficial(Provider):
 
         payloads = {"messages": context_query, "model": model}
 
-        # xAI origin search tool inject
-        self._maybe_inject_xai_search(payloads, **kwargs)
+        self._finally_convert_payload(payloads)
 
         return payloads, context_query
+
+    def _finally_convert_payload(self, payloads: dict):
+        """Finally convert the payload. Such as think part conversion, tool inject."""
+        for message in payloads.get("messages", []):
+            if message.get("role") == "assistant" and isinstance(
+                message.get("content"), list
+            ):
+                reasoning_content = ""
+                new_content = []  # not including think part
+                for part in message["content"]:
+                    if part.get("type") == "think":
+                        reasoning_content += str(part.get("think"))
+                    else:
+                        new_content.append(part)
+                message["content"] = new_content
+                # reasoning key is "reasoning_content"
+                message["reasoning_content"] = reasoning_content
 
     async def _handle_api_error(
         self,

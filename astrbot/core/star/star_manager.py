@@ -944,7 +944,48 @@ class PluginManager:
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
+
+        # 第一步：检查是否已安装同目录名的插件，先终止旧插件
+        existing_plugin = None
+        for star in self.context.get_all_stars():
+            if star.root_dir_name == dir_name:
+                existing_plugin = star
+                break
+
+        if existing_plugin:
+            logger.info(f"检测到插件 {existing_plugin.name} 已安装，正在终止旧插件...")
+            try:
+                await self._terminate_plugin(existing_plugin)
+            except Exception:
+                logger.warning(traceback.format_exc())
+            if existing_plugin.name and existing_plugin.module_path:
+                await self._unbind_plugin(
+                    existing_plugin.name, existing_plugin.module_path
+                )
+
         self.updator.unzip_file(zip_file_path, desti_dir)
+
+        # 第二步：解压后，读取新插件的 metadata.yaml，检查是否存在同名但不同目录的插件
+        try:
+            new_metadata = self._load_plugin_metadata(desti_dir)
+            if new_metadata and new_metadata.name:
+                for star in self.context.get_all_stars():
+                    if (
+                        star.name == new_metadata.name
+                        and star.root_dir_name != dir_name
+                    ):
+                        logger.warning(
+                            f"检测到同名插件 {star.name} 存在于不同目录 {star.root_dir_name}，正在终止..."
+                        )
+                        try:
+                            await self._terminate_plugin(star)
+                        except Exception:
+                            logger.warning(traceback.format_exc())
+                        if star.name and star.module_path:
+                            await self._unbind_plugin(star.name, star.module_path)
+                        break  # 只处理第一个匹配的
+        except Exception as e:
+            logger.debug(f"读取新插件 metadata.yaml 失败，跳过同名检查: {e!s}")
 
         # remove the zip
         try:

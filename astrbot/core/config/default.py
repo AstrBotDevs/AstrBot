@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.10.3"
+VERSION = "4.10.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -905,6 +905,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
+                        "anth_thinking_config": {"budget": 0},
                     },
                     "Moonshot": {
                         "id": "moonshot",
@@ -920,7 +921,7 @@ CONFIG_METADATA_2 = {
                     "xAI": {
                         "id": "xai",
                         "provider": "xai",
-                        "type": "openai_chat_completion",
+                        "type": "xai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
@@ -1450,7 +1451,32 @@ CONFIG_METADATA_2 = {
                         "description": "自定义请求体参数",
                         "type": "dict",
                         "items": {},
-                        "hint": "此处添加的键值对将被合并到发送给 API 的 extra_body 中。值可以是字符串、数字或布尔值。",
+                        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+                        "template_schema": {
+                            "temperature": {
+                                "name": "Temperature",
+                                "description": "温度参数",
+                                "hint": "控制输出的随机性，范围通常为 0-2。值越高越随机。",
+                                "type": "float",
+                                "default": 0.6,
+                                "slider": {"min": 0, "max": 2, "step": 0.1},
+                            },
+                            "top_p": {
+                                "name": "Top-p",
+                                "description": "Top-p 采样",
+                                "hint": "核采样参数，范围通常为 0-1。控制模型考虑的概率质量。",
+                                "type": "float",
+                                "default": 1.0,
+                                "slider": {"min": 0, "max": 1, "step": 0.01},
+                            },
+                            "max_tokens": {
+                                "name": "Max Tokens",
+                                "description": "最大令牌数",
+                                "hint": "生成的最大令牌数。",
+                                "type": "int",
+                                "default": 8192,
+                            },
+                        },
                     },
                     "provider": {
                         "type": "string",
@@ -1784,6 +1810,17 @@ CONFIG_METADATA_2 = {
                                     "MEDIUM",
                                     "HIGH",
                                 ],
+                            },
+                        },
+                    },
+                    "anth_thinking_config": {
+                        "description": "Thinking Config",
+                        "type": "object",
+                        "items": {
+                            "budget": {
+                                "description": "Thinking Budget",
+                                "type": "int",
+                                "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
                             },
                         },
                     },
@@ -3052,4 +3089,5 @@ DEFAULT_VALUE_MAP = {
     "text": "",
     "list": [],
     "object": {},
+    "template_list": [],
 }

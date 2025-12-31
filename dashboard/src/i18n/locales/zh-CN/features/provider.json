@@ -130,6 +130,7 @@
     "manualDialogPreviewLabel": "显示 ID（自动生成）",
     "manualDialogPreviewHint": "生成规则：源ID/模型ID",
     "manualModelRequired": "请输入模型 ID",
-    "manualModelExists": "该模型已存在"
+    "manualModelExists": "该模型已存在",
+    "configure": "配置"
   }
 } 

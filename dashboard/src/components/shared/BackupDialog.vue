@@ -110,9 +110,23 @@
 
                         <!-- 步骤1.5: 上传中 -->
                         <div v-else-if="importStatus === 'uploading'" class="text-center py-8">
-                            <v-progress-circular indeterminate color="primary" size="64" class="mb-4"></v-progress-circular>
+                            <v-icon size="64" color="primary" class="mb-4">mdi-cloud-upload</v-icon>
                             <h3 class="mb-4">{{ t('features.settings.backup.import.uploading') }}</h3>
-                            <p class="text-grey">{{ t('features.settings.backup.import.uploadWait') }}</p>
+                            <p class="text-grey mb-2">
+                                {{ uploadProgress.message || t('features.settings.backup.import.uploadWait') }}
+                            </p>
+                            <p class="text-grey-darken-1 mb-4">
+                                {{ formatFileSize(uploadProgress.uploaded) }} / {{ formatFileSize(uploadProgress.total) }}
+                                ({{ uploadProgress.percent }}%)
+                            </p>
+                            <v-progress-linear
+                                :model-value="uploadProgress.percent"
+                                :max="100"
+                                class="mt-2"
+                                color="primary"
+                                height="8"
+                                rounded
+                            ></v-progress-linear>
                         </div>
 
                         <!-- 步骤2: 确认导入 -->
@@ -242,15 +256,38 @@
                                 :key="backup.filename"
                             >
                                 <template v-slot:prepend>
-                                    <v-icon color="primary">mdi-zip-box</v-icon>
+                                    <v-icon :color="backup.type === 'uploaded' ? 'orange' : 'primary'">
+                                        {{ backup.type === 'uploaded' ? 'mdi-upload' : 'mdi-zip-box' }}
+                                    </v-icon>
                                 </template>
 
                                 <v-list-item-title>{{ backup.filename }}</v-list-item-title>
                                 <v-list-item-subtitle>
                                     {{ formatFileSize(backup.size) }} · {{ formatDate(backup.created_at) }}
+                                    <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">
+                                        v{{ backup.astrbot_version }}
+                                    </v-chip>
+                                    <v-chip v-if="backup.type === 'uploaded'" size="x-small" color="orange" variant="tonal" class="ml-1">
+                                        {{ t('features.settings.backup.list.uploaded') }}
+                                    </v-chip>
                                 </v-list-item-subtitle>
 
                                 <template v-slot:append>
+                                    <v-btn
+                                        icon="mdi-restore"
+                                        variant="text"
+                                        size="small"
+                                        color="success"
+                                        :title="t('features.settings.backup.list.restore')"
+                                        @click="restoreFromList(backup.filename)"
+                                    ></v-btn>
+                                    <v-btn
+                                        icon="mdi-pencil"
+                                        variant="text"
+                                        size="small"
+                                        :title="t('features.settings.backup.list.rename')"
+                                        @click="openRenameDialog(backup.filename)"
+                                    ></v-btn>
                                     <v-btn icon="mdi-download" variant="text" size="small" @click="downloadBackup(backup.filename)"></v-btn>
                                     <v-btn icon="mdi-delete" variant="text" size="small" color="error" @click="deleteBackup(backup.filename)"></v-btn>
                                 </template>
@@ -263,6 +300,12 @@
                                 {{ t('features.settings.backup.list.refresh') }}
                             </v-btn>
                         </div>
+
+                        <!-- 提示信息 -->
+                        <p class="text-caption text-grey text-center mt-4">
+                            <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
+                            {{ t('features.settings.backup.list.ftpHint') }}
+                        </p>
                     </v-window-item>
                 </v-window>
             </v-card-text>
@@ -271,6 +314,50 @@
                 <v-spacer></v-spacer>
                 <v-btn color="grey" variant="text" @click="handleClose" :disabled="isProcessing">
                     {{ t('core.common.close') }}
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+
+    <!-- 重命名对话框 -->
+    <v-dialog v-model="renameDialogOpen" max-width="450" persistent>
+        <v-card>
+            <v-card-title>
+                <v-icon class="mr-2">mdi-pencil</v-icon>
+                {{ t('features.settings.backup.list.renameTitle') }}
+            </v-card-title>
+            <v-card-text>
+                <v-text-field
+                    v-model="renameNewName"
+                    :label="t('features.settings.backup.list.newName')"
+                    :rules="[renameValidationRule]"
+                    :error-messages="renameError"
+                    variant="outlined"
+                    density="comfortable"
+                    autofocus
+                    @keyup.enter="confirmRename"
+                >
+                    <template v-slot:append-inner>
+                        <span class="text-grey">.zip</span>
+                    </template>
+                </v-text-field>
+                <p class="text-caption text-grey mt-1">
+                    {{ t('features.settings.backup.list.renameHint') }}
+                </p>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn color="grey" variant="text" @click="closeRenameDialog">
+                    {{ t('core.common.cancel') }}
+                </v-btn>
+                <v-btn
+                    color="primary"
+                    variant="flat"
+                    @click="confirmRename"
+                    :loading="renameLoading"
+                    :disabled="!renameNewName || !!renameError"
+                >
+                    {{ t('core.common.confirm') }}
                 </v-btn>
             </v-card-actions>
         </v-card>
@@ -307,13 +394,33 @@ const importError = ref('')
 const uploadedFilename = ref('')  // 已上传的文件名
 const checkResult = ref(null)     // 预检查结果
 
+// 分片上传状态
+const CONCURRENT_UPLOADS = 5     // 并发上传数
+const uploadId = ref('')
+const chunkSize = ref(0)         // 分片大小（从后端获取）
+const uploadProgress = ref({
+    uploaded: 0,
+    total: 0,
+    percent: 0,
+    message: ''
+})
+
 // 备份列表
 const loadingList = ref(false)
 const backupList = ref([])
 
+// 重命名对话框状态
+const renameDialogOpen = ref(false)
+const renameOldFilename = ref('')
+const renameNewName = ref('')
+const renameLoading = ref(false)
+const renameError = ref('')
+
 // 计算属性
 const isProcessing = computed(() => {
-    return exportStatus.value === 'processing' || importStatus.value === 'processing'
+    return exportStatus.value === 'processing' ||
+           importStatus.value === 'processing' ||
+           importStatus.value === 'uploading'
 })
 
 // 版本检查相关的计算属性
@@ -440,28 +547,127 @@ const resetExport = () => {
     exportError.value = ''
 }
 
+/**
+ * 并发上传分片
+ *
+ * 使用并发控制同时上传多个分片，提升上传速度。
+ * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
+ * 因此分片到达顺序不影响最终结果。
+ */
+const uploadChunksInParallel = async (file, totalChunks, currentUploadId, currentChunkSize) => {
+    // 跟踪已完成的字节数（使用原子操作避免并发问题）
+    let completedBytes = 0
+    const chunkSizes = []
+    
+    // 预计算每个分片的大小（使用后端返回的 chunk_size）
+    for (let i = 0; i < totalChunks; i++) {
+        const start = i * currentChunkSize
+        const end = Math.min(start + currentChunkSize, file.size)
+        chunkSizes[i] = end - start
+    }
+
+    // 上传单个分片的函数
+    const uploadSingleChunk = async (chunkIndex) => {
+        const start = chunkIndex * currentChunkSize
+        const end = Math.min(start + currentChunkSize, file.size)
+        const chunk = file.slice(start, end)
+
+        const formData = new FormData()
+        formData.append('upload_id', currentUploadId)
+        formData.append('chunk_index', chunkIndex.toString())
+        formData.append('chunk', chunk)
+
+        const response = await axios.post('/api/backup/upload/chunk', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+
+        if (response.data.status !== 'ok') {
+            throw new Error(response.data.message)
+        }
+
+        // 更新进度（累加已完成字节）
+        completedBytes += chunkSizes[chunkIndex]
+        uploadProgress.value.uploaded = completedBytes
+        uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100)
+
+        return response
+    }
+
+    // 创建分片索引队列
+    const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i)
+    const activePromises = []
+
+    // 处理队列中的分片
+    while (pendingChunks.length > 0 || activePromises.length > 0) {
+        // 填充并发槽位
+        while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
+            const chunkIndex = pendingChunks.shift()
+            const promise = uploadSingleChunk(chunkIndex).then(() => {
+                // 完成后从活动列表移除
+                const idx = activePromises.indexOf(promise)
+                if (idx > -1) activePromises.splice(idx, 1)
+            })
+            activePromises.push(promise)
+        }
+
+        // 等待至少一个完成
+        if (activePromises.length > 0) {
+            await Promise.race(activePromises)
+        }
+    }
+}
+
 // 上传并检查
 const uploadAndCheck = async () => {
     if (!importFile.value) return
 
     importStatus.value = 'uploading'
+    const file = importFile.value
 
     try {
-        // 步骤1: 上传文件
-        const formData = new FormData()
-        formData.append('file', importFile.value)
-
-        const uploadResponse = await axios.post('/api/backup/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        })
-
-        if (uploadResponse.data.status !== 'ok') {
-            throw new Error(uploadResponse.data.message)
+        // 初始化上传进度
+        uploadProgress.value = {
+            uploaded: 0,
+            total: file.size,
+            percent: 0,
+            message: t('features.settings.backup.import.uploadInit')
         }
 
-        uploadedFilename.value = uploadResponse.data.data.filename
+        // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
+        const initResponse = await axios.post('/api/backup/upload/init', {
+            filename: file.name,
+            total_size: file.size
+        })
 
-        // 步骤2: 预检查
+        if (initResponse.data.status !== 'ok') {
+            throw new Error(initResponse.data.message)
+        }
+
+        uploadId.value = initResponse.data.data.upload_id
+        chunkSize.value = initResponse.data.data.chunk_size
+        const totalChunks = initResponse.data.data.total_chunks
+
+        // 步骤2: 并行分片上传（5个并发连接）
+        uploadProgress.value.message = t('features.settings.backup.import.uploadingChunks')
+        
+        await uploadChunksInParallel(file, totalChunks, uploadId.value, chunkSize.value)
+
+        // 步骤3: 完成上传
+        uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
+
+        const completeResponse = await axios.post('/api/backup/upload/complete', {
+            upload_id: uploadId.value
+        })
+
+        if (completeResponse.data.status !== 'ok') {
+            throw new Error(completeResponse.data.message)
+        }
+
+        uploadedFilename.value = completeResponse.data.data.filename
+
+        // 步骤4: 预检查
+        uploadProgress.value.message = t('features.settings.backup.import.checking')
+
         const checkResponse = await axios.post('/api/backup/check', {
             filename: uploadedFilename.value
         })
@@ -483,6 +689,17 @@ const uploadAndCheck = async () => {
         importStatus.value = 'confirm'
 
     } catch (error) {
+        // 上传失败时尝试清理已上传的分片
+        if (uploadId.value) {
+            try {
+                await axios.post('/api/backup/upload/abort', {
+                    upload_id: uploadId.value
+                })
+            } catch (abortError) {
+                console.error('Failed to abort upload:', abortError)
+            }
+        }
+        
         importStatus.value = 'failed'
         importError.value = error.response?.data?.message || error.message || 'Upload failed'
     }
@@ -548,7 +765,18 @@ const pollImportProgress = async () => {
 }
 
 // 重置导入状态
-const resetImport = () => {
+const resetImport = async () => {
+    // 如果有进行中的上传，先取消
+    if (uploadId.value && importStatus.value === 'uploading') {
+        try {
+            await axios.post('/api/backup/upload/abort', {
+                upload_id: uploadId.value
+            })
+        } catch (error) {
+            console.error('Failed to abort upload:', error)
+        }
+    }
+    
     importStatus.value = 'idle'
     importFile.value = null
     importTaskId.value = null
@@ -556,29 +784,61 @@ const resetImport = () => {
     importError.value = ''
     uploadedFilename.value = ''
     checkResult.value = null
+    uploadId.value = ''
+    chunkSize.value = 0
+    uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: '' }
 }
 
-// 下载备份
-const downloadBackup = async (filename) => {
+// 下载备份（使用浏览器原生下载，可显示下载进度）
+const downloadBackup = (filename) => {
+    // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
+    const token = localStorage.getItem('token')
+    if (!token) {
+        alert(t('core.common.unauthorized'))
+        return
+    }
+    
+    // 直接使用浏览器下载，这样可以看到原生下载进度条
+    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
+    
+    // 创建隐藏的 a 标签触发下载
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+}
+
+// 从列表中恢复备份
+const restoreFromList = async (filename) => {
+    // 切换到导入标签页并设置文件名
+    uploadedFilename.value = filename
+    
+    // 预检查
     try {
-        const response = await axios.get('/api/backup/download', {
-            params: { filename },
-            responseType: 'blob'
+        const checkResponse = await axios.post('/api/backup/check', {
+            filename: filename
         })
+
+        if (checkResponse.data.status !== 'ok') {
+            throw new Error(checkResponse.data.message)
+        }
+
+        checkResult.value = checkResponse.data.data
         
-        // 创建 Blob URL 并触发下载
-        const blob = new Blob([response.data], { type: 'application/zip' })
-        const url = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = filename
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(url)
+        if (!checkResult.value.valid) {
+            alert(checkResult.value.error || t('features.settings.backup.import.invalidBackup'))
+            return
+        }
+
+        // 切换到导入标签页并显示确认
+        activeTab.value = 'import'
+        importStatus.value = 'confirm'
+
     } catch (error) {
-        console.error('Download failed:', error)
-        alert(t('features.settings.backup.export.failed') + ': ' + (error.message || 'Unknown error'))
+        alert(error.response?.data?.message || error.message || 'Check failed')
     }
 }
 
@@ -595,6 +855,68 @@ const deleteBackup = async (filename) => {
         }
     } catch (error) {
         alert(error.message || 'Delete failed')
+    }
+}
+
+// 重命名相关函数
+const openRenameDialog = (filename) => {
+    renameOldFilename.value = filename
+    // 移除 .zip 后缀，只显示文件名部分
+    renameNewName.value = filename.replace(/\.zip$/i, '')
+    renameError.value = ''
+    renameDialogOpen.value = true
+}
+
+const closeRenameDialog = () => {
+    renameDialogOpen.value = false
+    renameOldFilename.value = ''
+    renameNewName.value = ''
+    renameError.value = ''
+}
+
+// 文件名验证规则
+const renameValidationRule = (value) => {
+    if (!value) return t('features.settings.backup.list.renameRequired')
+    // 检查是否包含非法字符
+    if (/[\\/:*?"<>|]/.test(value)) {
+        return t('features.settings.backup.list.renameInvalidChars')
+    }
+    // 检查是否包含路径遍历字符
+    if (value.includes('..')) {
+        return t('features.settings.backup.list.renameInvalidChars')
+    }
+    return true
+}
+
+const confirmRename = async () => {
+    if (!renameNewName.value || renameError.value) return
+    
+    // 前端验证
+    const validationResult = renameValidationRule(renameNewName.value)
+    if (validationResult !== true) {
+        renameError.value = validationResult
+        return
+    }
+
+    renameLoading.value = true
+    renameError.value = ''
+
+    try {
+        const response = await axios.post('/api/backup/rename', {
+            filename: renameOldFilename.value,
+            new_name: renameNewName.value
+        })
+
+        if (response.data.status === 'ok') {
+            closeRenameDialog()
+            loadBackupList()
+        } else {
+            renameError.value = response.data.message || t('features.settings.backup.list.renameFailed')
+        }
+    } catch (error) {
+        renameError.value = error.response?.data?.message || error.message || t('features.settings.backup.list.renameFailed')
+    } finally {
+        renameLoading.value = false
     }
 }
 
@@ -632,9 +954,9 @@ const restartAstrBot = () => {
 }
 
 // 重置所有状态
-const resetAll = () => {
+const resetAll = async () => {
     resetExport()
-    resetImport()
+    await resetImport()
     activeTab.value = 'export'
 }
 
