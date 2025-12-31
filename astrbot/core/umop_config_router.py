@@ -32,7 +32,7 @@ class UmopConfigRouter:
         if len(p1_ls) != 3 or len(p2_ls) != 3:
             return False  # 非法格式
 
-        return all(p == "" or fnmatch.fnmatch(t, p) for p, t in zip(p1_ls, p2_ls))
+        return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
 
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID
