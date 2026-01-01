@@ -378,7 +378,8 @@ class ProviderOpenAIOfficial(Provider):
                         new_content.append(part)
                 message["content"] = new_content
                 # reasoning key is "reasoning_content"
-                message["reasoning_content"] = reasoning_content
+                if reasoning_content:
+                    message["reasoning_content"] = reasoning_content
 
     async def _handle_api_error(
         self,
