@@ -78,13 +78,19 @@ const readmeDialog = reactive({
 });
 
 // 新增变量支持列表视图
-const isListView = ref(false);
+// 从 localStorage 恢复显示模式，默认为 false（卡片视图）
+const getInitialListViewMode = () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return localStorage.getItem('pluginListViewMode') === 'true';
+  }
+  return false;
+};
+const isListView = ref(getInitialListViewMode());
 const pluginSearch = ref("");
 const loading_ = ref(false);
 
 // 分页相关
 const currentPage = ref(1);
-const itemsPerPage = ref(6); // 每页显示6个卡片 (2行 x 3列，避免滚动)
 
 // 危险插件确认对话框
 const dangerConfirmDialog = ref(false);
@@ -113,7 +119,6 @@ const uploadTab = ref('file');
 const showPluginFullName = ref(false);
 const marketSearch = ref("");
 const debouncedMarketSearch = ref("");
-const filterKeys = ['name', 'desc', 'author'];
 const refreshingMarket = ref(false);
 const sortBy = ref('default'); // default, stars, author, updated
 const sortOrder = ref('desc'); // desc (降序) or asc (升序)
@@ -162,18 +167,6 @@ const pluginHeaders = computed(() => [
 ]);
 
 
-// 插件市场表头
-const pluginMarketHeaders = computed(() => [
-  { title: tm('table.headers.name'), key: 'name', maxWidth: '200px' },
-  { title: tm('table.headers.description'), key: 'desc', maxWidth: '250px' },
-  { title: tm('table.headers.author'), key: 'author', maxWidth: '90px' },
-  { title: tm('table.headers.stars'), key: 'stars', maxWidth: '80px' },
-  { title: tm('table.headers.lastUpdate'), key: 'updated_at', maxWidth: '100px' },
-  { title: tm('table.headers.tags'), key: 'tags', maxWidth: '100px' },
-  { title: tm('table.headers.actions'), key: 'actions', sortable: false }
-]);
-
-
 // 过滤要显示的插件
 const filteredExtensions = computed(() => {
   const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -197,9 +190,6 @@ const filteredPlugins = computed(() => {
   });
 });
 
-const pinnedPlugins = computed(() => {
-  return pluginMarketData.value.filter(plugin => plugin?.pinned);
-});
 
 // 过滤后的插件市场数据（带搜索）
 const filteredMarketPlugins = computed(() => {
@@ -550,14 +540,6 @@ const viewReadme = (plugin) => {
   readmeDialog.pluginName = plugin.name;
   readmeDialog.repoUrl = plugin.repo;
   readmeDialog.show = true;
-};
-
-
-
-const open = (link) => {
-  if (link) {
-    window.open(link, '_blank');
-  }
 };
 
 // 为表格视图创建一个处理安装插件的函数
@@ -918,6 +900,13 @@ watch(marketSearch, (newVal) => {
   }, 300); // 300ms 防抖延迟
 });
 
+// 监听显示模式变化并保存到 localStorage
+watch(isListView, (newVal) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('pluginListViewMode', String(newVal));
+  }
+});
+
 
 </script>
 
@@ -1037,8 +1026,21 @@ watch(marketSearch, (newVal) => {
 
                     <template v-slot:item.name="{ item }">
                       <div class="d-flex align-center py-2">
+                        <div v-if="item.logo" class="mr-3" style="flex-shrink: 0;">
+                          <img :src="item.logo" :alt="item.name"
+                            style="height: 40px; width: 40px; border-radius: 8px; object-fit: cover;" />
+                        </div>
+                        <div v-else class="mr-3" style="flex-shrink: 0;">
+                          <img :src="defaultPluginIcon" :alt="item.name"
+                            style="height: 40px; width: 40px; border-radius: 8px; object-fit: cover;" />
+                        </div>
                         <div>
-                          <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
+                          <div class="text-subtitle-1 font-weight-medium">
+                            {{ item.display_name && item.display_name.length ? item.display_name : item.name }}
+                          </div>
+                          <div v-if="item.display_name && item.display_name.length" class="text-caption text-medium-emphasis mt-1">
+                            {{ item.name }}
+                          </div>
                           <div v-if="item.reserved" class="d-flex align-center mt-1">
                             <v-chip color="primary" size="x-small" class="font-weight-medium">{{ tm('status.system')
                               }}</v-chip>
@@ -1048,7 +1050,7 @@ watch(marketSearch, (newVal) => {
                     </template>
 
                     <template v-slot:item.desc="{ item }">
-                      <div class="text-body-2 text-medium-emphasis">{{ item.desc }}</div>
+                      <div class="text-body-2 text-medium-emphasis mt-2 mb-2" style="display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;">{{ item.desc }}</div>
                     </template>
 
                     <template v-slot:item.version="{ item }">
@@ -1084,7 +1086,7 @@ watch(marketSearch, (newVal) => {
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.disable') }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn icon size="small" color="info" @click="reloadPlugin(item.name)">
+                          <v-btn icon size="small" @click="reloadPlugin(item.name)">
                             <v-icon>mdi-refresh</v-icon>
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.reload') }}</v-tooltip>
                           </v-btn>
@@ -1104,7 +1106,7 @@ watch(marketSearch, (newVal) => {
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDocs') }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn icon size="small" color="warning" @click="updateExtension(item.name)"
+                          <v-btn icon size="small" @click="updateExtension(item.name)"
                             :v-show="item.has_update">
                             <v-icon>mdi-update</v-icon>
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.update') }}</v-tooltip>
