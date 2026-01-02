@@ -77,6 +77,12 @@ const readmeDialog = reactive({
   repoUrl: null
 });
 
+// 强制更新确认对话框
+const forceUpdateDialog = reactive({
+  show: false,
+  extensionName: ''
+});
+
 // 新增变量支持列表视图
 // 从 localStorage 恢复显示模式，默认为 false（卡片视图）
 const getInitialListViewMode = () => {
@@ -375,7 +381,17 @@ const handleUninstallConfirm = (options) => {
   }
 };
 
-const updateExtension = async (extension_name) => {
+const updateExtension = async (extension_name, forceUpdate = false) => {
+  // 查找插件信息
+  const ext = extension_data.data?.find(e => e.name === extension_name);
+  
+  // 如果没有检测到更新且不是强制更新，则弹窗确认
+  if (!ext?.has_update && !forceUpdate) {
+    forceUpdateDialog.extensionName = extension_name;
+    forceUpdateDialog.show = true;
+    return;
+  }
+  
   loadingDialog.title = tm('status.loading');
   loadingDialog.show = true;
   try {
@@ -405,6 +421,14 @@ const updateExtension = async (extension_name) => {
   } catch (err) {
     toast(err, "error");
   }
+};
+
+// 确认强制更新
+const confirmForceUpdate = () => {
+  const name = forceUpdateDialog.extensionName;
+  forceUpdateDialog.show = false;
+  forceUpdateDialog.extensionName = '';
+  updateExtension(name, true);
 };
 
 const updateAllExtensions = async () => {
@@ -1106,8 +1130,7 @@ watch(isListView, (newVal) => {
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.viewDocs') }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn icon size="small" @click="updateExtension(item.name)"
-                            :v-show="item.has_update">
+                          <v-btn icon size="small" @click="updateExtension(item.name)">
                             <v-icon>mdi-update</v-icon>
                             <v-tooltip activator="parent" location="top">{{ tm('tooltips.update') }}</v-tooltip>
                           </v-btn>
@@ -1771,6 +1794,24 @@ watch(isListView, (newVal) => {
         <v-spacer></v-spacer>
         <v-btn color="grey" variant="text" @click="showRemoveSourceDialog = false">{{ tm('buttons.cancel') }}</v-btn>
         <v-btn color="error" variant="text" @click="confirmRemoveSource">{{ tm('buttons.deleteSource') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 强制更新确认对话框 -->
+  <v-dialog v-model="forceUpdateDialog.show" max-width="420">
+    <v-card class="rounded-lg">
+      <v-card-title class="text-h6 d-flex align-center">
+        <v-icon color="info" class="mr-2">mdi-information-outline</v-icon>
+        {{ tm('dialogs.forceUpdate.title') }}
+      </v-card-title>
+      <v-card-text>
+        {{ tm('dialogs.forceUpdate.message') }}
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="forceUpdateDialog.show = false">{{ tm('buttons.cancel') }}</v-btn>
+        <v-btn color="primary" variant="flat" @click="confirmForceUpdate">{{ tm('dialogs.forceUpdate.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
