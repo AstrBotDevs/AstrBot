@@ -25,6 +25,8 @@ class SharedPreferences:
         t = threading.Thread(target=self._sync_loop.run_forever, daemon=True)
         t.start()
 
+        self._write_lock = threading.Lock()
+
     async def get_async(
         self,
         scope: str,
@@ -167,8 +169,11 @@ class SharedPreferences:
             raise ValueError(
                 "scope_id and key cannot be None when getting a specific preference.",
             )
+        scope = scope or "unknown"
+        scope_id = scope_id or "unknown"
+
         result = asyncio.run_coroutine_threadsafe(
-            self.get_async(scope or "unknown", scope_id or "unknown", key, default),
+            self.get_async(scope, scope_id, key, default),
             self._sync_loop,
         ).result()
 
@@ -190,21 +195,33 @@ class SharedPreferences:
 
     def put(self, key, value, scope: str | None = None, scope_id: str | None = None):
         """设置偏好设置（已弃用）"""
-        asyncio.run_coroutine_threadsafe(
-            self.put_async(scope or "unknown", scope_id or "unknown", key, value),
-            self._sync_loop,
-        ).result()
+        scope = scope or "unknown"
+        scope_id = scope_id or "unknown"
+
+        with self._write_lock:
+            asyncio.run_coroutine_threadsafe(
+                self.put_async(scope, scope_id, key, value),
+                self._sync_loop,
+            ).result()
 
     def remove(self, key, scope: str | None = None, scope_id: str | None = None):
         """删除偏好设置（已弃用）"""
-        asyncio.run_coroutine_threadsafe(
-            self.remove_async(scope or "unknown", scope_id or "unknown", key),
-            self._sync_loop,
-        ).result()
+        scope = scope or "unknown"
+        scope_id = scope_id or "unknown"
+
+        with self._write_lock:
+            asyncio.run_coroutine_threadsafe(
+                self.remove_async(scope, scope_id, key),
+                self._sync_loop,
+            ).result()
 
     def clear(self, scope: str | None = None, scope_id: str | None = None):
         """清空偏好设置（已弃用）"""
-        asyncio.run_coroutine_threadsafe(
-            self.clear_async(scope or "unknown", scope_id or "unknown"),
-            self._sync_loop,
-        ).result()
+        scope = scope or "unknown"
+        scope_id = scope_id or "unknown"
+
+        with self._write_lock:
+            asyncio.run_coroutine_threadsafe(
+                self.clear_async(scope, scope_id),
+                self._sync_loop,
+            ).result()
