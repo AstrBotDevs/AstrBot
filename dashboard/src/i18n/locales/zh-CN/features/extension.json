@@ -145,6 +145,11 @@
       "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
       "confirm": "继续",
       "cancel": "取消"
+    },
+    "forceUpdate": {
+      "title": "未检测到新版本",
+      "message": "当前插件未检测到新版本，是否强制重新安装？这将从远程仓库拉取最新代码。",
+      "confirm": "强制更新"
     }
   },
   "messages": {
@@ -185,7 +190,8 @@
       "reloadPlugin": "重载插件",
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
-      "updateTo": "更新到"
+      "updateTo": "更新到",
+      "reinstall": "重新安装"
     },
     "status": {
       "hasUpdate": "有新版本可用",

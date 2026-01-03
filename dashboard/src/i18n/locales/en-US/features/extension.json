@@ -145,6 +145,11 @@
       "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
       "confirm": "Continue",
       "cancel": "Cancel"
+    },
+    "forceUpdate": {
+      "title": "No New Version Detected",
+      "message": "No new version detected for this plugin. Do you want to force reinstall? This will pull the latest code from the remote repository.",
+      "confirm": "Force Update"
     }
   },
   "messages": {
@@ -185,7 +190,8 @@
       "reloadPlugin": "Reload Extension",
       "togglePlugin": "Extension",
       "viewHandlers": "View Handlers",
-      "updateTo": "Update to"
+      "updateTo": "Update to",
+      "reinstall": "Reinstall"
     },
     "status": {
       "hasUpdate": "New version available",
