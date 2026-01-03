@@ -260,7 +260,7 @@ class ResultDecorateStage(Stage):
             should_tts = (
                 bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
                 and result.is_llm_result()
-                and SessionServiceManager.should_process_tts_request(event)
+                and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider
             )

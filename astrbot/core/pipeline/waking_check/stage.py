@@ -227,7 +227,7 @@ class WakingCheckStage(Stage):
             event._extras.pop("parsed_params", None)
 
         # 根据会话配置过滤插件处理器
-        activated_handlers = SessionPluginManager.filter_handlers_by_session(
+        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
             event,
             activated_handlers,
         )

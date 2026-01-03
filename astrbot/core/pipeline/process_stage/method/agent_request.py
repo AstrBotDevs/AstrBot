@@ -38,7 +38,7 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        if not SessionServiceManager.should_process_llm_request(event):
+        if not await SessionServiceManager.should_process_llm_request(event):
             logger.debug(
                 f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
             )
