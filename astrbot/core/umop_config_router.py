@@ -11,14 +11,15 @@ class UmopConfigRouter:
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp
 
-        self._load_routing_table()
+    async def initialize(self):
+        await self._load_routing_table()
 
-    def _load_routing_table(self):
+    async def _load_routing_table(self):
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
-        sp_data = self.sp.get(
-            "umop_config_routing",
-            {},
+        sp_data = await self.sp.get_async(
+            key="umop_config_routing",
+            default={},
             scope="global",
             scope_id="global",
         )

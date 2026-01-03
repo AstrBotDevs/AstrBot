@@ -8,7 +8,10 @@ class SessionPluginManager:
     """管理会话级别的插件启停状态"""
 
     @staticmethod
-    def is_plugin_enabled_for_session(session_id: str, plugin_name: str) -> bool:
+    async def is_plugin_enabled_for_session(
+        session_id: str,
+        plugin_name: str,
+    ) -> bool:
         """检查插件是否在指定会话中启用
 
         Args:
@@ -20,11 +23,11 @@ class SessionPluginManager:
 
         """
         # 获取会话插件配置
-        session_plugin_config = sp.get(
-            "session_plugin_config",
-            {},
+        session_plugin_config = await sp.get_async(
             scope="umo",
             scope_id=session_id,
+            key="session_plugin_config",
+            default={},
         )
         session_config = session_plugin_config.get(session_id, {})
 
@@ -43,7 +46,10 @@ class SessionPluginManager:
         return True
 
     @staticmethod
-    def filter_handlers_by_session(event: AstrMessageEvent, handlers: list) -> list:
+    async def filter_handlers_by_session(
+        event: AstrMessageEvent,
+        handlers: list,
+    ) -> list:
         """根据会话配置过滤处理器列表
 
         Args:
@@ -58,6 +64,15 @@ class SessionPluginManager:
 
         session_id = event.unified_msg_origin
         filtered_handlers = []
+
+        session_plugin_config = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_plugin_config",
+            default={},
+        )
+        session_config = session_plugin_config.get(session_id, {})
+        disabled_plugins = session_config.get("disabled_plugins", [])
 
         for handler in handlers:
             # 获取处理器对应的插件
@@ -76,14 +91,11 @@ class SessionPluginManager:
                 continue
 
             # 检查插件是否在当前会话中启用
-            if SessionPluginManager.is_plugin_enabled_for_session(
-                session_id,
-                plugin.name,
-            ):
-                filtered_handlers.append(handler)
-            else:
+            if plugin.name in disabled_plugins:
                 logger.debug(
                     f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
                 )
+            else:
+                filtered_handlers.append(handler)
 
         return filtered_handlers

@@ -14,13 +14,13 @@ class TTSCommand:
     async def tts(self, event: AstrMessageEvent):
         """开关文本转语音（会话级别）"""
         umo = event.unified_msg_origin
-        ses_tts = SessionServiceManager.is_tts_enabled_for_session(umo)
+        ses_tts = await SessionServiceManager.is_tts_enabled_for_session(umo)
         cfg = self.context.get_config(umo=umo)
         tts_enable = cfg["provider_tts_settings"]["enable"]
 
         # 切换状态
         new_status = not ses_tts
-        SessionServiceManager.set_tts_status_for_session(umo, new_status)
+        await SessionServiceManager.set_tts_status_for_session(umo, new_status)
 
         status_text = "已开启" if new_status else "已关闭"
 

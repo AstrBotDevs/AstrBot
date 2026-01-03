@@ -119,19 +119,34 @@ class ProviderManager:
             TTSProvider,
         ):
             self.curr_tts_provider_inst = prov
-            sp.put("curr_provider_tts", provider_id, scope="global", scope_id="global")
+            await sp.put_async(
+                key="curr_provider_tts",
+                value=provider_id,
+                scope="global",
+                scope_id="global",
+            )
         elif provider_type == ProviderType.SPEECH_TO_TEXT and isinstance(
             prov,
             STTProvider,
         ):
             self.curr_stt_provider_inst = prov
-            sp.put("curr_provider_stt", provider_id, scope="global", scope_id="global")
+            await sp.put_async(
+                key="curr_provider_stt",
+                value=provider_id,
+                scope="global",
+                scope_id="global",
+            )
         elif provider_type == ProviderType.CHAT_COMPLETION and isinstance(
             prov,
             Provider,
         ):
             self.curr_provider_inst = prov
-            sp.put("curr_provider", provider_id, scope="global", scope_id="global")
+            await sp.put_async(
+                key="curr_provider",
+                value=provider_id,
+                scope="global",
+                scope_id="global",
+            )
 
     async def get_provider_by_id(self, provider_id: str) -> Providers | None:
         """根据提供商 ID 获取提供商实例"""
@@ -206,21 +221,21 @@ class ProviderManager:
                 logger.error(traceback.format_exc())
                 logger.error(e)
 
-        selected_provider_id = sp.get(
-            "curr_provider",
-            self.provider_settings.get("default_provider_id"),
+        selected_provider_id = await sp.get_async(
+            key="curr_provider",
+            default=self.provider_settings.get("default_provider_id"),
             scope="global",
             scope_id="global",
         )
-        selected_stt_provider_id = sp.get(
-            "curr_provider_stt",
-            self.provider_stt_settings.get("provider_id"),
+        selected_stt_provider_id = await sp.get_async(
+            key="curr_provider_stt",
+            default=self.provider_stt_settings.get("provider_id"),
             scope="global",
             scope_id="global",
         )
-        selected_tts_provider_id = sp.get(
-            "curr_provider_tts",
-            self.provider_tts_settings.get("provider_id"),
+        selected_tts_provider_id = await sp.get_async(
+            key="curr_provider_tts",
+            default=self.provider_tts_settings.get("provider_id"),
             scope="global",
             scope_id="global",
         )

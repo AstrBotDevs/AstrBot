@@ -90,6 +90,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化 UMOP 配置路由器
         self.umop_config_router = UmopConfigRouter(sp=sp)
+        await self.umop_config_router.initialize()
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
