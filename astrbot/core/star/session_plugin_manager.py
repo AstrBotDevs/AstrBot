@@ -65,6 +65,15 @@ class SessionPluginManager:
         session_id = event.unified_msg_origin
         filtered_handlers = []
 
+        session_plugin_config = await sp.get_async(
+            scope="umo",
+            scope_id=session_id,
+            key="session_plugin_config",
+            default={},
+        )
+        session_config = session_plugin_config.get(session_id, {})
+        disabled_plugins = session_config.get("disabled_plugins", [])
+
         for handler in handlers:
             # 获取处理器对应的插件
             plugin = star_map.get(handler.handler_module_path)
@@ -82,14 +91,11 @@ class SessionPluginManager:
                 continue
 
             # 检查插件是否在当前会话中启用
-            if await SessionPluginManager.is_plugin_enabled_for_session(
-                session_id=session_id,
-                plugin_name=plugin.name,
-            ):
-                filtered_handlers.append(handler)
-            else:
+            if plugin.name in disabled_plugins:
                 logger.debug(
                     f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
                 )
+            else:
+                filtered_handlers.append(handler)
 
         return filtered_handlers
