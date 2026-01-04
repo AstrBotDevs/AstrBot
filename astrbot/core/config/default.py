@@ -227,23 +227,13 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "OneBot v11": {
+                    "OneBot v11 (QQ 个人号等)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
-                    },
-                    "WeChatPadPro": {
-                        "id": "wechatpadpro",
-                        "type": "wechatpadpro",
-                        "enable": False,
-                        "admin_key": "stay33",
-                        "host": "这里填写你的局域网IP或者公网服务器IP",
-                        "port": 8059,
-                        "wpp_active_message_poll": False,
-                        "wpp_active_message_poll_interval": 3,
                     },
                     "微信公众平台": {
                         "id": "weixin_official_account",
@@ -373,6 +363,16 @@ CONFIG_METADATA_2 = {
                         "satori_auto_reconnect": True,
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
+                    },
+                    "WeChatPadPro": {
+                        "id": "wechatpadpro",
+                        "type": "wechatpadpro",
+                        "enable": False,
+                        "admin_key": "stay33",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
+                        "port": 8059,
+                        "wpp_active_message_poll": False,
+                        "wpp_active_message_poll_interval": 3,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
