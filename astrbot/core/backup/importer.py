@@ -11,10 +11,11 @@ import json
 import os
 import shutil
 import zipfile
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete
 
@@ -110,7 +111,7 @@ class ImportPreCheckResult:
 class ImportResult:
     """导入结果"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.success = True
         self.imported_tables: dict[str, int] = {}
         self.imported_files: dict[str, int] = {}
@@ -161,7 +162,7 @@ class AstrBotImporter:
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = CMD_CONFIG_FILE_PATH,
         kb_root_dir: str = KB_PATH,
-    ):
+    ) -> None:
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
@@ -283,7 +284,8 @@ class AstrBotImporter:
         self,
         zip_path: str,
         mode: str = "replace",  # "replace" 清空后导入
-        progress_callback: Any | None = None,
+        progress_callback: Callable[[str, int, int, str], Awaitable[None]]
+        | None = None,
     ) -> ImportResult:
         """从 ZIP 文件导入所有数据
 

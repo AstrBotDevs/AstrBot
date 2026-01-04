@@ -4,7 +4,13 @@
 import builtins
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, GetCoreSchemaHandler, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    GetCoreSchemaHandler,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 from pydantic.config import ConfigDict
 from pydantic_core import core_schema
 from typing_extensions import Unpack
@@ -77,7 +83,7 @@ class ThinkPart(ContentPart):
     encrypted: str | None = None
     """Encrypted thinking content, or signature."""
 
-    def merge_in_place(self, other: Any) -> bool:
+    def merge_in_place(self, other: object) -> bool:
         if not isinstance(other, ThinkPart):
             return False
         if self.encrypted:
@@ -148,7 +154,7 @@ class ToolCall(BaseModel):
     """Extra metadata for the tool call."""
 
     @model_serializer(mode="wrap")
-    def serialize(self, handler):
+    def serialize(self, handler: SerializerFunctionWrapHandler) -> dict:
         data = handler(self)
         if self.extra_content is None:
             data.pop("extra_content", None)
@@ -195,7 +201,7 @@ class Message(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize(self, handler):
+    def serialize(self, handler: SerializerFunctionWrapHandler) -> dict:
         data = handler(self)
         if self.tool_calls is None:
             data.pop("tool_calls", None)

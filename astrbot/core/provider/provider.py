@@ -1,7 +1,7 @@
 import abc
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import NoReturn, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message
@@ -260,7 +260,7 @@ class EmbeddingProvider(AbstractProvider):
         batch_size: int = 16,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[int, int], Awaitable[None]] | None = None,
     ) -> list[list[float]]:
         """批量获取文本的向量，分批处理以节省内存
 

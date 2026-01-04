@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from astrbot.core import logger
@@ -294,7 +295,7 @@ class KnowledgeBaseManager:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
     ) -> KBDocument:
         """从 URL 上传文档到指定的知识库
 
