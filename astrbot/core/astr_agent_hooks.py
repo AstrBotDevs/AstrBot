@@ -5,6 +5,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.pipeline.context_utils import call_event_hook
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.star.star_handler import EventType
 
 
@@ -12,7 +13,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     async def on_agent_done(
         self,
         run_context: ContextWrapper[AstrAgentContext],
-        llm_response: object,
+        llm_response: LLMResponse,
     ) -> None:
         # 执行事件钩子
         if llm_response and llm_response.reasoning_content:
