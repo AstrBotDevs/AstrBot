@@ -26,6 +26,7 @@ jobs:
       - uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          operations-per-run: 200
 
           # 只处理带 bug 标签的 Issue
           any-of-labels: 'bug'
