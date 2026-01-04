@@ -7,7 +7,7 @@ class Bing(SearchEngine):
         self.base_urls = ["https://cn.bing.com", "https://www.bing.com"]
         self.headers.update({"User-Agent": USER_AGENT_BING})
 
-    def _set_selector(self, selector: str):
+    def _set_selector(self, selector: str) -> str:
         selectors = {
             "url": "div.b_attribution cite",
             "title": "h2",
@@ -17,7 +17,7 @@ class Bing(SearchEngine):
         }
         return selectors[selector]
 
-    async def _get_next_page(self, query) -> str:
+    async def _get_next_page(self, query: str) -> str:
         # if self.page == 1:
         #     await self._get_html(self.base_url)
         for base_url in self.base_urls:

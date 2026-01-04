@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import AsyncGenerator
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
@@ -21,14 +22,16 @@ class Main(star.Star):
 
         self.proc_llm_req = ProcessLLMRequest(self.context)
 
-    def ltm_enabled(self, event: AstrMessageEvent):
+    def ltm_enabled(self, event: AstrMessageEvent) -> bool:
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
             "provider_ltm_settings"
         ]
         return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
-    async def on_message(self, event: AstrMessageEvent):
+    async def on_message(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[ProviderRequest, None]:
         """群聊记忆增强"""
         has_image_or_plain = False
         for comp in event.message_obj.message:

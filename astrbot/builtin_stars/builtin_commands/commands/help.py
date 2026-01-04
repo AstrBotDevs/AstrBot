@@ -11,7 +11,7 @@ class HelpCommand:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def _query_astrbot_notice(self):
+    async def _query_astrbot_notice(self) -> str:
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(
@@ -34,7 +34,7 @@ class HelpCommand:
         lines: list[str] = []
         hidden_commands = {"set", "unset", "websearch"}
 
-        def walk(items: list[dict], indent: int = 0):
+        def walk(items: list[dict], indent: int = 0) -> None:
             for item in items:
                 if not item.get("reserved") or not item.get("enabled"):
                     continue

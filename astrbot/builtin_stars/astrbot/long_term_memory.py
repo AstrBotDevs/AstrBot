@@ -23,7 +23,7 @@ class LongTermMemory:
         self.session_chats = defaultdict(list)
         """记录群成员的群聊记录"""
 
-    def cfg(self, event: AstrMessageEvent):
+    def cfg(self, event: AstrMessageEvent) -> dict:
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         try:
             max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])

@@ -1,7 +1,7 @@
 import os
 
 
-def _get_magic_code():
+def _get_magic_code() -> str | None:
     """防止注入攻击"""
     return os.getenv("MAGIC_CODE")
 

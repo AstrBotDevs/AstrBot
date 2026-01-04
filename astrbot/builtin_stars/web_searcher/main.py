@@ -89,7 +89,7 @@ class Main(star.Star):
 
     async def _web_search_default(
         self,
-        query,
+        query: str,
         num_results: int = 5,
     ) -> list[SearchResult]:
         results = []
