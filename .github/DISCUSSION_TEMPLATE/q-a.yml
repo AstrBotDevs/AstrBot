@@ -1,0 +1,31 @@
+body:
+  - type: textarea
+    attributes:
+      label: 问题 / Question
+      description: 直接描述你遇到的问题或想问的点（越具体越好）/ Describe your question (the more specific, the better).
+      placeholder: |
+        我在……时遇到……
+        期望……，但实际……
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 已尝试 / What you tried
+      description: 你已经试过哪些方法？结果如何？/ What have you tried and what happened?
+      placeholder: |
+        我尝试了……
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: AstrBot 版本
+      description: 你也可以补充有关此问题的其它环境信息 / You can also provide other environment information related to this problem.
+      value: |
+        - AstrBot 版本：
+        - 部署方式：
+        - 其它：
+    validations:
+      required: false
+ 
