@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="session-management-page">
     <v-container fluid class="pa-0">
       <v-card flat>
@@ -111,6 +111,160 @@
           </v-data-table-server>
         </v-card-text>
       </v-card>
+      <!-- 批量操作面板 -->
+      <v-card flat class="mt-4">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <span class="text-h6">{{ tm('batchOperations.title') }}</span>
+          <v-chip size="small" class="ml-2" color="info" variant="outlined">
+            {{ tm('batchOperations.hint') }}
+          </v-chip>
+        </v-card-title>
+        <v-card-text>
+          <v-row dense>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchScope" :items="batchScopeOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.scope')" hide-details variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchLlmStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.llmStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchTtsStatus" :items="statusOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.ttsStatus')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+            <v-col cols="12" md="6" lg="3">
+              <v-select v-model="batchChatProvider" :items="chatProviderOptions" item-title="label" item-value="value"
+                :label="tm('batchOperations.chatProvider')" hide-details clearable variant="solo-filled" flat density="comfortable">
+              </v-select>
+            </v-col>
+          </v-row>
+          <v-row dense class="mt-3">
+            <v-col cols="12" class="d-flex justify-end">
+              <v-btn color="primary" variant="tonal" size="large" @click="applyBatchChanges"
+                :disabled="!canApplyBatch" :loading="batchUpdating" prepend-icon="mdi-check-all">
+                {{ tm('batchOperations.apply') }}
+              </v-btn>
+            </v-col>
+          </v-row>
+        </v-card-text>
+      </v-card>
+
+      <!-- 分组管理面板 -->
+      <v-card flat class="mt-4">
+        <v-card-title class="d-flex align-center py-3 px-4">
+          <span class="text-h6">分组管理</span>
+          <v-chip size="small" class="ml-2" color="secondary" variant="outlined">
+            {{ groups.length }} 个分组
+          </v-chip>
+          <v-spacer></v-spacer>
+          <v-btn v-if="selectedItems.length > 0 && groups.length > 0" color="info" variant="tonal" size="small" class="mr-2">
+            <v-icon start>mdi-folder-plus</v-icon>
+            添加到分组
+            <v-menu activator="parent">
+              <v-list density="compact">
+                <v-list-item v-for="g in groups" :key="g.id" @click="addSelectedToGroup(g.id)">
+                  <v-list-item-title>{{ g.name }} ({{ g.umo_count }})</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </v-btn>
+          <v-btn color="success" variant="tonal" size="small" @click="openCreateGroupDialog" prepend-icon="mdi-folder-plus">
+            新建分组
+          </v-btn>
+        </v-card-title>
+        <v-card-text v-if="groups.length > 0">
+          <v-row dense>
+            <v-col v-for="group in groups" :key="group.id" cols="12" sm="6" md="4" lg="3">
+              <v-card variant="outlined" class="pa-3">
+                <div class="d-flex align-center justify-space-between">
+                  <div>
+                    <div class="font-weight-bold">{{ group.name }}</div>
+                    <div class="text-caption text-grey">{{ group.umo_count }} 个会话</div>
+                  </div>
+                  <div>
+                    <v-btn icon size="small" variant="text" @click="openEditGroupDialog(group)">
+                      <v-icon size="small">mdi-pencil</v-icon>
+                    </v-btn>
+                    <v-btn icon size="small" variant="text" color="error" @click="deleteGroup(group)">
+                      <v-icon size="small">mdi-delete</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-text v-else class="text-center text-grey py-6">
+          暂无分组，点击「新建分组」创建
+        </v-card-text>
+      </v-card>
+
+      <!-- 分组编辑对话框 -->
+      <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
+        <v-card>
+          <v-card-title class="py-3 px-4">
+            {{ groupDialogMode === 'create' ? '新建分组' : '编辑分组' }}
+          </v-card-title>
+          <v-card-text>
+            <v-text-field v-model="editingGroup.name" label="分组名称" variant="outlined" hide-details class="mb-4"></v-text-field>
+            <v-row dense>
+              <!-- 左侧：可选会话 -->
+              <v-col cols="5">
+                <div class="text-subtitle-2 mb-2">可选会话 ({{ unselectedUmos.length }})</div>
+                <v-text-field v-model="groupMemberSearch" placeholder="搜索..." variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <v-list density="compact" class="transfer-list" lines="one">
+                  <v-list-item v-for="umo in filteredUnselectedUmos" :key="umo" @click="addToGroup(umo)" class="transfer-item">
+                    <template v-slot:prepend>
+                      <v-icon size="small" color="grey">mdi-plus</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="filteredUnselectedUmos.length === 0 && !loadingUmos">
+                    <v-list-item-title class="text-caption text-grey text-center">无匹配项</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="loadingUmos">
+                    <v-list-item-title class="text-center"><v-progress-circular indeterminate size="20"></v-progress-circular></v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-col>
+              <!-- 中间：操作按钮 -->
+              <v-col cols="2" class="d-flex flex-column align-center justify-center">
+                <v-btn icon size="small" variant="tonal" color="primary" class="mb-2" @click="addAllToGroup" :disabled="unselectedUmos.length === 0">
+                  <v-icon>mdi-chevron-double-right</v-icon>
+                </v-btn>
+                <v-btn icon size="small" variant="tonal" color="error" @click="removeAllFromGroup" :disabled="editingGroup.umos.length === 0">
+                  <v-icon>mdi-chevron-double-left</v-icon>
+                </v-btn>
+              </v-col>
+              <!-- 右侧：已选会话 -->
+              <v-col cols="5">
+                <div class="text-subtitle-2 mb-2">已选会话 ({{ editingGroup.umos.length }})</div>
+                <v-text-field v-model="groupSelectedSearch" placeholder="搜索..." variant="outlined" density="compact" hide-details class="mb-2" clearable prepend-inner-icon="mdi-magnify"></v-text-field>
+                <v-list density="compact" class="transfer-list" lines="one">
+                  <v-list-item v-for="umo in filteredSelectedUmos" :key="umo" @click="removeFromGroup(umo)" class="transfer-item">
+                    <template v-slot:prepend>
+                      <v-icon size="small" color="error">mdi-minus</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">{{ formatUmoShort(umo) }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item v-if="editingGroup.umos.length === 0">
+                    <v-list-item-title class="text-caption text-grey text-center">暂无成员</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-col>
+            </v-row>
+          </v-card-text>
+          <v-card-actions class="px-4 pb-4">
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="groupDialog = false">取消</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveGroup">保存</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
@@ -454,6 +608,29 @@ export default {
       quickEditNameDialog: false,
       quickEditNameTarget: null,
       quickEditNameValue: '',
+      // 批量操作
+      batchScope: 'selected',
+      batchGroupId: null,
+      batchLlmStatus: null,
+      batchTtsStatus: null,
+      batchChatProvider: null,
+      batchTtsProvider: null,
+      batchUpdating: false,
+
+      // 分组管理
+      groups: [],
+      groupsLoading: false,
+      groupDialog: false,
+      groupDialogMode: 'create',
+      editingGroup: {
+        id: null,
+        name: '',
+        umos: [],
+      },
+      groupMemberDialog: false,
+      groupMemberTarget: null,
+      groupMemberSearch: '',
+      groupSelectedSearch: '',
 
       // 提示信息
       snackbar: false,
@@ -529,6 +706,65 @@ export default {
         value: kb.kb_id
       }))
     },
+    batchScopeOptions() {
+      const options = [
+        { label: this.tm('batchOperations.scopeSelected'), value: 'selected' },
+        { label: this.tm('batchOperations.scopeAll'), value: 'all' },
+        { label: this.tm('batchOperations.scopeGroup'), value: 'group' },
+        { label: this.tm('batchOperations.scopePrivate'), value: 'private' },
+      ]
+      // 添加自定义分组选项
+      if (this.groups.length > 0) {
+        options.push({ label: '── 自定义分组 ──', value: '_divider', disabled: true })
+        this.groups.forEach(g => {
+          options.push({ label: `📁 ${g.name} (${g.umo_count})`, value: `custom_group:${g.id}` })
+        })
+      }
+      return options
+    },
+
+    groupOptions() {
+      return this.groups.map(g => ({
+        label: `${g.name} (${g.umo_count} 个会话)`,
+        value: g.id
+      }))
+    },
+
+    statusOptions() {
+      return [
+        { label: this.tm('status.enabled'), value: true },
+        { label: this.tm('status.disabled'), value: false },
+      ]
+    },
+
+    canApplyBatch() {
+      const hasChanges = this.batchLlmStatus !== null || this.batchTtsStatus !== null || 
+                         this.batchChatProvider !== null || this.batchTtsProvider !== null
+      if (this.batchScope === 'selected') {
+        return hasChanges && this.selectedItems.length > 0
+      }
+      return hasChanges
+    },
+
+    // 穿梭框：未选中的UMO列表
+    unselectedUmos() {
+      const selected = new Set(this.editingGroup.umos || [])
+      return this.availableUmos.filter(u => !selected.has(u))
+    },
+
+    // 穿梭框：过滤后的未选中列表
+    filteredUnselectedUmos() {
+      if (!this.groupMemberSearch) return this.unselectedUmos
+      const search = this.groupMemberSearch.toLowerCase()
+      return this.unselectedUmos.filter(u => u.toLowerCase().includes(search))
+    },
+
+    // 穿梭框：过滤后的已选中列表
+    filteredSelectedUmos() {
+      if (!this.groupSelectedSearch) return this.editingGroup.umos || []
+      const search = this.groupSelectedSearch.toLowerCase()
+      return (this.editingGroup.umos || []).filter(u => u.toLowerCase().includes(search))
+    },
   },
 
   watch: {
@@ -547,6 +783,7 @@ export default {
 
   mounted() {
     this.loadData()
+    this.loadGroups()
   },
 
   beforeUnmount() {
@@ -1072,6 +1309,242 @@ export default {
       }
       this.saving = false
     },
+
+    async applyBatchChanges() {
+      this.batchUpdating = true
+      try {
+        let scope = this.batchScope
+        let groupId = null
+        let umos = []
+
+        // 处理自定义分组
+        if (scope.startsWith('custom_group:')) {
+          groupId = scope.split(':')[1]
+          scope = 'custom_group'
+        }
+
+        if (scope === 'selected') {
+          umos = this.selectedItems.map(item => item.umo)
+          if (umos.length === 0) {
+            this.showError('请先选择要操作的会话')
+            this.batchUpdating = false
+            return
+          }
+        }
+
+        const tasks = []
+
+        if (this.batchLlmStatus !== null || this.batchTtsStatus !== null) {
+          const serviceData = { scope, umos, group_id: groupId }
+          if (this.batchLlmStatus !== null) {
+            serviceData.llm_enabled = this.batchLlmStatus
+          }
+          if (this.batchTtsStatus !== null) {
+            serviceData.tts_enabled = this.batchTtsStatus
+          }
+          tasks.push(axios.post('/api/session/batch-update-service', serviceData))
+        }
+
+        if (this.batchChatProvider !== null) {
+          tasks.push(axios.post('/api/session/batch-update-provider', {
+            scope,
+            umos,
+            group_id: groupId,
+            provider_type: 'chat_completion',
+            provider_id: this.batchChatProvider || null
+          }))
+        }
+
+        if (this.batchTtsProvider !== null) {
+          tasks.push(axios.post('/api/session/batch-update-provider', {
+            scope,
+            umos,
+            group_id: groupId,
+            provider_type: 'text_to_speech',
+            provider_id: this.batchTtsProvider || null
+          }))
+        }
+
+        if (tasks.length === 0) {
+          this.showError('请至少选择一项要修改的配置')
+          this.batchUpdating = false
+          return
+        }
+
+        const results = await Promise.all(tasks)
+        const allOk = results.every(r => r.data.status === 'ok')
+
+        if (allOk) {
+          this.showSuccess('批量更新成功')
+          this.batchLlmStatus = null
+          this.batchTtsStatus = null
+          this.batchChatProvider = null
+          this.batchTtsProvider = null
+          await this.loadData()
+        } else {
+          this.showError('部分更新失败')
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '批量更新失败')
+      }
+      this.batchUpdating = false
+    },
+
+    // ==================== 分组管理方法 ====================
+
+    async loadGroups() {
+      this.groupsLoading = true
+      try {
+        const response = await axios.get('/api/session/groups')
+        if (response.data.status === 'ok') {
+          this.groups = response.data.data.groups || []
+        }
+      } catch (error) {
+        console.error('加载分组失败:', error)
+      }
+      this.groupsLoading = false
+    },
+
+    async loadAvailableUmos() {
+      if (this.availableUmos.length > 0) return
+      this.loadingUmos = true
+      try {
+        const response = await axios.get('/api/session/active-umos')
+        if (response.data.status === 'ok') {
+          this.availableUmos = response.data.data.umos || []
+        }
+      } catch (error) {
+        console.error('加载会话列表失败:', error)
+      }
+      this.loadingUmos = false
+    },
+
+    openCreateGroupDialog() {
+      this.groupDialogMode = 'create'
+      this.editingGroup = { id: null, name: '', umos: [] }
+      this.groupMemberSearch = ''
+      this.groupSelectedSearch = ''
+      this.groupDialog = true
+    },
+
+    openEditGroupDialog(group) {
+      this.groupDialogMode = 'edit'
+      this.editingGroup = { ...group, umos: [...(group.umos || [])] }
+      this.groupMemberSearch = ''
+      this.groupSelectedSearch = ''
+      this.groupDialog = true
+    },
+
+    // 穿梭框操作方法
+    addToGroup(umo) {
+      if (!this.editingGroup.umos.includes(umo)) {
+        this.editingGroup.umos.push(umo)
+      }
+    },
+
+    removeFromGroup(umo) {
+      const idx = this.editingGroup.umos.indexOf(umo)
+      if (idx > -1) {
+        this.editingGroup.umos.splice(idx, 1)
+      }
+    },
+
+    addAllToGroup() {
+      this.unselectedUmos.forEach(umo => {
+        if (!this.editingGroup.umos.includes(umo)) {
+          this.editingGroup.umos.push(umo)
+        }
+      })
+    },
+
+    removeAllFromGroup() {
+      this.editingGroup.umos = []
+    },
+
+    formatUmoShort(umo) {
+      // 简化显示：平台:类型:ID -> 只显示ID部分
+      const parts = umo.split(':')
+      if (parts.length >= 3) {
+        return `${parts[0]}:${parts[2]}`
+      }
+      return umo
+    },
+
+    async saveGroup() {
+      if (!this.editingGroup.name.trim()) {
+        this.showError('分组名称不能为空')
+        return
+      }
+
+      try {
+        let response
+        if (this.groupDialogMode === 'create') {
+          response = await axios.post('/api/session/group/create', {
+            name: this.editingGroup.name,
+            umos: this.editingGroup.umos
+          })
+        } else {
+          response = await axios.post('/api/session/group/update', {
+            id: this.editingGroup.id,
+            name: this.editingGroup.name,
+            umos: this.editingGroup.umos
+          })
+        }
+
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.data.message)
+          this.groupDialog = false
+          await this.loadGroups()
+        } else {
+          this.showError(response.data.message)
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '保存分组失败')
+      }
+    },
+
+    async deleteGroup(group) {
+      if (!confirm(`确定要删除分组 "${group.name}" 吗？`)) return
+
+      try {
+        const response = await axios.post('/api/session/group/delete', { id: group.id })
+        if (response.data.status === 'ok') {
+          this.showSuccess(response.data.data.message)
+          await this.loadGroups()
+        } else {
+          this.showError(response.data.message)
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '删除分组失败')
+      }
+    },
+
+    openGroupMemberDialog(group) {
+      this.groupMemberTarget = { ...group }
+      this.groupMemberDialog = true
+    },
+
+    async addSelectedToGroup(groupId) {
+      if (this.selectedItems.length === 0) {
+        this.showError('请先选择要添加的会话')
+        return
+      }
+
+      try {
+        const response = await axios.post('/api/session/group/update', {
+          id: groupId,
+          add_umos: this.selectedItems.map(item => item.umo)
+        })
+        if (response.data.status === 'ok') {
+          this.showSuccess(`已添加 ${this.selectedItems.length} 个会话到分组`)
+          await this.loadGroups()
+        } else {
+          this.showError(response.data.message)
+        }
+      } catch (error) {
+        this.showError(error.response?.data?.message || '添加失败')
+      }
+    },
   },
 }
 </script>
@@ -1087,5 +1560,21 @@ code {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
+}
+
+.transfer-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+.transfer-item {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.transfer-item:hover {
+  background-color: rgba(0, 0, 0, 0.04);
 }
 </style>
