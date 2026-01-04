@@ -510,7 +510,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     const metadata = getModelMetadata(modelName)
     let modalities: string[]
-    
+
     if (!metadata) {
       modalities = ['text', 'image', 'tool_use']
     } else {
@@ -523,13 +523,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     }
 
+    let max_context_tokens = 0
+    if (metadata?.limit?.context && typeof metadata.limit.context === 'number') {
+      max_context_tokens = metadata.limit.context
+    }
+
     const newProvider = {
       id: newId,
       enable: false,
       provider_source_id: sourceId,
       model: modelName,
       modalities,
-      custom_extra_body: {}
+      custom_extra_body: {},
+      max_context_tokens: max_context_tokens
     }
 
     try {

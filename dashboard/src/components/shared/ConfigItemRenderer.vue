@@ -144,7 +144,7 @@
         color="primary"
         density="compact"
         hide-details
-        class="flex-grow-1"
+        style="flex: 1"
       ></v-slider>
       <v-text-field
         :model-value="modelValue"
@@ -154,7 +154,7 @@
         class="config-field"
         type="number"
         hide-details
-        style="max-width: 140px;"
+        style="flex: 1"
       ></v-text-field>
     </div>
 
@@ -324,5 +324,9 @@ function getSpecialSubtype(value) {
 
 .gap-20 {
   gap: 20px;
+}
+
+:deep(.v-field__input) {
+  font-size: 14px;
 }
 </style>
