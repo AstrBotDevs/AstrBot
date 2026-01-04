@@ -10,12 +10,12 @@ from astrbot.core import logger
 
 
 class CozeAPIClient:
-    def __init__(self, api_key: str, api_base: str = "https://api.coze.cn"):
+    def __init__(self, api_key: str, api_base: str = "https://api.coze.cn") -> None:
         self.api_key = api_key
         self.api_base = api_base
         self.session = None
 
-    async def _ensure_session(self):
+    async def _ensure_session(self) -> aiohttp.ClientSession:
         """确保HTTP session存在"""
         if self.session is None:
             connector = aiohttp.TCPConnector(
@@ -208,7 +208,7 @@ class CozeAPIClient:
         except Exception as e:
             raise Exception(f"Coze API 流式请求失败: {e!s}")
 
-    async def clear_context(self, conversation_id: str):
+    async def clear_context(self, conversation_id: str) -> dict:
         """清空会话上下文
 
         Args:
@@ -247,7 +247,7 @@ class CozeAPIClient:
         order: str = "desc",
         limit: int = 10,
         offset: int = 0,
-    ):
+    ) -> dict:
         """获取消息列表
 
         Args:
@@ -277,7 +277,7 @@ class CozeAPIClient:
             logger.error(f"获取Coze消息列表失败: {e!s}")
             raise Exception(f"获取Coze消息列表失败: {e!s}")
 
-    async def close(self):
+    async def close(self) -> None:
         """关闭会话"""
         if self.session:
             await self.session.close()
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     import asyncio
     import os
 
-    async def test_coze_api_client():
+    async def test_coze_api_client() -> None:
         api_key = os.getenv("COZE_API_KEY", "")
         bot_id = os.getenv("COZE_BOT_ID", "")
         client = CozeAPIClient(api_key=api_key)

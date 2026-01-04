@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 import zoneinfo
+from collections.abc import AsyncGenerator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -38,7 +39,7 @@ class Main(star.Star):
         self._init_scheduler()
         self.scheduler.start()
 
-    def _init_scheduler(self):
+    def _init_scheduler(self) -> None:
         """Initialize the scheduler."""
         for group in self.reminder_data:
             for reminder in self.reminder_data[group]:
@@ -72,7 +73,7 @@ class Main(star.Star):
                         misfire_grace_time=60,
                     )
 
-    def check_is_outdated(self, reminder: dict):
+    def check_is_outdated(self, reminder: dict) -> bool:
         """Check if the reminder is outdated."""
         if "datetime" in reminder:
             reminder_time = datetime.datetime.strptime(
@@ -82,13 +83,13 @@ class Main(star.Star):
             return reminder_time < datetime.datetime.now(self.timezone)
         return False
 
-    async def _save_data(self):
+    async def _save_data(self) -> None:
         """Save the reminder data."""
         reminder_file = os.path.join(get_astrbot_data_path(), "astrbot-reminder.json")
         with open(reminder_file, "w", encoding="utf-8") as f:
             json.dump(self.reminder_data, f, ensure_ascii=False)
 
-    def _parse_cron_expr(self, cron_expr: str):
+    def _parse_cron_expr(self, cron_expr: str) -> dict:
         fields = cron_expr.split(" ")
         return {
             "minute": fields[0],
@@ -106,7 +107,7 @@ class Main(star.Star):
         datetime_str: str | None = None,
         cron_expression: str | None = None,
         human_readable_cron: str | None = None,
-    ):
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """Call this function when user is asking for setting a reminder.
 
         Args:
@@ -178,10 +179,10 @@ class Main(star.Star):
         )
 
     @filter.command_group("reminder")
-    def reminder(self):
+    def reminder(self) -> None:
         """待办提醒"""
 
-    async def get_upcoming_reminders(self, unified_msg_origin: str):
+    async def get_upcoming_reminders(self, unified_msg_origin: str) -> list:
         """Get upcoming reminders."""
         reminders = self.reminder_data.get(unified_msg_origin, [])
         if not reminders:
@@ -200,7 +201,9 @@ class Main(star.Star):
         return upcoming_reminders
 
     @reminder.command("ls")
-    async def reminder_ls(self, event: AstrMessageEvent):
+    async def reminder_ls(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """List upcoming reminders."""
         reminders = await self.get_upcoming_reminders(event.unified_msg_origin)
         if not reminders:
@@ -218,7 +221,9 @@ class Main(star.Star):
             yield event.plain_result(reminder_str)
 
     @reminder.command("rm")
-    async def reminder_rm(self, event: AstrMessageEvent, index: int):
+    async def reminder_rm(
+        self, event: AstrMessageEvent, index: int
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """Remove a reminder by index."""
         reminders = await self.get_upcoming_reminders(event.unified_msg_origin)
 
@@ -246,7 +251,7 @@ class Main(star.Star):
             await self._save_data()
             yield event.plain_result("成功删除待办事项：\n" + reminder["text"])
 
-    async def _reminder_callback(self, unified_msg_origin: str, d: dict):
+    async def _reminder_callback(self, unified_msg_origin: str, d: dict) -> None:
         """The callback function of the reminder."""
         logger.info(f"Reminder Activated: {d['text']}, created by {unified_msg_origin}")
         await self.context.send_message(
@@ -260,7 +265,7 @@ class Main(star.Star):
             ),
         )
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.scheduler.shutdown()
         await self._save_data()
         logger.info("Reminder plugin terminated.")

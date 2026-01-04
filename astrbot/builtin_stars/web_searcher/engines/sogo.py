@@ -13,7 +13,7 @@ class Sogo(SearchEngine):
         self.base_url = "https://www.sogou.com"
         self.headers["User-Agent"] = random.choice(USER_AGENTS)
 
-    def _set_selector(self, selector: str):
+    def _set_selector(self, selector: str) -> str:
         selectors = {
             "url": "h3 > a",
             "title": "h3",
@@ -23,7 +23,7 @@ class Sogo(SearchEngine):
         }
         return selectors[selector]
 
-    async def _get_next_page(self, query) -> str:
+    async def _get_next_page(self, query: str) -> str:
         url = f"{self.base_url}/web?query={query}"
         return await self._get_html(url, None)
 
@@ -38,7 +38,7 @@ class Sogo(SearchEngine):
                 result.url = await self._parse_url(result.url)
         return results
 
-    async def _parse_url(self, url) -> str:
+    async def _parse_url(self, url: str) -> str:
         html = await self._get_html(url)
         soup = BeautifulSoup(html, "html.parser")
         script = soup.find("script")

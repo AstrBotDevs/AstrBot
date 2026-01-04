@@ -12,7 +12,7 @@ class FixedSizeChunker(BaseChunker):
     按照固定的字符数分块,并支持块之间的重叠。
     """
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50) -> None:
         """初始化分块器
 
         Args:
@@ -23,7 +23,13 @@ class FixedSizeChunker(BaseChunker):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    async def chunk(self, text: str, **kwargs) -> list[str]:
+    async def chunk(
+        self,
+        text: str,
+        *,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+    ) -> list[str]:
         """固定大小分块
 
         Args:
@@ -35,8 +41,11 @@ class FixedSizeChunker(BaseChunker):
             list[str]: 分块后的文本列表
 
         """
-        chunk_size = kwargs.get("chunk_size", self.chunk_size)
-        chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
+        chunk_size = self.chunk_size if chunk_size is None else chunk_size
+        chunk_overlap = self.chunk_overlap if chunk_overlap is None else chunk_overlap
+        if chunk_size <= 0:
+            return [text]
+        chunk_overlap = max(0, min(chunk_overlap, chunk_size - 1))
 
         chunks = []
         start = 0

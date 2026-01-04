@@ -31,7 +31,7 @@ class RankFusion:
     - 使用 Reciprocal Rank Fusion (RRF) 算法
     """
 
-    def __init__(self, kb_db: KBSQLiteDatabase, k: int = 60):
+    def __init__(self, kb_db: KBSQLiteDatabase, k: int = 60) -> None:
         """初始化结果融合器
 
         Args:

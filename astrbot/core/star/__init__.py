@@ -15,11 +15,11 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
     author: str
     name: str
 
-    def __init__(self, context: Context, config: dict | None = None):
+    def __init__(self, context: Context, config: dict | None = None) -> None:
         StarTools.initialize(context)
         self.context = context
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         if not star_map.get(cls.__module__):
             metadata = StarMetadata(
@@ -32,7 +32,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             star_map[cls.__module__].star_cls_type = cls
             star_map[cls.__module__].module_path = cls.__module__
 
-    async def text_to_image(self, text: str, return_url=True) -> str:
+    async def text_to_image(self, text: str, return_url: bool = True) -> str:
         """将文本转换为图片"""
         return await html_renderer.render_t2i(
             text,
@@ -44,7 +44,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         self,
         tmpl: str,
         data: dict,
-        return_url=True,
+        return_url: bool = True,
         options: dict | None = None,
     ) -> str:
         """渲染 HTML"""
@@ -55,13 +55,13 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             options=options,
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """当插件被激活时会调用这个方法"""
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """当插件被禁用、重载插件时会调用这个方法"""
 
-    def __del__(self):
+    def __del__(self) -> None:
         """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
 
 
