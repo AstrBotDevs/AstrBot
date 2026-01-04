@@ -21,6 +21,9 @@ from astrbot.core.star.register import (
 from astrbot.core.star.register import register_on_llm_request as on_llm_request
 from astrbot.core.star.register import register_on_llm_response as on_llm_response
 from astrbot.core.star.register import register_on_platform_loaded as on_platform_loaded
+from astrbot.core.star.register import (
+    register_on_waiting_llm_request as on_waiting_llm_request,
+)
 from astrbot.core.star.register import register_permission_type as permission_type
 from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
@@ -46,6 +49,7 @@ __all__ = [
     "on_llm_request",
     "on_llm_response",
     "on_platform_loaded",
+    "on_waiting_llm_request",
     "permission_type",
     "platform_adapter_type",
     "regex",

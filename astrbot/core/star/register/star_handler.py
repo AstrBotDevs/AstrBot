@@ -339,6 +339,30 @@ def register_on_platform_loaded(**kwargs):
     return decorator
 
 
+def register_on_waiting_llm_request(**kwargs):
+    """当等待调用 LLM 时的通知事件（在获取锁之前）
+
+    此钩子在消息确定要调用 LLM 但还未开始排队等锁时触发，
+    适合用于发送"正在思考中..."等用户反馈提示。
+
+    Examples:
+    ```py
+    @on_waiting_llm_request()
+    async def on_waiting_llm(self, event: AstrMessageEvent) -> None:
+        await event.send("🤔 正在思考中...")
+    ```
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(
+            awaitable, EventType.OnWaitingLLMRequestEvent, **kwargs
+        )
+        return awaitable
+
+    return decorator
+
+
 def register_on_llm_request(**kwargs):
     """当有 LLM 请求时的事件
 
