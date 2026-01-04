@@ -134,6 +134,7 @@ uv run main.py
 
 **社群維護**
 
+- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
 - [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
 - [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
 - [Bilibili 私訊](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
