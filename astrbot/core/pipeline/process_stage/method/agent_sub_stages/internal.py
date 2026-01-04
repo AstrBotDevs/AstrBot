@@ -364,6 +364,10 @@ class InternalAgentSubStage(Stage):
                 streaming_response = bool(enable_streaming)
 
             logger.debug("ready to request llm provider")
+            
+            # 通知等待调用 LLM（在获取锁之前）
+            await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
                 if event.get_extra("provider_request"):
