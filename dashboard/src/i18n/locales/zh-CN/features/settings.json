@@ -18,6 +18,11 @@
       "title": "数据迁移到 v4.0.0 格式",
       "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",
       "button": "启动迁移助手"
+    },
+    "backup": {
+      "title": "数据备份与恢复",
+      "subtitle": "导出或导入 AstrBot 的所有数据，方便迁移到新服务器",
+      "button": "备份管理"
     }
   },
   "sidebar": {
@@ -29,5 +34,80 @@
       "mainItems": "主要模块",
       "moreItems": "更多功能"
     }
+  },
+  "backup": {
+    "dialog": {
+      "title": "备份管理"
+    },
+    "tabs": {
+      "export": "导出备份",
+      "import": "导入备份",
+      "list": "备份列表"
+    },
+    "export": {
+      "title": "创建备份",
+      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置和附件。",
+      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件",
+      "button": "开始导出",
+      "processing": "正在导出...",
+      "wait": "请稍候，正在打包数据...",
+      "completed": "导出完成！",
+      "download": "下载备份",
+      "another": "创建新备份",
+      "failed": "导出失败",
+      "retry": "重试"
+    },
+    "import": {
+      "title": "导入备份",
+      "warning": "⚠️ 导入将会清空并覆盖现有数据！请确保已备份当前数据。",
+      "selectFile": "选择备份文件 (.zip)",
+      "uploadAndCheck": "上传并检查",
+      "uploading": "正在上传...",
+      "uploadWait": "请稍候，正在上传备份文件...",
+      "uploadInit": "正在初始化上传...",
+      "uploadingChunks": "正在上传分片...",
+      "uploadComplete": "上传完成，正在合并文件...",
+      "checking": "正在检查备份文件...",
+      "invalidBackup": "无效的备份文件",
+      "backupContents": "备份内容",
+      "tables": "个数据表",
+      "knowledgeBases": "知识库",
+      "configFiles": "配置文件",
+      "confirmImport": "确认导入",
+      "button": "开始导入",
+      "processing": "正在导入...",
+      "wait": "请稍候，正在恢复数据...",
+      "completed": "导入完成！",
+      "restartRequired": "数据已成功导入。建议立即重启 AstrBot 以使所有更改生效。",
+      "restartNow": "立即重启",
+      "failed": "导入失败",
+      "retry": "重试",
+      "version": {
+        "backupVersion": "备份版本",
+        "currentVersion": "当前版本",
+        "backupTime": "备份时间",
+        "matchTitle": "✅ 版本匹配",
+        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n\n此操作不可撤销！是否确认继续？",
+        "minorDiffTitle": "⚠️ 版本差异警告",
+        "minorDiffMessage": "小版本差异通常是兼容的，但可能存在少量数据结构变化。\n导入将会清空并覆盖现有的所有数据！\n\n是否确认继续导入？",
+        "majorDiffTitle": "⛔ 无法导入",
+        "majorDiffMessage": "主版本号不同，跨主版本导入可能导致数据损坏。\n请使用相同主版本的 AstrBot 进行导入。"
+      }
+    },
+    "list": {
+      "empty": "暂无备份文件",
+      "refresh": "刷新列表",
+      "confirmDelete": "确定要删除这个备份文件吗？此操作不可撤销。",
+      "uploaded": "已上传",
+      "restore": "恢复此备份",
+      "rename": "重命名",
+      "renameTitle": "重命名备份文件",
+      "newName": "新文件名",
+      "renameHint": "文件名只能包含字母、数字、下划线、连字符和点",
+      "renameRequired": "请输入文件名",
+      "renameInvalidChars": "文件名包含非法字符",
+      "renameFailed": "重命名失败",
+      "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录"
+    }
   }
-} 
+}

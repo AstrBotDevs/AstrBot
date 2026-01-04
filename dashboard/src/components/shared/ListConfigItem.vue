@@ -1,6 +1,15 @@
 <template>
-  <div class="d-flex align-center justify-space-between">
-    <div>
+  <div class="d-flex align-center justify-space-between ga-2">
+    <div v-if="isSingleItemMode" class="flex-grow-1 d-flex align-center ga-2">
+      <v-text-field
+        v-model="singleItemValue"
+        hide-details
+        variant="outlined"
+        density="compact"
+        class="flex-grow-1"
+      ></v-text-field>
+    </div>
+    <div v-else>
       <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
         {{ t('core.common.list.noItems') }}
       </span>
@@ -14,7 +23,7 @@
       </div>
     </div>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText || t('core.common.list.modifyButton') }}
+      {{ preferSingleItem ? t('core.common.list.addMore') : (buttonText || t('core.common.list.modifyButton')) }}
     </v-btn>
   </div>
 
@@ -39,6 +48,14 @@
             :placeholder="t('core.common.list.inputPlaceholder')"
             class="flex-grow-1">
           </v-text-field>
+          <v-btn
+            @click="addItem"
+            variant="tonal"
+            color="primary"
+            size="small"
+            :disabled="!newItem.trim()">
+            {{ t('core.common.list.addButton') }}
+          </v-btn>
           <v-btn 
             @click="showBatchImport = true" 
             variant="tonal" 
@@ -167,6 +184,10 @@ const props = defineProps({
   maxDisplayItems: {
     type: Number,
     default: 1
+  },
+  preferSingleItem: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -180,6 +201,21 @@ const editIndex = ref(-1)
 const editItem = ref('')
 const showBatchImport = ref(false)
 const batchImportText = ref('')
+const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem)
+const singleItemValue = computed({
+  get: () => props.modelValue?.[0] ?? '',
+  set: (value) => {
+    const newItems = [...(props.modelValue || [])]
+
+    if (newItems.length === 0) {
+      newItems.push(value)
+    } else {
+      newItems[0] = value
+    }
+
+    emit('update:modelValue', newItems)
+  }
+})
 
 // 计算要显示的项目
 const displayItems = computed(() => {

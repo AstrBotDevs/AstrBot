@@ -18,63 +18,39 @@
                     @editTitle="showEditTitleDialog"
                     @deleteConversation="handleDeleteConversation"
                     @closeMobileSidebar="closeMobileSidebar"
+                    @toggleTheme="toggleTheme"
+                    @toggleFullscreen="toggleFullscreen"
                 />
 
                 <!-- 右侧聊天内容区域 -->
                 <div class="chat-content-panel">
 
-                    <div class="conversation-header fade-in">
+                    <div class="conversation-header fade-in" v-if="isMobile">
                         <!-- 手机端菜单按钮 -->
-                        <v-btn icon class="mobile-menu-btn" @click="toggleMobileSidebar" v-if="isMobile" variant="text">
+                        <v-btn icon class="mobile-menu-btn" @click="toggleMobileSidebar" variant="text">
                             <v-icon>mdi-menu</v-icon>
                         </v-btn>
-                        
-                        <!-- <div v-if="currCid && getCurrentConversation">
-                            <h3
-                                style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                {{ getCurrentConversation.title || tm('conversation.newConversation') }}</h3>
-                            <span style="font-size: 12px;">{{ formatDate(getCurrentConversation.updated_at) }}</span>
-                        </div> -->
-                        <div class="conversation-header-actions">
-                            <!-- router 推送到 /chatbox -->
-                            <v-tooltip :text="tm('actions.fullscreen')" v-if="!chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props"
-                                        @click="router.push(currSessionId ? `/chatbox/${currSessionId}` : '/chatbox')"
-                                        class="fullscreen-icon">mdi-fullscreen</v-icon>
-                                </template>
-                            </v-tooltip>
-                            <!-- 语言切换按钮 -->
-                            <v-tooltip :text="t('core.common.language')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <LanguageSwitcher variant="chatbox" />
-                                </template>
-                            </v-tooltip>
-                            <!-- 主题切换按钮 -->
-                            <v-tooltip :text="isDark ? tm('modes.lightMode') : tm('modes.darkMode')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-btn v-bind="props" icon @click="toggleTheme" class="theme-toggle-icon"
-                                        size="small" rounded="sm" style="margin-right: 8px;" variant="text">
-                                        <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
-                                    </v-btn>
-                                </template>
-                            </v-tooltip>
-                            <!-- router 推送到 /chat -->
-                            <v-tooltip :text="tm('actions.exitFullscreen')" v-if="chatboxMode">
-                                <template v-slot:activator="{ props }">
-                                    <v-icon v-bind="props" @click="router.push(currSessionId ? `/chat/${currSessionId}` : '/chat')"
-                                        class="fullscreen-icon">mdi-fullscreen-exit</v-icon>
-                                </template>
-                            </v-tooltip>
-                        </div>
                     </div>
 
-                    <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
-                        :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
-                        @replyMessage="handleReplyMessage"
-                        ref="messageList" />
+                    <div class="message-list-wrapper" v-if="messages && messages.length > 0">
+                        <MessageList :messages="messages" :isDark="isDark"
+                            :isStreaming="isStreaming || isConvRunning" 
+                            :isLoadingMessages="isLoadingMessages"
+                            @openImagePreview="openImagePreview"
+                            @replyMessage="handleReplyMessage"
+                            ref="messageList" />
+                        <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
+                    </div>
                     <div class="welcome-container fade-in" v-else>
-                        <div class="welcome-title">
+                        <div v-if="isLoadingMessages" class="loading-overlay-welcome">
+                            <v-progress-circular
+                                indeterminate
+                                size="48"
+                                width="4"
+                                color="primary"
+                            ></v-progress-circular>
+                        </div>
+                        <div v-else class="welcome-title">
                             <span>Hello, I'm</span>
                             <span class="bot-name">AstrBot ⭐</span>
                         </div>
@@ -173,6 +149,7 @@ const isMobile = ref(false);
 const mobileMenuOpen = ref(false);
 const imagePreviewDialog = ref(false);
 const previewImageUrl = ref('');
+const isLoadingMessages = ref(false);
 
 // 使用 composables
 const {
@@ -260,6 +237,14 @@ function toggleTheme() {
     theme.global.name.value = newTheme;
 }
 
+function toggleFullscreen() {
+    if (props.chatboxMode) {
+        router.push(currSessionId.value ? `/chat/${currSessionId.value}` : '/chat');
+    } else {
+        router.push(currSessionId.value ? `/chatbox/${currSessionId.value}` : '/chatbox');
+    }
+}
+
 function openImagePreview(imageUrl: string) {
     previewImageUrl.value = imageUrl;
     imagePreviewDialog.value = true;
@@ -303,11 +288,14 @@ function clearReply() {
 async function handleSelectConversation(sessionIds: string[]) {
     if (!sessionIds[0]) return;
 
+    // 立即更新选中状态，避免需要点击两次
+    currSessionId.value = sessionIds[0];
+    selectedSessions.value = [sessionIds[0]];
+
     // 更新 URL
     const basePath = props.chatboxMode ? '/chatbox' : '/chat';
     if (route.path !== `${basePath}/${sessionIds[0]}`) {
         router.push(`${basePath}/${sessionIds[0]}`);
-        return;
     }
 
     // 手机端关闭侧边栏
@@ -317,11 +305,15 @@ async function handleSelectConversation(sessionIds: string[]) {
 
     // 清除引用状态
     clearReply();
-
-    currSessionId.value = sessionIds[0];
-    selectedSessions.value = [sessionIds[0]];
     
-    await getSessionMsg(sessionIds[0], router);
+    // 开始加载消息
+    isLoadingMessages.value = true;
+    
+    try {
+        await getSessionMsg(sessionIds[0]);
+    } finally {
+        isLoadingMessages.value = false;
+    }
     
     nextTick(() => {
         messageList.value?.scrollToBottom();
@@ -510,6 +502,29 @@ onBeforeUnmount(() => {
     overflow: hidden;
 }
 
+.message-list-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-list-fade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(to top, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.message-list-fade.fade-dark {
+    background: linear-gradient(to top, rgba(30, 30, 30, 1) 0%, rgba(30, 30, 30, 0) 100%);
+}
+
 .conversation-header {
     display: flex;
     justify-content: space-between;
@@ -543,11 +558,18 @@ onBeforeUnmount(() => {
     justify-content: center;
     align-items: center;
     flex-direction: column;
+    position: relative;
 }
 
 .welcome-title {
     font-size: 28px;
     margin-bottom: 16px;
+}
+
+.loading-overlay-welcome {
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .bot-name {
@@ -574,6 +596,10 @@ onBeforeUnmount(() => {
     
     .chat-page-container {
         padding: 0 !important;
+    }
+
+    .conversation-header {
+        padding: 2px;
     }
 }
 </style>

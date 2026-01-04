@@ -142,7 +142,12 @@ class SatoriPlatformAdapter(Platform):
             raise ValueError(f"WebSocket URL必须以ws://或wss://开头: {self.endpoint}")
 
         try:
-            websocket = await connect(self.endpoint, additional_headers={})
+            websocket = await connect(
+                self.endpoint,
+                additional_headers={},
+                max_size=10 * 1024 * 1024,  # 10MB
+            )
+
             self.ws = websocket
 
             await asyncio.sleep(0.1)

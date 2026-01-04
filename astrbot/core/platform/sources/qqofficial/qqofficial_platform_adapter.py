@@ -46,11 +46,8 @@ class botClient(Client):
             message,
             MessageType.GROUP_MESSAGE,
         )
-        abm.session_id = (
-            abm.sender.user_id
-            if self.platform.unique_session
-            else cast(str, message.group_openid)
-        )
+        abm.group_id = cast(str, message.group_openid)
+        abm.session_id = abm.group_id
         self._commit(abm)
 
     # 收到频道消息
@@ -59,9 +56,8 @@ class botClient(Client):
             message,
             MessageType.GROUP_MESSAGE,
         )
-        abm.session_id = (
-            abm.sender.user_id if self.platform.unique_session else message.channel_id
-        )
+        abm.group_id = message.channel_id
+        abm.session_id = abm.group_id
         self._commit(abm)
 
     # 收到私聊消息
@@ -108,7 +104,6 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
-        self.unique_session: bool = platform_settings["unique_session"]
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
 

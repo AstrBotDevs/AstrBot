@@ -17,7 +17,7 @@
             </template>
         </v-tooltip>
 
-        <v-dialog v-model="dialog" max-width="480" persistent>
+        <v-dialog v-model="dialog" max-width="480">
             <v-card>
                 <v-card-title class="d-flex align-center justify-space-between">
                     <span>选择配置文件</span>

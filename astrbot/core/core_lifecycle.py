@@ -33,6 +33,7 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 
 from . import astrbot_config, html_renderer
@@ -89,6 +90,7 @@ class AstrBotCoreLifecycle:
 
         # 初始化 UMOP 配置路由器
         self.umop_config_router = UmopConfigRouter(sp=sp)
+        await self.umop_config_router.initialize()
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
@@ -184,6 +186,8 @@ class AstrBotCoreLifecycle:
 
         # 初始化关闭控制面板的事件
         self.dashboard_shutdown_event = asyncio.Event()
+
+        asyncio.create_task(update_llm_metadata())
 
     def _load(self) -> None:
         """加载事件总线和任务并初始化."""

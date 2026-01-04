@@ -1,10 +1,11 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.9.2"
+VERSION = "4.10.6"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -61,7 +62,8 @@ DEFAULT_CONFIG = {
         "ignore_bot_self_message": False,
         "ignore_at_all": False,
     },
-    "provider": [],
+    "provider_sources": [],  # provider sources
+    "provider": [],  # models from provider_sources
     "provider_settings": {
         "enable": True,
         "default_provider_id": "",
@@ -171,6 +173,22 @@ DEFAULT_CONFIG = {
 }
 
 
+class ChatProviderTemplate(TypedDict):
+    id: str
+    provider_source_id: str
+    model: str
+    modalities: list
+    custom_extra_body: dict[str, Any]
+
+
+CHAT_PROVIDER_TEMPLATE = {
+    "id": "",
+    "provide_source_id": "",
+    "model": "",
+    "modalities": [],
+    "custom_extra_body": {},
+}
+
 """
 AstrBot v3 时代的配置元数据，目前仅承担以下功能：
 
@@ -209,23 +227,13 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "QQ 个人号(OneBot v11)": {
+                    "OneBot v11 (QQ 个人号等)": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
-                    },
-                    "WeChatPadPro": {
-                        "id": "wechatpadpro",
-                        "type": "wechatpadpro",
-                        "enable": False,
-                        "admin_key": "stay33",
-                        "host": "这里填写你的局域网IP或者公网服务器IP",
-                        "port": 8059,
-                        "wpp_active_message_poll": False,
-                        "wpp_active_message_poll_interval": 3,
                     },
                     "微信公众平台": {
                         "id": "weixin_official_account",
@@ -355,6 +363,16 @@ CONFIG_METADATA_2 = {
                         "satori_auto_reconnect": True,
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
+                    },
+                    "WeChatPadPro": {
+                        "id": "wechatpadpro",
+                        "type": "wechatpadpro",
+                        "enable": False,
+                        "admin_key": "stay33",
+                        "host": "这里填写你的局域网IP或者公网服务器IP",
+                        "port": 8059,
+                        "wpp_active_message_poll": False,
+                        "wpp_active_message_poll_interval": 3,
                     },
                     # "WebChat": {
                     #     "id": "webchat",
@@ -844,6 +862,7 @@ CONFIG_METADATA_2 = {
         "metadata": {
             "provider": {
                 "type": "list",
+                # provider sources templates
                 "config_template": {
                     "OpenAI": {
                         "id": "openai",
@@ -854,107 +873,10 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
-                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                        "hint": "也兼容所有与 OpenAI API 兼容的服务。",
                     },
-                    "Azure OpenAI": {
-                        "id": "azure",
-                        "provider": "azure",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "api_version": "2024-05-01-preview",
-                        "key": [],
-                        "api_base": "",
-                        "timeout": 120,
-                        "model_config": {"model": "gpt-4o-mini", "temperature": 0.4},
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "xAI": {
-                        "id": "xai",
-                        "provider": "xai",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://api.x.ai/v1",
-                        "timeout": 120,
-                        "model_config": {"model": "grok-2-latest", "temperature": 0.4},
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "xai_native_search": False,
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "Anthropic": {
-                        "hint": "注意Claude系列模型的温度调节范围为0到1.0，超出可能导致报错",
-                        "id": "claude",
-                        "provider": "anthropic",
-                        "type": "anthropic_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://api.anthropic.com/v1",
-                        "timeout": 120,
-                        "model_config": {
-                            "model": "claude-3-5-sonnet-latest",
-                            "max_tokens": 4096,
-                            "temperature": 0.2,
-                        },
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "Ollama": {
-                        "hint": "启用前请确保已正确安装并运行 Ollama 服务端，Ollama默认不带鉴权，无需修改key",
-                        "id": "ollama_default",
-                        "provider": "ollama",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": ["ollama"],  # ollama 的 key 默认是 ollama
-                        "api_base": "http://localhost:11434/v1",
-                        "model_config": {"model": "llama3.1-8b", "temperature": 0.4},
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "LM Studio": {
-                        "id": "lm_studio",
-                        "provider": "lm_studio",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": ["lmstudio"],
-                        "api_base": "http://localhost:1234/v1",
-                        "model_config": {
-                            "model": "llama-3.1-8b",
-                        },
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "Gemini(OpenAI兼容)": {
-                        "id": "gemini_default",
-                        "provider": "google",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
-                        "timeout": 120,
-                        "model_config": {
-                            "model": "gemini-1.5-flash",
-                            "temperature": 0.4,
-                        },
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "Gemini": {
-                        "id": "gemini_default",
+                    "Google Gemini": {
+                        "id": "google_gemini",
                         "provider": "google",
                         "type": "googlegenai_chat_completion",
                         "provider_type": "chat_completion",
@@ -962,10 +884,6 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "gemini-2.0-flash-exp",
-                            "temperature": 0.4,
-                        },
                         "gm_resp_image_modal": False,
                         "gm_native_search": False,
                         "gm_native_coderunner": False,
@@ -976,13 +894,44 @@ CONFIG_METADATA_2 = {
                             "sexually_explicit": "BLOCK_MEDIUM_AND_ABOVE",
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
-                        "gm_thinking_config": {
-                            "budget": 0,
-                        },
-                        "modalities": ["text", "image", "tool_use"],
+                        "gm_thinking_config": {"budget": 0, "level": "HIGH"},
+                    },
+                    "Anthropic": {
+                        "id": "anthropic",
+                        "provider": "anthropic",
+                        "type": "anthropic_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.anthropic.com/v1",
+                        "timeout": 120,
+                        "anth_thinking_config": {"budget": 0},
+                    },
+                    "Moonshot": {
+                        "id": "moonshot",
+                        "provider": "moonshot",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.moonshot.cn/v1",
+                        "custom_headers": {},
+                    },
+                    "xAI": {
+                        "id": "xai",
+                        "provider": "xai",
+                        "type": "xai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.x.ai/v1",
+                        "timeout": 120,
+                        "custom_headers": {},
+                        "xai_native_search": False,
                     },
                     "DeepSeek": {
-                        "id": "deepseek_default",
+                        "id": "deepseek",
                         "provider": "deepseek",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
@@ -990,13 +939,75 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
-                        "model_config": {"model": "deepseek-chat", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "tool_use"],
+                    },
+                    "Zhipu": {
+                        "id": "zhipu",
+                        "provider": "zhipu",
+                        "type": "zhipu_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+                        "custom_headers": {},
+                    },
+                    "Azure OpenAI": {
+                        "id": "azure_openai",
+                        "provider": "azure",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "api_version": "2024-05-01-preview",
+                        "key": [],
+                        "api_base": "",
+                        "timeout": 120,
+                        "custom_headers": {},
+                    },
+                    "Ollama": {
+                        "id": "ollama",
+                        "provider": "ollama",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": ["ollama"],  # ollama 的 key 默认是 ollama
+                        "api_base": "http://127.0.0.1:11434/v1",
+                        "custom_headers": {},
+                    },
+                    "LM Studio": {
+                        "id": "lm_studio",
+                        "provider": "lm_studio",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": ["lmstudio"],
+                        "api_base": "http://127.0.0.1:1234/v1",
+                        "custom_headers": {},
+                    },
+                    "ModelStack": {
+                        "id": "modelstack",
+                        "provider": "modelstack",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://modelstack.app/v1",
+                        "timeout": 120,
+                        "custom_headers": {},
+                    },
+                    "Gemini_OpenAI_API": {
+                        "id": "google_gemini_openai",
+                        "provider": "google",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                        "timeout": 120,
+                        "custom_headers": {},
                     },
                     "Groq": {
-                        "id": "groq_default",
+                        "id": "groq",
                         "provider": "groq",
                         "type": "groq_chat_completion",
                         "provider_type": "chat_completion",
@@ -1004,13 +1015,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.groq.com/openai/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "openai/gpt-oss-20b",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "tool_use"],
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -1021,12 +1026,9 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
-                        "model_config": {"model": "gpt-4.1-mini", "temperature": 0.4},
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
-                    "硅基流动": {
+                    "SiliconFlow": {
                         "id": "siliconflow",
                         "provider": "siliconflow",
                         "type": "openai_chat_completion",
@@ -1035,15 +1037,9 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
-                        "model_config": {
-                            "model": "deepseek-ai/DeepSeek-V3",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
-                    "PPIO派欧云": {
+                    "PPIO": {
                         "id": "ppio",
                         "provider": "ppio",
                         "type": "openai_chat_completion",
@@ -1052,14 +1048,9 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "deepseek/deepseek-r1",
-                            "temperature": 0.4,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
                     },
-                    "小马算力": {
+                    "TokenPony": {
                         "id": "tokenpony",
                         "provider": "tokenpony",
                         "type": "openai_chat_completion",
@@ -1068,14 +1059,9 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.tokenpony.cn/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "kimi-k2-instruct-0905",
-                            "temperature": 0.7,
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
                     },
-                    "优云智算": {
+                    "Compshare": {
                         "id": "compshare",
                         "provider": "compshare",
                         "type": "openai_chat_completion",
@@ -1084,42 +1070,18 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.modelverse.cn/v1",
                         "timeout": 120,
-                        "model_config": {
-                            "model": "moonshotai/Kimi-K2-Instruct",
-                        },
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
-                    "Kimi": {
-                        "id": "moonshot",
-                        "provider": "moonshot",
+                    "ModelScope": {
+                        "id": "modelscope",
+                        "provider": "modelscope",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],
                         "timeout": 120,
-                        "api_base": "https://api.moonshot.cn/v1",
-                        "model_config": {"model": "moonshot-v1-8k", "temperature": 0.4},
+                        "api_base": "https://api-inference.modelscope.cn/v1",
                         "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
-                    "智谱 AI": {
-                        "id": "zhipu_default",
-                        "provider": "zhipu",
-                        "type": "zhipu_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "timeout": 120,
-                        "api_base": "https://open.bigmodel.cn/api/paas/v4/",
-                        "model_config": {
-                            "model": "glm-4-flash",
-                        },
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -1134,7 +1096,6 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,
-                        "hint": "请确保你在 AstrBot 里设置的 APP 类型和 Dify 里面创建的应用的类型一致！",
                     },
                     "Coze": {
                         "id": "coze",
@@ -1165,20 +1126,6 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                     },
-                    "ModelScope": {
-                        "id": "modelscope",
-                        "provider": "modelscope",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "timeout": 120,
-                        "api_base": "https://api-inference.modelscope.cn/v1",
-                        "model_config": {"model": "Qwen/Qwen3-32B", "temperature": 0.4},
-                        "custom_headers": {},
-                        "custom_extra_body": {},
-                        "modalities": ["text", "image", "tool_use"],
-                    },
                     "FastGPT": {
                         "id": "fastgpt",
                         "provider": "fastgpt",
@@ -1202,7 +1149,6 @@ CONFIG_METADATA_2 = {
                         "model": "whisper-1",
                     },
                     "Whisper(Local)": {
-                        "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
                         "provider_type": "speech_to_text",
@@ -1211,7 +1157,6 @@ CONFIG_METADATA_2 = {
                         "model": "tiny",
                     },
                     "SenseVoice(Local)": {
-                        "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。",
                         "type": "sensevoice_stt_selfhost",
                         "provider": "sensevoice",
                         "provider_type": "speech_to_text",
@@ -1233,7 +1178,6 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                     },
                     "Edge TTS": {
-                        "hint": "提示：使用这个服务前需要安装有 ffmpeg，并且可以直接在终端调用 ffmpeg 指令。",
                         "id": "edge_tts",
                         "provider": "microsoft",
                         "type": "edge_tts",
@@ -1343,7 +1287,7 @@ CONFIG_METADATA_2 = {
                         "minimax-is-timber-weight": False,
                         "minimax-voice-id": "female-shaonv",
                         "minimax-timber-weight": '[\n    {\n        "voice_id": "Chinese (Mandarin)_Warm_Girl",\n        "weight": 25\n    },\n    {\n        "voice_id": "Chinese (Mandarin)_BashfulGirl",\n        "weight": 50\n    }\n]',
-                        "minimax-voice-emotion": "neutral",
+                        "minimax-voice-emotion": "auto",
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
@@ -1449,6 +1393,10 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "provider_source_id": {
+                        "invisible": True,
+                        "type": "string",
+                    },
                     "xai_native_search": {
                         "description": "启用原生搜索功能",
                         "type": "bool",
@@ -1503,7 +1451,32 @@ CONFIG_METADATA_2 = {
                         "description": "自定义请求体参数",
                         "type": "dict",
                         "items": {},
-                        "hint": "此处添加的键值对将被合并到发送给 API 的 extra_body 中。值可以是字符串、数字或布尔值。",
+                        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+                        "template_schema": {
+                            "temperature": {
+                                "name": "Temperature",
+                                "description": "温度参数",
+                                "hint": "控制输出的随机性，范围通常为 0-2。值越高越随机。",
+                                "type": "float",
+                                "default": 0.6,
+                                "slider": {"min": 0, "max": 2, "step": 0.1},
+                            },
+                            "top_p": {
+                                "name": "Top-p",
+                                "description": "Top-p 采样",
+                                "hint": "核采样参数，范围通常为 0-1。控制模型考虑的概率质量。",
+                                "type": "float",
+                                "default": 1.0,
+                                "slider": {"min": 0, "max": 1, "step": 0.01},
+                            },
+                            "max_tokens": {
+                                "name": "Max Tokens",
+                                "description": "最大令牌数",
+                                "hint": "生成的最大令牌数。",
+                                "type": "int",
+                                "default": 8192,
+                            },
+                        },
                     },
                     "provider": {
                         "type": "string",
@@ -1819,13 +1792,35 @@ CONFIG_METADATA_2 = {
                         },
                     },
                     "gm_thinking_config": {
-                        "description": "Gemini思考设置",
+                        "description": "Thinking Config",
                         "type": "object",
                         "items": {
                             "budget": {
-                                "description": "思考预算",
+                                "description": "Thinking Budget",
                                 "type": "int",
-                                "hint": "模型应该生成的思考Token的数量，设为0关闭思考。除gemini-2.5-flash外的模型会静默忽略此参数。",
+                                "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget",
+                            },
+                            "level": {
+                                "description": "Thinking Level",
+                                "type": "string",
+                                "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels",
+                                "options": [
+                                    "MINIMAL",
+                                    "LOW",
+                                    "MEDIUM",
+                                    "HIGH",
+                                ],
+                            },
+                        },
+                    },
+                    "anth_thinking_config": {
+                        "description": "Thinking Config",
+                        "type": "object",
+                        "items": {
+                            "budget": {
+                                "description": "Thinking Budget",
+                                "type": "int",
+                                "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
                             },
                         },
                     },
@@ -1900,15 +1895,18 @@ CONFIG_METADATA_2 = {
                     "minimax-voice-emotion": {
                         "type": "string",
                         "description": "情绪",
-                        "hint": "控制合成语音的情绪",
+                        "hint": "控制合成语音的情绪。当为 auto 时，将根据文本内容自动选择情绪。",
                         "options": [
+                            "auto",
                             "happy",
                             "sad",
                             "angry",
                             "fearful",
                             "disgusted",
                             "surprised",
-                            "neutral",
+                            "calm",
+                            "fluent",
+                            "whisper",
                         ],
                     },
                     "minimax-voice-latex": {
@@ -2006,7 +2004,6 @@ CONFIG_METADATA_2 = {
                     "id": {
                         "description": "ID",
                         "type": "string",
-                        "hint": "模型提供商名字。",
                     },
                     "type": {
                         "description": "模型提供商种类",
@@ -2026,29 +2023,15 @@ CONFIG_METADATA_2 = {
                         "description": "API Key",
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "提供商 API Key。",
                     },
                     "api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                        "hint": "API Base URL 请在模型提供商处获得。如出现 404 报错，尝试在地址末尾加上 /v1",
                     },
-                    "model_config": {
-                        "description": "模型配置",
-                        "type": "object",
-                        "items": {
-                            "model": {
-                                "description": "模型名称",
-                                "type": "string",
-                                "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
-                            },
-                            "max_tokens": {
-                                "description": "模型最大输出长度（tokens）",
-                                "type": "int",
-                            },
-                            "temperature": {"description": "温度", "type": "float"},
-                            "top_p": {"description": "Top P值", "type": "float"},
-                        },
+                    "model": {
+                        "description": "模型 ID",
+                        "type": "string",
+                        "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
                     },
                     "dify_api_key": {
                         "description": "API Key",
@@ -3106,4 +3089,5 @@ DEFAULT_VALUE_MAP = {
     "text": "",
     "list": [],
     "object": {},
+    "template_list": [],
 }

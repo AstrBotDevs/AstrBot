@@ -19,7 +19,7 @@ dingtalk-stream>=0.22.1
 docstring-parser>=0.16
 faiss-cpu==1.10.0
 filelock>=3.18.0
-google-genai>=1.14.0
+google-genai>=1.56.0
 lark-oapi>=1.4.15
 lxml-html-clean>=0.4.2
 mcp>=1.8.0
@@ -27,7 +27,7 @@ openai>=1.78.0
 ormsgpack>=1.9.1
 pillow>=11.2.1
 pip>=25.1.1
-psutil>=5.8.0
+psutil>=5.8.0,<7.2.0
 py-cord>=2.6.1
 pydantic~=2.10.3
 pydub>=0.25.1

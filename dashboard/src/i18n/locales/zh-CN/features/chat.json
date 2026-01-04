@@ -41,7 +41,8 @@
     "editTitle": "编辑标题",
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
-    "reply": "引用回复"
+    "reply": "引用回复",
+    "providerConfig": "AI 配置"
   },
   "conversation": {
     "newConversation": "新的聊天",
@@ -79,6 +80,14 @@
   "time": {
     "today": "今天",
     "yesterday": "昨天"
+  },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "输入 Token",
+    "outputTokens": "输出 Token",
+    "cachedTokens": "缓存 Token",
+    "duration": "耗时",
+    "ttft": "首字时间"
   },
   "connection": {
     "title": "连接状态提醒",

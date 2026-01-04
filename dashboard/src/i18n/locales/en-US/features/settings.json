@@ -18,6 +18,11 @@
       "title": "Data Migration to v4.0.0",
       "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
       "button": "Start Migration Assistant"
+    },
+    "backup": {
+      "title": "Backup & Restore",
+      "subtitle": "Export or import all AstrBot data for easy migration to a new server",
+      "button": "Backup Manager"
     }
   },
   "sidebar": {
@@ -29,5 +34,80 @@
       "mainItems": "Main Modules",
       "moreItems": "More Features"
     }
+  },
+  "backup": {
+    "dialog": {
+      "title": "Backup Manager"
+    },
+    "tabs": {
+      "export": "Export Backup",
+      "import": "Import Backup",
+      "list": "Backup List"
+    },
+    "export": {
+      "title": "Create Backup",
+      "description": "Export all data as a ZIP backup file, including database, knowledge base, config and attachments.",
+      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files",
+      "button": "Start Export",
+      "processing": "Exporting...",
+      "wait": "Please wait, packaging data...",
+      "completed": "Export Completed!",
+      "download": "Download Backup",
+      "another": "Create New Backup",
+      "failed": "Export Failed",
+      "retry": "Retry"
+    },
+    "import": {
+      "title": "Import Backup",
+      "warning": "⚠️ Import will clear and overwrite existing data! Please make sure you have backed up your current data.",
+      "selectFile": "Select backup file (.zip)",
+      "uploadAndCheck": "Upload & Check",
+      "uploading": "Uploading...",
+      "uploadWait": "Please wait, uploading backup file...",
+      "uploadInit": "Initializing upload...",
+      "uploadingChunks": "Uploading chunks...",
+      "uploadComplete": "Upload complete, merging file...",
+      "checking": "Checking backup file...",
+      "invalidBackup": "Invalid backup file",
+      "backupContents": "Backup Contents",
+      "tables": "tables",
+      "knowledgeBases": "Knowledge Bases",
+      "configFiles": "Config Files",
+      "confirmImport": "Confirm Import",
+      "button": "Start Import",
+      "processing": "Importing...",
+      "wait": "Please wait, restoring data...",
+      "completed": "Import Completed!",
+      "restartRequired": "Data has been successfully imported. It is recommended to restart AstrBot immediately for all changes to take effect.",
+      "restartNow": "Restart Now",
+      "failed": "Import Failed",
+      "retry": "Retry",
+      "version": {
+        "backupVersion": "Backup Version",
+        "currentVersion": "Current Version",
+        "backupTime": "Backup Time",
+        "matchTitle": "✅ Version Match",
+        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n\nThis action cannot be undone! Do you want to continue?",
+        "minorDiffTitle": "⚠️ Version Difference Warning",
+        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "majorDiffTitle": "⛔ Cannot Import",
+        "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
+      }
+    },
+    "list": {
+      "empty": "No backup files",
+      "refresh": "Refresh List",
+      "confirmDelete": "Are you sure you want to delete this backup file? This action cannot be undone.",
+      "uploaded": "Uploaded",
+      "restore": "Restore this backup",
+      "rename": "Rename",
+      "renameTitle": "Rename Backup File",
+      "newName": "New Filename",
+      "renameHint": "Filename can only contain letters, numbers, underscores, hyphens and dots",
+      "renameRequired": "Please enter a filename",
+      "renameInvalidChars": "Filename contains invalid characters",
+      "renameFailed": "Rename failed",
+      "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
+    }
   }
-} 
+}

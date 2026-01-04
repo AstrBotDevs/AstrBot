@@ -132,6 +132,7 @@ uv run main.py
 
 **社区维护**
 
+- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
 - [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
 - [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
 - [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
@@ -208,6 +209,7 @@ pre-commit install
 - 5 群：822130018
 - 6 群：753075035
 - 7 群：743746109
+- 8 群：1030353265
 - 开发者群：975206796
 
 ### Telegram 群组

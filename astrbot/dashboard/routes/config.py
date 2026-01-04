@@ -6,7 +6,7 @@ from typing import Any
 
 from quart import request
 
-from astrbot.core import file_token_service, logger
+from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -21,6 +21,7 @@ from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
@@ -45,6 +46,46 @@ def try_cast(value: Any, type_: str):
             return None
 
 
+def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+    if not isinstance(value, expected_type):
+        errors.append(
+            f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
+            f"得到了 {type(value).__name__}"
+        )
+        return False
+    return True
+
+
+def _validate_template_list(value, meta, path_key, errors, validate_fn):
+    if not _expect_type(value, list, path_key, errors, "list"):
+        return
+
+    templates = meta.get("templates")
+    if not isinstance(templates, dict):
+        templates = {}
+
+    for idx, item in enumerate(value):
+        item_path = f"{path_key}[{idx}]"
+        if not _expect_type(item, dict, item_path, errors, "dict"):
+            continue
+
+        template_key = item.get("__template_key") or item.get("template")
+        if not template_key:
+            errors.append(f"缺少模板选择 {item_path}: 需要 __template_key")
+            continue
+
+        template_meta = templates.get(template_key)
+        if not template_meta:
+            errors.append(f"未知模板 {item_path}: {template_key}")
+            continue
+
+        validate_fn(
+            item,
+            template_meta.get("items", {}),
+            path=f"{item_path}.",
+        )
+
+
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
@@ -60,6 +101,11 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
             if value is None:
                 data[key] = DEFAULT_VALUE_MAP[meta["type"]]
                 continue
+
+            if meta["type"] == "template_list":
+                _validate_template_list(value, meta, f"{path}{key}", errors, validate)
+                continue
+
             if meta["type"] == "list" and not isinstance(value, list):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 list, 得到了 {type(value).__name__}",
@@ -181,12 +227,156 @@ class ConfigRoute(Route):
             "/config/provider/new": ("POST", self.post_new_provider),
             "/config/provider/update": ("POST", self.post_update_provider),
             "/config/provider/delete": ("POST", self.post_delete_provider),
+            "/config/provider/template": ("GET", self.get_provider_template),
             "/config/provider/check_one": ("GET", self.check_one_provider_status),
             "/config/provider/list": ("GET", self.get_provider_config_list),
             "/config/provider/model_list": ("GET", self.get_provider_model_list),
             "/config/provider/get_embedding_dim": ("POST", self.get_embedding_dim),
+            "/config/provider_sources/models": (
+                "GET",
+                self.get_provider_source_models,
+            ),
+            "/config/provider_sources/update": (
+                "POST",
+                self.update_provider_source,
+            ),
+            "/config/provider_sources/delete": (
+                "POST",
+                self.delete_provider_source,
+            ),
         }
         self.register_routes()
+
+    async def delete_provider_source(self):
+        """删除 provider_source，并更新关联的 providers"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        provider_source_id = post_data.get("id")
+        if not provider_source_id:
+            return Response().error("缺少 provider_source_id").__dict__
+
+        provider_sources = self.config.get("provider_sources", [])
+        target_idx = next(
+            (
+                i
+                for i, ps in enumerate(provider_sources)
+                if ps.get("id") == provider_source_id
+            ),
+            -1,
+        )
+
+        if target_idx == -1:
+            return Response().error("未找到对应的 provider source").__dict__
+
+        # 删除 provider_source
+        del provider_sources[target_idx]
+
+        # 写回配置
+        self.config["provider_sources"] = provider_sources
+
+        # 删除引用了该 provider_source 的 providers
+        await self.core_lifecycle.provider_manager.delete_provider(
+            provider_source_id=provider_source_id
+        )
+
+        try:
+            save_config(self.config, self.config, is_core=True)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+        return Response().ok(message="删除 provider source 成功").__dict__
+
+    async def update_provider_source(self):
+        """更新或新增 provider_source，并重载关联的 providers"""
+        post_data = await request.json
+        if not post_data:
+            return Response().error("缺少配置数据").__dict__
+
+        new_source_config = post_data.get("config") or post_data
+        original_id = post_data.get("original_id")
+        if not original_id:
+            return Response().error("缺少 original_id").__dict__
+
+        if not isinstance(new_source_config, dict):
+            return Response().error("缺少或错误的配置数据").__dict__
+
+        # 确保配置中有 id 字段
+        if not new_source_config.get("id"):
+            new_source_config["id"] = original_id
+
+        provider_sources = self.config.get("provider_sources", [])
+
+        for ps in provider_sources:
+            if ps.get("id") == new_source_config["id"] and ps.get("id") != original_id:
+                return (
+                    Response()
+                    .error(
+                        f"Provider source ID '{new_source_config['id']}' exists already, please try another ID.",
+                    )
+                    .__dict__
+                )
+
+        # 查找旧的 provider_source，若不存在则追加为新配置
+        target_idx = next(
+            (i for i, ps in enumerate(provider_sources) if ps.get("id") == original_id),
+            -1,
+        )
+
+        old_id = original_id
+        if target_idx == -1:
+            provider_sources.append(new_source_config)
+        else:
+            old_id = provider_sources[target_idx].get("id")
+            provider_sources[target_idx] = new_source_config
+
+        # 更新引用了该 provider_source 的 providers
+        affected_providers = []
+        for provider in self.config.get("provider", []):
+            if provider.get("provider_source_id") == old_id:
+                provider["provider_source_id"] = new_source_config["id"]
+                affected_providers.append(provider)
+
+        # 写回配置
+        self.config["provider_sources"] = provider_sources
+
+        try:
+            save_config(self.config, self.config, is_core=True)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+        # 重载受影响的 providers，使新的 source 配置生效
+        reload_errors = []
+        prov_mgr = self.core_lifecycle.provider_manager
+        for provider in affected_providers:
+            try:
+                await prov_mgr.reload(provider)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                reload_errors.append(f"{provider.get('id')}: {e}")
+
+        if reload_errors:
+            return (
+                Response()
+                .error("更新成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+                .__dict__
+            )
+
+        return Response().ok(message="更新 provider source 成功").__dict__
+
+    async def get_provider_template(self):
+        config_schema = {
+            "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+        }
+        data = {
+            "config_schema": config_schema,
+            "providers": astrbot_config["provider"],
+            "provider_sources": astrbot_config["provider_sources"],
+        }
+        return Response().ok(data=data).__dict__
 
     async def get_uc_table(self):
         """获取 UMOP 配置路由表"""
@@ -435,9 +625,25 @@ class ConfigRoute(Route):
             return Response().error("缺少参数 provider_type").__dict__
         provider_type_ls = provider_type.split(",")
         provider_list = []
-        astrbot_config = self.core_lifecycle.astrbot_config
-        for provider in astrbot_config["provider"]:
-            if provider.get("provider_type", None) in provider_type_ls:
+        ps = self.core_lifecycle.provider_manager.providers_config
+        p_source_pt = {
+            psrc["id"]: psrc["provider_type"]
+            for psrc in self.core_lifecycle.provider_manager.provider_sources_config
+        }
+        for provider in ps:
+            ps_id = provider.get("provider_source_id", None)
+            if (
+                ps_id
+                and ps_id in p_source_pt
+                and p_source_pt[ps_id] in provider_type_ls
+            ):
+                # chat
+                prov = self.core_lifecycle.provider_manager.get_merged_provider_config(
+                    provider
+                )
+                provider_list.append(prov)
+            elif not ps_id and provider.get("provider_type", None) in provider_type_ls:
+                # agent runner, embedding, etc
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 
@@ -460,9 +666,18 @@ class ConfigRoute(Route):
 
         try:
             models = await provider.get_models()
+            models = models or []
+
+            metadata_map = {}
+            for model_id in models:
+                meta = LLM_METADATAS.get(model_id)
+                if meta:
+                    metadata_map[model_id] = meta
+
             ret = {
                 "models": models,
                 "provider_id": provider_id,
+                "model_metadata": metadata_map,
             }
             return Response().ok(ret).__dict__
         except Exception as e:
@@ -524,6 +739,104 @@ class ConfigRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
 
+    async def get_provider_source_models(self):
+        """获取指定 provider_source 支持的模型列表
+
+        本质上会临时初始化一个 Provider 实例，调用 get_models() 获取模型列表，然后销毁实例
+        """
+        provider_source_id = request.args.get("source_id")
+        if not provider_source_id:
+            return Response().error("缺少参数 source_id").__dict__
+
+        try:
+            from astrbot.core.provider.register import provider_cls_map
+
+            # 从配置中查找对应的 provider_source
+            provider_sources = self.config.get("provider_sources", [])
+            provider_source = None
+            for ps in provider_sources:
+                if ps.get("id") == provider_source_id:
+                    provider_source = ps
+                    break
+
+            if not provider_source:
+                return (
+                    Response()
+                    .error(f"未找到 ID 为 {provider_source_id} 的 provider_source")
+                    .__dict__
+                )
+
+            # 获取 provider 类型
+            provider_type = provider_source.get("type", None)
+            if not provider_type:
+                return Response().error("provider_source 缺少 type 字段").__dict__
+
+            try:
+                self.core_lifecycle.provider_manager.dynamic_import_provider(
+                    provider_type
+                )
+            except ImportError as e:
+                logger.error(traceback.format_exc())
+                return Response().error(f"动态导入提供商适配器失败: {e!s}").__dict__
+
+            # 获取对应的 provider 类
+            if provider_type not in provider_cls_map:
+                return (
+                    Response()
+                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .__dict__
+                )
+
+            provider_metadata = provider_cls_map[provider_type]
+            cls_type = provider_metadata.cls_type
+
+            if not cls_type:
+                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+
+            # 检查是否是 Provider 类型
+            if not issubclass(cls_type, Provider):
+                return (
+                    Response()
+                    .error(f"提供商 {provider_type} 不支持获取模型列表")
+                    .__dict__
+                )
+
+            # 临时实例化 provider
+            inst = cls_type(provider_source, {})
+
+            # 如果有 initialize 方法，调用它
+            init_fn = getattr(inst, "initialize", None)
+            if inspect.iscoroutinefunction(init_fn):
+                await init_fn()
+
+            # 获取模型列表
+            models = await inst.get_models()
+            models = models or []
+
+            metadata_map = {}
+            for model_id in models:
+                meta = LLM_METADATAS.get(model_id)
+                if meta:
+                    metadata_map[model_id] = meta
+
+            # 销毁实例（如果有 terminate 方法）
+            terminate_fn = getattr(inst, "terminate", None)
+            if inspect.iscoroutinefunction(terminate_fn):
+                await terminate_fn()
+
+            logger.info(
+                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
+            )
+
+            return (
+                Response()
+                .ok({"models": models, "model_metadata": metadata_map})
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取模型列表失败: {e!s}").__dict__
+
     async def get_platform_list(self):
         """获取所有平台的列表"""
         platform_list = []
@@ -535,7 +848,15 @@ class ConfigRoute(Route):
         data = await request.json
         config = data.get("config", None)
         conf_id = data.get("conf_id", None)
+
         try:
+            # 不更新 provider_sources, provider, platform
+            # 这些配置有单独的接口进行更新
+            if conf_id == "default":
+                no_update_keys = ["provider_sources", "provider", "platform"]
+                for key in no_update_keys:
+                    config[key] = self.acm.default_conf[key]
+
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
             return Response().ok(None, "保存成功~").__dict__
@@ -575,28 +896,30 @@ class ConfigRoute(Route):
 
     async def post_new_provider(self):
         new_provider_config = await request.json
-        self.config["provider"].append(new_provider_config)
+
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.load_provider(
-                new_provider_config,
+            await self.core_lifecycle.provider_manager.create_provider(
+                new_provider_config
             )
         except Exception as e:
             return Response().error(str(e)).__dict__
-        return Response().ok(None, "新增服务提供商配置成功~").__dict__
+        return Response().ok(None, "新增服务提供商配置成功").__dict__
 
     async def post_update_platform(self):
         update_platform_config = await request.json
-        platform_id = update_platform_config.get("id", None)
+        origin_platform_id = update_platform_config.get("id", None)
         new_config = update_platform_config.get("config", None)
-        if not platform_id or not new_config:
+        if not origin_platform_id or not new_config:
             return Response().error("参数错误").__dict__
+
+        if origin_platform_id != new_config.get("id", None):
+            return Response().error("机器人名称不允许修改").__dict__
 
         # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
         ensure_platform_webhook_config(new_config)
 
         for i, platform in enumerate(self.config["platform"]):
-            if platform["id"] == platform_id:
+            if platform["id"] == origin_platform_id:
                 self.config["platform"][i] = new_config
                 break
         else:
@@ -611,21 +934,15 @@ class ConfigRoute(Route):
 
     async def post_update_provider(self):
         update_provider_config = await request.json
-        provider_id = update_provider_config.get("id", None)
+        origin_provider_id = update_provider_config.get("id", None)
         new_config = update_provider_config.get("config", None)
-        if not provider_id or not new_config:
+        if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
 
-        for i, provider in enumerate(self.config["provider"]):
-            if provider["id"] == provider_id:
-                self.config["provider"][i] = new_config
-                break
-        else:
-            return Response().error("未找到对应服务提供商").__dict__
-
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.reload(new_config)
+            await self.core_lifecycle.provider_manager.update_provider(
+                origin_provider_id, new_config
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
         return Response().ok(None, "更新成功，已经实时生效~").__dict__
@@ -648,19 +965,17 @@ class ConfigRoute(Route):
 
     async def post_delete_provider(self):
         provider_id = await request.json
-        provider_id = provider_id.get("id")
-        for i, provider in enumerate(self.config["provider"]):
-            if provider["id"] == provider_id:
-                del self.config["provider"][i]
-                break
-        else:
-            return Response().error("未找到对应服务提供商").__dict__
+        provider_id = provider_id.get("id", "")
+        if not provider_id:
+            return Response().error("缺少参数 id").__dict__
+
         try:
-            save_config(self.config, self.config, is_core=True)
-            await self.core_lifecycle.provider_manager.terminate_provider(provider_id)
+            await self.core_lifecycle.provider_manager.delete_provider(
+                provider_id=provider_id
+            )
         except Exception as e:
             return Response().error(str(e)).__dict__
-        return Response().ok(None, "删除成功，已经实时生效~").__dict__
+        return Response().ok(None, "删除成功，已经实时生效。").__dict__
 
     async def get_llm_tools(self):
         """获取函数调用工具。包含了本地加载的以及 MCP 服务的工具"""

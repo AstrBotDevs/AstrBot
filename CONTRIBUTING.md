@@ -33,6 +33,20 @@
 - 请使用英文描述您的 PR。
 - 标题请使用 `fix: `, `feat: `, `docs: `, `style: `, `refactor: `, `test: `, `chore: ` 等语义化前缀，并简要描述更改内容。如：`fix: correct login page typo`。
 
+#### 代码规范
+
+##### Core
+
+我们使用 Ruff 作为代码格式化和静态分析工具。在提交代码之前，请运行以下命令以确保代码符合规范：
+
+```bash
+ruff format .
+ruff check .
+```
+
+如果您使用 VSCode，可以安装 `Ruff` 插件。
+
+
 ## Contributing Guide
 
 First off, thanks for taking the time to contribute! ❤️
@@ -63,3 +77,14 @@ We use the `fix/` prefix for bug fixes and the `feat/` prefix for new features. 
 #### PR Description
 - Please use English to describe your PR.
 - Use semantic prefixes like `fix: `, `feat: `, `docs: `, `style: `, `refactor: `, `test: `, `chore: ` in the title, followed by a brief description of the changes, e.g., `fix: correct login page typo`.
+
+#### Code Style
+
+##### Core
+
+We use Ruff as our code formatter and static analysis tool. Before submitting your code, please run the following commands to ensure your code adheres to the style guidelines:
+
+```bash
+ruff format .
+ruff check .
+```

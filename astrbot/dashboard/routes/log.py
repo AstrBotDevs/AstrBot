@@ -1,13 +1,24 @@
 import asyncio
 import json
+import time
+from collections.abc import AsyncGenerator
 from typing import cast
 
 from quart import Response as QuartResponse
-from quart import make_response
+from quart import make_response, request
 
 from astrbot.core import LogBroker, logger
 
 from .route import Response, Route, RouteContext
+
+
+def _format_log_sse(log: dict, ts: float) -> str:
+    """辅助函数：格式化 SSE 消息"""
+    payload = {
+        "type": "log",
+        **log,
+    }
+    return f"id: {ts}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 class LogRoute(Route):
@@ -21,21 +32,44 @@ class LogRoute(Route):
             methods=["GET"],
         )
 
-    async def log(self):
+    async def _replay_cached_logs(
+        self, last_event_id: str
+    ) -> AsyncGenerator[str, None]:
+        """辅助生成器：重放缓存的日志"""
+        try:
+            last_ts = float(last_event_id)
+            cached_logs = list(self.log_broker.log_cache)
+
+            for log_item in cached_logs:
+                log_ts = float(log_item.get("time", 0))
+
+                if log_ts > last_ts:
+                    yield _format_log_sse(log_item, log_ts)
+
+        except ValueError:
+            pass
+        except Exception as e:
+            logger.error(f"Log SSE 补发历史错误: {e}")
+
+    async def log(self) -> QuartResponse:
+        last_event_id = request.headers.get("Last-Event-ID")
+
         async def stream():
             queue = None
             try:
+                if last_event_id:
+                    async for event in self._replay_cached_logs(last_event_id):
+                        yield event
+
                 queue = self.log_broker.register()
                 while True:
                     message = await queue.get()
-                    payload = {
-                        "type": "log",
-                        **message,  # see astrbot/core/log.py
-                    }
-                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                    current_ts = message.get("time", time.time())
+                    yield _format_log_sse(message, current_ts)
+
             except asyncio.CancelledError:
                 pass
-            except BaseException as e:
+            except Exception as e:
                 logger.error(f"Log SSE 连接错误: {e}")
             finally:
                 if queue:
@@ -53,7 +87,7 @@ class LogRoute(Route):
                 },
             ),
         )
-        response.timeout = None
+        response.timeout = None  # type: ignore
         return response
 
     async def log_history(self):
@@ -69,6 +103,6 @@ class LogRoute(Route):
                 )
                 .__dict__
             )
-        except BaseException as e:
+        except Exception as e:
             logger.error(f"获取日志历史失败: {e}")
             return Response().error(f"获取日志历史失败: {e}").__dict__

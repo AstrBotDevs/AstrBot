@@ -41,7 +41,6 @@ class SlackAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.unique_session = platform_settings.get("unique_session", False)
 
         self.bot_token = platform_config.get("bot_token")
         self.app_token = platform_config.get("app_token")
@@ -147,12 +146,10 @@ class SlackAdapter(Platform):
             abm.group_id = channel_id
 
         # 设置会话ID
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = f"{user_id}_{channel_id}"
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = abm.group_id
         else:
-            abm.session_id = (
-                channel_id if abm.type == MessageType.GROUP_MESSAGE else user_id
-            )
+            abm.session_id = user_id
 
         abm.message_id = event.get("client_msg_id", uuid.uuid4().hex)
         abm.timestamp = int(float(event.get("ts", time.time())))

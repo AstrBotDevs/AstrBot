@@ -41,7 +41,6 @@ class AiocqhttpAdapter(Platform):
         super().__init__(platform_config, event_queue)
 
         self.settings = platform_settings
-        self.unique_session = platform_settings["unique_session"]
         self.host = platform_config["ws_reverse_host"]
         self.port = platform_config["ws_reverse_port"]
 
@@ -136,14 +135,11 @@ class AiocqhttpAdapter(Platform):
             abm.group_id = str(event.group_id)
         else:
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = str(abm.sender.user_id) + "_" + str(event.group_id)
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
         abm.message_str = ""
         abm.message = []
         abm.timestamp = int(time.time())
@@ -164,16 +160,11 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
         else:
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = (
-                str(abm.sender.user_id) + "_" + str(event.group_id)
-            )  # 也保留群组 id
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
         abm.message_str = ""
         abm.message = []
         abm.raw_message = event
@@ -210,16 +201,11 @@ class AiocqhttpAdapter(Platform):
             abm.group.group_name = event.get("group_name", "N/A")
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = (
-                abm.sender.user_id + "_" + str(event.group_id)
-            )  # 也保留群组 id
-        else:
-            abm.session_id = (
-                str(event.group_id)
-                if abm.type == MessageType.GROUP_MESSAGE
-                else abm.sender.user_id
-            )
+        abm.session_id = (
+            str(event.group_id)
+            if abm.type == MessageType.GROUP_MESSAGE
+            else abm.sender.user_id
+        )
 
         abm.message_id = str(event.message_id)
         abm.message = []
@@ -385,10 +371,25 @@ class AiocqhttpAdapter(Platform):
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
 
                 message_str += "".join(at_parts)
+            elif t == "markdown":
+                text = m["data"].get("markdown") or m["data"].get("content", "")
+                abm.message.append(Plain(text=text))
+                message_str += text
             else:
                 for m in m_group:
-                    a = ComponentTypes[t](**m["data"])
-                    abm.message.append(a)
+                    try:
+                        if t not in ComponentTypes:
+                            logger.warning(
+                                f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
+                            )
+                            continue
+                        a = ComponentTypes[t](**m["data"])
+                        abm.message.append(a)
+                    except Exception as e:
+                        logger.exception(
+                            f"消息段解析失败: type={t}, data={m['data']}. {e}"
+                        )
+                        continue
 
         abm.timestamp = int(time.time())
         abm.message_str = message_str

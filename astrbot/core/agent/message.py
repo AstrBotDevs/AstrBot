@@ -4,9 +4,8 @@
 import builtins
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, GetCoreSchemaHandler, model_validator
+from pydantic import BaseModel, GetCoreSchemaHandler, model_serializer, model_validator
 from pydantic.config import ConfigDict
-from pydantic.main import IncEx
 from pydantic_core import core_schema
 from typing_extensions import Unpack
 
@@ -16,7 +15,7 @@ class ContentPart(BaseModel):
 
     __content_part_registry: ClassVar[dict[str, type["ContentPart"]]] = {}
 
-    type: str
+    type: Literal["text", "think", "image_url", "audio_url"]
 
     def __init_subclass__(cls, **kwargs: Unpack[ConfigDict]) -> None:
         super().__init_subclass__(**kwargs)
@@ -65,6 +64,28 @@ class TextPart(ContentPart):
 
     type: str = "text"
     text: str
+
+
+class ThinkPart(ContentPart):
+    """
+    >>> ThinkPart(think="I think I need to think about this.").model_dump()
+    {'type': 'think', 'think': 'I think I need to think about this.', 'encrypted': None}
+    """
+
+    type: str = "think"
+    think: str
+    encrypted: str | None = None
+    """Encrypted thinking content, or signature."""
+
+    def merge_in_place(self, other: Any) -> bool:
+        if not isinstance(other, ThinkPart):
+            return False
+        if self.encrypted:
+            return False
+        self.think += other.think
+        if other.encrypted:
+            self.encrypted = other.encrypted
+        return True
 
 
 class ImageURLPart(ContentPart):
@@ -126,32 +147,9 @@ class ToolCall(BaseModel):
     extra_content: dict[str, Any] | None = None
     """Extra metadata for the tool call."""
 
-    def model_dump(
-        self,
-        *,
-        mode: Literal["json", "python"] | str = "python",
-        include: IncEx | None = None,
-        exclude: IncEx | None = None,
-        by_alias: bool = False,
-        exclude_unset: bool = False,
-        exclude_defaults: bool = False,
-        exclude_none: bool = False,
-        round_trip: bool = False,
-        warnings: bool | Literal["none", "warn", "error"] = True,
-        serialize_as_any: bool = False,
-    ) -> dict[str, Any]:
-        data = super().model_dump(
-            mode=mode,
-            include=include,
-            exclude=exclude,
-            by_alias=by_alias,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-            round_trip=round_trip,
-            warnings=warnings,
-            serialize_as_any=serialize_as_any,
-        )
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        data = handler(self)
         if self.extra_content is None:
             data.pop("extra_content", None)
         return data
@@ -195,6 +193,15 @@ class Message(BaseModel):
                 "content is required unless role='assistant' and tool_calls is not None"
             )
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        data = handler(self)
+        if self.tool_calls is None:
+            data.pop("tool_calls", None)
+        if self.tool_call_id is None:
+            data.pop("tool_call_id", None)
+        return data
 
 
 class AssistantMessageSegment(Message):

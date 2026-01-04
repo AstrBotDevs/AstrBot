@@ -134,6 +134,7 @@ Ou consultez la documentation officielle : [Déployer AstrBot depuis les sources
 
 **Maintenues par la communauté**
 
+- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
 - [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
 - [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
 - [Messages directs Bilibili](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)

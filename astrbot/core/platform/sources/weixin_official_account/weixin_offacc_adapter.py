@@ -191,7 +191,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 if self.active_send_mode:
                     await self.convert_message(msg, None)
                 else:
-                    if msg.id in self.wexin_event_workers:
+                    if str(msg.id) in self.wexin_event_workers:
                         future = self.wexin_event_workers[str(cast(str | int, msg.id))]
                         logger.debug(f"duplicate message id checked: {msg.id}")
                     else:

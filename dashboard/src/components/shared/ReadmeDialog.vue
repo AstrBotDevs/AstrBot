@@ -1,10 +1,14 @@
 <script setup>
 import { ref, watch, onMounted, computed } from 'vue';
 import axios from 'axios';
-import MarkdownIt from 'markdown-it';
-import hljs from 'highlight.js';
+import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
+import 'markstream-vue/index.css';
+import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/github.css';
 import { useI18n } from '@/i18n/composables';
+
+enableKatex();
+enableMermaid();
 
 const props = defineProps({
   show: {
@@ -74,29 +78,6 @@ function openRepoInNewTab() {
   }
 }
 
-// 配置markdown-it，启用代码高亮
-const md = new MarkdownIt({
-  html: true,        // 启用HTML标签
-  breaks: true,       // 换行转<br>
-  linkify: true,      // 自动转链接
-  typographer: false, // 禁用智能引号
-  highlight: function(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(code, { language: lang }).value;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return hljs.highlightAuto(code).value;
-  }
-});
-
-// 渲染Markdown内容
-function renderMarkdown(content) {
-  if (!content) return '';
-  return md.render(content);
-}
 
 // 刷新README内容
 function refreshReadme() {
@@ -150,7 +131,9 @@ const _show = computed({
         </div>
         
         <!-- 内容显示 -->
-        <div v-else-if="content" class="markdown-body" v-html="renderMarkdown(content)"></div>
+        <div v-else-if="content" class="markdown-body">
+          <MarkdownRender :content="content" :typewriter="false" class="markdown-content" />
+        </div>
         
         <!-- 错误提示 -->
         <div v-else-if="error" class="d-flex flex-column align-center justify-center" style="height: 100%;">
@@ -301,6 +284,9 @@ const _show = computed({
 <script>
 export default {
   name: 'ReadmeDialog',
+  components: {
+    MarkdownRender
+  },
   computed: {
     _show: {
       get() {

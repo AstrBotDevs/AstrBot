@@ -14,6 +14,7 @@ export function useCommandActions(
     show: false,
     command: null,
     newName: '',
+    aliases: [],
     loading: false
   });
 
@@ -53,6 +54,7 @@ export function useCommandActions(
   const openRenameDialog = (cmd: CommandItem) => {
     renameDialog.command = cmd;
     renameDialog.newName = cmd.current_fragment || '';
+    renameDialog.aliases = [...(cmd.aliases || [])];
     renameDialog.show = true;
   };
 
@@ -66,7 +68,8 @@ export function useCommandActions(
     try {
       const res = await axios.post('/api/commands/rename', {
         handler_full_name: renameDialog.command.handler_full_name,
-        new_name: renameDialog.newName.trim()
+        new_name: renameDialog.newName.trim(),
+        aliases: renameDialog.aliases.filter(a => a.trim())
       });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');

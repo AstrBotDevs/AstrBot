@@ -1,15 +1,20 @@
 <script setup>
-import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
+import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 
 const { t } = useI18n();
 
 const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
+
+// 侧边栏分组展开状态持久化
+const openedItems = ref(JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]'));
+watch(openedItems, (val) => localStorage.setItem('sidebar_openedItems', JSON.stringify(val)), { deep: true });
 
 // Apply customization on mount and listen for storage changes
 const handleStorageChange = (e) => {
@@ -36,6 +41,9 @@ onUnmounted(() => {
 
 const showIframe = ref(false);
 const starCount = ref(null);
+
+// 更新日志对话框
+const changelogDialog = ref(false);
 
 const sidebarWidth = ref(235);
 const minSidebarWidth = 200;
@@ -220,6 +228,11 @@ async function fetchStarCount() {
 
 fetchStarCount();
 
+// 打开更新日志对话框
+function openChangelogDialog() {
+  changelogDialog.value = true;
+}
+
 </script>
 
 <template>
@@ -234,7 +247,7 @@ fetchStarCount();
     :rail="customizer.mini_sidebar"
   >
     <div class="sidebar-container">
-      <v-list class="pa-4 listitem flex-grow-1">
+      <v-list class="pa-4 listitem flex-grow-1" v-model:opened="openedItems" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="i">
           <NavItem :item="item" class="leftPadding" />
         </template>
@@ -242,6 +255,9 @@ fetchStarCount();
       <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
         <v-btn style="margin-bottom: 8px;" size="small" variant="tonal" color="primary" to="/settings">
           🔧 {{ t('core.navigation.settings') }}
+        </v-btn>
+        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openChangelogDialog">
+          📝 {{ t('core.navigation.changelog') }}
         </v-btn>
         <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="toggleIframe">
           {{ t('core.navigation.documentation') }}
@@ -301,8 +317,11 @@ fetchStarCount();
     <iframe
       src="https://astrbot.app"
       style="width: 100%; height: calc(100% - 56px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
-    ></iframe>
+      ></iframe>
   </div>
+
+  <!-- 更新日志对话框 -->
+  <ChangelogDialog v-model="changelogDialog" />
 </template>
 
 <style scoped>

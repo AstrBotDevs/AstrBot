@@ -1,3 +1,5 @@
+import fnmatch
+
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
 
@@ -9,14 +11,15 @@ class UmopConfigRouter:
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp
 
-        self._load_routing_table()
+    async def initialize(self):
+        await self._load_routing_table()
 
-    def _load_routing_table(self) -> None:
+    async def _load_routing_table(self) -> None:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_conf_id 映射
-        sp_data = self.sp.get(
-            "umop_config_routing",
-            {},
+        sp_data = await self.sp.get_async(
+            key="umop_config_routing",
+            default={},
             scope="global",
             scope_id="global",
         )
@@ -30,7 +33,7 @@ class UmopConfigRouter:
         if len(p1_ls) != 3 or len(p2_ls) != 3:
             return False  # 非法格式
 
-        return all(p == "" or p == "*" or p == t for p, t in zip(p1_ls, p2_ls))
+        return all(p == "" or fnmatch.fnmatchcase(t, p) for p, t in zip(p1_ls, p2_ls))
 
     def get_conf_id_for_umop(self, umo: str) -> str | None:
         """根据 UMO 获取对应的配置文件 ID
