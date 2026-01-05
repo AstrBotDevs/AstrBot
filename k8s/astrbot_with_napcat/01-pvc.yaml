@@ -44,3 +44,20 @@ spec:
     requests:
       storage: 5Gi
   # storageClassName: standard
+
+---
+# 持久化 machine-id，保持设备标识不变
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: napcat-machine-id-pvc
+  namespace: astrbot-ns
+  labels:
+    app: astrbot-stack
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi  # 只需存储一个 32 字节的文件
+  # storageClassName: standard

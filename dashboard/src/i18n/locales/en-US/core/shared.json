@@ -28,7 +28,9 @@
     "cancelSelection": "Cancel",
     "noDescription": "No description",
     "notActivated": "Not activated",
-    "note": "*System plugins and disabled plugins are not shown."
+    "note": "*System plugins and disabled plugins are not shown.",
+    "selectedPluginsLabel": "Selected Plugins:",
+    "allPluginsLabel": "All Plugins"
   },
   "providerSelector": {
     "notSelected": "Not selected",
@@ -42,6 +44,45 @@
     "clearSelectionSubtitle": "Clear current selection",
     "unknownType": "Unknown type",
     "createProvider": "Create Provider",
-    "manageProviders": "Provider Management"
+    "manageProviders": "Provider Management",
+    "selectProviderPool": "Select Provider Pool..."
+  },
+  "personaSelector": {
+    "notSelected": "Not selected",
+    "defaultPersona": "Default Persona",
+    "buttonText": "Select Persona...",
+    "dialogTitle": "Select Persona",
+    "noDescription": "No description",
+    "noPersonas": "No personas available",
+    "createPersona": "Create New Persona",
+    "cancelSelection": "Cancel",
+    "confirmSelection": "Confirm Selection",
+    "selectPersonaPool": "Select Persona Pool..."
+  },
+  "t2iTemplateEditor": {
+    "buttonText": "Customize T2I Template",
+    "dialogTitle": "Customize Text-to-Image HTML Template",
+    "newTemplateNameLabel": "Enter new template name",
+    "nameRequired": "Name is required",
+    "selectTemplateLabel": "Select Template",
+    "applied": "Applied",
+    "apply": "Apply",
+    "templateEditor": "Template Editor",
+    "new": "New",
+    "resetBase": "Reset Base",
+    "delete": "Delete",
+    "save": "Save",
+    "livePreview": "Live Preview (may differ)",
+    "refreshPreview": "Refresh Preview",
+    "syntaxHint": "Supports jinja2 syntax. Available variables: text | safe (text to render), version (AstrBot version)",
+    "saveAndApply": "Save and Apply Current Template",
+    "confirmReset": "Confirm Reset",
+    "confirmResetMessage": "Are you sure you want to reset the 'base' template to default content? Any unsaved changes in the editor will be lost. This action cannot be undone.",
+    "confirmResetButton": "Confirm Reset",
+    "confirmDelete": "Confirm Delete",
+    "confirmDeleteMessage": "Are you sure you want to delete template '{name}'? This action cannot be undone.",
+    "confirmDeleteButton": "Confirm Delete",
+    "confirmAction": "Confirm Action",
+    "confirmApplyMessage": "Are you sure you want to save changes to '{name}' and set it as the active template?"
   }
 }

@@ -20,13 +20,13 @@
     </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
-        button-text="选择提供商池..." />
+        :button-text="t('core.shared.providerSelector.selectProviderPool')" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
-      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" button-text="选择人格池..." />
+      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" :button-text="t('core.shared.personaSelector.selectPersonaPool')" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
@@ -56,7 +56,7 @@
           :loading="loading"
           class="ml-2"
         >
-          自动检测
+          {{ t('core.common.autoDetect') }}
         </v-btn>
       </div>
     </template>

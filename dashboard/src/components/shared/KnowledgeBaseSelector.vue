@@ -20,7 +20,7 @@
       </div>
     </div>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog" style="flex-shrink: 0;">
-      {{ buttonText }}
+      {{ buttonText || tm('knowledgeBaseSelector.buttonText') }}
     </v-btn>
   </div>
 
@@ -105,7 +105,7 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '选择知识库...'
+    default: ''
   }
 })
 

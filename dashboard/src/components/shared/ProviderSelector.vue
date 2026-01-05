@@ -7,7 +7,7 @@
       {{ modelValue }}
     </span>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText }}
+      {{ buttonText || tm('providerSelector.buttonText') }}
     </v-btn>
   </div>
 
@@ -134,7 +134,7 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '选择提供商...'
+    default: ''
   }
 })
 

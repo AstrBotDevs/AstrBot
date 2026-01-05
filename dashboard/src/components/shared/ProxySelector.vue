@@ -1,13 +1,13 @@
 <template>
-    <h5>GitHub 加速</h5>
+    <h5>{{ tm('network.proxySelector.title') }}</h5>
     <v-radio-group class="mt-2" v-model="radioValue" hide-details="true">
-        <v-radio label="不使用 GitHub 加速" value="0"></v-radio>
+        <v-radio :label="tm('network.proxySelector.noProxy')" value="0"></v-radio>
         <v-radio value="1">
             <template v-slot:label>
-                <span>使用 GitHub 加速</span>
+                <span>{{ tm('network.proxySelector.useProxy') }}</span>
                 <v-btn v-if="radioValue === '1'" class="ml-2" @click="testAllProxies" size="x-small"
                     variant="tonal" :loading="loadingTestingConnection">
-                    测试代理连通性
+                    {{ tm('network.proxySelector.testConnection') }}
                 </v-btn>
             </template>
         </v-radio>
@@ -20,15 +20,15 @@
                         <div class="d-flex align-center">
                             <span class="mr-2">{{ proxy }}</span>
                             <div v-if="proxyStatus[idx]">
-                                <v-chip 
-                                    :color="proxyStatus[idx].available ? 'success' : 'error'" 
-                                    size="x-small" 
+                                <v-chip
+                                    :color="proxyStatus[idx].available ? 'success' : 'error'"
+                                    size="x-small"
                                     class="mr-1">
-                                    {{ proxyStatus[idx].available ? '可用' : '不可用' }}
+                                    {{ proxyStatus[idx].available ? tm('network.proxySelector.available') : tm('network.proxySelector.unavailable') }}
                                 </v-chip>
-                                <v-chip 
-                                    v-if="proxyStatus[idx].available" 
-                                    color="info" 
+                                <v-chip
+                                    v-if="proxyStatus[idx].available"
+                                    color="info"
                                     size="x-small">
                                     {{ proxyStatus[idx].latency }}ms
                                 </v-chip>
@@ -36,10 +36,10 @@
                         </div>
                     </template>
                 </v-radio>
-                <v-radio color="primary" value="-1" label="自定义">
+                <v-radio color="primary" value="-1" :label="tm('network.proxySelector.custom')">
                     <template v-slot:label v-if="githubProxyRadioControl === '-1'">
                         <v-text-field density="compact" v-model="selectedGitHubProxy" variant="outlined"
-                            style="width: 100vw;" placeholder="自定义" hide-details="true">
+                            style="width: 100vw;" :placeholder="tm('network.proxySelector.custom')" hide-details="true">
                         </v-text-field>
                     </template>
                 </v-radio>
