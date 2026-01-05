@@ -29,7 +29,7 @@
     "noDescription": "No description",
     "notActivated": "Not activated",
     "note": "*System plugins and disabled plugins are not shown.",
-    "selectedPluginsLabel": "Selected Plugins",
+    "selectedPluginsLabel": "Selected Plugins:",
     "allPluginsLabel": "All Plugins"
   },
   "providerSelector": {

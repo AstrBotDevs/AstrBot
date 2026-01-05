@@ -233,7 +233,7 @@ function getSpecialSubtype(value) {
               <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
                 class="selected-plugins-full-width">
                 <div class="plugins-header">
-                  <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}：</small>
+                  <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-2">
                   <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label

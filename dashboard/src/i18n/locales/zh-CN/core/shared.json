@@ -29,7 +29,7 @@
     "noDescription": "无描述",
     "notActivated": "未激活",
     "note": "*不显示系统插件和已经在插件页禁用的插件。",
-    "selectedPluginsLabel": "已选择的插件",
+    "selectedPluginsLabel": "已选择的插件：",
     "allPluginsLabel": "所有插件"
   },
   "providerSelector": {

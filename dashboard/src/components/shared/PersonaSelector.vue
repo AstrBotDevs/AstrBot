@@ -52,12 +52,12 @@
           {{ tm('personaSelector.createPersona') }}
         </v-btn>
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">{{ tm('personaSelector.cancelSelection') }}</v-btn>
+        <v-btn variant="text" @click="cancelSelection">{{ t('core.common.cancel') }}</v-btn>
         <v-btn
           color="primary"
           @click="confirmSelection"
           :disabled="!selectedPersona">
-          {{ tm('personaSelector.confirmSelection') }}
+          {{ t('core.common.confirm') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -78,7 +78,7 @@
 import { ref, watch } from 'vue'
 import axios from 'axios'
 import PersonaForm from './PersonaForm.vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -92,6 +92,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
 
 const dialog = ref(false)
