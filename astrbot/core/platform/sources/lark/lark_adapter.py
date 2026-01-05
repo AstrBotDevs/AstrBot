@@ -4,7 +4,7 @@ import json
 import re
 import time
 import uuid
-from typing import Any, cast
+from typing import cast
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -13,6 +13,7 @@ from lark_oapi.api.im.v1 import (
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
+from quart import Request, ResponseReturnValue
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
@@ -42,7 +43,7 @@ class LarkPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
 
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
@@ -372,7 +373,7 @@ class LarkPlatformAdapter(Platform):
             # 长连接模式
             await self.client._connect()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_server:
             return {"error": "Webhook server not initialized"}, 500

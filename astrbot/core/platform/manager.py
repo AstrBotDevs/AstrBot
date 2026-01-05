@@ -215,7 +215,7 @@ class PlatformManager:
             if getattr(inst, "terminate", None):
                 await inst.terminate()
 
-    def get_insts(self):
+    def get_insts(self) -> list:
         return self.platform_insts
 
     def get_all_stats(self) -> dict:

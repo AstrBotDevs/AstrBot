@@ -1,7 +1,13 @@
+from collections.abc import Callable
+from typing import TypeVar
+
 from astrbot.core import logger
+from astrbot.core.provider.provider import AbstractProvider
 
 from .entities import ProviderMetaData, ProviderType
 from .func_tool_manager import FuncCall
+
+T = TypeVar("T", bound=AbstractProvider)
 
 provider_registry: list[ProviderMetaData] = []
 """维护了通过装饰器注册的 Provider"""
@@ -17,10 +23,10 @@ def register_provider_adapter(
     provider_type: ProviderType = ProviderType.CHAT_COMPLETION,
     default_config_tmpl: dict | None = None,
     provider_display_name: str | None = None,
-):
+) -> Callable[[type[T]], type[T]]:
     """用于注册平台适配器的带参装饰器"""
 
-    def decorator(cls):
+    def decorator(cls: type[T]) -> type[T]:
         if provider_type_name in provider_cls_map:
             raise ValueError(
                 f"检测到大模型提供商适配器 {provider_type_name} 已经注册，可能发生了大模型提供商适配器类型命名冲突。",

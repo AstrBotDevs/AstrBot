@@ -25,10 +25,10 @@ class StarRequestSubStage(Stage):
         event: AstrMessageEvent,
     ) -> AsyncGenerator[Any, None]:
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers",
+            "activated_handlers", []
         )
         handlers_parsed_params: dict[str, dict[str, Any]] = event.get_extra(
-            "handlers_parsed_params",
+            "handlers_parsed_params", {}
         )
         if not handlers_parsed_params:
             handlers_parsed_params = {}

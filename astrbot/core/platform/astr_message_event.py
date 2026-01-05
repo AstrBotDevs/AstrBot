@@ -4,9 +4,10 @@ import hashlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, TypeVar, overload
 
 from astrbot import logger
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
     At,
@@ -21,11 +22,14 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.utils.metrics import Metric
 
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+
+_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -72,14 +76,14 @@ class AstrMessageEvent(abc.ABC):
         # back_compability
         self.platform = platform_meta
 
-    def get_platform_name(self):
+    def get_platform_name(self) -> str:
         """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
 
         NOTE: 用户可能会同时运行多个相同类型的平台适配器。
         """
         return self.platform_meta.name
 
-    def get_platform_id(self):
+    def get_platform_id(self) -> str:
         """获取这个事件所属的平台的 ID。
 
         NOTE: 用户可能会同时运行多个相同类型的平台适配器，但能确定的是 ID 是唯一的。
@@ -157,11 +161,17 @@ class AstrMessageEvent(abc.ABC):
             return self.message_obj.sender.nickname
         return ""
 
-    def set_extra(self, key, value) -> None:
+    def set_extra(self, key: str, value: object) -> None:
         """设置额外的信息。"""
         self._extras[key] = value
 
-    def get_extra(self, key: str | None = None, default=None) -> Any:
+    @overload
+    def get_extra(self, key: str, default: _VT = None) -> _VT: ...
+
+    @overload
+    def get_extra(self, key: None = None, default: object | None = None) -> dict: ...
+
+    def get_extra(self, key: str | None = None, default: _VT = None) -> dict | _VT:
         """获取额外的信息。"""
         if key is None:
             return self._extras
@@ -321,7 +331,7 @@ class AstrMessageEvent(abc.ABC):
     def request_llm(
         self,
         prompt: str,
-        func_tool_manager=None,
+        func_tool_manager: FunctionToolManager | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
         contexts: list | None = None,
@@ -360,7 +370,9 @@ class AstrMessageEvent(abc.ABC):
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
-            func_tool=func_tool_manager,
+            func_tool=func_tool_manager.get_full_tool_set()
+            if func_tool_manager
+            else ToolSet(),
             contexts=contexts,
             system_prompt=system_prompt,
             conversation=conversation,
@@ -396,7 +408,9 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:

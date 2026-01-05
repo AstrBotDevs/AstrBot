@@ -22,6 +22,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.provider import Providers
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.metrics import Metric
@@ -67,7 +68,7 @@ class InternalAgentSubStage(Stage):
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
-    def _select_provider(self, event: AstrMessageEvent):
+    def _select_provider(self, event: AstrMessageEvent) -> Providers | None:
         """选择使用的 LLM 提供商"""
         sel_provider = event.get_extra("selected_provider")
         _ctx = self.ctx.plugin_manager.context

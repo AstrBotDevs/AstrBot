@@ -6,6 +6,7 @@ from typing import Protocol, runtime_checkable
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import Personality
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
@@ -82,7 +83,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
-    def selected_default_persona(self):
+    def selected_default_persona(self) -> Personality | None:
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
 
@@ -153,7 +154,7 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+        self, provider_type: ProviderType, umo: str | None = None
     ) -> Providers | None:
         """获取正在使用的提供商实例。
 
@@ -276,7 +277,7 @@ class ProviderManager:
         # 初始化 MCP Client 连接
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
-    def dynamic_import_provider(self, type: str):
+    def dynamic_import_provider(self, type: str) -> None:
         """动态导入提供商适配器模块
 
         Args:
@@ -402,7 +403,7 @@ class ProviderManager:
                 pc = merged_config
         return pc
 
-    async def load_provider(self, provider_config: dict):
+    async def load_provider(self, provider_config: dict) -> None:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
@@ -596,7 +597,7 @@ class ProviderManager:
                     f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
                 )
 
-    def get_insts(self):
+    def get_insts(self) -> list[Provider]:
         return self.provider_insts
 
     async def terminate_provider(self, provider_id: str) -> None:
@@ -635,7 +636,7 @@ class ProviderManager:
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
-    ):
+    ) -> None:
         """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
         async with self.resource_lock:
             # delete from config
@@ -655,7 +656,7 @@ class ProviderManager:
             config.save_config()
             logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
 
-    async def update_provider(self, origin_provider_id: str, new_config: dict):
+    async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""
         async with self.resource_lock:
             npid = new_config.get("id", None)
@@ -679,7 +680,7 @@ class ProviderManager:
             # reload instance
             await self.reload(new_config)
 
-    async def create_provider(self, new_config: dict):
+    async def create_provider(self, new_config: dict) -> None:
         """Add new provider config and load the instance. Config will be saved after addition."""
         async with self.resource_lock:
             npid = new_config.get("id", None)

@@ -2,7 +2,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import cast
 
 import quart
 from requests import Response
@@ -153,7 +153,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
@@ -241,7 +241,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         else:
             await self.server.start_polling()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(
+        self, request: quart.Request
+    ) -> quart.ResponseReturnValue:
         """统一 Webhook 回调入口"""
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":

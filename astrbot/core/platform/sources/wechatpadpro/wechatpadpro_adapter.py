@@ -43,7 +43,7 @@ class WeChatPadProAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self._shutdown_event = None
         self.wxnewpass = None
         self.settings = platform_settings

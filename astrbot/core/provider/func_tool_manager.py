@@ -169,7 +169,7 @@ class FunctionToolManager:
                 self.func_list.pop(i)
                 break
 
-    def get_func(self, name) -> FuncTool | None:
+    def get_func(self, name: str) -> FuncTool | None:
         for f in self.func_list:
             if f.name == name:
                 return f
@@ -401,7 +401,9 @@ class FunctionToolManager:
                     f for f in self.func_list if not isinstance(f, MCPTool)
                 ]
 
-    def get_func_desc_openai_style(self, omit_empty_parameter_field=False) -> list:
+    def get_func_desc_openai_style(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list:
         """获得 OpenAI API 风格的**已经激活**的工具描述"""
         tools = [f for f in self.func_list if f.active]
         toolset = ToolSet(tools)
@@ -481,11 +483,11 @@ class FunctionToolManager:
         return False
 
     @property
-    def mcp_config_path(self):
+    def mcp_config_path(self) -> str:
         data_dir = get_astrbot_data_path()
         return os.path.join(data_dir, "mcp_server.json")
 
-    def load_mcp_config(self):
+    def load_mcp_config(self) -> dict:
         if not os.path.exists(self.mcp_config_path):
             # 配置文件不存在，创建默认配置
             os.makedirs(os.path.dirname(self.mcp_config_path), exist_ok=True)

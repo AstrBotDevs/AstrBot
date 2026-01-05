@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from typing import Any, NoReturn, cast
+from typing import NoReturn, cast
 
 import botpy
 import botpy.message
 import botpy.types
 import botpy.types.message
 from botpy import Client
+from quart import Request, ResponseReturnValue
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -91,7 +92,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
@@ -144,7 +145,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_helper:
             return {"error": "Webhook helper not initialized"}, 500

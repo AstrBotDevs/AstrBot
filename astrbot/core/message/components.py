@@ -67,7 +67,7 @@ class ComponentType(str, Enum):
 class BaseMessageComponent(BaseModel):
     type: ComponentType
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
 
     def toDict(self) -> dict:
@@ -93,7 +93,7 @@ class Plain(BaseMessageComponent):
     def __init__(self, text: str, convert: bool = True, **_: object) -> None:
         super().__init__(text=text, convert=convert, **_)
 
-    def toDict(self):
+    def toDict(self) -> dict:
         return {"type": "text", "data": {"text": self.text.strip()}}
 
     async def to_dict(self) -> dict:
@@ -632,7 +632,7 @@ class Json(BaseMessageComponent):
     type = ComponentType.Json
     data: dict
 
-    def __init__(self, data: str | dict, **_: object):
+    def __init__(self, data: str | dict, **_: object) -> None:
         if isinstance(data, str):
             data = json.loads(data)
         super().__init__(data=data, **_)

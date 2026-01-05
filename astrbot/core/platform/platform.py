@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from quart import Request, ResponseReturnValue
+
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
 
@@ -34,10 +36,12 @@ class PlatformError:
 
 
 class Platform(abc.ABC):
-    def __init__(self, config: dict, event_queue: Queue) -> None:
+    def __init__(
+        self, platform_config: dict, platform_settings: dict, event_queue: Queue
+    ) -> None:
         super().__init__()
         # 平台配置
-        self.config = config
+        self.config = platform_config
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
@@ -138,7 +142,7 @@ class Platform(abc.ABC):
     def get_client(self) -> None:
         """获取平台的客户端对象。"""
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口。
 
         支持统一 Webhook 模式的平台需要实现此方法。
