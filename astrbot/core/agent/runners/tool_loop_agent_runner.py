@@ -26,9 +26,9 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 
 from ..context.compressor import ContextCompressor
-from ..context.token_counter import TokenCounter
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
+from ..context.token_counter import TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
