@@ -662,7 +662,8 @@ class PluginRoute(Route):
                     logger.error(f"/api/plugin/changelog: {traceback.format_exc()}")
                     return Response().error(f"读取更新日志失败: {e!s}").__dict__
 
-        return Response().error(f"插件 {plugin_name} 没有更新日志文件").__dict__
+        # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
 
     async def get_custom_source(self):
         """获取自定义插件源"""

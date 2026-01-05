@@ -39,6 +39,7 @@ const { t } = useI18n();
 const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
+const isEmpty = ref(false); // 请求成功但无内容
 
 // 根据模式返回不同的配置
 const modeConfig = computed(() => {
@@ -97,13 +98,19 @@ async function fetchContent() {
   loading.value = true;
   content.value = null;
   error.value = null;
+  isEmpty.value = false;
 
   try {
     const res = await axios.get(
       `${modeConfig.value.apiPath}?name=${props.pluginName}`,
     );
     if (res.data.status === "ok") {
-      content.value = res.data.data.content;
+      if (res.data.data.content) {
+        content.value = res.data.data.content;
+      } else {
+        // 请求成功但无内容
+        isEmpty.value = true;
+      }
     } else {
       error.value = res.data.message;
     }
@@ -196,20 +203,20 @@ const _show = computed({
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
-          <v-icon size="64" color="warning" class="mb-4"
-            >mdi-file-alert-outline</v-icon
+          <v-icon size="64" color="error" class="mb-4"
+            >mdi-alert-circle-outline</v-icon
           >
           <p class="text-body-1 text-center mb-2">
-            {{ modeConfig.emptyTitle }}
+            {{ t("core.common.error") }}
           </p>
           <p class="text-body-2 text-center text-medium-emphasis">
-            {{ modeConfig.emptySubtitle }}
+            {{ error }}
           </p>
         </div>
 
         <!-- 无内容提示 -->
         <div
-          v-else
+          v-else-if="isEmpty"
           class="d-flex flex-column align-center justify-center"
           style="height: 100%"
         >
