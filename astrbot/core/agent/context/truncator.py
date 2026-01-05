@@ -23,7 +23,7 @@ class ContextTruncator:
         self,
         messages: list[Message],
         keep_most_recent_turns: int,
-        dequeue_turns: int = 1,
+        drop_turns: int = 1,
     ) -> list[Message]:
         """截断上下文列表，确保不超过最大长度。
         一个 turn 包含一个 user 消息和一个 assistant 消息。
@@ -32,27 +32,33 @@ class ContextTruncator:
         Args:
             messages: 上下文列表
             keep_most_recent_turns: 保留最近的对话轮数
-            dequeue_turns: 一次性丢弃的对话轮数
+            drop_turns: 一次性丢弃的对话轮数
 
         Returns:
             截断后的上下文列表
         """
         if keep_most_recent_turns == -1:
             return messages
-        if len(messages) <= keep_most_recent_turns:
-            return messages
-        if len(messages) // 2 <= keep_most_recent_turns:
+
+        first_non_system = 0
+        for i, msg in enumerate(messages):
+            if msg.role != "system":
+                first_non_system = i
+                break
+
+        system_messages = messages[:first_non_system]
+        non_system_messages = messages[first_non_system:]
+
+        if len(non_system_messages) // 2 <= keep_most_recent_turns:
             return messages
 
-        system_message = None
-        if messages[0].role == "system":
-            system_message = messages[0]
-            messages = messages[1:]
+        num_to_keep = keep_most_recent_turns - drop_turns + 1
+        if num_to_keep <= 0:
+            truncated_contexts = []
+        else:
+            truncated_contexts = non_system_messages[-num_to_keep * 2 :]
 
-        truncated_contexts = messages[
-            -(keep_most_recent_turns - dequeue_turns + 1) * 2 :
-        ]
-        # 找到第一个role 为 user 的索引，确保上下文格式正确
+        # 找到第一个 role 为 user 的索引，确保上下文格式正确
         index = next(
             (i for i, item in enumerate(truncated_contexts) if item.role == "user"),
             None,
@@ -60,10 +66,45 @@ class ContextTruncator:
         if index is not None and index > 0:
             truncated_contexts = truncated_contexts[index:]
 
-        if system_message is not None:
-            truncated_contexts = [system_message] + truncated_contexts
+        result = system_messages + truncated_contexts
 
-        return self.fix_messages(truncated_contexts)
+        return self.fix_messages(result)
+
+    def truncate_by_dropping_oldest_turns(
+        self,
+        messages: list[Message],
+        drop_turns: int = 1,
+    ) -> list[Message]:
+        """丢弃最旧的 N 个对话轮次。"""
+        if drop_turns <= 0:
+            return messages
+
+        first_non_system = 0
+        for i, msg in enumerate(messages):
+            if msg.role != "system":
+                first_non_system = i
+                break
+
+        system_messages = messages[:first_non_system]
+        non_system_messages = messages[first_non_system:]
+
+        if len(non_system_messages) // 2 <= drop_turns:
+            truncated_non_system = []
+        else:
+            truncated_non_system = non_system_messages[drop_turns * 2 :]
+
+        index = next(
+            (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
+            None,
+        )
+        if index is not None:
+            truncated_non_system = truncated_non_system[index:]
+        elif truncated_non_system:
+            truncated_non_system = []
+
+        result = system_messages + truncated_non_system
+
+        return self.fix_messages(result)
 
     def truncate_by_halving(
         self,
@@ -79,16 +120,22 @@ class ContextTruncator:
                 first_non_system = i
                 break
 
-        messages_to_delete = (len(messages) - first_non_system) // 2
+        system_messages = messages[:first_non_system]
+        non_system_messages = messages[first_non_system:]
 
-        result = messages[:first_non_system]
-        result.extend(messages[first_non_system + messages_to_delete :])
+        messages_to_delete = len(non_system_messages) // 2
+        if messages_to_delete == 0:
+            return messages
+
+        truncated_non_system = non_system_messages[messages_to_delete:]
 
         index = next(
-            (i for i, item in enumerate(result) if item.role == "user"),
+            (i for i, item in enumerate(truncated_non_system) if item.role == "user"),
             None,
         )
         if index is not None:
-            result = result[index:]
+            truncated_non_system = truncated_non_system[index:]
+
+        result = system_messages + truncated_non_system
 
         return self.fix_messages(result)

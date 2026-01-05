@@ -26,7 +26,7 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Provider
 
 from ..context.manager import ContextManager
-from ..context.truncator import ContextTruncator
+from ..context.config import ContextConfig
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
@@ -70,15 +70,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # we will do compress when:
         # 1. before requesting LLM
         # TODO: 2. after LLM output a tool call
-        self.context_manager = ContextManager(
-            # <=0 will never trigger context compression
+        self.context_config = ContextConfig(
+            # <=0 will never do compress
             max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            # enforce max turns before compression
+            enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
         )
-        self.context_truncator = ContextTruncator()
+        self.context_manager = ContextManager(self.context_config)
 
         self.provider = provider
         self.final_llm_resp = None
@@ -121,12 +123,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         else:
             yield await self.provider.text_chat(**payload)
 
-    async def do_context_compress(self):
-        """检查并执行上下文压缩。"""
-        original_messages = self.run_context.messages
-        compressed_messages = await self.context_manager.process(original_messages)
-        self.run_context.messages = compressed_messages
-
     @override
     async def step(self):
         """Process a single step of the agent.
@@ -145,23 +141,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # do truncate
-        if self.enforce_max_turns != -1:
-            try:
-                truncated_messages = self.context_truncator.truncate_by_turns(
-                    self.run_context.messages,
-                    keep_most_recent_turns=self.enforce_max_turns,
-                    dequeue_turns=self.truncate_turns,
-                )
-                self.run_context.messages = truncated_messages
-            except Exception as e:
-                logger.error(f"Error during context truncation: {e}", exc_info=True)
-
-        # check compress
-        try:
-            await self.do_context_compress()
-        except Exception as e:
-            logger.error(f"Error during context compression: {e}", exc_info=True)
+        # do truncate and compress
+        self.run_context.messages = await self.context_manager.process(
+            self.run_context.messages
+        )
 
         async for llm_response in self._iter_llm_responses():
             if llm_response.is_chunk:

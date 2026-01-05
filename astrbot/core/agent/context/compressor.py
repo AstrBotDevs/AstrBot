@@ -1,9 +1,16 @@
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
-
-from astrbot.api import logger
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ..message import Message
+
+if TYPE_CHECKING:
+    from astrbot import logger
+else:
+    try:
+        from astrbot import logger
+    except ImportError:
+        import logging
+
+        logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
@@ -11,14 +18,14 @@ if TYPE_CHECKING:
 from ..context.truncator import ContextTruncator
 
 
-class ContextCompressor(ABC):
+@runtime_checkable
+class ContextCompressor(Protocol):
     """
-    Abstract base class for context compressors.
+    Protocol for context compressors.
     Provides an interface for compressing message lists.
     """
 
-    @abstractmethod
-    async def compress(self, messages: list[Message]) -> list[Message]:
+    async def __call__(self, messages: list[Message]) -> list[Message]:
         """Compress the message list.
 
         Args:
@@ -27,19 +34,10 @@ class ContextCompressor(ABC):
         Returns:
             The compressed message list.
         """
-        pass
+        ...
 
 
-class DefaultCompressor(ContextCompressor):
-    """Default compressor implementation.
-    Returns the original messages.
-    """
-
-    async def compress(self, messages: list[Message]) -> list[Message]:
-        return messages
-
-
-class TruncateByTurnsCompressor(ContextCompressor):
+class TruncateByTurnsCompressor:
     """Truncate by turns compressor implementation.
     Truncates the message list by removing older turns.
     """
@@ -52,17 +50,47 @@ class TruncateByTurnsCompressor(ContextCompressor):
         """
         self.truncate_turns = truncate_turns
 
-    async def compress(self, messages: list[Message]) -> list[Message]:
+    async def __call__(self, messages: list[Message]) -> list[Message]:
         truncator = ContextTruncator()
-        truncated_messages = truncator.truncate_by_turns(
+        truncated_messages = truncator.truncate_by_dropping_oldest_turns(
             messages,
-            keep_most_recent_turns=0,
-            dequeue_turns=self.truncate_turns,
+            drop_turns=self.truncate_turns,
         )
         return truncated_messages
 
 
-class LLMSummaryCompressor(ContextCompressor):
+def split_history(
+    messages: list[Message], keep_recent: int
+) -> tuple[list[Message], list[Message], list[Message]]:
+    """Split the message list into system messages, messages to summarize, and recent messages.
+
+    Args:
+        messages: The original message list.
+        keep_recent: The number of latest messages to keep.
+
+    Returns:
+        tuple: (system_messages, messages_to_summarize, recent_messages)
+    """
+    # keep the system messages
+    first_non_system = 0
+    for i, msg in enumerate(messages):
+        if msg.role != "system":
+            first_non_system = i
+            break
+
+    system_messages = messages[:first_non_system]
+    non_system_messages = messages[first_non_system:]
+
+    if len(non_system_messages) <= keep_recent:
+        return system_messages, [], non_system_messages
+
+    messages_to_summarize = non_system_messages[:-keep_recent]
+    recent_messages = non_system_messages[-keep_recent:]
+
+    return system_messages, messages_to_summarize, recent_messages
+
+
+class LLMSummaryCompressor:
     """LLM-based summary compressor.
     Uses LLM to summarize the old conversation history, keeping the latest messages.
     """
@@ -90,7 +118,7 @@ class LLMSummaryCompressor(ContextCompressor):
             "4. Write the summary in the user's language.\n"
         )
 
-    async def compress(self, messages: list[Message]) -> list[Message]:
+    async def __call__(self, messages: list[Message]) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
 
         Process:
@@ -101,12 +129,9 @@ class LLMSummaryCompressor(ContextCompressor):
         if len(messages) <= self.keep_recent + 1:
             return messages
 
-        # keep the system message
-        system_msg = messages[0] if messages and messages[0].role == "system" else None
-        start_idx = 1 if system_msg else 0
-
-        messages_to_summarize = messages[start_idx : -self.keep_recent]
-        recent_messages = messages[-self.keep_recent :]
+        system_messages, messages_to_summarize, recent_messages = split_history(
+            messages, self.keep_recent
+        )
 
         if not messages_to_summarize:
             return messages
@@ -125,8 +150,7 @@ class LLMSummaryCompressor(ContextCompressor):
 
         # build result
         result = []
-        if system_msg:
-            result.append(system_msg)
+        result.extend(system_messages)
 
         result.append(
             Message(

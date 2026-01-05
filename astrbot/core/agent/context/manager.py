@@ -1,14 +1,10 @@
-from typing import TYPE_CHECKING
-
 from astrbot import logger
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .token_counter import TokenCounter
 from .truncator import ContextTruncator
-
-if TYPE_CHECKING:
-    from astrbot.core.provider.provider import Provider
+from .config import ContextConfig
 
 
 class ContextManager:
@@ -19,11 +15,7 @@ class ContextManager:
 
     def __init__(
         self,
-        max_context_tokens: int = 0,
-        truncate_turns: int = 1,
-        llm_compress_instruction: str | None = None,
-        llm_compress_keep_recent: int = 4,
-        llm_compress_provider: "Provider | None" = None,
+        config: ContextConfig,
     ):
         """Initialize the context manager.
 
@@ -32,26 +24,23 @@ class ContextManager:
         2. LLM-based compression: use LLM to summarize old messages.
 
         Args:
-            max_context_tokens: The maximum context tokens. <= 0 means no limit.
-            truncate_turns: For turncate strategy. The number of turns to discard when truncating.
-            llm_compress_instruction: The instruction text for LLM compression.
-            llm_compress_keep_recent: The number of recent messages to keep during LLM compression.
-            llm_compress_provider: The LLM provider for compression.
+            config: The context configuration.
         """
-        self.max_context_tokens = max_context_tokens
-        self.truncate_turns = truncate_turns
+        self.config = config
 
         self.token_counter = TokenCounter()
         self.truncator = ContextTruncator()
 
-        if llm_compress_provider:
+        if config.llm_compress_provider:
             self.compressor = LLMSummaryCompressor(
-                provider=llm_compress_provider,
-                keep_recent=llm_compress_keep_recent,
-                instruction_text=llm_compress_instruction,
+                provider=config.llm_compress_provider,
+                keep_recent=config.llm_compress_keep_recent,
+                instruction_text=config.llm_compress_instruction,
             )
         else:
-            self.compressor = TruncateByTurnsCompressor(truncate_turns=truncate_turns)
+            self.compressor = TruncateByTurnsCompressor(
+                truncate_turns=config.truncate_turns
+            )
 
     async def process(self, messages: list[Message]) -> list[Message]:
         """Process the messages.
@@ -62,16 +51,29 @@ class ContextManager:
         Returns:
             The processed message list.
         """
-        if self.max_context_tokens <= 0:
+        try:
+            result = messages
+
+            # 1. 基于轮次的截断 (Enforce max turns)
+            if self.config.enforce_max_turns != -1:
+                result = self.truncator.truncate_by_turns(
+                    result,
+                    keep_most_recent_turns=self.config.enforce_max_turns,
+                    drop_turns=self.config.truncate_turns,
+                )
+
+            # 2. 基于 token 的压缩
+            if self.config.max_context_tokens > 0:
+                # check if the messages need to be compressed
+                needs_compression, _ = await self._initial_token_check(result)
+
+                # compress/truncate the messages if needed
+                result = await self._run_compression(result, needs_compression)
+
+            return result
+        except Exception as e:
+            logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
-
-        # check if the messages need to be compressed
-        needs_compression, _ = await self._initial_token_check(messages)
-
-        # compress/truncate the messages if needed
-        messages = await self._run_compression(messages, needs_compression)
-
-        return messages
 
     async def _initial_token_check(
         self, messages: list[Message]
@@ -87,15 +89,15 @@ class ContextManager:
         """
         if not messages:
             return False, None
-        if self.max_context_tokens <= 0:
+        if self.config.max_context_tokens <= 0:
             return False, None
 
         total_tokens = self.token_counter.count_tokens(messages)
 
         logger.debug(
-            f"ContextManager: total tokens = {total_tokens}, max_context_tokens = {self.max_context_tokens}"
+            f"ContextManager: total tokens = {total_tokens}, max_context_tokens = {self.config.max_context_tokens}"
         )
-        usage_rate = total_tokens / self.max_context_tokens
+        usage_rate = total_tokens / self.config.max_context_tokens
 
         needs_compression = usage_rate > self.COMPRESSION_THRESHOLD
         return needs_compression, total_tokens if needs_compression else None
@@ -115,14 +117,17 @@ class ContextManager:
         """
         if not needs_compression:
             return messages
-        if self.max_context_tokens <= 0:
+        if self.config.max_context_tokens <= 0:
             return messages
 
-        messages = await self.compressor.compress(messages)
+        messages = await self.compressor(messages)
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
-        if tokens_after_summary / self.max_context_tokens > self.COMPRESSION_THRESHOLD:
+        if (
+            tokens_after_summary / self.config.max_context_tokens
+            > self.COMPRESSION_THRESHOLD
+        ):
             # still over 82%, truncate by half
             messages = self._compress_by_halving(messages)
 
