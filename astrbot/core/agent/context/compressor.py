@@ -64,6 +64,8 @@ def split_history(
 ) -> tuple[list[Message], list[Message], list[Message]]:
     """Split the message list into system messages, messages to summarize, and recent messages.
 
+    Ensures that the split point is between complete user-assistant pairs to maintain conversation flow.
+
     Args:
         messages: The original message list.
         keep_recent: The number of latest messages to keep.
@@ -84,8 +86,22 @@ def split_history(
     if len(non_system_messages) <= keep_recent:
         return system_messages, [], non_system_messages
 
-    messages_to_summarize = non_system_messages[:-keep_recent]
-    recent_messages = non_system_messages[-keep_recent:]
+    # Find the split point, ensuring recent_messages starts with a user message
+    # This maintains complete conversation turns
+    split_index = len(non_system_messages) - keep_recent
+
+    # Search backward from split_index to find the first user message
+    # This ensures recent_messages starts with a user message (complete turn)
+    while split_index > 0 and non_system_messages[split_index].role != "user":
+        # TODO: +=1 or -=1 ? calculate by tokens
+        split_index -= 1
+
+    # If we couldn't find a user message, keep all messages as recent
+    if split_index == 0:
+        return system_messages, [], non_system_messages
+
+    messages_to_summarize = non_system_messages[:split_index]
+    recent_messages = non_system_messages[split_index:]
 
     return system_messages, messages_to_summarize, recent_messages
 

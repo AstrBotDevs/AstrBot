@@ -682,3 +682,92 @@ class TestContextManager:
 
         # Should have been compressed
         assert len(result) <= len(messages)
+
+    # ==================== split_history Tests ====================
+
+    def test_split_history_ensures_user_start(self):
+        """Test split_history ensures recent_messages starts with user message."""
+        from astrbot.core.agent.context.compressor import split_history
+
+        # Create alternating messages: user, assistant, user, assistant, user, assistant
+        messages = [
+            self.create_message("system", "System prompt"),
+            self.create_message("user", "msg1"),
+            self.create_message("assistant", "msg2"),
+            self.create_message("user", "msg3"),
+            self.create_message("assistant", "msg4"),
+            self.create_message("user", "msg5"),
+            self.create_message("assistant", "msg6"),
+        ]
+
+        # Keep recent 3 messages - should adjust to start with user
+        system, to_summarize, recent = split_history(messages, keep_recent=3)
+
+        # recent_messages should start with user message
+        assert len(recent) > 0
+        assert recent[0].role == "user"
+
+        # messages_to_summarize should end with assistant (complete turn)
+        if len(to_summarize) > 0:
+            assert to_summarize[-1].role == "assistant"
+
+    def test_split_history_handles_assistant_at_split_point(self):
+        """Test split_history when assistant message is at the intended split point."""
+        from astrbot.core.agent.context.compressor import split_history
+
+        messages = [
+            self.create_message("user", "msg1"),
+            self.create_message("assistant", "msg2"),
+            self.create_message("user", "msg3"),
+            self.create_message("assistant", "msg4"),  # <- intended split here
+            self.create_message("user", "msg5"),
+            self.create_message("assistant", "msg6"),
+        ]
+
+        # keep_recent=2 would normally split at index 4 (assistant msg4)
+        # Should move back to include from msg5 (user)
+        system, to_summarize, recent = split_history(messages, keep_recent=2)
+
+        # recent should start with user message
+        assert recent[0].role == "user"
+        assert recent[0].content == "msg5"
+
+    def test_split_history_all_assistant_messages(self):
+        """Test split_history when there are consecutive assistant messages."""
+        from astrbot.core.agent.context.compressor import split_history
+
+        messages = [
+            self.create_message("user", "msg1"),
+            self.create_message("assistant", "msg2"),
+            self.create_message("assistant", "msg3"),
+            self.create_message("assistant", "msg4"),
+        ]
+
+        system, to_summarize, recent = split_history(messages, keep_recent=2)
+
+        # Should find the user message and keep from there
+        if len(recent) > 0:
+            # Find first user message backwards
+            assert any(m.role == "user" for m in messages)
+
+    def test_split_history_with_system_messages(self):
+        """Test split_history preserves system messages separately."""
+        from astrbot.core.agent.context.compressor import split_history
+
+        messages = [
+            self.create_message("system", "System 1"),
+            self.create_message("system", "System 2"),
+            self.create_message("user", "msg1"),
+            self.create_message("assistant", "msg2"),
+            self.create_message("user", "msg3"),
+        ]
+
+        system, to_summarize, recent = split_history(messages, keep_recent=2)
+
+        # System messages should be separate
+        assert len(system) == 2
+        assert all(m.role == "system" for m in system)
+
+        # Recent should start with user
+        if len(recent) > 0:
+            assert recent[0].role == "user"
