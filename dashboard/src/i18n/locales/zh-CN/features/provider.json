@@ -109,6 +109,11 @@
       "name": "名称",
       "apiKey": "API Key",
       "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "提供商源唯一 ID（不是提供商 ID）",
+      "key": "API 密钥",
+      "apiBase": "自定义 API 端点 URL"
     }
   },
   "models": {
@@ -131,6 +136,10 @@
     "manualDialogPreviewHint": "生成规则：源ID/模型ID",
     "manualModelRequired": "请输入模型 ID",
     "manualModelExists": "该模型已存在",
-    "configure": "配置"
+    "configure": "配置",
+    "tooltips": {
+      "providerId": "提供商 ID",
+      "modelId": "模型 ID"
+    }
   }
 } 

@@ -241,6 +241,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return providers.value.filter((provider: any) => getProviderType(provider) === selectedProviderType.value)
   })
 
+  const providerSourceSchema = computed(() => {
+    if (!configSchema.value || !configSchema.value.provider) {
+      return configSchema.value
+    }
+
+    // 创建一个深拷贝以避免修改原始 schema
+    const customSchema = JSON.parse(JSON.stringify(configSchema.value))
+
+    // 为 provider source 的 id 字段添加自定义 hint
+    if (customSchema.provider?.items?.id) {
+      customSchema.provider.items.id.hint = tm('providerSources.hints.id')
+      customSchema.provider.items.key.hint = tm('providerSources.hints.key')
+      customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+    }
+
+    return customSchema
+  })
+
   // ===== Watches =====
   watch(editableProviderSource, () => {
     if (suppressSourceWatch) return
@@ -646,6 +664,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     basicSourceConfig,
     advancedSourceConfig,
     manualProviderId,
+    providerSourceSchema,
 
     // helpers
     resolveSourceIcon,
