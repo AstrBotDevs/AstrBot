@@ -115,7 +115,9 @@ class ContextManager:
         if self.config.max_context_tokens <= 0:
             return messages
 
-        logger.debug("Starting context compression process...")
+        logger.debug(
+            f"Reached high water mark {self.COMPRESSION_THRESHOLD}, starting compression..."
+        )
 
         messages = await self.compressor(messages)
 
