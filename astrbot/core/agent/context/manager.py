@@ -2,9 +2,9 @@ from astrbot import logger
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
+from .config import ContextConfig
 from .token_counter import TokenCounter
 from .truncator import ContextTruncator
-from .config import ContextConfig
 
 
 class ContextManager:
