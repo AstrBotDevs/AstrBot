@@ -233,12 +233,12 @@ function getSpecialSubtype(value) {
               <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
                 class="selected-plugins-full-width">
                 <div class="plugins-header">
-                  <small class="text-grey">已选择的插件：</small>
+                  <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}：</small>
                 </div>
                 <div class="d-flex flex-wrap ga-2 mt-2">
                   <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
                     color="primary" variant="outlined">
-                    {{ plugin === '*' ? '所有插件' : plugin }}
+                    {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
                   </v-chip>
                 </div>
               </div>

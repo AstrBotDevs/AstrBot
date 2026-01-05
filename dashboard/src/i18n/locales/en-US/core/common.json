@@ -35,6 +35,7 @@
   "yes": "Yes",
   "no": "No",
   "imagePreview": "Image Preview",
+  "autoDetect": "Auto Detect",
   "dialog": {
     "confirmTitle": "Confirm Action",
     "confirmMessage": "Are you sure you want to perform this action?",

@@ -14,7 +14,7 @@
         </span>
       </div>
       <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-        {{ buttonText }}
+        {{ buttonText || tm('pluginSetSelector.buttonText') }}
       </v-btn>
     </div>
   </div>
@@ -113,7 +113,7 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '选择插件集合...'
+    default: ''
   },
   maxDisplayItems: {
     type: Number,
