@@ -1,9 +1,33 @@
 import json
+from typing import Protocol, runtime_checkable
 
 from ..message import Message, TextPart
 
 
-class TokenCounter:
+@runtime_checkable
+class TokenCounter(Protocol):
+    """
+    Protocol for token counters.
+    Provides an interface for counting tokens in message lists.
+    """
+
+    def count_tokens(self, messages: list[Message]) -> int:
+        """Count the total tokens in the message list.
+
+        Args:
+            messages: The message list.
+
+        Returns:
+            The total token count.
+        """
+        ...
+
+
+class EstimateTokenCounter:
+    """Estimate token counter implementation.
+    Provides a simple estimation of token count based on character types.
+    """
+
     def count_tokens(self, messages: list[Message]) -> int:
         total = 0
         for msg in messages:

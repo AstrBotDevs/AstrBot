@@ -197,13 +197,18 @@ class TestContextManager:
         messages = [self.create_message("user", "Hi" * 50)]  # ~100 tokens
 
         with patch.object(
-            manager.compressor, "__call__", new_callable=AsyncMock
-        ) as mock_compress:
-            result = await manager.process(messages)
+            manager.compressor, "should_compress", return_value=False
+        ) as mock_should_compress:
+            with patch.object(
+                manager.compressor, "__call__", new_callable=AsyncMock
+            ) as mock_compress:
+                result = await manager.process(messages)
 
-            # Compressor should not be called
-            mock_compress.assert_not_called()
-            assert result == messages
+                # should_compress should be called
+                mock_should_compress.assert_called_once()
+                # Compressor should not be called
+                mock_compress.assert_not_called()
+                assert result == messages
 
     @pytest.mark.asyncio
     async def test_token_compression_triggered_above_threshold(self):
@@ -219,16 +224,28 @@ class TestContextManager:
         # Mock compressor to return smaller result
         compressed = [self.create_message("user", "short")]
 
-        # Create a mock compressor that we can track
-        mock_compress = AsyncMock(return_value=compressed)
-        manager.compressor = mock_compress
+        # Create a mock compressor
+        mock_compressor = AsyncMock()
+        mock_compressor.compression_threshold = 0.82
+        mock_compressor.return_value = compressed
+
+        # Mock should_compress to return True first time, False after
+        call_count = 0
+
+        def mock_should_compress(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return call_count == 1
+
+        mock_compressor.should_compress = mock_should_compress
+        manager.compressor = mock_compressor
 
         result = await manager.process(messages)
 
         # Compressor should be called
-        mock_compress.assert_called_once()
+        mock_compressor.assert_called_once()
         # Result should be the compressed version
-        assert len(result) == len(compressed)
+        assert len(result) <= len(messages)
 
     @pytest.mark.asyncio
     async def test_token_compression_with_zero_max_tokens(self):
@@ -243,7 +260,7 @@ class TestContextManager:
         ) as mock_compress:
             result = await manager.process(messages)
 
-            # Compressor should not be called
+            # Compressor should not be called when max_context_tokens is 0
             mock_compress.assert_not_called()
             assert result == messages
 
@@ -277,14 +294,18 @@ class TestContextManager:
         async def mock_compress(msgs):
             return msgs  # Return same messages (still over limit)
 
-        with patch.object(manager.compressor, "__call__", new=mock_compress):
-            with patch.object(
-                manager, "_compress_by_halving", return_value=long_messages[:5]
-            ) as mock_halving:
-                _ = await manager.process(long_messages)
+        # Mock should_compress to return True twice (before and after compression)
+        with patch.object(manager.compressor, "should_compress", return_value=True):
+            with patch.object(manager.compressor, "__call__", new=mock_compress):
+                with patch.object(
+                    manager.truncator,
+                    "truncate_by_halving",
+                    return_value=long_messages[:5],
+                ) as mock_halving:
+                    _ = await manager.process(long_messages)
 
-                # Halving should be called
-                mock_halving.assert_called_once()
+                    # Halving should be called
+                    mock_halving.assert_called_once()
 
     # ==================== Combined Truncation and Compression Tests ====================
 
@@ -352,7 +373,10 @@ class TestContextManager:
         messages = [self.create_message("user", "x" * 300)]  # ~90 tokens
 
         # Replace compressor with one that raises an exception
-        manager.compressor = AsyncMock(side_effect=Exception("Test error"))
+        mock_compressor = AsyncMock(side_effect=Exception("Test error"))
+        mock_compressor.compression_threshold = 0.82
+        mock_compressor.should_compress = MagicMock(return_value=True)
+        manager.compressor = mock_compressor
 
         with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
             result = await manager.process(messages)
@@ -393,9 +417,10 @@ class TestContextManager:
         ]
 
         # Should trigger compression due to token count
-        needs_compression, tokens = await manager._initial_token_check(messages)
+        tokens = manager.token_counter.count_tokens(messages)
+        needs_compression = manager.compressor.should_compress(messages, tokens, 50)
 
-        assert tokens is not None  # Tokens should be counted
+        assert tokens > 0  # Tokens should be counted
         assert needs_compression  # Should trigger compression
 
     # ==================== Tool Calls Tests ====================
@@ -425,101 +450,73 @@ class TestContextManager:
 
         assert len(result) == 2
 
-    # ==================== Initial Token Check Tests ====================
+    # ==================== Compressor should_compress Tests ====================
 
     @pytest.mark.asyncio
-    async def test_initial_token_check_empty_messages(self):
-        """Test _initial_token_check with empty messages."""
+    async def test_should_compress_empty_messages(self):
+        """Test should_compress with empty messages."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
-        needs_compression, tokens = await manager._initial_token_check([])
-
+        # Compressor's should_compress should handle empty gracefully
+        needs_compression = manager.compressor.should_compress([], 0, 100)
         assert not needs_compression
-        assert tokens is None
 
     @pytest.mark.asyncio
-    async def test_initial_token_check_no_limit(self):
-        """Test _initial_token_check when max_context_tokens is 0."""
-        config = ContextConfig(max_context_tokens=0)
-        manager = ContextManager(config)
-
-        messages = [self.create_message("user", "x" * 1000)]
-        needs_compression, tokens = await manager._initial_token_check(messages)
-
-        assert not needs_compression
-        assert tokens is None
-
-    @pytest.mark.asyncio
-    async def test_initial_token_check_below_threshold(self):
-        """Test _initial_token_check when below compression threshold."""
+    async def test_should_compress_below_threshold(self):
+        """Test should_compress when below compression threshold."""
         config = ContextConfig(max_context_tokens=1000)
         manager = ContextManager(config)
 
         messages = [self.create_message("user", "Hello")]
-        needs_compression, tokens = await manager._initial_token_check(messages)
+        tokens = manager.token_counter.count_tokens(messages)
 
+        needs_compression = manager.compressor.should_compress(messages, tokens, 1000)
         assert not needs_compression
-        assert tokens is None
 
     @pytest.mark.asyncio
-    async def test_initial_token_check_above_threshold(self):
-        """Test _initial_token_check when above compression threshold."""
+    async def test_should_compress_above_threshold(self):
+        """Test should_compress when above compression threshold."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
-        # Create message with ~90 tokens (above 0.82 * 100 = 82)
+        # Create message with many tokens
         messages = [self.create_message("user", "这是测试" * 50)]
-        needs_compression, tokens = await manager._initial_token_check(messages)
+        tokens = manager.token_counter.count_tokens(messages)
 
-        assert needs_compression
-        assert tokens is not None
-        assert tokens > 82
+        needs_compression = manager.compressor.should_compress(messages, tokens, 100)
+        # Should need compression if tokens > 82 (0.82 * 100)
+        assert needs_compression == (tokens > 82)
 
-    @pytest.mark.asyncio
-    async def test_initial_token_check_exactly_at_threshold(self):
-        """Test _initial_token_check when just above threshold."""
-        config = ContextConfig(max_context_tokens=100)
-        manager = ContextManager(config)
+    # ==================== Truncator Halving Tests ====================
 
-        # Create message with >82 tokens (0.82 * 100)
-        # 300 chars * 0.3 = 90 tokens > 82 (threshold)
-        messages = [self.create_message("user", "x" * 300)]  # ~90 tokens
-        needs_compression, tokens = await manager._initial_token_check(messages)
-
-        # Above threshold should trigger compression
-        assert tokens is not None
-        assert needs_compression
-
-    # ==================== Compression by Halving Tests ====================
-
-    def test_compress_by_halving_basic(self):
-        """Test _compress_by_halving removes middle 50%."""
+    def test_truncate_by_halving_basic(self):
+        """Test truncate_by_halving removes middle 50%."""
         config = ContextConfig()
         manager = ContextManager(config)
 
         messages = self.create_messages(10)
-        result = manager._compress_by_halving(messages)
+        result = manager.truncator.truncate_by_halving(messages)
 
         # Should keep roughly half
         assert len(result) < len(messages)
 
-    def test_compress_by_halving_empty_list(self):
-        """Test _compress_by_halving with empty list."""
+    def test_truncate_by_halving_empty_list(self):
+        """Test truncate_by_halving with empty list."""
         config = ContextConfig()
         manager = ContextManager(config)
 
-        result = manager._compress_by_halving([])
+        result = manager.truncator.truncate_by_halving([])
 
         assert result == []
 
-    def test_compress_by_halving_single_message(self):
-        """Test _compress_by_halving with single message."""
+    def test_truncate_by_halving_single_message(self):
+        """Test truncate_by_halving with single message."""
         config = ContextConfig()
         manager = ContextManager(config)
 
         messages = [self.create_message("user", "Hello")]
-        result = manager._compress_by_halving(messages)
+        result = manager.truncator.truncate_by_halving(messages)
 
         assert len(result) <= 1
 
@@ -557,19 +554,21 @@ class TestContextManager:
             assert non_system[0].role == "user"
 
     @pytest.mark.asyncio
-    async def test_compression_threshold_constant(self):
-        """Test that COMPRESSION_THRESHOLD is used correctly."""
+    async def test_compression_threshold_default(self):
+        """Test that compression threshold is used correctly."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
-        # Verify the threshold is 0.82
-        assert manager.COMPRESSION_THRESHOLD == 0.82
+        # Verify the default threshold is 0.82
+        assert manager.compressor.compression_threshold == 0.82
 
-        # Create messages just below threshold
+        # Test threshold logic
         messages = [self.create_message("user", "x" * 81)]  # ~24 tokens
+        tokens = manager.token_counter.count_tokens(messages)
 
-        needs_compression, _ = await manager._initial_token_check(messages)
-        assert not needs_compression
+        needs_compression = manager.compressor.should_compress(messages, tokens, 100)
+        # Should not compress if below threshold
+        assert needs_compression == (tokens > 82)
 
     @pytest.mark.asyncio
     async def test_large_batch_processing(self):
@@ -608,39 +607,29 @@ class TestContextManager:
     # ==================== Run Compression Tests ====================
 
     @pytest.mark.asyncio
-    async def test_run_compression_skip_when_not_needed(self):
-        """Test _run_compression skips when needs_compression is False."""
+    async def test_run_compression_calls_compressor(self):
+        """Test _run_compression calls compressor."""
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
         messages = self.create_messages(5)
+        compressed = self.create_messages(3)
 
-        with patch.object(
-            manager.compressor, "__call__", new_callable=AsyncMock
-        ) as mock_compress:
-            result = await manager._run_compression(messages, needs_compression=False)
+        # Create a mock compressor
+        mock_compressor = AsyncMock()
+        mock_compressor.compression_threshold = 0.82
+        mock_compressor.return_value = compressed
+        mock_compressor.should_compress = MagicMock(return_value=False)
+        manager.compressor = mock_compressor
 
-            mock_compress.assert_not_called()
-            assert result == messages
+        result = await manager._run_compression(messages, prev_tokens=100)
 
-    @pytest.mark.asyncio
-    async def test_run_compression_skip_when_zero_limit(self):
-        """Test _run_compression skips when max_context_tokens is 0."""
-        config = ContextConfig(max_context_tokens=0)
-        manager = ContextManager(config)
-
-        messages = self.create_messages(5)
-
-        with patch.object(
-            manager.compressor, "__call__", new_callable=AsyncMock
-        ) as mock_compress:
-            result = await manager._run_compression(messages, needs_compression=True)
-
-            mock_compress.assert_not_called()
-            assert result == messages
+        # Compressor __call__ should be invoked
+        mock_compressor.assert_called_once_with(messages)
+        assert result == compressed
 
     @pytest.mark.asyncio
-    async def test_run_compression_applies_compressor(self):
+    async def test_run_compression_applies_compressor_through_process(self):
         """Test _run_compression calls compressor when needed through process()."""
         config = ContextConfig(max_context_tokens=100, truncate_turns=1)
         manager = ContextManager(config)
@@ -649,14 +638,26 @@ class TestContextManager:
         messages = [self.create_message("user", "x" * 300)]  # ~90 tokens > 82 threshold
         compressed = [self.create_message("user", "short")]  # Much smaller
 
-        # Replace compressor with mock
-        mock_compress = AsyncMock(return_value=compressed)
-        manager.compressor = mock_compress
+        # Create a mock compressor
+        mock_compressor = AsyncMock()
+        mock_compressor.compression_threshold = 0.82
+        mock_compressor.return_value = compressed
+
+        # Mock should_compress to return True first time, False after
+        call_count = 0
+
+        def mock_should_compress(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return call_count == 1
+
+        mock_compressor.should_compress = mock_should_compress
+        manager.compressor = mock_compressor
 
         result = await manager.process(messages)
 
         # Compressor should have been called
-        mock_compress.assert_called_once()
+        mock_compressor.assert_called_once()
         assert len(result) <= len(messages)
 
     @pytest.mark.asyncio

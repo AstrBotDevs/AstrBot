@@ -25,6 +25,21 @@ class ContextCompressor(Protocol):
     Provides an interface for compressing message lists.
     """
 
+    def should_compress(
+        self, messages: list[Message], current_tokens: int, max_tokens: int
+    ) -> bool:
+        """Check if compression is needed.
+
+        Args:
+            messages: The message list to evaluate.
+            current_tokens: The current token count.
+            max_tokens: The maximum allowed tokens for the model.
+
+        Returns:
+            True if compression is needed, False otherwise.
+        """
+        ...
+
     async def __call__(self, messages: list[Message]) -> list[Message]:
         """Compress the message list.
 
@@ -42,13 +57,33 @@ class TruncateByTurnsCompressor:
     Truncates the message list by removing older turns.
     """
 
-    def __init__(self, truncate_turns: int = 1):
+    def __init__(self, truncate_turns: int = 1, compression_threshold: float = 0.82):
         """Initialize the truncate by turns compressor.
 
         Args:
             truncate_turns: The number of turns to remove when truncating (default: 1).
+            compression_threshold: The compression trigger threshold (default: 0.82).
         """
         self.truncate_turns = truncate_turns
+        self.compression_threshold = compression_threshold
+
+    def should_compress(
+        self, messages: list[Message], current_tokens: int, max_tokens: int
+    ) -> bool:
+        """Check if compression is needed.
+
+        Args:
+            messages: The message list to evaluate.
+            current_tokens: The current token count.
+            max_tokens: The maximum allowed tokens.
+
+        Returns:
+            True if compression is needed, False otherwise.
+        """
+        if max_tokens <= 0 or current_tokens <= 0:
+            return False
+        usage_rate = current_tokens / max_tokens
+        return usage_rate > self.compression_threshold
 
     async def __call__(self, messages: list[Message]) -> list[Message]:
         truncator = ContextTruncator()
@@ -116,15 +151,19 @@ class LLMSummaryCompressor:
         provider: "Provider",
         keep_recent: int = 4,
         instruction_text: str | None = None,
+        compression_threshold: float = 0.82,
     ):
         """Initialize the LLM summary compressor.
 
         Args:
             provider: The LLM provider instance.
             keep_recent: The number of latest messages to keep (default: 4).
+            instruction_text: Custom instruction for summary generation.
+            compression_threshold: The compression trigger threshold (default: 0.82).
         """
         self.provider = provider
         self.keep_recent = keep_recent
+        self.compression_threshold = compression_threshold
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -133,6 +172,24 @@ class LLMSummaryCompressor:
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         )
+
+    def should_compress(
+        self, messages: list[Message], current_tokens: int, max_tokens: int
+    ) -> bool:
+        """Check if compression is needed.
+
+        Args:
+            messages: The message list to evaluate.
+            current_tokens: The current token count.
+            max_tokens: The maximum allowed tokens.
+
+        Returns:
+            True if compression is needed, False otherwise.
+        """
+        if max_tokens <= 0 or current_tokens <= 0:
+            return False
+        usage_rate = current_tokens / max_tokens
+        return usage_rate > self.compression_threshold
 
     async def __call__(self, messages: list[Message]) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
@@ -170,9 +227,15 @@ class LLMSummaryCompressor:
 
         result.append(
             Message(
-                role="system",
-                content=f"History conversation summary: {summary_content}",
-            ),
+                role="user",
+                content=f"Our previous history conversation summary: {summary_content}",
+            )
+        )
+        result.append(
+            Message(
+                role="assistant",
+                content="Acknowledged the summary of our previous conversation history.",
+            )
         )
 
         result.extend(recent_messages)

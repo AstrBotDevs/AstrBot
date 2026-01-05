@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .compressor import ContextCompressor
+from .token_counter import TokenCounter
+
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
@@ -26,3 +29,7 @@ class ContextConfig:
     """Number of recent messages to keep during LLM-based compression."""
     llm_compress_provider: "Provider | None" = None
     """LLM provider used for compression tasks. If None, truncation strategy is used."""
+    custom_token_counter: TokenCounter | None = None
+    """Custom token counting method. If None, the default method is used."""
+    custom_compressor: ContextCompressor | None = None
+    """Custom context compression method. If None, the default method is used."""

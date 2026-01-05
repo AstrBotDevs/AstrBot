@@ -3,15 +3,12 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
-from .token_counter import TokenCounter
+from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
 
 class ContextManager:
     """Context compression manager."""
-
-    COMPRESSION_THRESHOLD = 0.82
-    """compression trigger threshold"""
 
     def __init__(
         self,
@@ -28,10 +25,12 @@ class ContextManager:
         """
         self.config = config
 
-        self.token_counter = TokenCounter()
+        self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
 
-        if config.llm_compress_provider:
+        if config.custom_compressor:
+            self.compressor = config.custom_compressor
+        elif config.llm_compress_provider:
             self.compressor = LLMSummaryCompressor(
                 provider=config.llm_compress_provider,
                 keep_recent=config.llm_compress_keep_recent,
@@ -64,60 +63,32 @@ class ContextManager:
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
-                # check if the messages need to be compressed
-                needs_compression, tokens = await self._initial_token_check(result)
+                total_tokens = self.token_counter.count_tokens(result)
 
-                # compress/truncate the messages if needed
-                result = await self._run_compression(result, tokens, needs_compression)
+                if self.compressor.should_compress(
+                    result, total_tokens, self.config.max_context_tokens
+                ):
+                    result = await self._run_compression(result, total_tokens)
 
             return result
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
 
-    async def _initial_token_check(self, messages: list[Message]) -> tuple[bool, int]:
-        """
-        Check if the messages need to be compressed.
-
-        Args:
-            messages: The original message list.
-
-        Returns:
-            tuple: (whether to compress, initial token count)
-        """
-        if not messages:
-            return False, 0
-        if self.config.max_context_tokens <= 0:
-            return False, 0
-
-        total_tokens = self.token_counter.count_tokens(messages)
-
-        usage_rate = total_tokens / self.config.max_context_tokens
-
-        needs_compression = usage_rate > self.COMPRESSION_THRESHOLD
-        return needs_compression, total_tokens if needs_compression else 0
-
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int, needs_compression: bool
+        self, messages: list[Message], prev_tokens: int
     ) -> list[Message]:
         """
-        Compress/truncate the messages if needed.
+        Compress/truncate the messages.
 
         Args:
             messages: The original message list.
-            needs_compression: Whether to compress.
+            prev_tokens: The token count before compression.
 
         Returns:
             The compressed/truncated message list.
         """
-        if not needs_compression:
-            return messages
-        if self.config.max_context_tokens <= 0:
-            return messages
-
-        logger.debug(
-            f"Reached high water mark {self.COMPRESSION_THRESHOLD}, starting compression..."
-        )
+        logger.debug("Compress triggered, starting compression...")
 
         messages = await self.compressor(messages)
 
@@ -132,23 +103,14 @@ class ContextManager:
             f" compression rate: {compress_rate:.2f}%.",
         )
 
-        if (
-            tokens_after_summary / self.config.max_context_tokens
-            > self.COMPRESSION_THRESHOLD
+        # last check
+        if self.compressor.should_compress(
+            messages, tokens_after_summary, self.config.max_context_tokens
         ):
-            # still over 82%, truncate by half
-            messages = self._compress_by_halving(messages)
+            logger.info(
+                "Context still exceeds max tokens after compression, applying halving truncation..."
+            )
+            # still need compress, truncate by half
+            messages = self.truncator.truncate_by_halving(messages)
 
         return messages
-
-    def _compress_by_halving(self, messages: list[Message]) -> list[Message]:
-        """
-        对半砍策略：删除中间50%的消息
-
-        Args:
-            messages: 原始消息列表
-
-        Returns:
-            截断后的消息列表
-        """
-        return self.truncator.truncate_by_halving(messages)
