@@ -1,8 +1,12 @@
 import warnings
+from collections.abc import Callable
+from typing import TypeVar
 
 from astrbot.core.star import StarMetadata, star_map
 
 _warned_register_star = False
+
+T = TypeVar("T")
 
 
 def register_star(
@@ -11,7 +15,7 @@ def register_star(
     desc: str,
     version: str,
     repo: str | None = None,
-):
+) -> Callable[[type[T]], type[T]]:
     """注册一个插件(Star)。
 
     [DEPRECATED] 该装饰器已废弃，将在未来版本中移除。
@@ -44,7 +48,7 @@ def register_star(
             stacklevel=2,
         )
 
-    def decorator(cls):
+    def decorator(cls: type[T]) -> type[T]:
         if not star_map.get(cls.__module__):
             metadata = StarMetadata(
                 name=name,
