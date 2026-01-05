@@ -2,12 +2,11 @@ from collections.abc import Callable
 from typing import TypeVar
 
 from astrbot.core import logger
-from astrbot.core.provider.provider import AbstractProvider
 
 from .entities import ProviderMetaData, ProviderType
 from .func_tool_manager import FuncCall
 
-T = TypeVar("T", bound=AbstractProvider)
+T = TypeVar("T")
 
 provider_registry: list[ProviderMetaData] = []
 """维护了通过装饰器注册的 Provider"""
