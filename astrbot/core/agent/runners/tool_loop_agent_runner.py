@@ -25,6 +25,10 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.provider.provider import Provider
 
+from ..context.compressor import ContextCompressor
+from ..context.config import ContextConfig
+from ..context.manager import ContextManager
+from ..context.token_counter import TokenCounter
 from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
@@ -47,10 +51,47 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         run_context: ContextWrapper[TContext],
         tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
+        streaming: bool = False,
+        # enforce max turns, will discard older turns when exceeded BEFORE compression
+        # -1 means no limit
+        enforce_max_turns: int = -1,
+        # llm compressor
+        llm_compress_instruction: str | None = None,
+        llm_compress_keep_recent: int = 0,
+        llm_compress_provider: Provider | None = None,
+        # truncate by turns compressor
+        truncate_turns: int = 1,
+        # customize
+        custom_token_counter: TokenCounter | None = None,
+        custom_compressor: ContextCompressor | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
-        self.streaming = kwargs.get("streaming", False)
+        self.streaming = streaming
+        self.enforce_max_turns = enforce_max_turns
+        self.llm_compress_instruction = llm_compress_instruction
+        self.llm_compress_keep_recent = llm_compress_keep_recent
+        self.llm_compress_provider = llm_compress_provider
+        self.truncate_turns = truncate_turns
+        self.custom_token_counter = custom_token_counter
+        self.custom_compressor = custom_compressor
+        # we will do compress when:
+        # 1. before requesting LLM
+        # TODO: 2. after LLM output a tool call
+        self.context_config = ContextConfig(
+            # <=0 will never do compress
+            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
+            # enforce max turns before compression
+            enforce_max_turns=self.enforce_max_turns,
+            truncate_turns=self.truncate_turns,
+            llm_compress_instruction=self.llm_compress_instruction,
+            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_provider=self.llm_compress_provider,
+            custom_token_counter=self.custom_token_counter,
+            custom_compressor=self.custom_compressor,
+        )
+        self.context_manager = ContextManager(self.context_config)
+
         self.provider = provider
         self.final_llm_resp = None
         self._state = AgentState.IDLE
@@ -109,6 +150,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
+
+        # do truncate and compress
+        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        self.run_context.messages = await self.context_manager.process(
+            self.run_context.messages, trusted_token_usage=token_usage
+        )
 
         async for llm_response in self._iter_llm_responses():
             if llm_response.is_chunk:

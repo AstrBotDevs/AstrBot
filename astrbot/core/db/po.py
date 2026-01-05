@@ -54,6 +54,11 @@ class ConversationV2(SQLModel, table=True):
     )
     title: str | None = Field(default=None, max_length=255)
     persona_id: str | None = Field(default=None)
+    token_usage: int = Field(default=0, nullable=False)
+    """content is a list of OpenAI-formated messages in list[dict] format.
+    token_usage is the total token value of the messages.
+    when 0, will use estimated token counter.
+    """
 
     __table_args__ = (
         UniqueConstraint(
@@ -313,6 +318,8 @@ class Conversation:
     persona_id: str | None = ""
     created_at: int = 0
     updated_at: int = 0
+    token_usage: int = 0
+    """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
 
 
 class Personality(TypedDict):

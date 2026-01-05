@@ -83,6 +83,16 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
+        "context_limit_reached_strategy": "truncate_by_turns",  # or llm_compress
+        "llm_compress_instruction": (
+            "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
+            "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
+            "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
+            "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
+            "4. Write the summary in the user's language.\n"
+        ),
+        "llm_compress_keep_recent": 4,
+        "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -179,6 +189,7 @@ class ChatProviderTemplate(TypedDict):
     model: str
     modalities: list
     custom_extra_body: dict[str, Any]
+    max_context_tokens: int
 
 
 CHAT_PROVIDER_TEMPLATE = {
@@ -187,6 +198,7 @@ CHAT_PROVIDER_TEMPLATE = {
     "model": "",
     "modalities": [],
     "custom_extra_body": {},
+    "max_context_tokens": 0,
 }
 
 """
@@ -2033,6 +2045,11 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。",
                     },
+                    "max_context_tokens": {
+                        "description": "模型上下文窗口大小",
+                        "type": "int",
+                        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。",
+                    },
                     "dify_api_key": {
                         "description": "API Key",
                         "type": "string",
@@ -2540,6 +2557,66 @@ CONFIG_METADATA_3 = {
             #         "provider_settings.enable": True,
             #     },
             # },
+            "truncate_and_compress": {
+                "description": "上下文管理策略",
+                "type": "object",
+                "items": {
+                    "provider_settings.max_context_length": {
+                        "description": "最多携带对话轮数",
+                        "type": "int",
+                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.dequeue_context_length": {
+                        "description": "丢弃对话轮数",
+                        "type": "int",
+                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.context_limit_reached_strategy": {
+                        "description": "超出模型上下文窗口时的处理方式",
+                        "type": "string",
+                        "options": ["truncate_by_turns", "llm_compress"],
+                        "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                        "hint": "",
+                    },
+                    "provider_settings.llm_compress_instruction": {
+                        "description": "上下文压缩提示词",
+                        "type": "text",
+                        "hint": "如果为空则使用默认提示词。",
+                        "condition": {
+                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.llm_compress_keep_recent": {
+                        "description": "压缩时保留最近对话轮数",
+                        "type": "int",
+                        "hint": "始终保留的最近 N 轮对话。",
+                        "condition": {
+                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.llm_compress_provider_id": {
+                        "description": "用于上下文压缩的模型提供商 ID",
+                        "type": "string",
+                        "_special": "select_provider",
+                        "hint": "留空时将降级为“按对话轮数截断”的策略。",
+                        "condition": {
+                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                },
+            },
             "others": {
                 "description": "其他配置",
                 "type": "object",
@@ -2602,22 +2679,6 @@ CONFIG_METADATA_3 = {
                         "labels": ["实时分段回复", "关闭流式回复"],
                         "condition": {
                             "provider_settings.streaming_response": True,
-                        },
-                    },
-                    "provider_settings.max_context_length": {
-                        "description": "最多携带对话轮数",
-                        "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.dequeue_context_length": {
-                        "description": "丢弃对话轮数",
-                        "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.wake_prefix": {

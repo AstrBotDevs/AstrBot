@@ -11,7 +11,12 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application"]
+          "labels": [
+            "Built-in Agent",
+            "Dify",
+            "Coze",
+            "Alibaba Cloud Bailian Application"
+          ]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -128,6 +133,39 @@
         }
       }
     },
+    "truncate_and_compress": {
+      "description": "Context Management Strategy",
+      "provider_settings": {
+        "max_context_length": {
+          "description": "Maximum Conversation Turns",
+          "hint": "Discards the oldest parts when this count is exceeded. One conversation round counts as 1, -1 means unlimited"
+        },
+        "dequeue_context_length": {
+          "description": "Dequeue Conversation Turns",
+          "hint": "Number of conversation turns to discard at once when maximum context length is exceeded"
+        },
+        "context_limit_reached_strategy": {
+          "description": "Handling When Model Context Window is Exceeded",
+          "labels": [
+            "Truncate by Turns",
+            "Compress by LLM"
+          ],
+          "hint": "When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Dequeue Conversation Turns' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+        },
+        "llm_compress_instruction": {
+          "description": "Context Compression Instruction",
+          "hint": "If empty, the default prompt will be used."
+        },
+        "llm_compress_keep_recent": {
+          "description": "Keep Recent Turns When Compressing",
+          "hint": "Always keep the most recent N turns of conversation when compressing context."
+        },
+        "llm_compress_provider_id": {
+          "description": "Model Provider ID for Context Compression",
+          "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+        }
+      }
+    },
     "others": {
       "description": "Other Settings",
       "provider_settings": {
@@ -161,15 +199,10 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
-        },
-        "max_context_length": {
-          "description": "Maximum Conversation Rounds",
-          "hint": "Discards the oldest parts when this count is exceeded. One conversation round counts as 1, -1 means unlimited"
-        },
-        "dequeue_context_length": {
-          "description": "Dequeue Conversation Rounds",
-          "hint": "Number of conversation rounds to discard at once when maximum context length is exceeded"
+          "labels": [
+            "Real-time Segmented Reply",
+            "Disable Streaming Response"
+          ]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -387,7 +420,10 @@
           },
           "split_mode": {
             "description": "Split Mode",
-            "labels": ["Regex", "Words List"]
+            "labels": [
+              "Regex",
+              "Words List"
+            ]
           },
           "regex": {
             "description": "Segmentation Regular Expression"
