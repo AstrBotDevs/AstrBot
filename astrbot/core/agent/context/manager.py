@@ -65,19 +65,17 @@ class ContextManager:
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 # check if the messages need to be compressed
-                needs_compression, _ = await self._initial_token_check(result)
+                needs_compression, tokens = await self._initial_token_check(result)
 
                 # compress/truncate the messages if needed
-                result = await self._run_compression(result, needs_compression)
+                result = await self._run_compression(result, tokens, needs_compression)
 
             return result
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
 
-    async def _initial_token_check(
-        self, messages: list[Message]
-    ) -> tuple[bool, int | None]:
+    async def _initial_token_check(self, messages: list[Message]) -> tuple[bool, int]:
         """
         Check if the messages need to be compressed.
 
@@ -88,22 +86,19 @@ class ContextManager:
             tuple: (whether to compress, initial token count)
         """
         if not messages:
-            return False, None
+            return False, 0
         if self.config.max_context_tokens <= 0:
-            return False, None
+            return False, 0
 
         total_tokens = self.token_counter.count_tokens(messages)
 
-        logger.debug(
-            f"ContextManager: total tokens = {total_tokens}, max_context_tokens = {self.config.max_context_tokens}"
-        )
         usage_rate = total_tokens / self.config.max_context_tokens
 
         needs_compression = usage_rate > self.COMPRESSION_THRESHOLD
-        return needs_compression, total_tokens if needs_compression else None
+        return needs_compression, total_tokens if needs_compression else 0
 
     async def _run_compression(
-        self, messages: list[Message], needs_compression: bool
+        self, messages: list[Message], prev_tokens: int, needs_compression: bool
     ) -> list[Message]:
         """
         Compress/truncate the messages if needed.
@@ -120,10 +115,21 @@ class ContextManager:
         if self.config.max_context_tokens <= 0:
             return messages
 
+        logger.debug("Starting context compression process...")
+
         messages = await self.compressor(messages)
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
+
+        # calculate compress rate
+        compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
+        logger.info(
+            f"Compress completed."
+            f" {prev_tokens} -> {tokens_after_summary} tokens,"
+            f" compression rate: {compress_rate:.2f}%.",
+        )
+
         if (
             tokens_after_summary / self.config.max_context_tokens
             > self.COMPRESSION_THRESHOLD
