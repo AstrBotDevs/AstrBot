@@ -7,19 +7,24 @@ import ssl
 import time
 import uuid
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import certifi
 import psutil
 from PIL import Image
 
+if TYPE_CHECKING:
+    from _typeshed import ExcInfo
+
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 
 
-def on_error(func, path, exc_info) -> None:
+def on_error(func: Callable[..., Any], path: str, exc_info: ExcInfo) -> None:
     """A callback of the rmtree function."""
     import stat
 
@@ -217,7 +222,7 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
-def get_local_ip_addresses():
+def get_local_ip_addresses() -> list[str]:
     net_interfaces = psutil.net_if_addrs()
     network_ips = []
 
@@ -229,7 +234,7 @@ def get_local_ip_addresses():
     return network_ips
 
 
-async def get_dashboard_version():
+async def get_dashboard_version() -> str | None:
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")

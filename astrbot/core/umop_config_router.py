@@ -11,7 +11,7 @@ class UmopConfigRouter:
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self._load_routing_table()
 
     async def _load_routing_table(self) -> None:
