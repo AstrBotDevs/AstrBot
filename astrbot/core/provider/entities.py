@@ -344,6 +344,11 @@ class LLMResponse:
         self.raw_completion = raw_completion
         self.is_chunk = is_chunk
 
+        if id is not None:
+            self.id = id
+        if usage is not None:
+            self.usage = usage
+
     @property
     def completion_text(self):
         if self.result_chain:
