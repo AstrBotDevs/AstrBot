@@ -298,7 +298,7 @@ class PluginManager:
 
     async def reload(
         self, specified_plugin_name: str | None = None
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str]:
         """重新加载插件
 
         Args:
@@ -358,7 +358,7 @@ class PluginManager:
         self,
         specified_module_path: str | None = None,
         specified_dir_name: str | None = None,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str]:
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
 
@@ -647,7 +647,7 @@ class PluginManager:
             logger.error(traceback.format_exc())
 
         if not fail_rec:
-            return True, None
+            return True, ""
         self.failed_plugin_info = fail_rec
         return False, fail_rec
 
