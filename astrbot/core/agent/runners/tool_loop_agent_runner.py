@@ -152,8 +152,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp_result = None
 
         # do truncate and compress
+        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self.run_context.messages = await self.context_manager.process(
-            self.run_context.messages
+            self.run_context.messages, trusted_token_usage=token_usage
         )
 
         async for llm_response in self._iter_llm_responses():

@@ -152,6 +152,7 @@ class BaseDatabase(abc.ABC):
         title: str | None = None,
         persona_id: str | None = None,
         content: list[dict] | None = None,
+        token_usage: int | None = None,
     ) -> None:
         """Update a conversation's history."""
         ...

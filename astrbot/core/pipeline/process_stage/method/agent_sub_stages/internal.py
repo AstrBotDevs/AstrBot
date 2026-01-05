@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
@@ -282,6 +283,7 @@ class InternalAgentSubStage(Stage):
         req: ProviderRequest,
         llm_response: LLMResponse | None,
         all_messages: list[Message],
+        runner_stats: AgentStats | None,
     ):
         if (
             not req
@@ -308,10 +310,16 @@ class InternalAgentSubStage(Stage):
                 continue
             message_to_save.append(message.model_dump())
 
+        # get token usage from agent runner stats
+        token_usage = None
+        if runner_stats:
+            token_usage = runner_stats.token_usage.total
+
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
             req.conversation.cid,
             history=message_to_save,
+            token_usage=token_usage,
         )
 
     def _get_compress_provider(self) -> Provider | None:
@@ -519,6 +527,7 @@ class InternalAgentSubStage(Stage):
                     req,
                     agent_runner.get_final_llm_resp(),
                     agent_runner.run_context.messages,
+                    agent_runner.stats,
                 )
 
             # 异步处理 WebChat 特殊情况

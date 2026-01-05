@@ -3,6 +3,7 @@ import traceback
 from astrbot.core import astrbot_config, logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
+from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
 from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
 
 
@@ -137,6 +138,13 @@ async def migra(
         await migrate_webchat_session(db)
     except Exception as e:
         logger.error(f"Migration for webchat session failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+    # migration for token_usage column
+    try:
+        await migrate_token_usage(db)
+    except Exception as e:
+        logger.error(f"Migration for token_usage column failed: {e!s}")
         logger.error(traceback.format_exc())
 
     # migra third party agent runner configs

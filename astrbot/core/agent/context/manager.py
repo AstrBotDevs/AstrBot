@@ -41,7 +41,9 @@ class ContextManager:
                 truncate_turns=config.truncate_turns
             )
 
-    async def process(self, messages: list[Message]) -> list[Message]:
+    async def process(
+        self, messages: list[Message], trusted_token_usage: int = 0
+    ) -> list[Message]:
         """Process the messages.
 
         Args:
@@ -63,7 +65,9 @@ class ContextManager:
 
             # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
-                total_tokens = self.token_counter.count_tokens(result)
+                total_tokens = self.token_counter.count_tokens(
+                    result, trusted_token_usage
+                )
 
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
