@@ -141,6 +141,7 @@ const marketCustomFilter = (value, query, item) => {
   if (value != null) candidates.add(String(value));
   if (item?.name) candidates.add(String(item.name));
   if (item?.trimmedName) candidates.add(String(item.trimmedName));
+  if (item?.display_name) candidates.add(String(item.display_name));
   if (item?.desc) candidates.add(String(item.desc));
   if (item?.author) candidates.add(String(item.author));
 
