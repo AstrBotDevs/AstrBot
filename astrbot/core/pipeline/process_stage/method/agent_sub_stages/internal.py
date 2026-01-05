@@ -76,6 +76,8 @@ class InternalAgentSubStage(Stage):
             max(1, settings["dequeue_context_length"]),
             self.max_context_length - 1,
         )
+        if self.dequeue_context_length <= 0:
+            self.dequeue_context_length = 1
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
