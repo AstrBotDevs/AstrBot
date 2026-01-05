@@ -62,6 +62,14 @@
       "subtitle": "请查看插件市场或联系插件作者获取更多信息。"
     }
   },
+  "changelog": {
+    "title": "更新日志",
+    "loading": "正在加载更新日志...",
+    "empty": {
+      "title": "该插件未提供更新日志",
+      "subtitle": "开发者可在插件目录下添加 CHANGELOG.md 文件来提供更新日志"
+    }
+  },
   "editor": {
     "fullscreen": "全屏编辑",
     "editingTitle": "编辑内容"
