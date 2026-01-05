@@ -993,6 +993,7 @@ class BackupRoute(Route):
                 file_path,
                 as_attachment=True,
                 attachment_filename=filename,
+                conditional=True,  # 启用 Range 请求支持（断点续传）
             )
         except Exception as e:
             logger.error(f"下载备份失败: {e}")
