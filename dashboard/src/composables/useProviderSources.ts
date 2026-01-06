@@ -241,6 +241,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return providers.value.filter((provider: any) => getProviderType(provider) === selectedProviderType.value)
   })
 
+  const providerSourceSchema = computed(() => {
+    if (!configSchema.value || !configSchema.value.provider) {
+      return configSchema.value
+    }
+
+    // 创建一个深拷贝以避免修改原始 schema
+    const customSchema = JSON.parse(JSON.stringify(configSchema.value))
+
+    // 为 provider source 的 id 字段添加自定义 hint
+    if (customSchema.provider?.items?.id) {
+      customSchema.provider.items.id.hint = tm('providerSources.hints.id')
+      customSchema.provider.items.key.hint = tm('providerSources.hints.key')
+      customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+    }
+
+    return customSchema
+  })
+
   // ===== Watches =====
   watch(editableProviderSource, () => {
     if (suppressSourceWatch) return
@@ -510,7 +528,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     const metadata = getModelMetadata(modelName)
     let modalities: string[]
-    
+
     if (!metadata) {
       modalities = ['text', 'image', 'tool_use']
     } else {
@@ -523,13 +541,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       }
     }
 
+    let max_context_tokens = 0
+    if (metadata?.limit?.context && typeof metadata.limit.context === 'number') {
+      max_context_tokens = metadata.limit.context
+    }
+
     const newProvider = {
       id: newId,
       enable: false,
       provider_source_id: sourceId,
       model: modelName,
       modalities,
-      custom_extra_body: {}
+      custom_extra_body: {},
+      max_context_tokens: max_context_tokens
     }
 
     try {
@@ -640,6 +664,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     basicSourceConfig,
     advancedSourceConfig,
     manualProviderId,
+    providerSourceSchema,
 
     // helpers
     resolveSourceIcon,

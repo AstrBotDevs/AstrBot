@@ -20,13 +20,13 @@
     </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'"
-        button-text="选择提供商池..." />
+        :button-text="t('core.shared.providerSelector.selectProviderPool')" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
-      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" button-text="选择人格池..." />
+      <PersonaSelector :model-value="modelValue" @update:model-value="emitUpdate" :button-text="t('core.shared.personaSelector.selectPersonaPool')" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
@@ -56,7 +56,7 @@
           :loading="loading"
           class="ml-2"
         >
-          自动检测
+          {{ t('core.common.autoDetect') }}
         </v-btn>
       </div>
     </template>
@@ -144,7 +144,7 @@
         color="primary"
         density="compact"
         hide-details
-        class="flex-grow-1"
+        style="flex: 1"
       ></v-slider>
       <v-text-field
         :model-value="modelValue"
@@ -154,7 +154,7 @@
         class="config-field"
         type="number"
         hide-details
-        style="max-width: 140px;"
+        style="flex: 1"
       ></v-text-field>
     </div>
 
@@ -324,5 +324,9 @@ function getSpecialSubtype(value) {
 
 .gap-20 {
   gap: 20px;
+}
+
+:deep(.v-field__input) {
+  font-size: 14px;
 }
 </style>

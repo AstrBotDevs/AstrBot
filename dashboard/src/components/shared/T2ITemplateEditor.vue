@@ -1,32 +1,32 @@
 <template>
   <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
     <template v-slot:activator="{ props }">
-      <v-btn 
+      <v-btn
         v-bind="props"
-        variant="outlined" 
-        color="primary" 
+        variant="outlined"
+        color="primary"
         size="small"
         :loading="loading"
       >
-        自定义 T2I 模板
+        {{ tm('t2iTemplateEditor.buttonText') }}
       </v-btn>
     </template>
     
     <v-card>
       <v-card-title class="d-flex align-center justify-space-between">
-        <span>自定义文转图 HTML 模板</span>
+        <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
         <v-spacer></v-spacer>
         <div class="d-flex align-center gap-2" style="width: 60%">
           <v-text-field
             v-if="isCreatingNew"
             v-model="editingName"
-            label="输入新模板名称"
+            :label="tm('t2iTemplateEditor.newTemplateNameLabel')"
             density="compact"
             hide-details
             variant="outlined"
             class="flex-grow-1"
             autofocus
-            :rules="[v => !!v || '名称不能为空']"
+            :rules="[v => !!v || tm('t2iTemplateEditor.nameRequired')]"
           ></v-text-field>
           <v-select
             v-else
@@ -34,7 +34,7 @@
             :items="templates"
             item-title="name"
             item-value="name"
-            label="选择模板"
+            :label="tm('t2iTemplateEditor.selectTemplateLabel')"
             density="compact"
             hide-details
             variant="outlined"
@@ -51,7 +51,7 @@
                     size="small"
                     class="ml-2"
                   >
-                    已应用
+                    {{ tm('t2iTemplateEditor.applied') }}
                   </v-chip>
                   <v-btn
                     v-else
@@ -62,7 +62,7 @@
                     @click.stop="setActiveTemplate(item.raw.name)"
                     :loading="applyLoading"
                   >
-                    应用
+                    {{ tm('t2iTemplateEditor.apply') }}
                   </v-btn>
                 </template>
               </v-list-item>
@@ -83,7 +83,7 @@
           <!-- 左侧编辑器 -->
           <v-col cols="6" class="d-flex flex-column">
             <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">模板编辑器</v-toolbar-title>
+              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.templateEditor') }}</v-toolbar-title>
               <v-spacer></v-spacer>
               <div class="d-flex align-center pa-1" style="border: 1px solid rgba(0,0,0,0.1); border-radius: 8px;">
                 <v-btn
@@ -93,7 +93,7 @@
                   color="success"
                 >
                   <v-icon left>mdi-plus</v-icon>
-                  新建
+                  {{ tm('t2iTemplateEditor.new') }}
                 </v-btn>
                 <v-divider vertical class="mx-1"></v-divider>
                 <v-btn
@@ -103,7 +103,7 @@
                   :loading="resetLoading"
                   color="warning"
                 >
-                  重置Base
+                  {{ tm('t2iTemplateEditor.resetBase') }}
                 </v-btn>
                 <v-btn
                   variant="text"
@@ -112,7 +112,7 @@
                   color="error"
                   :disabled="isCreatingNew || selectedTemplate === 'base' || !selectedTemplate"
                 >
-                  删除
+                  {{ tm('t2iTemplateEditor.delete') }}
                 </v-btn>
                 <v-divider vertical class="mx-1"></v-divider>
                 <v-btn
@@ -123,7 +123,7 @@
                   color="primary"
                   :disabled="(isCreatingNew && !editingName) || (!isCreatingNew && !selectedTemplate)"
                 >
-                  保存
+                  {{ tm('t2iTemplateEditor.save') }}
                 </v-btn>
               </div>
             </v-toolbar>
@@ -141,15 +141,15 @@
           <!-- 右侧预览 -->
           <v-col cols="6" class="d-flex flex-column">
             <v-toolbar density="compact" color="surface-variant">
-              <v-toolbar-title class="text-subtitle-2">实时预览(可能有差异)</v-toolbar-title>
+              <v-toolbar-title class="text-subtitle-2">{{ tm('t2iTemplateEditor.livePreview') }}</v-toolbar-title>
               <v-spacer></v-spacer>
-              <v-btn 
-                variant="text" 
-                size="small" 
+              <v-btn
+                variant="text"
+                size="small"
                 @click="refreshPreview"
                 :loading="previewLoading"
               >
-                刷新预览
+                {{ tm('t2iTemplateEditor.refreshPreview') }}
               </v-btn>
             </v-toolbar>
             <div class="flex-grow-1 preview-container">
@@ -168,7 +168,7 @@
           <v-col>
             <div class="text-caption text-grey">
               <v-icon size="16" class="mr-1">mdi-information</v-icon>
-              支持 jinja2 语法。可用变量：<code> text | safe </code>（要渲染的文本）, <code> version </code>（AstrBot 版本）
+              {{ tm('t2iTemplateEditor.syntaxHint') }}
             </div>
           </v-col>
           <v-col cols="auto">
@@ -176,7 +176,7 @@
               variant="text"
               @click="closeDialog"
             >
-              取消
+              {{ t('core.common.cancel') }}
             </v-btn>
             <v-btn
               color="primary"
@@ -184,7 +184,7 @@
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
             >
-              保存应用当前编辑模板
+              {{ tm('t2iTemplateEditor.saveAndApply') }}
             </v-btn>
           </v-col>
         </v-row>
@@ -194,14 +194,14 @@
     <!-- 确认重置对话框 -->
     <v-dialog v-model="resetDialog" max-width="400px">
       <v-card>
-        <v-card-title>确认重置</v-card-title>
+        <v-card-title>{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
         <v-card-text>
-          确定要将 'base' 模板恢复为默认内容吗？当前编辑器中的任何未保存更改将丢失。此操作无法撤销。
+          {{ tm('t2iTemplateEditor.confirmResetMessage') }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="resetDialog = false">取消</v-btn>
-          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">确认重置</v-btn>
+          <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -209,14 +209,14 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>确认删除</v-card-title>
+        <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
         <v-card-text>
-          确定要删除模板 '{{ selectedTemplate }}' 吗？此操作无法撤销。
+          {{ tm('t2iTemplateEditor.confirmDeleteMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">取消</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">确认删除</v-btn>
+          <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -224,14 +224,14 @@
     <!-- 保存并应用确认对话框 -->
     <v-dialog v-model="applyAndCloseDialog" max-width="500px">
       <v-card>
-        <v-card-title>确认操作</v-card-title>
+        <v-card-title>{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
         <v-card-text>
-          确定要保存对 '{{ selectedTemplate }}' 的修改，并将其设为新的活动模板吗？
+          {{ tm('t2iTemplateEditor.confirmApplyMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="applyAndCloseDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">确认</v-btn>
+          <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -242,10 +242,11 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import axios from 'axios'
 
 const { t } = useI18n()
+const { tm } = useModuleI18n('core.shared')
 
 // --- 响应式数据 ---
 const dialog = ref(false)

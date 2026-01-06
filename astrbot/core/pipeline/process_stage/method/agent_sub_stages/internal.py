@@ -1,12 +1,12 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
 
 import asyncio
-import copy
 import json
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.conversation_mgr import Conversation
@@ -25,6 +25,7 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.provider import Providers
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
@@ -42,11 +43,6 @@ class InternalAgentSubStage(Stage):
         self.ctx = ctx
         conf = ctx.astrbot_config
         settings = conf["provider_settings"]
-        self.max_context_length = settings["max_context_length"]  # int
-        self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
-        )
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
@@ -65,6 +61,25 @@ class InternalAgentSubStage(Stage):
         self.file_extract_msh_api_key: str = file_extract_conf.get(
             "moonshotai_api_key", ""
         )
+
+        # 上下文管理相关
+        self.context_limit_reached_strategy: str = settings.get(
+            "context_limit_reached_strategy", "truncate_by_turns"
+        )
+        self.llm_compress_instruction: str = settings.get(
+            "llm_compress_instruction", ""
+        )
+        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_provider_id: str = settings.get(
+            "llm_compress_provider_id", ""
+        )
+        self.max_context_length = settings["max_context_length"]  # int
+        self.dequeue_context_length: int = min(
+            max(1, settings["dequeue_context_length"]),
+            self.max_context_length - 1,
+        )
+        if self.dequeue_context_length <= 0:
+            self.dequeue_context_length = 1
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -168,34 +183,6 @@ class InternalAgentSubStage(Stage):
                 },
             )
 
-    def _truncate_contexts(
-        self,
-        contexts: list[dict],
-    ) -> list[dict]:
-        """截断上下文列表，确保不超过最大长度"""
-        if self.max_context_length == -1:
-            return contexts
-
-        if len(contexts) // 2 <= self.max_context_length:
-            return contexts
-
-        truncated_contexts = contexts[
-            -(self.max_context_length - self.dequeue_context_length + 1) * 2 :
-        ]
-        # 找到第一个role 为 user 的索引，确保上下文格式正确
-        index = next(
-            (
-                i
-                for i, item in enumerate(truncated_contexts)
-                if item.get("role") == "user"
-            ),
-            None,
-        )
-        if index is not None and index > 0:
-            truncated_contexts = truncated_contexts[index:]
-
-        return truncated_contexts
-
     def _modalities_fix(
         self,
         provider: Provider,
@@ -297,6 +284,7 @@ class InternalAgentSubStage(Stage):
         req: ProviderRequest,
         llm_response: LLMResponse | None,
         all_messages: list[Message],
+        runner_stats: AgentStats | None,
     ) -> None:
         if (
             not req
@@ -323,27 +311,37 @@ class InternalAgentSubStage(Stage):
                 continue
             message_to_save.append(message.model_dump())
 
+        # get token usage from agent runner stats
+        token_usage = None
+        if runner_stats:
+            token_usage = runner_stats.token_usage.total
+
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
             req.conversation.cid,
             history=message_to_save,
+            token_usage=token_usage,
         )
 
-    def _fix_messages(self, messages: list[dict]) -> list[dict]:
-        """验证并且修复上下文"""
-        fixed_messages = []
-        for message in messages:
-            if message.get("role") == "tool":
-                # tool block 前面必须要有 user 和 assistant block
-                if len(fixed_messages) < 2:
-                    # 这种情况可能是上下文被截断导致的
-                    # 我们直接将之前的上下文都清空
-                    fixed_messages = []
-                else:
-                    fixed_messages.append(message)
-            else:
-                fixed_messages.append(message)
-        return fixed_messages
+    def _get_compress_provider(self) -> Provider | None:
+        if not self.llm_compress_provider_id:
+            return None
+        if self.context_limit_reached_strategy != "llm_compress":
+            return None
+        provider = self.ctx.plugin_manager.context.get_provider_by_id(
+            self.llm_compress_provider_id,
+        )
+        if provider is None:
+            logger.warning(
+                f"未找到指定的上下文压缩模型 {self.llm_compress_provider_id}，将跳过压缩。",
+            )
+            return None
+        if not isinstance(provider, Provider):
+            logger.warning(
+                f"指定的上下文压缩模型 {self.llm_compress_provider_id} 不是对话模型，将跳过压缩。"
+            )
+            return None
+        return provider
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -365,6 +363,10 @@ class InternalAgentSubStage(Stage):
                 streaming_response = bool(enable_streaming)
 
             logger.debug("ready to request llm provider")
+
+            # 通知等待调用 LLM（在获取锁之前）
+            await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
                 if event.get_extra("provider_request"):
@@ -423,9 +425,10 @@ class InternalAgentSubStage(Stage):
                 await self._apply_kb(event, req)
 
                 # truncate contexts to fit max length
-                if req.contexts:
-                    req.contexts = self._truncate_contexts(req.contexts)
-                    self._fix_messages(req.contexts)
+                # NOW moved to ContextManager inside ToolLoopAgentRunner
+                # if req.contexts:
+                #     req.contexts = self._truncate_contexts(req.contexts)
+                #     self._fix_messages(req.contexts)
 
                 # session_id
                 if not req.session_id:
@@ -441,8 +444,6 @@ class InternalAgentSubStage(Stage):
                     self.unsupported_streaming_strategy == "turn_off"
                     and not event.platform_meta.support_streaming_message
                 )
-                # 备份 req.contexts
-                backup_contexts = copy.deepcopy(req.contexts)
 
                 # run agent
                 agent_runner = AgentRunner()
@@ -453,6 +454,15 @@ class InternalAgentSubStage(Stage):
                     context=self.ctx.plugin_manager.context,
                     event=event,
                 )
+
+                # inject model context length limit
+                if provider.provider_config.get("max_context_tokens", 0) <= 0:
+                    model = provider.get_model()
+                    if model_info := LLM_METADATAS.get(model):
+                        provider.provider_config["max_context_tokens"] = model_info[
+                            "limit"
+                        ]["context"]
+
                 await agent_runner.reset(
                     provider=provider,
                     request=req,
@@ -463,6 +473,11 @@ class InternalAgentSubStage(Stage):
                     tool_executor=FunctionToolExecutor(),
                     agent_hooks=MAIN_AGENT_HOOKS,
                     streaming=streaming_response,
+                    llm_compress_instruction=self.llm_compress_instruction,
+                    llm_compress_keep_recent=self.llm_compress_keep_recent,
+                    llm_compress_provider=self._get_compress_provider(),
+                    truncate_turns=self.dequeue_context_length,
+                    enforce_max_turns=self.max_context_length,
                 )
 
                 if streaming_response and not stream_to_general:
@@ -508,14 +523,12 @@ class InternalAgentSubStage(Stage):
                     ):
                         yield
 
-                # 恢复备份的 contexts
-                req.contexts = backup_contexts
-
                 await self._save_to_history(
                     event,
                     req,
                     agent_runner.get_final_llm_resp(),
                     agent_runner.run_context.messages,
+                    agent_runner.stats,
                 )
 
             # 异步处理 WebChat 特殊情况

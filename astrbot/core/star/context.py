@@ -149,8 +149,11 @@ class Context:
             contexts: context messages for the LLM
             max_steps: Maximum number of tool calls before stopping the loop
             **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
+                stream: bool - whether to stream the LLM response
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
                 agent_context: AstrAgentContext - context to use for the agent
+
+                other kwargs will be DIRECTLY passed to the runner.reset() method
 
         Returns:
             The final LLMResponse after tool calls are completed.
@@ -204,6 +207,15 @@ class Context:
             )
         agent_runner = ToolLoopAgentRunner()
         tool_executor = FunctionToolExecutor()
+
+        streaming = kwargs.get("stream", False)
+
+        other_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["stream", "agent_hooks", "agent_context"]
+        }
+
         await agent_runner.reset(
             provider=prov,
             request=request,
@@ -213,7 +225,8 @@ class Context:
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
-            streaming=bool(_kw.get("stream", False)),
+            streaming=streaming,
+            **other_kwargs,
         )
         async for _ in agent_runner.step_until_done(max_steps):
             pass

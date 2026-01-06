@@ -1,13 +1,13 @@
 <template>
   <div class="d-flex align-center justify-space-between">
     <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText));">
-      未选择
+      {{ tm('personaSelector.notSelected') }}
     </span>
     <span v-else>
-      {{ modelValue === 'default' ? '默认人格' : modelValue }}
+      {{ modelValue === 'default' ? tm('personaSelector.defaultPersona') : modelValue }}
     </span>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText }}
+      {{ buttonText || tm('personaSelector.buttonText') }}
     </v-btn>
   </div>
 
@@ -15,7 +15,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        选择人格
+        {{ tm('personaSelector.dialogTitle') }}
       </v-card-title>
       
       <v-card-text class="pa-2" style="max-height: 400px; overflow-y: auto;">
@@ -30,9 +30,9 @@
             :active="selectedPersona === persona.persona_id"
             rounded="md"
             class="ma-1">
-            <v-list-item-title>{{ persona.persona_id === 'default' ? '默认人格' : persona.persona_id }}</v-list-item-title>
+            <v-list-item-title>{{ persona.persona_id === 'default' ? tm('personaSelector.defaultPersona') : persona.persona_id }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ persona.system_prompt ? persona.system_prompt.substring(0, 50) + '...' : '无描述' }}
+              {{ persona.system_prompt ? persona.system_prompt.substring(0, 50) + '...' : tm('personaSelector.noDescription') }}
             </v-list-item-subtitle>
             
             <template v-slot:append>
@@ -43,21 +43,21 @@
         
         <div v-else-if="!loading && personaList.length === 0" class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-account-off</v-icon>
-          <p class="text-grey mt-4">暂无可用的人格</p>
+          <p class="text-grey mt-4">{{ tm('personaSelector.noPersonas') }}</p>
         </div>
       </v-card-text>
       
       <v-card-actions class="pa-4">
         <v-btn variant="text" color="primary" prepend-icon="mdi-plus" @click="openCreatePersona">
-          创建新人格
+          {{ tm('personaSelector.createPersona') }}
         </v-btn>
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">取消</v-btn>
-        <v-btn 
-          color="primary" 
+        <v-btn variant="text" @click="cancelSelection">{{ t('core.common.cancel') }}</v-btn>
+        <v-btn
+          color="primary"
           @click="confirmSelection"
           :disabled="!selectedPersona">
-          确认选择
+          {{ t('core.common.confirm') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -78,6 +78,7 @@
 import { ref, watch } from 'vue'
 import axios from 'axios'
 import PersonaForm from './PersonaForm.vue'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -86,11 +87,13 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '选择人格...'
+    default: ''
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
+const { t } = useI18n()
+const { tm } = useModuleI18n('core.shared')
 
 const dialog = ref(false)
 const personaList = ref([])

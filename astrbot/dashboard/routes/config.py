@@ -627,7 +627,7 @@ class ConfigRoute(Route):
         provider_list = []
         ps = self.core_lifecycle.provider_manager.providers_config
         p_source_pt = {
-            psrc["id"]: psrc["provider_type"]
+            psrc["id"]: psrc.get("provider_type", "chat_completion")
             for psrc in self.core_lifecycle.provider_manager.provider_sources_config
         }
         for provider in ps:
@@ -642,7 +642,7 @@ class ConfigRoute(Route):
                     provider
                 )
                 provider_list.append(prov)
-            elif not ps_id and provider.get("provider_type", None) in provider_type_ls:
+            elif not ps_id and provider.get("provider_type", "") in provider_type_ls:
                 # agent runner, embedding, etc
                 provider_list.append(provider)
         return Response().ok(provider_list).__dict__

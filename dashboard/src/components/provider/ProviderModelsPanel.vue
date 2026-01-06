@@ -44,14 +44,16 @@
     >
       <template v-if="entries.length > 0">
         <template v-for="entry in entries" :key="entry.type === 'configured' ? `provider-${entry.provider.id}` : `model-${entry.model}`">
-          <v-list-item
-            v-if="entry.type === 'configured'"
-            class="provider-compact-item"
-            @click="emit('open-provider-edit', entry.provider)"
-          >
-            <v-list-item-title class="font-weight-medium text-truncate">
-              {{ entry.provider.id }}
-            </v-list-item-title>
+          <v-tooltip location="top" max-width="400" v-if="entry.type === 'configured'">
+            <template #activator="{ props }">
+              <v-list-item
+                v-bind="props"
+                class="provider-compact-item"
+                @click="emit('open-provider-edit', entry.provider)"
+              >
+                <v-list-item-title class="font-weight-medium text-truncate">
+                  {{ entry.provider.id }}
+                </v-list-item-title>
             <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1" style="font-family: monospace;">
               <span>{{ entry.provider.model }}</span>
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
@@ -109,10 +111,18 @@
                 <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click.stop="emit('delete-provider', entry.provider)"></v-btn>
               </div>
             </template>
-          </v-list-item>
+              </v-list-item>
+            </template>
+            <div>
+              <div><strong>{{ tm('models.tooltips.providerId') }}:</strong> {{ entry.provider.id }}</div>
+              <div><strong>{{ tm('models.tooltips.modelId') }}:</strong> {{ entry.provider.model }}</div>
+            </div>
+          </v-tooltip>
 
-          <v-list-item v-else class="cursor-pointer" @click="emit('add-model-provider', entry.model)">
-            <v-list-item-title>{{ entry.model }}</v-list-item-title>
+          <v-tooltip location="top" max-width="400" v-else>
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" class="cursor-pointer" @click="emit('add-model-provider', entry.model)">
+                <v-list-item-title>{{ entry.model }}</v-list-item-title>
             <v-list-item-subtitle class="text-caption text-grey d-flex align-center ga-1">
               <span>{{ entry.model }}</span>
               <v-icon v-if="supportsImageInput(entry.metadata)" size="14" color="grey">
@@ -128,10 +138,15 @@
                 {{ formatContextLimit(entry.metadata) }}
               </span>
             </v-list-item-subtitle>
-            <template #append>
-              <v-btn icon="mdi-plus" size="small" variant="text" color="primary"></v-btn>
+                <template #append>
+                  <v-btn icon="mdi-plus" size="small" variant="text" color="primary"></v-btn>
+                </template>
+              </v-list-item>
             </template>
-          </v-list-item>
+            <div>
+              <div><strong>{{ tm('models.tooltips.modelId') }}:</strong> {{ entry.model }}</div>
+            </div>
+          </v-tooltip>
         </template>
       </template>
       <template v-else>

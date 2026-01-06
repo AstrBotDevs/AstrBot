@@ -175,11 +175,11 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '修改'
+    default: ''
   },
   dialogTitle: {
     type: String,
-    default: '修改列表项'
+    default: ''
   },
   maxDisplayItems: {
     type: Number,

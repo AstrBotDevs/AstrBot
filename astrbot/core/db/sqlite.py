@@ -280,6 +280,7 @@ class SQLiteDatabase(BaseDatabase):
         title: str | None = None,
         persona_id: str | None = None,
         content: list[dict] | None = None,
+        token_usage: int | None = None,
     ) -> ConversationV2 | None:
         async with self.get_db() as session:
             session: AsyncSession
@@ -294,6 +295,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["persona_id"] = persona_id
                 if content is not None:
                     values["content"] = content
+                if token_usage is not None:
+                    values["token_usage"] = token_usage
                 if not values:
                     return None
                 query = query.values(**values)

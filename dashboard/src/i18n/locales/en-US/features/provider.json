@@ -108,6 +108,11 @@
       "name": "Name",
       "apiKey": "API Key",
       "baseUrl": "Base URL"
+    },
+    "hints": {
+      "id": "Provider source ID (not provider ID)",
+      "key": "API key for authentication",
+      "apiBase": "Custom API endpoint URL"
     }
   },
   "models": {
@@ -130,6 +135,10 @@
     "manualDialogPreviewHint": "Generated as sourceId/modelId",
     "manualModelRequired": "Please enter a model ID",
     "manualModelExists": "Model already exists",
-    "configure": "Configure"
+    "configure": "Configure",
+    "tooltips": {
+      "providerId": "Provider ID",
+      "modelId": "Model ID"
+    }
   }
 } 

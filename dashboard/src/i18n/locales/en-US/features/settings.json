@@ -5,6 +5,15 @@
       "title": "GitHub Proxy Address",
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
       "label": "Select GitHub Proxy Address"
+    },
+    "proxySelector": {
+      "title": "GitHub Proxy",
+      "noProxy": "Don't use GitHub Proxy",
+      "useProxy": "Use GitHub Proxy",
+      "testConnection": "Test Connection",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "custom": "Custom"
     }
   },
   "system": {

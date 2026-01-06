@@ -69,6 +69,7 @@ class ConversationManager:
             persona_id=conv_v2.persona_id,
             created_at=created_at,
             updated_at=updated_at,
+            token_usage=conv_v2.token_usage,
         )
 
     async def new_conversation(
@@ -258,6 +259,7 @@ class ConversationManager:
         history: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
+        token_usage: int | None = None,
     ) -> None:
         """更新会话的对话.
 
@@ -265,6 +267,7 @@ class ConversationManager:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
             history (List[Dict]): 对话历史记录, 是一个字典列表, 每个字典包含 role 和 content 字段
+            token_usage (int | None): token 使用量。None 表示不更新
 
         """
         if not conversation_id:
@@ -276,6 +279,7 @@ class ConversationManager:
                 title=title,
                 persona_id=persona_id,
                 content=history,
+                token_usage=token_usage,
             )
 
     async def update_conversation_title(
