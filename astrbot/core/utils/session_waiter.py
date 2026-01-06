@@ -37,7 +37,7 @@ class SessionController:
             else:
                 self.future.set_result(None)
 
-    def keep(self, timeout: float = 0, reset_timeout=False) -> None:
+    def keep(self, timeout: float = 0, reset_timeout: bool = False) -> None:
         """保持这个会话
 
         Args:

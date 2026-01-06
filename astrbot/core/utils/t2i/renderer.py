@@ -20,7 +20,7 @@ class HtmlRenderer:
         tmpl_data: dict,
         return_url: bool = False,
         options: dict | None = None,
-    ):
+    ) -> str:
         """使用自定义文转图模板。该方法会通过网络调用 t2i 终结点图文渲染API。
         @param tmpl_str: HTML Jinja2 模板。
         @param tmpl_data: jinja2 模板数据。
@@ -43,7 +43,7 @@ class HtmlRenderer:
         use_network: bool = True,
         return_url: bool = False,
         template_name: str | None = None,
-    ):
+    ) -> str:
         """使用默认文转图模板。"""
         if use_network:
             try:

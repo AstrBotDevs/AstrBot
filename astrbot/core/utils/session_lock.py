@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 
@@ -10,7 +11,7 @@ class SessionLockManager:
         self._access_lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def acquire_lock(self, session_id: str):
+    async def acquire_lock(self, session_id: str) -> AsyncGenerator[None, None]:
         async with self._access_lock:
             lock = self._locks[session_id]
             self._lock_count[session_id] += 1

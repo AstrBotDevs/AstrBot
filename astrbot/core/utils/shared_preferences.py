@@ -1,7 +1,7 @@
 import asyncio
 import os
 import threading
-from typing import Any, TypeVar, overload
+from typing import TypeVar, overload
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
@@ -12,7 +12,9 @@ _VT = TypeVar("_VT")
 
 
 class SharedPreferences:
-    def __init__(self, db_helper: BaseDatabase, json_storage_path=None) -> None:
+    def __init__(
+        self, db_helper: BaseDatabase, json_storage_path: str | None = None
+    ) -> None:
         if json_storage_path is None:
             json_storage_path = os.path.join(
                 get_astrbot_data_path(),
@@ -66,7 +68,7 @@ class SharedPreferences:
         self,
         umo: None,
         key: str,
-        default: Any = None,
+        default: object = None,
     ) -> list[Preference]: ...
 
     @overload
@@ -74,7 +76,7 @@ class SharedPreferences:
         self,
         umo: str,
         key: None,
-        default: Any = None,
+        default: object = None,
     ) -> list[Preference]: ...
 
     @overload
@@ -82,7 +84,7 @@ class SharedPreferences:
         self,
         umo: None,
         key: None,
-        default: Any = None,
+        default: object = None,
     ) -> list[Preference]: ...
 
     async def session_get(
@@ -100,7 +102,9 @@ class SharedPreferences:
         return await self.get_async("umo", umo, key, default)
 
     @overload
-    async def global_get(self, key: None, default: Any = None) -> list[Preference]: ...
+    async def global_get(
+        self, key: None, default: object = None
+    ) -> list[Preference]: ...
 
     @overload
     async def global_get(self, key: str, default: _VT = None) -> _VT: ...
@@ -118,7 +122,9 @@ class SharedPreferences:
             return await self.range_get_async("global", "global", key)
         return await self.get_async("global", "global", key, default)
 
-    async def put_async(self, scope: str, scope_id: str, key: str, value: Any) -> None:
+    async def put_async(
+        self, scope: str, scope_id: str, key: str, value: object
+    ) -> None:
         """设置指定范围和键的偏好设置"""
         await self.db_helper.insert_preference_or_update(
             scope,
@@ -127,10 +133,10 @@ class SharedPreferences:
             {"val": value},
         )
 
-    async def session_put(self, umo: str, key: str, value: Any) -> None:
+    async def session_put(self, umo: str, key: str, value: object) -> None:
         await self.put_async("umo", umo, key, value)
 
-    async def global_put(self, key: str, value: Any) -> None:
+    async def global_put(self, key: str, value: object) -> None:
         await self.put_async("global", "global", key, value)
 
     async def remove_async(self, scope: str, scope_id: str, key: str) -> None:
@@ -189,7 +195,11 @@ class SharedPreferences:
         return result
 
     def put(
-        self, key, value, scope: str | None = None, scope_id: str | None = None
+        self,
+        key: str,
+        value: object,
+        scope: str | None = None,
+        scope_id: str | None = None,
     ) -> None:
         """设置偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(
@@ -198,7 +208,7 @@ class SharedPreferences:
         ).result()
 
     def remove(
-        self, key, scope: str | None = None, scope_id: str | None = None
+        self, key: str, scope: str | None = None, scope_id: str | None = None
     ) -> None:
         """删除偏好设置（已弃用）"""
         asyncio.run_coroutine_threadsafe(

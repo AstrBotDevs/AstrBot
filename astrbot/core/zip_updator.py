@@ -150,7 +150,7 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(
-        self, target_path: str, repo_url: str, proxy=""
+        self, target_path: str, repo_url: str, proxy: str = ""
     ) -> None:
         author, repo, branch = self.parse_github_url(repo_url)
 
@@ -188,7 +188,7 @@ class RepoZipUpdator:
 
         await download_file(release_url, target_path + ".zip")
 
-    def parse_github_url(self, url: str):
+    def parse_github_url(self, url: str) -> tuple[str, str, str]:
         """使用正则表达式解析 GitHub 仓库 URL，支持 `.git` 后缀和 `tree/branch` 结构
         Returns:
             tuple[str, str, str]: 返回作者名、仓库名和分支名

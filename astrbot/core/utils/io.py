@@ -9,22 +9,24 @@ import uuid
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from types import TracebackType
+from typing import Any
 
 import aiohttp
 import certifi
 import psutil
 from PIL import Image
 
-if TYPE_CHECKING:
-    from _typeshed import ExcInfo
-
 from .astrbot_path import get_astrbot_data_path
 
 logger = logging.getLogger("astrbot")
 
 
-def on_error(func: Callable[..., Any], path: str, exc_info: ExcInfo) -> None:
+def on_error(
+    func: Callable[..., Any],
+    path: str,
+    exc_info: tuple[type[BaseException], BaseException, TracebackType],
+) -> None:
     """A callback of the rmtree function."""
     import stat
 

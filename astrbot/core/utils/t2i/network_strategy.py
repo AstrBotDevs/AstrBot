@@ -57,7 +57,7 @@ class NetworkRenderStrategy(RenderStrategy):
         except Exception as e:
             logger.error(f"Failed to get official endpoints: {e}")
 
-    def _clean_url(self, url: str):
+    def _clean_url(self, url: str) -> str:
         url = url.removesuffix("/")
         if not url.endswith("text2img"):
             url += "/text2img"

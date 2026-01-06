@@ -2,8 +2,10 @@ import traceback
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
+from astrbot.core.db import BaseDatabase
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
+from astrbot.core.umop_config_router import UmopConfigRouter
 
 
 def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
@@ -119,7 +121,10 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
 
 
 async def migra(
-    db, astrbot_config_mgr, umop_config_router, acm: AstrBotConfigManager
+    db: BaseDatabase,
+    astrbot_config_mgr: AstrBotConfigManager,
+    umop_config_router: UmopConfigRouter,
+    acm: AstrBotConfigManager,
 ) -> None:
     """
     Stores the migration logic here.
