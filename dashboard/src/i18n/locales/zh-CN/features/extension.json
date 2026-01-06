@@ -212,5 +212,8 @@
     "pairs": "对指令冲突",
     "goToManage": "前往处理",
     "later": "稍后处理"
+  },
+  "pluginChangelog": {
+    "menuTitle": "查看更新日志"
   }
 }

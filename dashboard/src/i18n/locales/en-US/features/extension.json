@@ -212,5 +212,8 @@
     "pairs": "command conflicts",
     "goToManage": "Go to Manage",
     "later": "Later"
+  },
+  "pluginChangelog": {
+    "menuTitle": "View Changelog"
   }
 }

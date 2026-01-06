@@ -55,6 +55,7 @@ class PluginRoute(Route):
             "/plugin/on": ("POST", self.on_plugin),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
+            "/plugin/changelog": ("GET", self.get_plugin_changelog),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
         }
@@ -614,6 +615,55 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {e!s}").__dict__
+
+    async def get_plugin_changelog(self):
+        """获取插件更新日志
+
+        读取插件目录下的 CHANGELOG.md 文件内容。
+        """
+        plugin_name = request.args.get("name")
+        logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
+
+        if not plugin_name:
+            return Response().error("插件名称不能为空").__dict__
+
+        # 查找插件
+        plugin_obj = None
+        for plugin in self.plugin_manager.context.get_all_stars():
+            if plugin.name == plugin_name:
+                plugin_obj = plugin
+                break
+
+        if not plugin_obj:
+            return Response().error(f"插件 {plugin_name} 不存在").__dict__
+
+        if not plugin_obj.root_dir_name:
+            return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
+
+        plugin_dir = os.path.join(
+            self.plugin_manager.plugin_store_path,
+            plugin_obj.root_dir_name,
+        )
+
+        # 尝试多种可能的文件名
+        changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
+        for name in changelog_names:
+            changelog_path = os.path.join(plugin_dir, name)
+            if os.path.isfile(changelog_path):
+                try:
+                    with open(changelog_path, encoding="utf-8") as f:
+                        changelog_content = f.read()
+                    return (
+                        Response()
+                        .ok({"content": changelog_content}, "成功获取更新日志")
+                        .__dict__
+                    )
+                except Exception as e:
+                    logger.error(f"/api/plugin/changelog: {traceback.format_exc()}")
+                    return Response().error(f"读取更新日志失败: {e!s}").__dict__
+
+        # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
 
     async def get_custom_source(self):
         """获取自定义插件源"""
