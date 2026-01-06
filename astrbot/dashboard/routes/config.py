@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
-from typing import Any
+from typing import Any, Literal, overload
 
 from quart import request
 
@@ -27,7 +27,15 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from .route import Response, Route, RouteContext
 
 
-def try_cast(value: Any, type_: str):
+@overload
+def try_cast(value: object, type_: Literal["int"]) -> int | None: ...
+
+
+@overload
+def try_cast(value: object, type_: Literal["float"]) -> float | None: ...
+
+
+def try_cast(value: Any, type_: str):  # noqa:ANN401
     if type_ == "int":
         try:
             return int(value)
@@ -46,7 +54,9 @@ def try_cast(value: Any, type_: str):
             return None
 
 
-def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+def _expect_type(
+    value: object, expected_type, path_key, errors, expected_name=None
+) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
             f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
