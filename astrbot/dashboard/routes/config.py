@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
+import types
 from typing import Any, Literal, overload
 
 from quart import request
@@ -55,7 +56,11 @@ def try_cast(value: Any, type_: str):  # noqa:ANN401
 
 
 def _expect_type(
-    value: object, expected_type, path_key, errors, expected_name=None
+    value: object,
+    expected_type: type | tuple[type, ...] | types.UnionType,
+    path_key,
+    errors,
+    expected_name=None,
 ) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
