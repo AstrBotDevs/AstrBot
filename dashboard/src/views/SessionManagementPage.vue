@@ -986,7 +986,6 @@ export default {
     getPlatformColor(platform) {
       const colors = {
         'aiocqhttp': 'blue',
-        'wechatpadpro': 'green',
         'qq_official': 'purple',
         'telegram': 'light-blue',
         'discord': 'indigo',

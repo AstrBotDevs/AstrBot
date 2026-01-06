@@ -22,7 +22,6 @@ UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] 
     "qq_official_webhook": lambda e: e.get_sender_id(),
     "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
     "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
-    "wechatpadpro": lambda e: f"{e.get_group_id()}#{e.get_sender_id()}",
 }
 
 

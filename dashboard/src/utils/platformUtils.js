@@ -14,8 +14,6 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
   } else if (name === 'wecom' || name === 'wecom_ai_bot') {
     return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
-  } else if (name === 'wechatpadpro' || name === 'weixin_official_account' || name === 'wechat') {
-    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
   } else if (name === 'lark') {
     return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
   } else if (name === 'dingtalk') {
@@ -52,7 +50,6 @@ export function getTutorialLink(platformType) {
     "lark": "https://docs.astrbot.app/deploy/platform/lark.html",
     "telegram": "https://docs.astrbot.app/deploy/platform/telegram.html",
     "dingtalk": "https://docs.astrbot.app/deploy/platform/dingtalk.html",
-    "wechatpadpro": "https://docs.astrbot.app/deploy/platform/wechat/wechatpadpro.html",
     "weixin_official_account": "https://docs.astrbot.app/deploy/platform/weixin-official-account.html",
     "discord": "https://docs.astrbot.app/deploy/platform/discord.html",
     "slack": "https://docs.astrbot.app/deploy/platform/slack.html",

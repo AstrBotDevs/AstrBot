@@ -70,10 +70,6 @@ class PlatformManager:
                     from .sources.qqofficial_webhook.qo_webhook_adapter import (
                         QQOfficialWebhookPlatformAdapter,  # noqa: F401
                     )
-                case "wechatpadpro":
-                    from .sources.wechatpadpro.wechatpadpro_adapter import (
-                        WeChatPadProAdapter,  # noqa: F401
-                    )
                 case "lark":
                     from .sources.lark.lark_adapter import (
                         LarkPlatformAdapter,  # noqa: F401

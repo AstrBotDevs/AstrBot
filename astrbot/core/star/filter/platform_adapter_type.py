@@ -12,7 +12,6 @@ class PlatformAdapterType(enum.Flag):
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     LARK = enum.auto()
-    WECHATPADPRO = enum.auto()
     DINGTALK = enum.auto()
     DISCORD = enum.auto()
     SLACK = enum.auto()
@@ -27,7 +26,6 @@ class PlatformAdapterType(enum.Flag):
         | TELEGRAM
         | WECOM
         | LARK
-        | WECHATPADPRO
         | DINGTALK
         | DISCORD
         | SLACK
@@ -49,7 +47,6 @@ ADAPTER_NAME_2_TYPE = {
     "discord": PlatformAdapterType.DISCORD,
     "slack": PlatformAdapterType.SLACK,
     "kook": PlatformAdapterType.KOOK,
-    "wechatpadpro": PlatformAdapterType.WECHATPADPRO,
     "vocechat": PlatformAdapterType.VOCECHAT,
     "weixin_official_account": PlatformAdapterType.WEIXIN_OFFICIAL_ACCOUNT,
     "satori": PlatformAdapterType.SATORI,
