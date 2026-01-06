@@ -522,13 +522,15 @@ class InternalAgentSubStage(Stage):
                     ):
                         yield
 
-                await self._save_to_history(
-                    event,
-                    req,
-                    agent_runner.get_final_llm_resp(),
-                    agent_runner.run_context.messages,
-                    agent_runner.stats,
-                )
+                # 检查事件是否被停止，如果被停止则不保存历史记录
+                if not event.is_stopped():
+                    await self._save_to_history(
+                        event,
+                        req,
+                        agent_runner.get_final_llm_resp(),
+                        agent_runner.run_context.messages,
+                        agent_runner.stats,
+                    )
 
             # 异步处理 WebChat 特殊情况
             if event.get_platform_name() == "webchat":
