@@ -133,7 +133,7 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
-        **kwargs: object,
+        **kwargs,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
         If you do not pass the agent_context parameter, the method will recreate a new agent context.
