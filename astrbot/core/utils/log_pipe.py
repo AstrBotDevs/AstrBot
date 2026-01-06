@@ -1,16 +1,18 @@
 import os
 import threading
+from collections.abc import Callable
 from logging import Logger
+from typing import Any
 
 
 class LogPipe(threading.Thread):
     def __init__(
         self,
-        level,
+        level: int,
         logger: Logger,
-        identifier=None,
-        callback=None,
-    ):
+        identifier: str | None = None,
+        callback: Callable[..., Any] | None = None,
+    ) -> None:
         threading.Thread.__init__(self)
         self.daemon = True
         self.level = level
@@ -21,10 +23,10 @@ class LogPipe(threading.Thread):
         self.reader = os.fdopen(self.fd_read)
         self.start()
 
-    def fileno(self):
+    def fileno(self) -> int:
         return self.fd_write
 
-    def run(self):
+    def run(self) -> None:
         for line in iter(self.reader.readline, ""):
             if self.callback:
                 self.callback(line.strip())
@@ -32,5 +34,5 @@ class LogPipe(threading.Thread):
 
         self.reader.close()
 
-    def close(self):
+    def close(self) -> None:
         os.close(self.fd_write)

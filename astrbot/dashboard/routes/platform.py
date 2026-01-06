@@ -3,7 +3,7 @@
 提供统一的 webhook 回调入口，支持多个平台使用同一端口接收回调。
 """
 
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -26,7 +26,7 @@ class PlatformRoute(Route):
 
         self._register_webhook_routes()
 
-    def _register_webhook_routes(self):
+    def _register_webhook_routes(self) -> None:
         """注册 webhook 路由"""
         # 统一 webhook 入口，支持 GET 和 POST
         self.app.add_url_rule(
@@ -42,7 +42,7 @@ class PlatformRoute(Route):
             methods=["GET"],
         )
 
-    async def unified_webhook_callback(self, webhook_uuid: str):
+    async def unified_webhook_callback(self, webhook_uuid: str) -> ResponseReturnValue:
         """统一 webhook 回调入口
 
         Args:

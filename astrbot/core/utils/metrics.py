@@ -10,10 +10,10 @@ from astrbot.core.config import VERSION
 
 
 class Metric:
-    _iid_cache = None
+    _iid_cache: str | None = None
 
     @staticmethod
-    def get_installation_id():
+    def get_installation_id() -> str:
         """获取或创建一个唯一的安装ID"""
         if Metric._iid_cache is not None:
             return Metric._iid_cache
@@ -40,7 +40,7 @@ class Metric:
             return "null"
 
     @staticmethod
-    async def upload(**kwargs):
+    async def upload(**kwargs) -> None:
         """上传相关非敏感的指标以更好地了解 AstrBot 的使用情况。上传的指标不会包含任何有关消息文本、用户信息等敏感信息。
 
         Powered by TickStats.

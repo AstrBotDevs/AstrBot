@@ -1,10 +1,13 @@
 import copy
+from collections.abc import AsyncGenerator
 from sys import maxsize
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
@@ -17,11 +20,11 @@ from astrbot.core.utils.session_waiter import (
 class Main(Star):
     """会话控制"""
 
-    def __init__(self, context: Context):
+    def __init__(self, context: Context) -> None:
         super().__init__(context)
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
-    async def handle_session_control_agent(self, event: AstrMessageEvent):
+    async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
         """会话控制代理"""
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
@@ -30,7 +33,9 @@ class Main(Star):
                 event.stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize - 1)
-    async def handle_empty_mention(self, event: AstrMessageEvent):
+    async def handle_empty_mention(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult | ProviderRequest, None]:
         """实现了对只有一个 @ 的消息内容的处理"""
         try:
             messages = event.get_messages()
@@ -91,7 +96,7 @@ class Main(Star):
                     async def empty_mention_waiter(
                         controller: SessionController,
                         event: AstrMessageEvent,
-                    ):
+                    ) -> None:
                         event.message_obj.message.insert(
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),

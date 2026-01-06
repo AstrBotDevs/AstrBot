@@ -1,7 +1,7 @@
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from deprecated import deprecated
 
@@ -65,7 +65,7 @@ class Context:
         persona_manager: PersonaManager,
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
-    ):
+    ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -89,7 +89,7 @@ class Context:
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> LLMResponse:
         """Call the LLM to generate a response. The method will not automatically execute tool calls. If you want to use tool calls, please use `tool_loop_agent()`.
 
@@ -117,7 +117,7 @@ class Context:
             func_tool=tools,
             contexts=contexts,
             system_prompt=system_prompt,
-            **kwargs,
+            **cast(dict[str, Any], kwargs),
         )
         return llm_resp
 
@@ -133,7 +133,7 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
-        **kwargs: Any,
+        **kwargs,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
         If you do not pass the agent_context parameter, the method will recreate a new agent context.
@@ -173,8 +173,18 @@ class Context:
         if not prov or not isinstance(prov, Provider):
             raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
 
-        agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
-        agent_context = kwargs.get("agent_context")
+        _kw = cast(dict[str, Any], kwargs)
+        agent_hooks_obj = _kw.get("agent_hooks")
+        if isinstance(agent_hooks_obj, BaseAgentRunHooks):
+            agent_hooks = cast(BaseAgentRunHooks[Any], agent_hooks_obj)
+        else:
+            agent_hooks = BaseAgentRunHooks[AstrAgentContext]()
+
+        agent_context_obj = _kw.get("agent_context")
+        if isinstance(agent_context_obj, AstrAgentContext):
+            agent_context = agent_context_obj
+        else:
+            agent_context = None
 
         context_ = []
         for msg in contexts or []:
@@ -415,7 +425,7 @@ class Context:
         view_handler: Awaitable,
         methods: list,
         desc: str,
-    ):
+    ) -> None:
         for idx, api in enumerate(self.registered_web_apis):
             if api[0] == route and methods == api[2]:
                 self.registered_web_apis[idx] = (route, view_handler, methods, desc)
@@ -465,7 +475,7 @@ class Context:
         """获取 AstrBot 数据库。"""
         return self._db
 
-    def register_provider(self, provider: Provider):
+    def register_provider(self, provider: Provider) -> None:
         """注册一个 LLM Provider(Chat_Completion 类型)。"""
         self.provider_manager.provider_insts.append(provider)
 
@@ -508,9 +518,9 @@ class Context:
         desc: str,
         priority: int,
         awaitable: Callable[..., Awaitable[Any]],
-        use_regex=False,
-        ignore_prefix=False,
-    ):
+        use_regex: bool = False,
+        ignore_prefix: bool = False,
+    ) -> None:
         """注册一个命令。
 
         [Deprecated] 推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
@@ -539,6 +549,6 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable, desc: str):
+    def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。"""
         self._register_tasks.append(task)

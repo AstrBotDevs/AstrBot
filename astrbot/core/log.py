@@ -44,7 +44,7 @@ log_color_config = {
 }
 
 
-def is_plugin_path(pathname):
+def is_plugin_path(pathname: str) -> bool:
     """检查文件路径是否来自插件目录
 
     Args:
@@ -61,7 +61,7 @@ def is_plugin_path(pathname):
     return ("data/plugins" in norm_path) or ("astrbot/builtin_stars/" in norm_path)
 
 
-def get_short_level_name(level_name):
+def get_short_level_name(level_name: str) -> str:
     """将日志级别名称转换为四个字母的缩写
 
     Args:
@@ -87,7 +87,7 @@ class LogBroker:
     发布-订阅模式
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.log_cache = deque(maxlen=CACHED_SIZE)  # 环形缓冲区, 保存最近的日志
         self.subscribers: list[Queue] = []  # 订阅者列表
 
@@ -102,7 +102,7 @@ class LogBroker:
         self.subscribers.append(q)
         return q
 
-    def unregister(self, q: Queue):
+    def unregister(self, q: Queue) -> None:
         """取消订阅
 
         Args:
@@ -111,7 +111,7 @@ class LogBroker:
         """
         self.subscribers.remove(q)
 
-    def publish(self, log_entry: dict):
+    def publish(self, log_entry: dict) -> None:
         """发布新日志到所有订阅者, 使用非阻塞方式投递, 避免一个订阅者阻塞整个系统
 
         Args:
@@ -133,11 +133,11 @@ class LogQueueHandler(logging.Handler):
     继承自 logging.Handler
     """
 
-    def __init__(self, log_broker: LogBroker):
+    def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
         self.log_broker = log_broker
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         """日志处理的入口方法, 接受一个日志记录, 转换为字符串后由 LogBroker 发布
         这个方法会在每次日志记录时被调用
 
@@ -162,7 +162,7 @@ class LogManager:
     """
 
     @classmethod
-    def GetLogger(cls, log_name: str = "default"):
+    def GetLogger(cls, log_name: str = "default") -> logging.Logger:
         """获取指定名称的日志记录器logger
 
         Args:
@@ -194,7 +194,7 @@ class LogManager:
         class PluginFilter(logging.Filter):
             """插件过滤器类, 用于标记日志来源是插件还是核心组件"""
 
-            def filter(self, record):
+            def filter(self, record: logging.LogRecord) -> bool:
                 record.plugin_tag = (
                     "[Plug]" if is_plugin_path(record.pathname) else "[Core]"
                 )
@@ -206,7 +206,7 @@ class LogManager:
             """
 
             # 获取这个文件和父文件夹的名字：<folder>.<file> 并且去除 .py
-            def filter(self, record):
+            def filter(self, record: logging.LogRecord) -> bool:
                 dirname = os.path.dirname(record.pathname)
                 record.filename = (
                     os.path.basename(dirname)
@@ -219,7 +219,7 @@ class LogManager:
             """短日志级别名称过滤器类, 用于将日志级别名称转换为四个字母的缩写"""
 
             # 添加短日志级别名称
-            def filter(self, record):
+            def filter(self, record: logging.LogRecord) -> bool:
                 record.short_levelname = get_short_level_name(record.levelname)
                 return True
 
@@ -233,7 +233,7 @@ class LogManager:
         return logger
 
     @classmethod
-    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker):
+    def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
         """设置队列处理器, 用于将日志消息发送到 LogBroker
 
         Args:

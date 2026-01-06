@@ -16,7 +16,7 @@ class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
 
-def unwrap_optional(annotation) -> tuple:
+def unwrap_optional(annotation: object) -> tuple:
     """去掉 Optional[T] / Union[T, None] / T|None，返回 T"""
     args = typing.get_args(annotation)
     non_none_args = [a for a in args if a is not type(None)]
@@ -37,7 +37,7 @@ class CommandFilter(HandlerFilter):
         alias: set | None = None,
         handler_md: StarHandlerMetadata | None = None,
         parent_command_names: list[str] | None = None,
-    ):
+    ) -> None:
         self.command_name = command_name
         self.alias = alias if alias else set()
         self._original_command_name = command_name
@@ -51,7 +51,7 @@ class CommandFilter(HandlerFilter):
         # Cache for complete command names list
         self._cmpl_cmd_names: list | None = None
 
-    def print_types(self):
+    def print_types(self) -> str:
         parts = []
         for k, v in self.handler_params.items():
             if isinstance(v, type):
@@ -63,7 +63,7 @@ class CommandFilter(HandlerFilter):
         result = "".join(parts).rstrip(",")
         return result
 
-    def init_handler_md(self, handle_md: StarHandlerMetadata):
+    def init_handler_md(self, handle_md: StarHandlerMetadata) -> None:
         self.handler_md = handle_md
         signature = inspect.signature(self.handler_md.handler)
         self.handler_params = {}  # 参数名 -> 参数类型，如果有默认值则为默认值
@@ -81,7 +81,7 @@ class CommandFilter(HandlerFilter):
     def get_handler_md(self) -> StarHandlerMetadata:
         return self.handler_md
 
-    def add_custom_filter(self, custom_filter: CustomFilter):
+    def add_custom_filter(self, custom_filter: CustomFilter) -> None:
         self.custom_filter_list.append(custom_filter)
 
     def custom_filter_ok(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
@@ -172,7 +172,7 @@ class CommandFilter(HandlerFilter):
                     )
         return result
 
-    def get_complete_command_names(self):
+    def get_complete_command_names(self) -> list[str]:
         if self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
         self._cmpl_cmd_names = [

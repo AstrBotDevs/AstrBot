@@ -43,7 +43,7 @@ class WeChatPadProAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self._shutdown_event = None
         self.wxnewpass = None
         self.settings = platform_settings
@@ -149,7 +149,7 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"加载 WeChatPadPro 凭据失败: {e}")
         return None
 
-    def save_credentials(self):
+    def save_credentials(self) -> None:
         """将 auth_key 和 wxid 保存到文件。"""
         credentials = {
             "auth_key": self.auth_key,
@@ -164,7 +164,7 @@ class WeChatPadProAdapter(Platform):
         except Exception as e:
             logger.error(f"保存 WeChatPadPro 凭据失败: {e}")
 
-    async def check_online_status(self):
+    async def check_online_status(self) -> bool | None:
         """检查 WeChatPadPro 设备是否在线。"""
         if not self.auth_key:
             return False
@@ -218,7 +218,7 @@ class WeChatPadProAdapter(Platform):
             return data[0]
         return None
 
-    async def generate_auth_key(self):
+    async def generate_auth_key(self) -> None:
         """生成授权码。"""
         url = f"{self.base_url}/admin/GenAuthKey1"
         params = {"key": self.admin_key}
@@ -291,7 +291,7 @@ class WeChatPadProAdapter(Platform):
                 logger.error(f"获取登录二维码时发生错误: {e}")
                 return None
 
-    async def check_login_status(self):
+    async def check_login_status(self) -> bool:
         """循环检测扫码状态。
         尝试 6 次后跳出循环，添加倒计时。
         返回 True 如果登录成功，否则返回 False。
@@ -358,7 +358,7 @@ class WeChatPadProAdapter(Platform):
         logger.warning("登录检测超过最大尝试次数，退出检测。")
         return False
 
-    async def connect_websocket(self):
+    async def connect_websocket(self) -> None:
         """建立 WebSocket 连接并处理接收到的消息。"""
         os.environ["no_proxy"] = f"localhost,127.0.0.1,{self.host}"
         ws_url = f"ws://{self.host}:{self.port}/ws/GetSyncMsg?key={self.auth_key}"
@@ -398,7 +398,7 @@ class WeChatPadProAdapter(Platform):
                 )
                 await asyncio.sleep(5)
 
-    async def handle_websocket_message(self, message: str | bytes):
+    async def handle_websocket_message(self, message: str | bytes) -> None:
         """处理从 WebSocket 接收到的消息。"""
         logger.debug(f"收到 WebSocket 消息: {message}")
         try:
@@ -486,7 +486,7 @@ class WeChatPadProAdapter(Platform):
         to_user_name: str,
         content: str,
         push_content: str,
-    ):
+    ) -> bool:
         """判断消息是群聊还是私聊，并设置 AstrBotMessage 的基本属性。"""
         if from_user_name == "weixin":
             return False
@@ -638,7 +638,7 @@ class WeChatPadProAdapter(Platform):
         raw_message: dict,
         msg_type: int,
         content: str,
-    ):
+    ) -> None:
         """根据消息类型处理消息内容，填充 AstrBotMessage 的 message 列表。"""
         if msg_type == 1:  # 文本消息
             abm.message_str = content
@@ -835,7 +835,7 @@ class WeChatPadProAdapter(Platform):
         else:
             logger.warning(f"收到未处理的消息类型: {msg_type}。")
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止一个平台的运行实例。"""
         logger.info("终止 WeChatPadPro 适配器。")
         try:
@@ -854,7 +854,7 @@ class WeChatPadProAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         dummy_message_obj = AstrBotMessage()
         dummy_message_obj.session_id = session.session_id
         # 根据 session_id 判断消息类型

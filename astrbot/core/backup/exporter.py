@@ -8,15 +8,18 @@ import hashlib
 import json
 import os
 import zipfile
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
+from sqlmodel import SQLModel
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.db import BaseDatabase
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_backups_path,
     get_astrbot_data_path,
@@ -59,7 +62,7 @@ class AstrBotExporter:
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = CMD_CONFIG_FILE_PATH,
-    ):
+    ) -> None:
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path
@@ -68,7 +71,8 @@ class AstrBotExporter:
     async def export_all(
         self,
         output_dir: str | None = None,
-        progress_callback: Any | None = None,
+        progress_callback: Callable[[str, int, int, str], Awaitable[None]]
+        | None = None,
     ) -> str:
         """导出所有数据到 ZIP 文件
 
@@ -248,13 +252,18 @@ class AstrBotExporter:
 
         return export_data
 
-    async def _export_kb_documents(self, kb_helper: Any) -> dict[str, Any]:
+    async def _export_kb_documents(self, kb_helper: KBHelper) -> dict[str, Any]:
         """导出知识库的文档块数据"""
         try:
+            from astrbot.core.db.vec_db.base import BaseVecDB
             from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
-            vec_db: FaissVecDB = kb_helper.vec_db
-            if not vec_db or not vec_db.document_storage:
+            vec_db: BaseVecDB = kb_helper.vec_db
+            if (
+                not vec_db
+                or not isinstance(vec_db, FaissVecDB)
+                or not vec_db.document_storage
+            ):
                 return {"documents": []}
 
             # 获取所有文档
@@ -272,7 +281,7 @@ class AstrBotExporter:
     async def _export_faiss_index(
         self,
         zf: zipfile.ZipFile,
-        kb_helper: Any,
+        kb_helper: KBHelper,
         kb_id: str,
     ) -> None:
         """导出 FAISS 索引文件"""
@@ -286,7 +295,7 @@ class AstrBotExporter:
             logger.warning(f"导出 FAISS 索引失败: {e}")
 
     async def _export_kb_media_files(
-        self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
+        self, zf: zipfile.ZipFile, kb_helper: KBHelper, kb_id: str
     ) -> None:
         """导出知识库的多媒体文件"""
         try:
@@ -371,7 +380,7 @@ class AstrBotExporter:
             except Exception as e:
                 logger.warning(f"导出附件失败: {e}")
 
-    def _model_to_dict(self, record: Any) -> dict:
+    def _model_to_dict(self, record: SQLModel) -> dict:
         """将 SQLModel 实例转换为字典
 
         这是数据库无关的序列化方式，支持未来迁移到其他数据库。

@@ -12,8 +12,8 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 async def call_handler(
     event: AstrMessageEvent,
     handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
-    *args,
-    **kwargs,
+    *args: object,
+    **kwargs: object,
 ) -> T.AsyncGenerator[T.Any, None]:
     """执行事件处理函数并处理其返回结果
 
@@ -75,8 +75,8 @@ async def call_handler(
 async def call_event_hook(
     event: AstrMessageEvent,
     hook_type: EventType,
-    *args,
-    **kwargs,
+    *args: object,
+    **kwargs: object,
 ) -> bool:
     """调用事件钩子函数
 

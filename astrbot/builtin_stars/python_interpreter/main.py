@@ -6,6 +6,7 @@ import shutil
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import AsyncGenerator
 
 import aiodocker
 import aiohttp
@@ -124,7 +125,7 @@ class Main(star.Star):
             with open(PATH) as f:
                 self.config = json.load(f)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         ok = await self.is_docker_available()
         if not ok:
             logger.info(
@@ -134,7 +135,7 @@ class Main(star.Star):
             #     "astrbot-python-interpreter"
             # )
 
-    async def file_upload(self, file_path: str):
+    async def file_upload(self, file_path: str) -> str:
         """上传图像文件到 S3"""
         ext = os.path.splitext(file_path)[1]
         S3_URL = "https://s3.neko.soulter.top/astrbot-s3"
@@ -170,7 +171,7 @@ class Main(star.Star):
             return f"{self.config['sandbox']['docker_mirror']}/{self.config['sandbox']['image']}"
         return self.config["sandbox"]["image"]
 
-    def _save_config(self):
+    def _save_config(self) -> None:
         with open(PATH, "w") as f:
             json.dump(self.config, f)
 
@@ -202,7 +203,9 @@ class Main(star.Star):
         return match.group(1)
 
     @filter.event_message_type(filter.EventMessageType.ALL)
-    async def on_message(self, event: AstrMessageEvent):
+    async def on_message(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理消息"""
         uid = event.get_sender_id()
         if uid not in self.user_waiting:
@@ -239,7 +242,9 @@ class Main(star.Star):
                     del self.user_waiting[uid]
 
     @filter.on_llm_request()
-    async def on_llm_req(self, event: AstrMessageEvent, request: ProviderRequest):
+    async def on_llm_req(
+        self, event: AstrMessageEvent, request: ProviderRequest
+    ) -> None:
         if event.get_session_id() in self.user_file_msg_buffer:
             files = self.user_file_msg_buffer[event.get_session_id()]
             if not request.prompt:
@@ -247,11 +252,13 @@ class Main(star.Star):
             request.prompt += f"\nUser provided files: {files}"
 
     @filter.command_group("pi")
-    def pi(self):
+    def pi(self) -> None:
         """代码执行器配置"""
 
     @pi.command("absdir")
-    async def pi_absdir(self, event: AstrMessageEvent, path: str = ""):
+    async def pi_absdir(
+        self, event: AstrMessageEvent, path: str = ""
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """设置 Docker 宿主机绝对路径"""
         if not path:
             yield event.plain_result(
@@ -263,7 +270,9 @@ class Main(star.Star):
             yield event.plain_result(f"设置 Docker 宿主机绝对路径成功: {path}")
 
     @pi.command("mirror")
-    async def pi_mirror(self, event: AstrMessageEvent, url: str = ""):
+    async def pi_mirror(
+        self, event: AstrMessageEvent, url: str = ""
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """Docker 镜像地址"""
         if not url:
             yield event.plain_result(f"""当前 Docker 镜像地址: {self.config["sandbox"]["docker_mirror"]}。
@@ -276,7 +285,9 @@ class Main(star.Star):
             yield event.plain_result("设置 Docker 镜像地址成功。")
 
     @pi.command("repull")
-    async def pi_repull(self, event: AstrMessageEvent):
+    async def pi_repull(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """重新拉取沙箱镜像"""
         async with aiodocker.Docker() as docker:
             image_name = await self.get_image_name()
@@ -289,7 +300,9 @@ class Main(star.Star):
         yield event.plain_result("重新拉取沙箱镜像成功。")
 
     @pi.command("file")
-    async def pi_file(self, event: AstrMessageEvent):
+    async def pi_file(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """在规定秒数(60s)内上传一个文件"""
         uid = event.get_sender_id()
         self.user_waiting[uid] = time.time()
@@ -303,7 +316,9 @@ class Main(star.Star):
             self.user_waiting.pop(uid)
 
     @pi.command("clear", alias=["clean"])
-    async def pi_file_clean(self, event: AstrMessageEvent):
+    async def pi_file_clean(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """清理用户上传的文件"""
         uid = event.get_sender_id()
         if uid in self.user_waiting:
@@ -317,7 +332,9 @@ class Main(star.Star):
             )
 
     @pi.command("list")
-    async def pi_file_list(self, event: AstrMessageEvent):
+    async def pi_file_list(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """列出用户上传的文件"""
         uid = event.get_sender_id()
         if uid in self.user_file_msg_buffer:
@@ -331,7 +348,9 @@ class Main(star.Star):
             )
 
     @llm_tool("python_interpreter")
-    async def python_interpreter(self, event: AstrMessageEvent):
+    async def python_interpreter(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult | None, None]:
         """Use this tool only if user really want to solve a complex problem and the problem can be solved very well by Python code.
         For example, user can use this tool to solve math problems, edit image, docx, pptx, pdf, etc.
         """
@@ -507,7 +526,9 @@ class Main(star.Star):
         )
 
     @pi.command("cleanfile")
-    async def pi_cleanfile(self, event: AstrMessageEvent):
+    async def pi_cleanfile(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """清理用户上传的文件"""
         for file in self.user_file_msg_buffer[event.get_session_id()]:
             try:

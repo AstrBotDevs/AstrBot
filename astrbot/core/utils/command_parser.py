@@ -13,7 +13,7 @@ class CommandTokens:
 
 
 class CommandParserMixin:
-    def parse_commands(self, message: str):
+    def parse_commands(self, message: str) -> CommandTokens:
         cmd_tokens = CommandTokens()
         cmd_tokens.tokens = re.split(r"\s+", message)
         cmd_tokens.len = len(cmd_tokens.tokens)
