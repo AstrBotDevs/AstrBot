@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import os
 import traceback
-import types
 from typing import Any, Literal, overload
 
 from quart import request
@@ -26,6 +25,9 @@ from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
+
+# 兼容 isinstance 的类型提示，等价于内建 _ClassInfo 的可用子集
+ClassInfo = type | tuple[type, ...]
 
 
 @overload
@@ -57,15 +59,20 @@ def try_cast(value: Any, type_: str):  # noqa:ANN401
 
 def _expect_type(
     value: object,
-    expected_type: type | tuple[type, ...] | types.UnionType,
+    expected_type: ClassInfo,
     path_key,
     errors,
     expected_name=None,
 ) -> bool:
     if not isinstance(value, expected_type):
+        exp_name = expected_name or (
+            expected_type.__name__
+            if isinstance(expected_type, type)
+            else " | ".join(t.__name__ for t in expected_type if isinstance(t, type))
+            or "unknown"
+        )
         errors.append(
-            f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
-            f"得到了 {type(value).__name__}"
+            f"错误的类型 {path_key}: 期望是 {exp_name}, 得到了 {type(value).__name__}"
         )
         return False
     return True

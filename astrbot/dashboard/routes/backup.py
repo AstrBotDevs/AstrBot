@@ -9,10 +9,12 @@ import time
 import traceback
 import uuid
 import zipfile
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 
 import jwt
+import quart
 from quart import request, send_file
 
 from astrbot.core import logger
@@ -180,10 +182,14 @@ class BackupRoute(Route):
         if message is not None:
             p["message"] = message
 
-    def _make_progress_callback(self, task_id: str):
+    def _make_progress_callback(
+        self, task_id: str
+    ) -> Callable[[str, int, int, str], Awaitable[None]]:
         """创建进度回调函数"""
 
-        async def _callback(stage: str, current: int, total: int, message: str = ""):
+        async def _callback(
+            stage: str, current: int, total: int, message: str = ""
+        ) -> None:
             self._update_progress(
                 task_id,
                 status="processing",
@@ -195,7 +201,7 @@ class BackupRoute(Route):
 
         return _callback
 
-    def _ensure_cleanup_task_started(self):
+    def _ensure_cleanup_task_started(self) -> None:
         """确保后台清理任务已启动（在异步上下文中延迟启动）"""
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
@@ -206,7 +212,7 @@ class BackupRoute(Route):
                 # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
                 pass
 
-    async def _cleanup_expired_uploads(self):
+    async def _cleanup_expired_uploads(self) -> None:
         """定期清理过期的上传会话
 
         基于 last_activity 字段判断过期，避免清理活跃的上传会话。
@@ -233,7 +239,7 @@ class BackupRoute(Route):
             except Exception as e:
                 logger.error(f"清理过期上传会话失败: {e}")
 
-    async def _cleanup_upload_session(self, upload_id: str):
+    async def _cleanup_upload_session(self, upload_id: str) -> None:
         """清理上传会话"""
         if upload_id in self.upload_sessions:
             session = self.upload_sessions[upload_id]
@@ -266,7 +272,7 @@ class BackupRoute(Route):
             logger.debug(f"读取备份 manifest 失败: {e}")
         return None  # 无法读取，不是有效备份
 
-    async def list_backups(self):
+    async def list_backups(self) -> dict:
         # 确保后台清理任务已启动
         self._ensure_cleanup_task_started()
 
@@ -340,7 +346,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取备份列表失败: {e!s}").__dict__
 
-    async def export_backup(self):
+    async def export_backup(self) -> dict:
         """创建备份
 
         返回:
@@ -371,7 +377,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"创建备份失败: {e!s}").__dict__
 
-    async def _background_export_task(self, task_id: str):
+    async def _background_export_task(self, task_id: str) -> None:
         """后台导出任务"""
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
@@ -409,7 +415,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def upload_backup(self):
+    async def upload_backup(self) -> dict:
         """上传备份文件
 
         将备份文件上传到服务器，返回保存的文件名。
@@ -459,7 +465,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"上传备份文件失败: {e!s}").__dict__
 
-    async def upload_init(self):
+    async def upload_init(self) -> dict:
         """初始化分片上传
 
         创建一个上传会话，返回 upload_id 供后续分片上传使用。
@@ -538,7 +544,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"初始化分片上传失败: {e!s}").__dict__
 
-    async def upload_chunk(self):
+    async def upload_chunk(self) -> dict:
         """上传分片
 
         上传单个分片数据。
@@ -642,7 +648,7 @@ class BackupRoute(Route):
         except Exception as e:
             logger.warning(f"标记备份来源失败: {e}")
 
-    async def upload_complete(self):
+    async def upload_complete(self) -> dict:
         """完成分片上传
 
         合并所有分片为完整文件。
@@ -732,7 +738,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"完成分片上传失败: {e!s}").__dict__
 
-    async def upload_abort(self):
+    async def upload_abort(self) -> dict:
         """取消分片上传
 
         取消上传并清理已上传的分片。
@@ -762,7 +768,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"取消上传失败: {e!s}").__dict__
 
-    async def check_backup(self):
+    async def check_backup(self) -> dict:
         """预检查备份文件
 
         检查备份文件的版本兼容性，返回确认信息。
@@ -806,7 +812,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"预检查备份文件失败: {e!s}").__dict__
 
-    async def import_backup(self):
+    async def import_backup(self) -> dict:
         """执行备份导入
 
         在用户确认后执行实际的导入操作。
@@ -866,7 +872,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"导入备份失败: {e!s}").__dict__
 
-    async def _background_import_task(self, task_id: str, zip_path: str):
+    async def _background_import_task(self, task_id: str, zip_path: str) -> None:
         """后台导入任务"""
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
@@ -908,7 +914,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def get_progress(self):
+    async def get_progress(self) -> dict:
         """获取任务进度
 
         Query 参数:
@@ -949,7 +955,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取任务进度失败: {e!s}").__dict__
 
-    async def download_backup(self):
+    async def download_backup(self) -> dict | quart.Response:
         """下载备份文件
 
         Query 参数:
@@ -1027,7 +1033,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除备份失败: {e!s}").__dict__
 
-    async def rename_backup(self):
+    async def rename_backup(self) -> dict:
         """重命名备份文件
 
         Body:

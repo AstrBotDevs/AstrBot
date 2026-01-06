@@ -3,15 +3,18 @@ import json
 import mimetypes
 import os
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import cast
 
+import quart
 from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import PlatformMessageHistory
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -19,7 +22,7 @@ from .route import Response, Route, RouteContext
 
 
 @asynccontextmanager
-async def track_conversation(convs: dict, conv_id: str):
+async def track_conversation(convs: dict, conv_id: str) -> AsyncGenerator[None, None]:
     convs[conv_id] = True
     try:
         yield
@@ -62,7 +65,7 @@ class ChatRoute(Route):
 
         self.running_convs: dict[str, bool] = {}
 
-    async def get_file(self):
+    async def get_file(self) -> dict | quart.Response:
         filename = request.args.get("filename")
         if not filename:
             return Response().error("Missing key: filename").__dict__
@@ -85,7 +88,7 @@ class ChatRoute(Route):
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
 
-    async def get_attachment(self):
+    async def get_attachment(self) -> dict | quart.Response:
         """Get attachment file by attachment_id."""
         attachment_id = request.args.get("attachment_id")
         if not attachment_id:
@@ -104,7 +107,7 @@ class ChatRoute(Route):
         except (FileNotFoundError, OSError):
             return Response().error("File access error").__dict__
 
-    async def post_file(self):
+    async def post_file(self) -> dict:
         """Upload a file and create an attachment record, return attachment_id."""
         post_data = await request.files
         if "file" not in post_data:
@@ -228,7 +231,7 @@ class ChatRoute(Route):
         media_parts: list,
         reasoning: str,
         agent_stats: dict,
-    ):
+    ) -> PlatformMessageHistory:
         """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
         bot_message_parts.extend(media_parts)
@@ -250,7 +253,7 @@ class ChatRoute(Route):
         )
         return record
 
-    async def chat(self):
+    async def chat(self) -> dict | quart.Response:
         username = g.get("username", "guest")
 
         post_data = await request.json
@@ -292,7 +295,7 @@ class ChatRoute(Route):
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
 
-        async def stream():
+        async def stream() -> AsyncGenerator[str, None]:
             client_disconnected = False
             accumulated_parts = []
             accumulated_text = ""
@@ -484,7 +487,7 @@ class ChatRoute(Route):
         response.timeout = None  # fix SSE auto disconnect issue
         return response
 
-    async def delete_webchat_session(self):
+    async def delete_webchat_session(self) -> dict:
         """Delete a Platform session and all its related data."""
         session_id = request.args.get("session_id")
         if not session_id:
@@ -540,7 +543,9 @@ class ChatRoute(Route):
 
         return Response().ok().__dict__
 
-    def _extract_attachment_ids(self, history_list) -> list[str]:
+    def _extract_attachment_ids(
+        self, history_list: list[PlatformMessageHistory]
+    ) -> list[str]:
         """从消息历史中提取所有 attachment_id"""
         attachment_ids = []
         for history in history_list:
@@ -575,7 +580,7 @@ class ChatRoute(Route):
         except Exception as e:
             logger.warning(f"Failed to delete attachments: {e}")
 
-    async def new_session(self):
+    async def new_session(self) -> dict:
         """Create a new Platform session (default: webchat)."""
         username = g.get("username", "guest")
 
@@ -600,7 +605,7 @@ class ChatRoute(Route):
             .__dict__
         )
 
-    async def get_sessions(self):
+    async def get_sessions(self) -> dict:
         """Get all Platform sessions for the current user."""
         username = g.get("username", "guest")
 
@@ -631,7 +636,7 @@ class ChatRoute(Route):
 
         return Response().ok(data=sessions_data).__dict__
 
-    async def get_session(self):
+    async def get_session(self) -> dict:
         """Get session information and message history by session_id."""
         session_id = request.args.get("session_id")
         if not session_id:
@@ -662,7 +667,7 @@ class ChatRoute(Route):
             .__dict__
         )
 
-    async def update_session_display_name(self):
+    async def update_session_display_name(self) -> dict:
         """Update a Platform session's display name."""
         post_data = await request.json
 
