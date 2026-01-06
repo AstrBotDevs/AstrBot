@@ -4,13 +4,15 @@ import asyncio
 import os
 import traceback
 import uuid
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 import aiofiles
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.knowledge_base.kb_helper import KBHelper
+from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 
 from ..utils import generate_tsne_visualization
@@ -65,7 +67,7 @@ class KnowledgeBaseRoute(Route):
         }
         self.register_routes()
 
-    def _get_kb_manager(self):
+    def _get_kb_manager(self) -> KnowledgeBaseManager:
         return self.core_lifecycle.kb_manager
 
     def _init_task(self, task_id: str, status: str = "pending") -> None:
@@ -76,7 +78,11 @@ class KnowledgeBaseRoute(Route):
         }
 
     def _set_task_result(
-        self, task_id: str, status: str, result: Any = None, error: str | None = None
+        self,
+        task_id: str,
+        status: str,
+        result: str | dict | None = None,
+        error: str | None = None,
     ) -> None:
         self.upload_tasks[task_id] = {
             "status": status,
@@ -113,8 +119,10 @@ class KnowledgeBaseRoute(Route):
         if total is not None:
             p["total"] = total
 
-    def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
-        async def _callback(stage: str, current: int, total: int):
+    def _make_progress_callback(
+        self, task_id: str, file_idx: int, file_name: str
+    ) -> Callable[[str, int, int], Awaitable[None]]:
+        async def _callback(stage: str, current: int, total: int) -> None:
             self._update_progress(
                 task_id,
                 status="processing",
@@ -130,7 +138,7 @@ class KnowledgeBaseRoute(Route):
     async def _background_upload_task(
         self,
         task_id: str,
-        kb_helper,
+        kb_helper: KBHelper,
         files_to_upload: list,
         chunk_size: int,
         chunk_overlap: int,
@@ -211,12 +219,12 @@ class KnowledgeBaseRoute(Route):
     async def _background_import_task(
         self,
         task_id: str,
-        kb_helper,
+        kb_helper: KBHelper,
         documents: list,
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台导入预切片文档任务"""
         try:
             # 初始化任务状态
@@ -295,7 +303,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def list_kbs(self):
+    async def list_kbs(self) -> ResponseReturnValue:
         """获取知识库列表
 
         Query 参数:
@@ -327,7 +335,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取知识库列表失败: {e!s}").__dict__
 
-    async def create_kb(self):
+    async def create_kb(self) -> ResponseReturnValue:
         """创建知识库
 
         Body:
@@ -424,7 +432,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"创建知识库失败: {e!s}").__dict__
 
-    async def get_kb(self):
+    async def get_kb(self) -> ResponseReturnValue:
         """获取知识库详情
 
         Query 参数:
@@ -450,7 +458,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取知识库详情失败: {e!s}").__dict__
 
-    async def update_kb(self):
+    async def update_kb(self) -> ResponseReturnValue:
         """更新知识库
 
         Body:
@@ -530,7 +538,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新知识库失败: {e!s}").__dict__
 
-    async def delete_kb(self):
+    async def delete_kb(self) -> ResponseReturnValue:
         """删除知识库
 
         Body:
@@ -557,7 +565,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除知识库失败: {e!s}").__dict__
 
-    async def get_kb_stats(self):
+    async def get_kb_stats(self) -> ResponseReturnValue:
         """获取知识库统计信息
 
         Query 参数:
@@ -594,7 +602,7 @@ class KnowledgeBaseRoute(Route):
 
     # ===== 文档管理 API =====
 
-    async def list_documents(self):
+    async def list_documents(self) -> ResponseReturnValue:
         """获取文档列表
 
         Query 参数:
@@ -634,7 +642,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取文档列表失败: {e!s}").__dict__
 
-    async def upload_document(self):
+    async def upload_document(self) -> ResponseReturnValue:
         """上传文档
 
         支持两种方式:
@@ -772,7 +780,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"上传文档失败: {e!s}").__dict__
 
-    def _validate_import_request(self, data: dict):
+    def _validate_import_request(self, data: dict) -> tuple[str, list, int, int, int]:
         kb_id = data.get("kb_id")
         if not kb_id:
             raise ValueError("缺少参数 kb_id")
@@ -796,7 +804,7 @@ class KnowledgeBaseRoute(Route):
         max_retries = data.get("max_retries", 3)
         return kb_id, documents, batch_size, tasks_limit, max_retries
 
-    async def import_documents(self):
+    async def import_documents(self) -> ResponseReturnValue:
         """导入预切片文档
 
         Body:
@@ -859,7 +867,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"导入文档失败: {e!s}").__dict__
 
-    async def get_upload_progress(self):
+    async def get_upload_progress(self) -> ResponseReturnValue:
         """获取上传进度和结果
 
         Query 参数:
@@ -912,7 +920,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取上传进度失败: {e!s}").__dict__
 
-    async def get_document(self):
+    async def get_document(self) -> ResponseReturnValue:
         """获取文档详情
 
         Query 参数:
@@ -943,7 +951,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取文档详情失败: {e!s}").__dict__
 
-    async def delete_document(self):
+    async def delete_document(self) -> ResponseReturnValue:
         """删除文档
 
         Body:
@@ -975,7 +983,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除文档失败: {e!s}").__dict__
 
-    async def delete_chunk(self):
+    async def delete_chunk(self) -> ResponseReturnValue:
         """删除文本块
 
         Body:
@@ -1010,7 +1018,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除文本块失败: {e!s}").__dict__
 
-    async def list_chunks(self):
+    async def list_chunks(self) -> ResponseReturnValue:
         """获取块列表
 
         Query 参数:
@@ -1059,7 +1067,7 @@ class KnowledgeBaseRoute(Route):
 
     # ===== 检索 API =====
 
-    async def retrieve(self):
+    async def retrieve(self) -> ResponseReturnValue:
         """检索知识库
 
         Body:
@@ -1122,7 +1130,7 @@ class KnowledgeBaseRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"检索失败: {e!s}").__dict__
 
-    async def upload_document_from_url(self):
+    async def upload_document_from_url(self) -> ResponseReturnValue:
         """从 URL 上传文档
 
         Body:
@@ -1206,7 +1214,7 @@ class KnowledgeBaseRoute(Route):
     async def _background_upload_from_url_task(
         self,
         task_id: str,
-        kb_helper,
+        kb_helper: KBHelper,
         url: str,
         chunk_size: int,
         chunk_overlap: int,

@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -28,7 +28,7 @@ class PersonaRoute(Route):
         self.persona_mgr = core_lifecycle.persona_mgr
         self.register_routes()
 
-    async def list_personas(self):
+    async def list_personas(self) -> ResponseReturnValue:
         """获取所有人格列表"""
         try:
             personas = await self.persona_mgr.get_all_personas()
@@ -57,7 +57,7 @@ class PersonaRoute(Route):
             logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取人格列表失败: {e!s}").__dict__
 
-    async def get_persona_detail(self):
+    async def get_persona_detail(self) -> ResponseReturnValue:
         """获取指定人格的详细信息"""
         try:
             data = await request.get_json()
@@ -92,7 +92,7 @@ class PersonaRoute(Route):
             logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取人格详情失败: {e!s}").__dict__
 
-    async def create_persona(self):
+    async def create_persona(self) -> ResponseReturnValue:
         """创建新人格"""
         try:
             data = await request.get_json()
@@ -149,7 +149,7 @@ class PersonaRoute(Route):
             logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"创建人格失败: {e!s}").__dict__
 
-    async def update_persona(self):
+    async def update_persona(self) -> ResponseReturnValue:
         """更新人格信息"""
         try:
             data = await request.get_json()
@@ -183,7 +183,7 @@ class PersonaRoute(Route):
             logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新人格失败: {e!s}").__dict__
 
-    async def delete_persona(self):
+    async def delete_persona(self) -> ResponseReturnValue:
         """删除人格"""
         try:
             data = await request.get_json()

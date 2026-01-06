@@ -1,6 +1,7 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from quart import Quart
+from quart import Quart, ResponseReturnValue
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -19,7 +20,9 @@ class Route:
         self.config = context.config
 
     def register_routes(self) -> None:
-        def _add_rule(path, method, func) -> None:
+        def _add_rule(
+            path: str, method: str, func: Callable[[], Awaitable[ResponseReturnValue]]
+        ) -> None:
             # 统一添加 /api 前缀
             full_path = f"/api{path}"
             self.app.add_url_rule(full_path, view_func=func, methods=[method])
@@ -45,12 +48,14 @@ class Response:
     message: str | None = None
     data: dict | list | None = None
 
-    def error(self, message: str):
+    def error(self, message: str) -> "Response":
         self.status = "error"
         self.message = message
         return self
 
-    def ok(self, data: dict | list | None = None, message: str | None = None):
+    def ok(
+        self, data: dict | list | None = None, message: str | None = None
+    ) -> "Response":
         self.status = "ok"
         if data is None:
             data = {}

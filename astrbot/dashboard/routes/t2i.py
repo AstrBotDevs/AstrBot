@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 
-from quart import jsonify, request
+from quart import ResponseReturnValue, jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -38,7 +38,7 @@ class T2iRoute(Route):
         ]
         self.register_routes()
 
-    async def list_templates(self):
+    async def list_templates(self) -> ResponseReturnValue:
         """获取所有T2I模板列表"""
         try:
             templates = self.manager.list_templates()
@@ -48,7 +48,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def get_active_template(self):
+    async def get_active_template(self) -> ResponseReturnValue:
         """获取当前激活的T2I模板"""
         try:
             active_template = self.config.get("t2i_active_template", "base")
@@ -61,7 +61,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def get_template(self, name: str):
+    async def get_template(self, name: str) -> ResponseReturnValue:
         """获取指定名称的T2I模板内容"""
         try:
             content = self.manager.get_template(name)
@@ -77,7 +77,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def create_template(self):
+    async def create_template(self) -> ResponseReturnValue:
         """创建一个新的T2I模板"""
         try:
             data = await request.json
@@ -117,7 +117,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def update_template(self, name: str):
+    async def update_template(self, name: str) -> ResponseReturnValue:
         """更新一个已存在的T2I模板"""
         try:
             name = name.strip()
@@ -148,7 +148,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def delete_template(self, name: str):
+    async def delete_template(self, name: str) -> ResponseReturnValue:
         """删除一个T2I模板"""
         try:
             name = name.strip()
@@ -169,7 +169,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def set_active_template(self):
+    async def set_active_template(self) -> ResponseReturnValue:
         """设置当前活动的T2I模板"""
         try:
             data = await request.json
@@ -204,7 +204,7 @@ class T2iRoute(Route):
             response.status_code = 500
             return response
 
-    async def reset_default_template(self):
+    async def reset_default_template(self) -> ResponseReturnValue:
         """重置默认的'base'模板"""
         try:
             self.manager.reset_default_template()

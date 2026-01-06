@@ -86,7 +86,7 @@ class PlatformRoute(Route):
                     return platform
         return None
 
-    async def get_platform_stats(self):
+    async def get_platform_stats(self) -> ResponseReturnValue:
         """获取所有平台的统计信息
 
         Returns:

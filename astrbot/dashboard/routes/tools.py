@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import logger
 from astrbot.core.agent.mcp_client import MCPTool
@@ -33,7 +33,7 @@ class ToolsRoute(Route):
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
 
-    async def get_mcp_servers(self):
+    async def get_mcp_servers(self) -> ResponseReturnValue:
         try:
             config = self.tool_mgr.load_mcp_config()
             servers = []
@@ -69,7 +69,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取 MCP 服务器列表失败: {e!s}").__dict__
 
-    async def add_mcp_server(self):
+    async def add_mcp_server(self) -> ResponseReturnValue:
         try:
             server_data = await request.json
 
@@ -125,7 +125,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"添加 MCP 服务器失败: {e!s}").__dict__
 
-    async def update_mcp_server(self):
+    async def update_mcp_server(self) -> ResponseReturnValue:
         try:
             server_data = await request.json
 
@@ -229,7 +229,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"更新 MCP 服务器失败: {e!s}").__dict__
 
-    async def delete_mcp_server(self):
+    async def delete_mcp_server(self) -> ResponseReturnValue:
         try:
             server_data = await request.json
             name = server_data.get("name", "")
@@ -265,7 +265,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除 MCP 服务器失败: {e!s}").__dict__
 
-    async def test_mcp_connection(self):
+    async def test_mcp_connection(self) -> ResponseReturnValue:
         """测试 MCP 服务器连接"""
         try:
             server_data = await request.json
@@ -293,7 +293,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"测试 MCP 连接失败: {e!s}").__dict__
 
-    async def get_tool_list(self):
+    async def get_tool_list(self) -> ResponseReturnValue:
         """获取所有注册的工具列表"""
         try:
             tools = self.tool_mgr.func_list
@@ -326,7 +326,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取工具列表失败: {e!s}").__dict__
 
-    async def toggle_tool(self):
+    async def toggle_tool(self) -> ResponseReturnValue:
         """启用或停用指定的工具"""
         try:
             data = await request.json
@@ -352,7 +352,7 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"操作工具失败: {e!s}").__dict__
 
-    async def sync_provider(self):
+    async def sync_provider(self) -> ResponseReturnValue:
         """同步 MCP 提供者配置"""
         try:
             data = await request.json

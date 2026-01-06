@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import cast
 
 from quart import Response as QuartResponse
-from quart import make_response, request
+from quart import ResponseReturnValue, make_response, request
 
 from astrbot.core import LogBroker, logger
 
@@ -54,7 +54,7 @@ class LogRoute(Route):
     async def log(self) -> QuartResponse:
         last_event_id = request.headers.get("Last-Event-ID")
 
-        async def stream():
+        async def stream() -> AsyncGenerator[str, None]:
             queue = None
             try:
                 if last_event_id:
@@ -90,7 +90,7 @@ class LogRoute(Route):
         response.timeout = None  # type: ignore
         return response
 
-    async def log_history(self):
+    async def log_history(self) -> ResponseReturnValue:
         """获取日志历史"""
         try:
             logs = list(self.log_broker.log_cache)

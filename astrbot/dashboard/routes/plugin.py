@@ -9,7 +9,7 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -73,7 +73,7 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
-    async def reload_plugins(self):
+    async def reload_plugins(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -92,7 +92,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def get_online_plugins(self):
+    async def get_online_plugins(self) -> ResponseReturnValue:
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
 
@@ -244,7 +244,7 @@ class PluginRoute(Route):
             logger.warning(f"检查缓存有效性失败: {e}")
             return False
 
-    def _load_plugin_cache(self, cache_file: str):
+    def _load_plugin_cache(self, cache_file: str) -> dict | None:
         """加载本地缓存的插件市场数据"""
         try:
             if os.path.exists(cache_file):
@@ -260,7 +260,9 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
+    def _save_plugin_cache(
+        self, cache_file: str, data: object, md5: str | None = None
+    ) -> None:
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -278,7 +280,7 @@ class PluginRoute(Route):
         except Exception as e:
             logger.warning(f"保存插件市场缓存失败: {e}")
 
-    async def get_plugin_logo_token(self, logo_path: str):
+    async def get_plugin_logo_token(self, logo_path: str) -> str | None:
         try:
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
@@ -290,7 +292,7 @@ class PluginRoute(Route):
             logger.warning(f"获取插件 Logo 失败: {e}")
             return None
 
-    async def get_plugins(self):
+    async def get_plugins(self) -> ResponseReturnValue:
         _plugin_resp = []
         plugin_name = request.args.get("name")
         for plugin in self.plugin_manager.context.get_all_stars():
@@ -321,7 +323,7 @@ class PluginRoute(Route):
             .__dict__
         )
 
-    async def get_plugin_handlers_info(self, handler_full_names: list[str]):
+    async def get_plugin_handlers_info(self, handler_full_names: list[str]) -> list:
         """解析插件行为"""
         handlers = []
 
@@ -382,7 +384,7 @@ class PluginRoute(Route):
 
         return handlers
 
-    async def install_plugin(self):
+    async def install_plugin(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -407,7 +409,7 @@ class PluginRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def install_plugin_upload(self):
+    async def install_plugin_upload(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -429,7 +431,7 @@ class PluginRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def uninstall_plugin(self):
+    async def uninstall_plugin(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -454,7 +456,7 @@ class PluginRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
-    async def update_plugin(self):
+    async def update_plugin(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -476,7 +478,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/update: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def update_all_plugins(self):
+    async def update_all_plugins(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -494,7 +496,7 @@ class PluginRoute(Route):
         results = []
         sem = asyncio.Semaphore(PLUGIN_UPDATE_CONCURRENCY)
 
-        async def _update_one(name: str):
+        async def _update_one(name: str) -> dict[str, str]:
             async with sem:
                 try:
                     logger.info(f"批量更新插件 {name}")
@@ -529,7 +531,7 @@ class PluginRoute(Route):
 
         return Response().ok({"results": results}, message).__dict__
 
-    async def off_plugin(self):
+    async def off_plugin(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -547,7 +549,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/off: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def on_plugin(self):
+    async def on_plugin(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -565,7 +567,7 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/on: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
 
-    async def get_plugin_readme(self):
+    async def get_plugin_readme(self) -> ResponseReturnValue:
         plugin_name = request.args.get("name")
         logger.debug(f"正在获取插件 {plugin_name} 的README文件内容")
 
@@ -615,12 +617,12 @@ class PluginRoute(Route):
             logger.error(f"/api/plugin/readme: {traceback.format_exc()}")
             return Response().error(f"读取README文件失败: {e!s}").__dict__
 
-    async def get_custom_source(self):
+    async def get_custom_source(self) -> ResponseReturnValue:
         """获取自定义插件源"""
         sources = await sp.global_get("custom_plugin_sources", [])
         return Response().ok(sources).__dict__
 
-    async def save_custom_source(self):
+    async def save_custom_source(self) -> ResponseReturnValue:
         """保存自定义插件源"""
         try:
             data = await request.get_json()

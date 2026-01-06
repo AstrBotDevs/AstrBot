@@ -1,6 +1,6 @@
 import traceback
 
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import DEMO_MODE, logger, pip_installer
 from astrbot.core.config.default import VERSION
@@ -34,7 +34,7 @@ class UpdateRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def do_migration(self):
+    async def do_migration(self) -> ResponseReturnValue:
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
         if not need_migration:
             return Response().ok(None, "不需要进行迁移。").__dict__
@@ -51,7 +51,7 @@ class UpdateRoute(Route):
             logger.error(f"迁移失败: {traceback.format_exc()}")
             return Response().error(f"迁移失败: {e!s}").__dict__
 
-    async def check_update(self):
+    async def check_update(self) -> ResponseReturnValue:
         type_ = request.args.get("type", None)
 
         try:
@@ -77,7 +77,7 @@ class UpdateRoute(Route):
             logger.warning(f"检查更新失败: {e!s} (不影响除项目更新外的正常使用)")
             return Response().error(e.__str__()).__dict__
 
-    async def get_releases(self):
+    async def get_releases(self) -> ResponseReturnValue:
         try:
             ret = await self.astrbot_updator.get_releases()
             return Response().ok(ret).__dict__
@@ -85,7 +85,7 @@ class UpdateRoute(Route):
             logger.error(f"/api/update/releases: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
-    async def update_project(self):
+    async def update_project(self) -> ResponseReturnValue:
         data = await request.json
         version = data.get("version", "")
         reboot = data.get("reboot", True)
@@ -136,7 +136,7 @@ class UpdateRoute(Route):
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
-    async def update_dashboard(self):
+    async def update_dashboard(self) -> ResponseReturnValue:
         try:
             try:
                 await download_dashboard(version=f"v{VERSION}", latest=False)
@@ -149,7 +149,7 @@ class UpdateRoute(Route):
             logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
-    async def install_pip_package(self):
+    async def install_pip_package(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import jwt
 import quart
-from quart import request, send_file
+from quart import ResponseReturnValue, request, send_file
 
 from astrbot.core import logger
 from astrbot.core.backup.exporter import AstrBotExporter
@@ -1006,7 +1006,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"下载备份失败: {e!s}").__dict__
 
-    async def delete_backup(self):
+    async def delete_backup(self) -> ResponseReturnValue:
         """删除备份文件
 
         Body:
