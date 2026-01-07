@@ -27,6 +27,7 @@
     "configure": "Configure",
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
+    "viewRepo": "Repository",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
