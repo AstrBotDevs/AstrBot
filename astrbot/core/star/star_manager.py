@@ -22,6 +22,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_path,
 )
 from astrbot.core.utils.io import remove_dir
+from astrbot.core.utils.metrics import Metric
 
 from . import StarMetadata
 from .command_management import sync_command_configs
@@ -656,6 +657,14 @@ class PluginManager:
                 如果找不到插件元数据则返回 None。
 
         """
+        # this metric is for displaying plugins installation count in webui
+        asyncio.create_task(
+            Metric.upload(
+                et="install_star",
+                repo=repo_url,
+            ),
+        )
+
         async with self._pm_lock:
             plugin_path = await self.updator.install(repo_url, proxy)
             # reload the plugin
@@ -1024,5 +1033,13 @@ class PluginManager:
                 "readme": readme_content,
                 "name": plugin.name,
             }
+
+            if plugin.repo:
+                asyncio.create_task(
+                    Metric.upload(
+                        et="install_star_f",  # install star
+                        repo=plugin.repo,
+                    ),
+                )
 
         return plugin_info
