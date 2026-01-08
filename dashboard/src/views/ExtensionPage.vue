@@ -2029,7 +2029,7 @@ watch(isListView, (newVal) => {
                         style="height: 24px"
                       >
                         <v-icon icon="mdi-github" start size="x-small"></v-icon>
-                        仓库
+                        {{ tm("buttons.viewRepo") }}
                       </v-btn>
                       <v-btn
                         v-if="!plugin?.installed"
