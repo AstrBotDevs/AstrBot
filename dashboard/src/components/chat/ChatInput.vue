@@ -11,13 +11,15 @@
                 backgroundColor: isDark ? '#2d2d2d' : 'transparent'
             }">
             <!-- 引用预览区 -->
-            <div class="reply-preview" v-if="props.replyTo">
-                <div class="reply-content">
-                    <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
-                    "<span class="reply-text">{{ props.replyTo.messageContent }}</span>"
+            <transition name="slideReply" @after-leave="handleReplyAfterLeave">
+                <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
+                    <div class="reply-content">
+                        <v-icon size="small" class="reply-icon">mdi-reply</v-icon>
+                        "<span class="reply-text">{{ props.replyTo.selectedText }}</span>"
+                    </div>
+                    <v-btn @click="handleClearReply" class="remove-reply-btn" icon="mdi-close" size="x-small" color="grey" variant="text" />
                 </div>
-                <v-btn @click="$emit('clearReply')" class="remove-reply-btn" icon="mdi-close" size="x-small" color="grey" variant="text" />
-            </div>
+            </transition>
             <textarea 
                 ref="inputField"
                 v-model="localPrompt" 
@@ -109,7 +111,7 @@ interface StagedFileInfo {
 
 interface ReplyInfo {
     messageId: number;
-    messageContent: string;
+    selectedText?: string;
 }
 
 interface Props {
@@ -155,6 +157,7 @@ const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
+const isReplyClosing = ref(false);
 
 const localPrompt = computed({
     get: () => props.prompt,
@@ -172,6 +175,17 @@ const canSend = computed(() => {
 const ctrlKeyDown = ref(false);
 const ctrlKeyTimer = ref<number | null>(null);
 const ctrlKeyLongPressThreshold = 300;
+
+// 处理清除引用 - 触发关闭动画
+function handleClearReply() {
+    isReplyClosing.value = true;
+}
+
+// 动画完成后发送clearReply事件
+function handleReplyAfterLeave() {
+    emit('clearReply');
+    isReplyClosing.value = false;
+}
 
 function handleKeyDown(e: KeyboardEvent) {
     // Enter 发送消息
@@ -286,6 +300,51 @@ defineExpose({
     background-color: rgba(103, 58, 183, 0.06);
     border-radius: 12px;
     gap: 8px;
+    max-height: 500px;
+    overflow: hidden;
+}
+
+/* Transition animations for reply preview */
+.slideReply-enter-active {
+    animation: slideDown 0.2s ease-out;
+}
+
+.slideReply-leave-active {
+    animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        max-height: 0;
+        opacity: 0;
+        margin-top: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    to {
+        max-height: 500px;
+        opacity: 1;
+        margin-top: 8px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        max-height: 500px;
+        opacity: 1;
+        margin-top: 8px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+    to {
+        max-height: 0;
+        opacity: 0;
+        margin-top: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
 }
 
 .reply-content {

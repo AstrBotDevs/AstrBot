@@ -124,17 +124,20 @@ class WebChatAdapter(Platform):
             part_type = part.get("type")
             if part_type == "plain":
                 text = part.get("text", "")
-                components.append(Plain(text))
+                components.append(Plain(text=text))
                 text_parts.append(text)
             elif part_type == "reply":
                 message_id = part.get("message_id")
                 reply_chain = []
-                reply_message_str = ""
+                reply_message_str = part.get("selected_text", "")
                 sender_id = None
                 sender_name = None
 
-                # recursively get the content of the referenced message
-                if depth < max_depth and message_id:
+                if reply_message_str:
+                    reply_chain = [Plain(text=reply_message_str)]
+
+                # recursively get the content of the referenced message, if selected_text is empty
+                if not reply_message_str and depth < max_depth and message_id:
                     history = await self._get_message_history(message_id)
                     if history and history.content:
                         reply_parts = history.content.get("message", [])
