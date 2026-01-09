@@ -1,5 +1,5 @@
 <template>
-    <div class="messages-container" ref="messageContainer">
+    <div class="messages-container" ref="messageContainer" :class="{ 'is-dark': isDark }">
         <!-- 加载指示器 -->
         <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
             <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
@@ -904,6 +904,23 @@ export default {
     gap: 8px;
 }
 
+:deep(code.bg-secondary) {
+    background-color: #ececec !important;
+    color: #0d0d0d !important;
+}
+
+:deep(code.rounded) {
+    border-radius: 6px !important;
+}
+
+.messages-container.is-dark :deep(code.bg-secondary) {
+    background-color: #424242 !important;
+    color: #ffffff !important;
+}
+
+.messages-container.is-dark :deep(.code-block-container) {
+    background-color: #1f1f1f !important;
+}
 
 /* 基础动画 */
 @keyframes fadeIn {
