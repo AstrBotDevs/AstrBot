@@ -45,13 +45,13 @@ export interface MessagePart {
     // embedded fields - 加载后填充
     embedded_url?: string;   // blob URL for image, record
     embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
-    reply_content?: string;  // for reply - 被引用消息的内容
+    selected_text?: string;  // for reply - 被引用消息的内容
 }
 
 // 引用信息 (用于发送消息时)
 export interface ReplyInfo {
     messageId: number;
-    messageContent: string;
+    selectedText?: string;  // 选中的文本内容（可选）
 }
 
 // 简化的消息内容结构
@@ -216,11 +216,12 @@ export function useMessages(
         const userMessageParts: MessagePart[] = [];
 
         // 添加引用消息段
+        console.log('ReplyTo in sendMessage:', replyTo);
         if (replyTo) {
             userMessageParts.push({
                 type: 'reply',
                 message_id: replyTo.messageId,
-                reply_content: replyTo.messageContent
+                selected_text: replyTo.selectedText
             });
         }
 
@@ -295,7 +296,8 @@ export function useMessages(
                 if (replyTo) {
                     parts.push({
                         type: 'reply',
-                        message_id: replyTo.messageId
+                        message_id: replyTo.messageId,
+                        selected_text: replyTo.selectedText
                     });
                 }
 

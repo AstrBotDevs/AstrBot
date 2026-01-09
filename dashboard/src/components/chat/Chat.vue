@@ -38,6 +38,7 @@
                             :isLoadingMessages="isLoadingMessages"
                             @openImagePreview="openImagePreview"
                             @replyMessage="handleReplyMessage"
+                            @replyWithText="handleReplyWithText"
                             ref="messageList" />
                         <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
                     </div>
@@ -208,7 +209,7 @@ const prompt = ref('');
 // 引用消息状态
 interface ReplyInfo {
     messageId: number;  // PlatformSessionHistoryMessage 的 id
-    messageContent: string;  // 用于显示的消息内容
+    selectedText?: string;  // 选中的文本内容（可选）
 }
 const replyTo = ref<ReplyInfo | null>(null);
 
@@ -277,12 +278,27 @@ function handleReplyMessage(msg: any, index: number) {
     
     replyTo.value = {
         messageId,
-        messageContent: messageContent || '[媒体内容]'
+        selectedText: messageContent || '[媒体内容]'
     };
 }
 
 function clearReply() {
     replyTo.value = null;
+}
+
+function handleReplyWithText(replyData: any) {
+    // 处理选中文本的引用
+    const { messageId, selectedText, messageIndex } = replyData;
+    
+    if (!messageId) {
+        console.warn('Message does not have an id');
+        return;
+    }
+    
+    replyTo.value = {
+        messageId,
+        selectedText: selectedText  // 保存原始的选中文本
+    };
 }
 
 async function handleSelectConversation(sessionIds: string[]) {

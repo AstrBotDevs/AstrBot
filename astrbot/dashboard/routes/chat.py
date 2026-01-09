@@ -166,7 +166,11 @@ class ChatRoute(Route):
                     parts.append({"type": "plain", "text": part.get("text", "")})
                 elif part_type == "reply":
                     parts.append(
-                        {"type": "reply", "message_id": part.get("message_id")}
+                        {
+                            "type": "reply",
+                            "message_id": part.get("message_id"),
+                            "selected_text": part.get("selected_text", ""),
+                        }
                     )
                 elif attachment_id := part.get("attachment_id"):
                     attachment = await self.db.get_attachment_by_id(attachment_id)

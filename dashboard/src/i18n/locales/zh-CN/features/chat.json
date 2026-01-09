@@ -42,7 +42,8 @@
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
     "reply": "引用回复",
-    "providerConfig": "AI 配置"
+    "providerConfig": "AI 配置",
+    "toolsUsed": "已使用工具"
   },
   "conversation": {
     "newConversation": "新的聊天",
