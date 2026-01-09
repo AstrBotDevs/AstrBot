@@ -36,7 +36,7 @@
 
 AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
 
-<img width="1776" height="1080" alt="image" src="https://github.com/user-attachments/assets/00782c4c-4437-4d97-aabc-605e3738da5c" />
+![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
 
 ## 主要功能
 
