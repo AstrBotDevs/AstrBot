@@ -7,6 +7,14 @@
     "handlersOperation": "Manage Handlers",
     "market": "Extension Market"
   },
+  "modManager": {
+    "panelTabs": {
+      "info": "Info",
+      "config": "Configuration",
+      "behavior": "Behavior",
+      "overview": "Overview"
+    }
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
@@ -216,5 +224,71 @@
   },
   "pluginChangelog": {
     "menuTitle": "View Changelog"
+  },
+  "pipeline": {
+    "tabTitle": "Execution Chain",
+    "traceTabTitle": "Impact Chain",
+    "toolbar": {
+      "refresh": "Refresh Snapshot",
+      "promptPreview": "Prompt Preview"
+    },
+    "scope": {
+      "label": "Scope",
+      "global": "Global",
+      "session": "Session",
+      "sessionUmo": "Session UMO"
+    },
+    "rightTabs": {
+      "detail": "Stage Detail",
+      "conflicts": "Conflict List"
+    },
+    "fishbone": {
+      "noSnapshot": "No snapshot data",
+      "noParticipants": "No participants",
+      "viewDetail": "View detail"
+    },
+    "detail": {
+      "viewImpactChain": "View Impact Chain",
+      "noSnapshot": "No snapshot data",
+      "noStageSelected": "No stage selected",
+      "noStageSelectedHint": "Select a stage from the fishbone on the left",
+      "noParticipants": "No participants",
+      "noParticipantsHint": "No plugins participated in this stage",
+      "participants": " participants",
+      "conflicts": " conflicts",
+      "plugin": "Plugin",
+      "trigger": "Trigger"
+    },
+    "conflictList": {
+      "title": "Conflict List",
+      "total": "{count} total",
+      "none": "No conflicts",
+      "noneHint": "No conflicts detected",
+      "severity": {
+        "error": "Critical",
+        "warn": "Warning",
+        "info": "Info"
+      },
+      "involved": "Involved"
+    },
+    "promptPreview": {
+      "title": "Prompt Injection Preview",
+      "emptyTitle": "No data",
+      "emptyHint": "This snapshot does not contain prompt preview information",
+      "overwriteWarn": "Multiple overwrite operations detected; final prompt may be overwritten and order may be unstable.",
+      "contexts": "contexts",
+      "injectedBy": "injected_by",
+      "chain": "Injection chain",
+      "headers": {
+        "plugin": "Plugin",
+        "handler": "Handler",
+        "priority": "Priority",
+        "field": "Field",
+        "mutation": "Mutation"
+      },
+      "finalSystemPrompt": "Final System Prompt",
+      "finalPrompt": "Final Prompt",
+      "close": "Close"
+    }
   }
 }

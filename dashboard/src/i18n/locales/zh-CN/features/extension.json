@@ -7,6 +7,14 @@
     "handlersOperation": "管理行为",
     "market": "插件市场"
   },
+  "modManager": {
+    "panelTabs": {
+      "info": "信息",
+      "config": "配置",
+      "behavior": "行为",
+      "overview": "文档"
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
@@ -216,5 +224,71 @@
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
+  },
+  "pipeline": {
+    "tabTitle": "执行链路",
+    "traceTabTitle": "影响链路",
+    "toolbar": {
+      "refresh": "刷新快照",
+      "promptPreview": "提示词预览"
+    },
+    "scope": {
+      "label": "范围",
+      "global": "全局",
+      "session": "会话",
+      "sessionUmo": "会话 UMO"
+    },
+    "rightTabs": {
+      "detail": "阶段详情",
+      "conflicts": "冲突列表"
+    },
+    "fishbone": {
+      "noSnapshot": "暂无快照数据",
+      "noParticipants": "无参与者",
+      "viewDetail": "查看详情"
+    },
+    "detail": {
+      "viewImpactChain": "查看影响链路",
+      "noSnapshot": "暂无快照数据",
+      "noStageSelected": "未选择阶段",
+      "noStageSelectedHint": "请在左侧鱼骨图选择一个阶段",
+      "noParticipants": "无参与者",
+      "noParticipantsHint": "该阶段没有任何插件参与",
+      "participants": "个参与者",
+      "conflicts": "个冲突",
+      "plugin": "插件",
+      "trigger": "触发"
+    },
+    "conflictList": {
+      "title": "冲突列表",
+      "total": "共 {count} 条",
+      "none": "无冲突",
+      "noneHint": "当前未检测到冲突",
+      "severity": {
+        "error": "严重",
+        "warn": "警告",
+        "info": "提示"
+      },
+      "involved": "涉及对象"
+    },
+    "promptPreview": {
+      "title": "提示词注入预览",
+      "emptyTitle": "暂无数据",
+      "emptyHint": "当前快照不包含提示词预览信息",
+      "overwriteWarn": "检测到多个 overwrite 操作，最终提示词可能被覆盖且顺序不稳定。",
+      "contexts": "contexts",
+      "injectedBy": "injected_by",
+      "chain": "注入链路",
+      "headers": {
+        "plugin": "插件",
+        "handler": "处理器",
+        "priority": "优先级",
+        "field": "字段",
+        "mutation": "变更类型"
+      },
+      "finalSystemPrompt": "最终 System Prompt",
+      "finalPrompt": "最终 Prompt",
+      "close": "关闭"
+    }
   }
 }
