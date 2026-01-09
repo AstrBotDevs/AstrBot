@@ -247,12 +247,25 @@ const _show = computed({
 </template>
 
 <style>
+/* 更贴近 GitHub 的 markdown 展示样式（不引入新依赖，仅调整样式）
+ * 合并策略：颜色/背景走 upstream 的 var(--v-theme-*) token；保留本地布局增强（word-wrap、首尾 margin、task list、表格横向滚动）
+ */
 .markdown-body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
     sans-serif;
+  font-size: 16px;
   line-height: 1.6;
+  word-wrap: break-word;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
+}
+
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-body h1,
@@ -279,54 +292,21 @@ const _show = computed({
   padding-bottom: 0.3em;
 }
 
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
 .markdown-body p {
   margin-top: 0;
   margin-bottom: 16px;
 }
 
-.markdown-body code {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  background-color: var(--v-theme-codeBg);
-  border-radius: 3px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 85%;
-}
-
-.markdown-body pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: var(--v-theme-containerBg);
-  border-radius: 3px;
-  margin-bottom: 16px;
-}
-
-.markdown-body pre code {
-  background-color: transparent;
+.markdown-body hr {
+  height: 0.25em;
   padding: 0;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 2em;
-  margin-bottom: 16px;
-}
-
-.markdown-body img {
-  max-width: 100%;
-  margin: 8px 0;
-  box-sizing: border-box;
-  background-color: var(--v-theme-background);
-  border-radius: 3px;
-}
-
-.markdown-body blockquote {
-  padding: 0 1em;
-  color: var(--v-theme-secondaryText);
-  border-left: 0.25em solid var(--v-theme-border);
-  margin-bottom: 16px;
+  margin: 24px 0;
+  background-color: var(--v-theme-containerBg);
+  border: 0;
 }
 
 .markdown-body a {
@@ -338,18 +318,96 @@ const _show = computed({
   text-decoration: underline;
 }
 
+/* Lists */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-body li > p {
+  margin-top: 0;
+}
+
+/* Task list */
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+
+.markdown-body .task-list-item input[type="checkbox"] {
+  margin: 0 0.35em 0 0;
+  vertical-align: middle;
+}
+
+/* Code */
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  background-color: var(--v-theme-codeBg);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo,
+    monospace;
+  font-size: 85%;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: var(--v-theme-containerBg);
+  border: 1px solid var(--v-theme-border);
+  border-radius: 6px;
+  margin: 0 0 16px;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+/* Blockquote */
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: var(--v-theme-secondaryText);
+  border-left: 0.25em solid var(--v-theme-border);
+  margin: 0 0 16px;
+}
+
+/* Images */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.5em 0;
+  box-sizing: border-box;
+  background-color: var(--v-theme-background);
+  border-radius: 6px;
+}
+
+/* Tables (GitHub-like + 横向滚动) */
 .markdown-body table {
   border-spacing: 0;
   border-collapse: collapse;
-  width: 100%;
-  overflow: auto;
-  margin-bottom: 16px;
+  width: max-content;
+  min-width: 100%;
+  display: block;
+  overflow-x: auto;
+  margin: 0 0 16px;
 }
 
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 13px;
-  border: 1px solid var(--v-theme-background);
+  border: 1px solid var(--v-theme-border);
+}
+
+.markdown-body table th {
+  font-weight: 600;
 }
 
 .markdown-body table tr {
@@ -358,15 +416,7 @@ const _show = computed({
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: var(--v-theme-background);
-}
-
-.markdown-body hr {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
   background-color: var(--v-theme-containerBg);
-  border: 0;
 }
 </style>
 
