@@ -295,14 +295,6 @@ function handleReplyWithText(replyData: any) {
         return;
     }
     
-    // 使用选中的文本作为引用内容，而不是整个消息
-    let displayText = selectedText.trim();
-    
-    // 截断过长的内容
-    if (displayText.length > 100) {
-        displayText = displayText.substring(0, 100) + '...';
-    }
-    
     replyTo.value = {
         messageId,
         selectedText: selectedText  // 保存原始的选中文本
