@@ -259,18 +259,63 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the text completion
         if choice.message.content is not None:
-            # text completion
-            completion_text = str(choice.message.content).strip()
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
-            # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-            matches = reasoning_pattern.findall(completion_text)
-            if matches:
-                llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
-                )
-                completion_text = reasoning_pattern.sub("", completion_text).strip()
-            llm_response.result_chain = MessageChain().message(completion_text)
+            # content can be either a plain string or a multimodal list
+            content = choice.message.content
+            # handle multimodal content returned as a list of parts
+            if isinstance(content, list):
+                reasoning_parts = []
+                mc = MessageChain()
+                for part in content:
+                    if not isinstance(part, dict):
+                        # fallback: append as plain text
+                        mc.message(str(part))
+                        continue
+                    ptype = part.get("type")
+                    if ptype == "text":
+                        mc.message(part.get("text", ""))
+                    elif ptype == "image_url":
+                        image_field = part.get("image_url")
+                        url = None
+                        if isinstance(image_field, dict):
+                            url = image_field.get("url")
+                        else:
+                            url = image_field
+                        if url:
+                            # data:image/...;base64,xxx
+                            if isinstance(url, str) and "base64," in url:
+                                base64_data = url.split("base64,", 1)[1]
+                                mc.base64_image(base64_data)
+                            elif isinstance(url, str) and url.startswith("base64://"):
+                                mc.base64_image(url.replace("base64://", ""))
+                            else:
+                                mc.url_image(url)
+                    elif ptype == "think":
+                        # collect reasoning parts for later extraction
+                        think_val = part.get("think")
+                        if think_val:
+                            reasoning_parts.append(str(think_val))
+                    else:
+                        # unknown part type, append its textual representation
+                        mc.message(json.dumps(part, ensure_ascii=False))
+
+                if reasoning_parts:
+                    llm_response.reasoning_content = "\n".join(
+                        [rp.strip() for rp in reasoning_parts]
+                    )
+                llm_response.result_chain = mc
+            else:
+                # text completion (string)
+                completion_text = str(content).strip()
+                # specially, some providers may set <think> tags around reasoning content in the completion text,
+                # we use regex to remove them, and store then in reasoning_content field
+                reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+                matches = reasoning_pattern.findall(completion_text)
+                if matches:
+                    llm_response.reasoning_content = "\n".join(
+                        [match.strip() for match in matches],
+                    )
+                    completion_text = reasoning_pattern.sub("", completion_text).strip()
+                llm_response.result_chain = MessageChain().message(completion_text)
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
