@@ -112,8 +112,9 @@
                                     <!-- Tool Calls Block -->
                                     <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
                                         class="tool-calls-container">
+                                        <div class="tool-calls-label">{{ tm('actions.toolsUsed') }}</div>
                                         <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
-                                            class="tool-call-card" :class="{ 'is-dark': isDark }" :style="isDark ? {
+                                            class="tool-call-card" :class="{ 'is-dark': isDark, 'expanded': isToolCallExpanded(index, partIndex, tcIndex) }" :style="isDark ? {
                                                 backgroundColor: 'rgba(40, 60, 100, 0.4)',
                                                 borderColor: 'rgba(100, 140, 200, 0.4)'
                                             } : {}">
@@ -1409,11 +1410,25 @@ export default {
     margin-top: 6px;
 }
 
+.tool-calls-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--v-theme-secondaryText);
+    opacity: 0.7;
+    margin-bottom: 4px;
+}
+
 .tool-call-card {
     border-radius: 8px;
     overflow: hidden;
     background-color: #eff3f6;
     margin: 8px 0px;
+    max-width: 300px;
+    transition: max-width 0.1s ease;
+}
+
+.tool-call-card.expanded {
+    max-width: 100%;
 }
 
 .tool-call-header {
