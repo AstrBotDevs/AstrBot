@@ -291,8 +291,8 @@ function cancelEdit() {
 }
 
 function confirmDialog() {
-  // 过滤空字符串
-  const filteredItems = localItems.value.filter(item => item.trim() !== '')
+  // 过滤空字符串，同时处理非字符串类型
+  const filteredItems = localItems.value.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
   emit('update:modelValue', filteredItems)
   dialog.value = false
 }
