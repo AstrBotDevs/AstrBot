@@ -1,14 +1,34 @@
 <script setup>
-import { ref, watch, onMounted, computed } from "vue";
+import { ref, watch, computed } from "vue";
 import axios from "axios";
-import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
-import "markstream-vue/index.css";
-import "katex/dist/katex.min.css";
+import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
+import hljs from "highlight.js";
 import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 
-enableKatex();
-enableMermaid();
+// 为 target="_blank" 链接自动添加 rel="noopener noreferrer"
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
+
+// 创建 markdown-it 实例，启用 HTML 透传和语法高亮
+const md = new MarkdownIt({
+  html: true, // 允许 HTML 标签（details, summary, img 等）
+  linkify: true, // 自动识别 URL 并转换为链接
+  typographer: true, // 启用排版优化
+  breaks: true, // 换行符转为 <br>
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(str, { language: lang }).value;
+      } catch (__) {}
+    }
+    return ""; // 使用默认转义
+  },
+});
 
 const props = defineProps({
   show: {
@@ -90,6 +110,17 @@ watch(
     }
   },
 );
+
+// 计算渲染后的 HTML（使用 DOMPurify 清理以防止 XSS 攻击）
+const renderedContent = computed(() => {
+  if (!content.value) return "";
+  const rawHtml = md.render(content.value);
+  // 使用 DOMPurify 清理 HTML，允许 img 标签和常见属性
+  return DOMPurify.sanitize(rawHtml, {
+    ADD_TAGS: ["details", "summary"], // 允许折叠标签
+    ADD_ATTR: ["target", "rel"], // 允许链接属性
+  });
+});
 
 // 获取内容
 async function fetchContent() {
@@ -189,13 +220,11 @@ const _show = computed({
         </div>
 
         <!-- 内容显示 -->
-        <div v-else-if="content" class="markdown-body">
-          <MarkdownRender
-            :content="content"
-            :typewriter="false"
-            class="markdown-content"
-          />
-        </div>
+        <div
+          v-else-if="content"
+          class="markdown-body"
+          v-html="renderedContent"
+        ></div>
 
         <!-- 错误提示 -->
         <div
@@ -373,18 +402,5 @@ const _show = computed({
 <script>
 export default {
   name: "ReadmeDialog",
-  components: {
-    MarkdownRender,
-  },
-  computed: {
-    _show: {
-      get() {
-        return this.show;
-      },
-      set(value) {
-        this.$emit("update:show", value);
-      },
-    },
-  },
 };
 </script>

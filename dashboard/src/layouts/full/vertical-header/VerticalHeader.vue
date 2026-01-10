@@ -1,72 +1,111 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import { useCustomizerStore } from '@/stores/customizer';
-import axios from 'axios';
-import Logo from '@/components/shared/Logo.vue';
-import { md5 } from 'js-md5';
-import { useAuthStore } from '@/stores/auth';
-import { useCommonStore } from '@/stores/common';
-import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue';
-import 'markstream-vue/index.css';
-import 'katex/dist/katex.min.css';
-import 'highlight.js/styles/github.css';
-import { useI18n } from '@/i18n/composables';
-import { router } from '@/router';
-import { useRoute } from 'vue-router';
-import { useTheme } from 'vuetify';
-import StyledMenu from '@/components/shared/StyledMenu.vue';
-import { useLanguageSwitcher } from '@/i18n/composables';
-import type { Locale } from '@/i18n/types';
-import AboutPage from '@/views/AboutPage.vue';
+import { ref, computed, watch } from "vue";
+import { useCustomizerStore } from "@/stores/customizer";
+import axios from "axios";
+import Logo from "@/components/shared/Logo.vue";
+import { md5 } from "js-md5";
+import { useAuthStore } from "@/stores/auth";
+import { useCommonStore } from "@/stores/common";
+import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
+import hljs from "highlight.js";
+import "highlight.js/styles/github.css";
+import { useI18n } from "@/i18n/composables";
+import { router } from "@/router";
+import { useRoute } from "vue-router";
+import { useTheme } from "vuetify";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import { useLanguageSwitcher } from "@/i18n/composables";
+import type { Locale } from "@/i18n/types";
+import AboutPage from "@/views/AboutPage.vue";
 
-enableKatex();
-enableMermaid();
+// 为 target="_blank" 链接自动添加 rel="noopener noreferrer"
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
+
+// 创建 markdown-it 实例
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+  breaks: true,
+  highlight: function (str: string, lang: string) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(str, { language: lang }).value;
+      } catch (__) {}
+    }
+    return ""; // 使用默认转义
+  },
+});
+
+// 渲染 Markdown 并清理 HTML
+function renderMarkdown(content: string): string {
+  if (!content) return "";
+  const rawHtml = md.render(content);
+  return DOMPurify.sanitize(rawHtml, {
+    ADD_TAGS: ["details", "summary"],
+    ADD_ATTR: ["target", "rel"],
+  });
+}
 
 const customizer = useCustomizerStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
 let dialog = ref(false);
-let accountWarning = ref(false)
+let accountWarning = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
-const username = localStorage.getItem('user');
-let password = ref('');
-let newPassword = ref('');
-let newUsername = ref('');
-let status = ref('');
-let updateStatus = ref('')
-let releaseMessage = ref('');
+const username = localStorage.getItem("user");
+let password = ref("");
+let newPassword = ref("");
+let newUsername = ref("");
+let status = ref("");
+let updateStatus = ref("");
+let releaseMessage = ref("");
 let hasNewVersion = ref(false);
-let botCurrVersion = ref('');
+let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
-let dashboardCurrentVersion = ref('');
-let version = ref('');
+let dashboardCurrentVersion = ref("");
+let version = ref("");
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
 // Release Notes Modal
 let releaseNotesDialog = ref(false);
-let selectedReleaseNotes = ref('');
-let selectedReleaseTag = ref('');
+let selectedReleaseNotes = ref("");
+let selectedReleaseTag = ref("");
 
 const releasesHeader = computed(() => [
-  { title: t('core.header.updateDialog.table.tag'), key: 'tag_name' },
-  { title: t('core.header.updateDialog.table.publishDate'), key: 'published_at' },
-  { title: t('core.header.updateDialog.table.content'), key: 'body' },
-  { title: t('core.header.updateDialog.table.sourceUrl'), key: 'zipball_url' },
-  { title: t('core.header.updateDialog.table.actions'), key: 'switch' }
+  { title: t("core.header.updateDialog.table.tag"), key: "tag_name" },
+  {
+    title: t("core.header.updateDialog.table.publishDate"),
+    key: "published_at",
+  },
+  { title: t("core.header.updateDialog.table.content"), key: "body" },
+  { title: t("core.header.updateDialog.table.sourceUrl"), key: "zipball_url" },
+  { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
 
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
-  (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
+  (v: string) =>
+    !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) =>
+    v.length >= 8 ||
+    t("core.header.accountDialog.validation.passwordMinLength"),
 ]);
 const usernameRules = computed(() => [
-  (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
+  (v: string) =>
+    !v ||
+    v.length >= 3 ||
+    t("core.header.accountDialog.validation.usernameMinLength"),
 ]);
 
 // 显示密码相关
@@ -78,18 +117,18 @@ const accountEditStatus = ref({
   loading: false,
   success: false,
   error: false,
-  message: ''
+  message: "",
 });
 
 const open = (link: string) => {
-  window.open(link, '_blank');
+  window.open(link, "_blank");
 };
 
 // 检测是否为预发布版本
 const isPreRelease = (version: string) => {
-  const preReleaseKeywords = ['alpha', 'beta', 'rc', 'pre', 'preview', 'dev'];
+  const preReleaseKeywords = ["alpha", "beta", "rc", "pre", "preview", "dev"];
   const lowerVersion = version.toLowerCase();
-  return preReleaseKeywords.some(keyword => lowerVersion.includes(keyword));
+  return preReleaseKeywords.some((keyword) => lowerVersion.includes(keyword));
 };
 
 // 账户修改
@@ -100,23 +139,24 @@ function accountEdit() {
 
   // md5加密
   // @ts-ignore
-  if (password.value != '') {
+  if (password.value != "") {
     password.value = md5(password.value);
   }
-  if (newPassword.value != '') {
+  if (newPassword.value != "") {
     newPassword.value = md5(newPassword.value);
   }
-  axios.post('/api/auth/account/edit', {
-    password: password.value,
-    new_password: newPassword.value,
-    new_username: newUsername.value ? newUsername.value : username
-  })
+  axios
+    .post("/api/auth/account/edit", {
+      password: password.value,
+      new_password: newPassword.value,
+      new_username: newUsername.value ? newUsername.value : username,
+    })
     .then((res) => {
-      if (res.data.status == 'error') {
+      if (res.data.status == "error") {
         accountEditStatus.value.error = true;
         accountEditStatus.value.message = res.data.message;
-        password.value = '';
-        newPassword.value = '';
+        password.value = "";
+        newPassword.value = "";
         return;
       }
       accountEditStatus.value.success = true;
@@ -130,9 +170,12 @@ function accountEdit() {
     .catch((err) => {
       console.log(err);
       accountEditStatus.value.error = true;
-      accountEditStatus.value.message = typeof err === 'string' ? err : t('core.header.accountDialog.messages.updateFailed');
-      password.value = '';
-      newPassword.value = '';
+      accountEditStatus.value.message =
+        typeof err === "string"
+          ? err
+          : t("core.header.accountDialog.messages.updateFailed");
+      password.value = "";
+      newPassword.value = "";
     })
     .finally(() => {
       accountEditStatus.value.loading = false;
@@ -140,7 +183,8 @@ function accountEdit() {
 }
 
 function getVersion() {
-  axios.get('/api/stat/version')
+  axios
+    .get("/api/stat/version")
     .then((res) => {
       botCurrVersion.value = "v" + res.data.data.version;
       dashboardCurrentVersion.value = res.data.data?.dashboard_version;
@@ -148,9 +192,9 @@ function getVersion() {
       if (change_pwd_hint) {
         dialog.value = true;
         accountWarning.value = true;
-        localStorage.setItem('change_pwd_hint', 'true');
+        localStorage.setItem("change_pwd_hint", "true");
       } else {
-        localStorage.removeItem('change_pwd_hint');
+        localStorage.removeItem("change_pwd_hint");
       }
     })
     .catch((err) => {
@@ -159,14 +203,15 @@ function getVersion() {
 }
 
 function checkUpdate() {
-  updateStatus.value = t('core.header.updateDialog.status.checking');
-  axios.get('/api/update/check')
+  updateStatus.value = t("core.header.updateDialog.status.checking");
+  axios
+    .get("/api/update/check")
     .then((res) => {
       hasNewVersion.value = res.data.data.has_new_version;
 
       if (res.data.data.has_new_version) {
         releaseMessage.value = res.data.message;
-        updateStatus.value = t('core.header.version.hasNewVersion');
+        updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
         updateStatus.value = res.data.message;
       }
@@ -180,35 +225,35 @@ function checkUpdate() {
         return;
       }
       console.log(err);
-      updateStatus.value = err
+      updateStatus.value = err;
     });
 }
 
 function getReleases() {
-  axios.get('/api/update/releases')
+  axios
+    .get("/api/update/releases")
     .then((res) => {
       releases.value = res.data.data.map((item: any) => {
         item.published_at = new Date(item.published_at).toLocaleString();
         return item;
-      })
+      });
     })
     .catch((err) => {
       console.log(err);
     });
 }
 
-
-
 function switchVersion(version: string) {
-  updateStatus.value = t('core.header.updateDialog.status.switching');
+  updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
-  axios.post('/api/update/do', {
-    version: version,
-    proxy: localStorage.getItem('selectedGitHubProxy') || ''
-  })
+  axios
+    .post("/api/update/do", {
+      version: version,
+      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+    })
     .then((res) => {
       updateStatus.value = res.data.message;
-      if (res.data.status == 'ok') {
+      if (res.data.status == "ok") {
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -216,19 +261,21 @@ function switchVersion(version: string) {
     })
     .catch((err) => {
       console.log(err);
-      updateStatus.value = err
-    }).finally(() => {
+      updateStatus.value = err;
+    })
+    .finally(() => {
       installLoading.value = false;
     });
 }
 
 function updateDashboard() {
   updatingDashboardLoading.value = true;
-  updateStatus.value = t('core.header.updateDialog.status.updating');
-  axios.post('/api/update/dashboard')
+  updateStatus.value = t("core.header.updateDialog.status.updating");
+  axios
+    .post("/api/update/dashboard")
     .then((res) => {
       updateStatus.value = res.data.message;
-      if (res.data.status == 'ok') {
+      if (res.data.status == "ok") {
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -236,14 +283,18 @@ function updateDashboard() {
     })
     .catch((err) => {
       console.log(err);
-      updateStatus.value = err
-    }).finally(() => {
+      updateStatus.value = err;
+    })
+    .finally(() => {
       updatingDashboardLoading.value = false;
     });
 }
 
 function toggleDarkMode() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
+  const newTheme =
+    customizer.uiTheme === "PurpleThemeDark"
+      ? "PurpleTheme"
+      : "PurpleThemeDark";
   customizer.SET_UI_THEME(newTheme);
   theme.global.name.value = newTheme;
 }
@@ -255,10 +306,10 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (customizer.viewMode === 'chat') {
+  if (customizer.viewMode === "chat") {
     aboutDialog.value = true;
   } else {
-    router.push('/about');
+    router.push("/about");
   }
 }
 
@@ -272,20 +323,23 @@ commonStore.getStartTime();
 // 视图模式切换
 const viewMode = computed({
   get: () => customizer.viewMode,
-  set: (value: 'bot' | 'chat') => {
+  set: (value: "bot" | "chat") => {
     customizer.SET_VIEW_MODE(value);
-  }
+  },
 });
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat') {
-    // 从 chat 模式切换到 bot 模式时，跳转到首页
-    if (route.path !== '/') {
-      router.push('/');
+watch(
+  () => customizer.viewMode,
+  (newMode, oldMode) => {
+    if (newMode === "bot" && oldMode === "chat") {
+      // 从 chat 模式切换到 bot 模式时，跳转到首页
+      if (route.path !== "/") {
+        router.push("/");
+      }
     }
-  }
-});
+  },
+);
 
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
@@ -296,66 +350,113 @@ const isChristmas = computed(() => {
 });
 
 // 语言切换相关
-const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
-const languages = computed(() => 
-  languageOptions.value.map(lang => ({
+const { languageOptions, currentLanguage, switchLanguage, locale } =
+  useLanguageSwitcher();
+const languages = computed(() =>
+  languageOptions.value.map((lang) => ({
     code: lang.value,
     name: lang.label,
-    flag: lang.flag
-  }))
+    flag: lang.flag,
+  })),
 );
 const currentLocale = computed(() => locale.value);
 const changeLanguage = async (langCode: string) => {
   await switchLanguage(langCode as Locale);
 };
-
 </script>
 
 <template>
   <v-app-bar elevation="0" height="55">
-
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
-      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
+    <v-btn
+      v-if="
+        customizer.viewMode === 'bot' &&
+        useCustomizerStore().uiTheme === 'PurpleTheme'
+      "
+      style="margin-left: 16px"
+      class="hidden-md-and-down"
+      icon
+      rounded="sm"
+      variant="flat"
+      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+    >
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px;"
-      class="hidden-md-and-down" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
+    <v-btn
+      v-else-if="customizer.viewMode === 'bot'"
+      style="margin-left: 22px"
+      class="hidden-md-and-down"
+      icon
+      rounded="sm"
+      variant="flat"
+      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+    >
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
+    <v-btn
+      v-if="
+        customizer.viewMode === 'bot' &&
+        useCustomizerStore().uiTheme === 'PurpleTheme'
+      "
+      class="hidden-lg-and-up ms-3"
+      icon
+      rounded="sm"
+      variant="flat"
+      @click.stop="customizer.SET_SIDEBAR_DRAWER"
+    >
       <v-icon>mdi-menu</v-icon>
     </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER">
+    <v-btn
+      v-else-if="customizer.viewMode === 'bot'"
+      class="hidden-lg-and-up ms-3"
+      icon
+      rounded="sm"
+      variant="flat"
+      @click.stop="customizer.SET_SIDEBAR_DRAWER"
+    >
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
-      <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
-        <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
-      </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+    <div
+      class="logo-container"
+      :class="{
+        'mobile-logo': $vuetify.display.xs,
+        'chat-mode-logo': customizer.viewMode === 'chat',
+      }"
+      @click="handleLogoClick"
+    >
+      <span class="logo-text Outfit"
+        >Astr<span class="logo-text bot-text-wrapper"
+          >Bot
+          <img
+            v-if="isChristmas"
+            src="@/assets/images/xmas-hat.png"
+            alt="Christmas hat"
+            class="xmas-hat"
+          /> </span
+      ></span>
+      <span
+        class="logo-text logo-text-light Outfit"
+        style="color: grey"
+        v-if="customizer.viewMode === 'chat'"
+        >ChatUI</span
+      >
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
-  <v-spacer />
+    <v-spacer />
 
     <!-- 版本提示信息 - 在手机上隐藏 -->
     <div class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
-        {{ t('core.header.version.hasNewVersion') }}
+        {{ t("core.header.version.hasNewVersion") }}
       </small>
       <small v-else-if="dashboardHasNewVersion">
-        {{ t('core.header.version.dashboardHasNewVersion') }}
+        {{ t("core.header.version.dashboardHasNewVersion") }}
       </small>
     </div>
-    
+
     <!-- Bot/Chat 模式切换按钮 -->
     <v-btn-toggle
       v-model="viewMode"
@@ -374,7 +475,6 @@ const changeLanguage = async (langCode: string) => {
         Chat
       </v-btn>
     </v-btn-toggle>
-
 
     <!-- 功能菜单 -->
     <StyledMenu offset="12" location="bottom end">
@@ -416,148 +516,252 @@ const changeLanguage = async (langCode: string) => {
       >
         <template v-slot:prepend>
           <v-icon>
-            {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
+            {{
+              useCustomizerStore().uiTheme === "PurpleThemeDark"
+                ? "mdi-weather-night"
+                : "mdi-white-balance-sunny"
+            }}
           </v-icon>
         </template>
         <v-list-item-title>
-          {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
+          {{
+            useCustomizerStore().uiTheme === "PurpleThemeDark"
+              ? t("core.header.buttons.theme.light")
+              : t("core.header.buttons.theme.dark")
+          }}
         </v-list-item-title>
       </v-list-item>
 
       <!-- 更新按钮 -->
       <v-list-item
-        @click="checkUpdate(); getReleases(); updateStatusDialog = true"
+        @click="
+          checkUpdate();
+          getReleases();
+          updateStatusDialog = true;
+        "
         class="styled-menu-item"
         rounded="md"
       >
         <template v-slot:prepend>
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
-        <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
+        <v-list-item-title>{{
+          t("core.header.updateDialog.title")
+        }}</v-list-item-title>
         <template v-slot:append v-if="hasNewVersion || dashboardHasNewVersion">
-          <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
+          <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
+            >!</v-chip
+          >
         </template>
       </v-list-item>
 
       <!-- 账户按钮 -->
-      <v-list-item
-        @click="dialog = true"
-        class="styled-menu-item"
-        rounded="md"
-      >
+      <v-list-item @click="dialog = true" class="styled-menu-item" rounded="md">
         <template v-slot:prepend>
           <v-icon>mdi-account</v-icon>
         </template>
-        <v-list-item-title>{{ t('core.header.accountDialog.title') }}</v-list-item-title>
+        <v-list-item-title>{{
+          t("core.header.accountDialog.title")
+        }}</v-list-item-title>
       </v-list-item>
     </StyledMenu>
 
     <!-- 更新对话框 -->
-    <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1200'"
-      :fullscreen="$vuetify.display.xs">
+    <v-dialog
+      v-model="updateStatusDialog"
+      :width="$vuetify.display.smAndDown ? '100%' : '1200'"
+      :fullscreen="$vuetify.display.xs"
+    >
       <v-card>
         <v-card-title class="mobile-card-title">
-          <span class="text-h5">{{ t('core.header.updateDialog.title') }}</span>
-          <v-btn v-if="$vuetify.display.xs" icon @click="updateStatusDialog = false">
+          <span class="text-h5">{{ t("core.header.updateDialog.title") }}</span>
+          <v-btn
+            v-if="$vuetify.display.xs"
+            icon
+            @click="updateStatusDialog = false"
+          >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
         <v-card-text>
           <v-container>
-            <v-progress-linear v-show="installLoading" class="mb-4" indeterminate color="primary"></v-progress-linear>
+            <v-progress-linear
+              v-show="installLoading"
+              class="mb-4"
+              indeterminate
+              color="primary"
+            ></v-progress-linear>
 
             <div>
-              <h1 style="display:inline-block;">{{ botCurrVersion }}</h1>
-              <small style="margin-left: 4px;">{{ updateStatus }}</small>
+              <h1 style="display: inline-block">{{ botCurrVersion }}</h1>
+              <small style="margin-left: 4px">{{ updateStatus }}</small>
             </div>
 
-            <div v-if="releaseMessage"
-              style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;">
-              <MarkdownRender :content="releaseMessage" :typewriter="false" class="markdown-content" />
-            </div>
+            <div
+              v-if="releaseMessage"
+              style="
+                background-color: #646cff24;
+                padding: 16px;
+                border-radius: 10px;
+                font-size: 14px;
+                max-height: 400px;
+                overflow-y: auto;
+              "
+              class="markdown-content"
+              v-html="renderMarkdown(releaseMessage)"
+            ></div>
 
             <div class="mb-4 mt-4">
-              <small>{{ t('core.header.updateDialog.tip') }}
-                {{ t('core.header.updateDialog.tipContinue') }}</small>
+              <small
+                >{{ t("core.header.updateDialog.tip") }}
+                {{ t("core.header.updateDialog.tipContinue") }}</small
+              >
             </div>
 
             <!-- 发行版 -->
             <div>
-                <div class="mb-4">
-                  <small>{{ t('core.header.updateDialog.dockerTip') }} <a
-                      href="https://containrrr.dev/watchtower/usage-overview/">{{
-                        t('core.header.updateDialog.dockerTipLink')
-                      }}</a> {{ t('core.header.updateDialog.dockerTipContinue') }}</small>
+              <div class="mb-4">
+                <small
+                  >{{ t("core.header.updateDialog.dockerTip") }}
+                  <a href="https://containrrr.dev/watchtower/usage-overview/">{{
+                    t("core.header.updateDialog.dockerTipLink")
+                  }}</a>
+                  {{ t("core.header.updateDialog.dockerTipContinue") }}</small
+                >
+              </div>
+
+              <v-alert
+                v-if="
+                  releases.some((item: any) => isPreRelease(item['tag_name']))
+                "
+                type="warning"
+                variant="tonal"
+                border="start"
+              >
+                <template v-slot:prepend>
+                  <v-icon>mdi-alert-circle-outline</v-icon>
+                </template>
+                <div class="text-body-2">
+                  <strong>{{
+                    t("core.header.updateDialog.preReleaseWarning.title")
+                  }}</strong>
+                  <br />
+                  {{
+                    t("core.header.updateDialog.preReleaseWarning.description")
+                  }}
+                  <a
+                    href="https://github.com/AstrBotDevs/AstrBot/issues"
+                    target="_blank"
+                    class="text-decoration-none"
+                  >
+                    {{
+                      t("core.header.updateDialog.preReleaseWarning.issueLink")
+                    }}
+                  </a>
                 </div>
+              </v-alert>
 
-                <v-alert v-if="releases.some((item: any) => isPreRelease(item['tag_name']))" type="warning" variant="tonal"
-                  border="start">
-                  <template v-slot:prepend>
-                    <v-icon>mdi-alert-circle-outline</v-icon>
-                  </template>
-                  <div class="text-body-2">
-                    <strong>{{ t('core.header.updateDialog.preReleaseWarning.title') }}</strong>
-                    <br>
-                    {{ t('core.header.updateDialog.preReleaseWarning.description') }}
-                    <a href="https://github.com/AstrBotDevs/AstrBot/issues" target="_blank" class="text-decoration-none">
-                      {{ t('core.header.updateDialog.preReleaseWarning.issueLink') }}
-                    </a>
+              <v-data-table
+                :headers="releasesHeader"
+                :items="releases"
+                item-key="name"
+                :items-per-page="8"
+              >
+                <template v-slot:item.tag_name="{ item }: { item: any }">
+                  <div class="d-flex align-center">
+                    <span>{{ item.tag_name }}</span>
+                    <v-chip
+                      v-if="isPreRelease(item.tag_name)"
+                      size="x-small"
+                      color="warning"
+                      variant="tonal"
+                      class="ml-2"
+                    >
+                      {{ t("core.header.updateDialog.preRelease") }}
+                    </v-chip>
                   </div>
-                </v-alert>
-
-                <v-data-table :headers="releasesHeader" :items="releases" item-key="name" :items-per-page="8">
-                  <template v-slot:item.tag_name="{ item }: { item: any }">
-                    <div class="d-flex align-center">
-                      <span>{{ item.tag_name }}</span>
-                      <v-chip v-if="isPreRelease(item.tag_name)" size="x-small" color="warning" variant="tonal"
-                        class="ml-2">
-                        {{ t('core.header.updateDialog.preRelease') }}
-                      </v-chip>
-                    </div>
-                  </template>
-                  <template v-slot:item.body="{ item }: { item: { body: string; tag_name: string } }">
-                    <v-btn @click="openReleaseNotesDialog(item.body, item.tag_name)" rounded="xl" variant="tonal"
-                      color="primary" size="x-small">{{
-                        t('core.header.updateDialog.table.view') }}</v-btn>
-                  </template>
-                  <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
-                    <v-btn @click="switchVersion(item.tag_name)" rounded="xl" variant="plain" color="primary">
-                      {{ t('core.header.updateDialog.table.switch') }}
-                    </v-btn>
-                  </template>
-                </v-data-table>
+                </template>
+                <template
+                  v-slot:item.body="{
+                    item,
+                  }: {
+                    item: { body: string; tag_name: string };
+                  }"
+                >
+                  <v-btn
+                    @click="openReleaseNotesDialog(item.body, item.tag_name)"
+                    rounded="xl"
+                    variant="tonal"
+                    color="primary"
+                    size="x-small"
+                    >{{ t("core.header.updateDialog.table.view") }}</v-btn
+                  >
+                </template>
+                <template
+                  v-slot:item.switch="{ item }: { item: { tag_name: string } }"
+                >
+                  <v-btn
+                    @click="switchVersion(item.tag_name)"
+                    rounded="xl"
+                    variant="plain"
+                    color="primary"
+                  >
+                    {{ t("core.header.updateDialog.table.switch") }}
+                  </v-btn>
+                </template>
+              </v-data-table>
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
-            <div style="margin-top: 16px;">
-              <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
+            <div style="margin-top: 16px">
+              <h3 class="mb-4">
+                {{ t("core.header.updateDialog.dashboardUpdate.title") }}
+              </h3>
               <div class="mb-4">
-                <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
-                  }}</small>
-                <br>
-
+                <small
+                  >{{
+                    t("core.header.updateDialog.dashboardUpdate.currentVersion")
+                  }}
+                  {{ dashboardCurrentVersion }}</small
+                >
+                <br />
               </div>
 
               <div class="mb-4">
                 <p v-if="dashboardHasNewVersion">
-                  {{ t('core.header.updateDialog.dashboardUpdate.hasNewVersion') }}
+                  {{
+                    t("core.header.updateDialog.dashboardUpdate.hasNewVersion")
+                  }}
                 </p>
                 <p v-else="dashboardHasNewVersion">
-                  {{ t('core.header.updateDialog.dashboardUpdate.isLatest') }}
+                  {{ t("core.header.updateDialog.dashboardUpdate.isLatest") }}
                 </p>
               </div>
 
-              <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()"
-                :disabled="!dashboardHasNewVersion" :loading="updatingDashboardLoading">
-                {{ t('core.header.updateDialog.dashboardUpdate.downloadAndUpdate') }}
+              <v-btn
+                color="primary"
+                style="border-radius: 10px"
+                @click="updateDashboard()"
+                :disabled="!dashboardHasNewVersion"
+                :loading="updatingDashboardLoading"
+              >
+                {{
+                  t(
+                    "core.header.updateDialog.dashboardUpdate.downloadAndUpdate",
+                  )
+                }}
               </v-btn>
             </div>
           </v-container>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="updateStatusDialog = false">
-            {{ t('core.common.close') }}
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="updateStatusDialog = false"
+          >
+            {{ t("core.common.close") }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -567,60 +771,120 @@ const changeLanguage = async (langCode: string) => {
     <v-dialog v-model="releaseNotesDialog" max-width="800">
       <v-card>
         <v-card-title class="text-h5">
-          {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
+          {{ t("core.header.updateDialog.releaseNotes.title") }}:
+          {{ selectedReleaseTag }}
         </v-card-title>
         <v-card-text
-          style="font-size: 14px; max-height: 400px; overflow-y: auto;">
-          <MarkdownRender :content="selectedReleaseNotes" :typewriter="false" class="markdown-content" />
+          style="font-size: 14px; max-height: 400px; overflow-y: auto"
+          class="markdown-content"
+          v-html="renderMarkdown(selectedReleaseNotes)"
+        >
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="releaseNotesDialog = false">
-            {{ t('core.common.close') }}
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="releaseNotesDialog = false"
+          >
+            {{ t("core.common.close") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- 账户对话框 -->
-    <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
+    <v-dialog
+      v-model="dialog"
+      persistent
+      :max-width="$vuetify.display.xs ? '90%' : '500'"
+    >
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-center mb-6">
-            <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
+            <logo
+              :title="t('core.header.logoTitle')"
+              :subtitle="t('core.header.accountDialog.title')"
+            ></logo>
           </div>
-          <v-alert v-if="accountWarning" type="warning" variant="tonal" border="start" class="mb-4">
-            <strong>{{ t('core.header.accountDialog.securityWarning') }}</strong>
+          <v-alert
+            v-if="accountWarning"
+            type="warning"
+            variant="tonal"
+            border="start"
+            class="mb-4"
+          >
+            <strong>{{
+              t("core.header.accountDialog.securityWarning")
+            }}</strong>
           </v-alert>
 
-          <v-alert v-if="accountEditStatus.success" type="success" variant="tonal" border="start" class="mb-4">
+          <v-alert
+            v-if="accountEditStatus.success"
+            type="success"
+            variant="tonal"
+            border="start"
+            class="mb-4"
+          >
             {{ accountEditStatus.message }}
           </v-alert>
 
-          <v-alert v-if="accountEditStatus.error" type="error" variant="tonal" border="start" class="mb-4">
+          <v-alert
+            v-if="accountEditStatus.error"
+            type="error"
+            variant="tonal"
+            border="start"
+            class="mb-4"
+          >
             {{ accountEditStatus.message }}
           </v-alert>
 
           <v-form v-model="formValid" @submit.prevent="accountEdit">
-            <v-text-field v-model="password" :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-              :type="showPassword ? 'text' : 'password'" :label="t('core.header.accountDialog.form.currentPassword')"
-              variant="outlined" required clearable @click:append-inner="showPassword = !showPassword"
-              prepend-inner-icon="mdi-lock-outline" hide-details="auto" class="mb-4"></v-text-field>
+            <v-text-field
+              v-model="password"
+              :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              :type="showPassword ? 'text' : 'password'"
+              :label="t('core.header.accountDialog.form.currentPassword')"
+              variant="outlined"
+              required
+              clearable
+              @click:append-inner="showPassword = !showPassword"
+              prepend-inner-icon="mdi-lock-outline"
+              hide-details="auto"
+              class="mb-4"
+            ></v-text-field>
 
-            <v-text-field v-model="newPassword" :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
-              :type="showNewPassword ? 'text' : 'password'" :rules="passwordRules"
-              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" required clearable
-              @click:append-inner="showNewPassword = !showNewPassword" prepend-inner-icon="mdi-lock-plus-outline"
-              :hint="t('core.header.accountDialog.form.passwordHint')" persistent-hint class="mb-4"></v-text-field>
+            <v-text-field
+              v-model="newPassword"
+              :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              :type="showNewPassword ? 'text' : 'password'"
+              :rules="passwordRules"
+              :label="t('core.header.accountDialog.form.newPassword')"
+              variant="outlined"
+              required
+              clearable
+              @click:append-inner="showNewPassword = !showNewPassword"
+              prepend-inner-icon="mdi-lock-plus-outline"
+              :hint="t('core.header.accountDialog.form.passwordHint')"
+              persistent-hint
+              class="mb-4"
+            ></v-text-field>
 
-            <v-text-field v-model="newUsername" :rules="usernameRules"
-              :label="t('core.header.accountDialog.form.newUsername')" variant="outlined" clearable
-              prepend-inner-icon="mdi-account-edit-outline" :hint="t('core.header.accountDialog.form.usernameHint')"
-              persistent-hint class="mb-3"></v-text-field>
+            <v-text-field
+              v-model="newUsername"
+              :rules="usernameRules"
+              :label="t('core.header.accountDialog.form.newUsername')"
+              variant="outlined"
+              clearable
+              prepend-inner-icon="mdi-account-edit-outline"
+              :hint="t('core.header.accountDialog.form.usernameHint')"
+              persistent-hint
+              class="mb-3"
+            ></v-text-field>
           </v-form>
 
           <div class="text-caption text-medium-emphasis mt-2">
-            {{ t('core.header.accountDialog.form.defaultCredentials') }}
+            {{ t("core.header.accountDialog.form.defaultCredentials") }}
           </div>
         </v-card-text>
 
@@ -628,23 +892,32 @@ const changeLanguage = async (langCode: string) => {
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn v-if="!accountWarning" variant="tonal" color="secondary" @click="dialog = false"
-            :disabled="accountEditStatus.loading">
-            {{ t('core.header.accountDialog.actions.cancel') }}
+          <v-btn
+            v-if="!accountWarning"
+            variant="tonal"
+            color="secondary"
+            @click="dialog = false"
+            :disabled="accountEditStatus.loading"
+          >
+            {{ t("core.header.accountDialog.actions.cancel") }}
           </v-btn>
-          <v-btn color="primary" @click="accountEdit" :loading="accountEditStatus.loading" :disabled="!formValid"
-            prepend-icon="mdi-content-save">
-            {{ t('core.header.accountDialog.actions.save') }}
+          <v-btn
+            color="primary"
+            @click="accountEdit"
+            :loading="accountEditStatus.loading"
+            :disabled="!formValid"
+            prepend-icon="mdi-content-save"
+          >
+            {{ t("core.header.accountDialog.actions.save") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- About 对话框 - 仅在 chat mode 下使用 -->
-    <v-dialog v-model="aboutDialog"
-      width="600">
+    <v-dialog v-model="aboutDialog" width="600">
       <v-card>
-        <v-card-text style="overflow-y: auto;">
+        <v-card-text style="overflow-y: auto">
           <AboutPage />
         </v-card-text>
       </v-card>
