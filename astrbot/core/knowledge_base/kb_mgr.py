@@ -92,6 +92,15 @@ class KnowledgeBaseManager:
         top_m_final: int | None = None,
     ) -> KBHelper:
         """创建新的知识库实例"""
+        # 检测embedding_provider_id
+        if embedding_provider_id is None:
+            raise ValueError("创建知识库时必须提供embedding_provider_id")
+
+        # 检查是否已存在同名知识库
+        existing_kb = await self.kb_db.get_kb_by_name(kb_name)
+        if existing_kb is not None:
+            raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -104,21 +113,31 @@ class KnowledgeBaseManager:
             top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
             top_m_final=top_m_final if top_m_final is not None else 5,
         )
+
+        kb_helper = None
         async with self.kb_db.get_db() as session:
             session.add(kb)
             await session.commit()
             await session.refresh(kb)
-
-            kb_helper = KBHelper(
-                kb_db=self.kb_db,
-                kb=kb,
-                provider_manager=self.provider_manager,
-                kb_root_dir=FILES_PATH,
-                chunker=CHUNKER,
-            )
-            await kb_helper.initialize()
-        self.kb_insts[kb.kb_id] = kb_helper
-        return kb_helper
+            try:
+                kb_helper = KBHelper(
+                    kb_db=self.kb_db,
+                    kb=kb,
+                    provider_manager=self.provider_manager,
+                    kb_root_dir=FILES_PATH,
+                    chunker=CHUNKER,
+                )
+                await kb_helper.initialize()
+            except Exception:
+                await session.refresh(kb)
+                await session.delete(kb)
+                await session.commit()
+                raise
+        # 判断是否成功创建
+        if kb_helper:
+            self.kb_insts[kb.kb_id] = kb_helper
+            return kb_helper
+        raise RuntimeError("知识库创建失败：未知错误")
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
         """获取知识库实例"""
