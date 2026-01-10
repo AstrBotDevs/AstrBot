@@ -91,7 +91,7 @@ class KnowledgeBaseManager:
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
     ) -> KBHelper:
-        """创建知识库"""
+        """创建新的知识库实例"""
         if embedding_provider_id is None:
             raise ValueError("创建知识库时必须提供embedding_provider_id")
         kb = KnowledgeBase(
