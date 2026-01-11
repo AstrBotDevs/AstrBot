@@ -7,49 +7,58 @@ import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";
 
-// 配置 markdown-it
-const md = new MarkdownIt({
-  html: true, // 启用 HTML 标签支持（用于 details/summary 等）
-  linkify: true, // 自动将 URL 转换为链接
-  typographer: true,
-  breaks: false, // 不将换行符转换为 <br>
-  highlight: function (str, lang) {
+// 定义在 setup 中以便访问 i18n
+let md = null;
+
+// 初始化 renderer 的函数（将在 setup 中调用）
+const initMarkdownIt = (t) => {
+  md = new MarkdownIt({
+    html: true,
+    linkify: true,
+    typographer: true,
+    breaks: false,
+    highlight: function (str, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          return `<pre class="hljs"><code class="language-${lang}">${
+            hljs.highlight(str, { language: lang }).value
+          }</code></pre>`;
+        } catch (__) {}
+      }
+      return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`;
+    },
+  });
+
+  md.enable(["table", "strikethrough"]);
+
+  // 自定义表格渲染规则：添加滚动容器
+  md.renderer.rules.table_open = () => '<div class="table-container"><table>';
+  md.renderer.rules.table_close = () => "</table></div>";
+
+  // 自定义渲染规则
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const lang = token.info.trim() || "";
+    const code = token.content;
+
+    let highlighted;
     if (lang && hljs.getLanguage(lang)) {
       try {
-        return `<pre class="hljs"><code class="language-${lang}">${
-          hljs.highlight(str, { language: lang }).value
-        }</code></pre>`;
-      } catch (__) {}
-    }
-    return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`;
-  },
-});
-
-// 显式启用 GFM 表格和删除线功能
-md.enable(["table", "strikethrough"]);
-
-// 自定义渲染规则：为代码块添加复制按钮容器
-md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-  const token = tokens[idx];
-  const lang = token.info.trim() || "";
-  const code = token.content;
-
-  let highlighted;
-  if (lang && hljs.getLanguage(lang)) {
-    try {
-      highlighted = hljs.highlight(code, { language: lang }).value;
-    } catch (__) {
+        highlighted = hljs.highlight(code, { language: lang }).value;
+      } catch (__) {
+        highlighted = md.utils.escapeHtml(code);
+      }
+    } else {
       highlighted = md.utils.escapeHtml(code);
     }
-  } else {
-    highlighted = md.utils.escapeHtml(code);
-  }
 
-  const langLabel = lang ? `<span class="code-lang-label">${lang}</span>` : "";
+    const langLabel = lang
+      ? `<span class="code-lang-label">${lang}</span>`
+      : "";
 
-  return `<div class="code-block-wrapper">
+    return `<div class="code-block-wrapper">
     ${langLabel}
-    <button class="copy-code-btn" title="复制代码">
+    <button class="copy-code-btn" title="${t("core.common.copy")}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -57,6 +66,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     </button>
     <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
   </div>`;
+  };
 };
 
 // 配置 DOMPurify 允许的标签和属性
@@ -97,7 +107,8 @@ const purifyConfig = {
     "button",
     "svg",
     "rect",
-    "path", // 用于复制按钮
+    "path",
+    "polyline", // 用于复制成功的图标
   ],
   ALLOWED_ATTR: [
     "href",
@@ -119,6 +130,7 @@ const purifyConfig = {
     "fill",
     "stroke",
     "stroke-width",
+    "points", // 用于 polyline
     "d",
     "x",
     "y",
@@ -127,17 +139,6 @@ const purifyConfig = {
   ],
   ADD_ATTR: ["target"], // 允许添加 target 属性
 };
-
-// 为所有外部链接添加 target="_blank" 和安全属性
-DOMPurify.addHook("afterSanitizeAttributes", function (node) {
-  if (node.tagName === "A") {
-    const href = node.getAttribute("href");
-    if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-      node.setAttribute("target", "_blank");
-      node.setAttribute("rel", "noopener noreferrer");
-    }
-  }
-});
 
 const props = defineProps({
   show: {
@@ -165,6 +166,9 @@ const emit = defineEmits(["update:show"]);
 // 国际化
 const { t } = useI18n();
 
+// 初始化 markdown-it
+initMarkdownIt(t);
+
 const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
@@ -173,9 +177,26 @@ const markdownContainer = ref(null);
 
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
-  if (!content.value) return "";
+  if (!content.value || !md) return "";
   const rawHtml = md.render(content.value);
-  return DOMPurify.sanitize(rawHtml, purifyConfig);
+  const cleanHtml = DOMPurify.sanitize(rawHtml, purifyConfig);
+
+  // 手动处理链接，避免全局 hook 污染
+  // 创建一个临时容器来解析 HTML
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = cleanHtml;
+
+  // 查找所有链接并添加 target="_blank"
+  const links = tempDiv.querySelectorAll("a");
+  links.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  return tempDiv.innerHTML;
 });
 
 // 根据模式返回不同的配置
@@ -258,6 +279,7 @@ function handleCopyCode(event) {
       .writeText(code.textContent)
       .then(() => {
         // 显示成功状态
+        btn.setAttribute("title", t("core.common.copied")); // 使用 i18n
         btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="20,6 9,17 4,12"></polyline>
       </svg>`;
@@ -269,6 +291,9 @@ function handleCopyCode(event) {
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
         </svg>`;
           btn.style.color = "";
+        }, 2000);
+        setTimeout(() => {
+          btn.setAttribute("title", t("core.common.copy")); // 还原 title
         }, 2000);
       })
       .catch((err) => {
@@ -433,8 +458,8 @@ const _show = computed({
 
 <style>
 .markdown-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
@@ -591,9 +616,14 @@ const _show = computed({
   border-spacing: 0;
   border-collapse: collapse;
   width: 100%;
-  overflow: auto;
+  margin-bottom: 0; /* margin 交给 container */
+  border: none; /* border 交给 container */
+}
+
+.markdown-body .table-container {
+  width: 100%;
+  overflow-x: auto;
   margin-bottom: 16px;
-  display: block;
   border: 1px solid #30363d;
   border-radius: 6px;
 }
