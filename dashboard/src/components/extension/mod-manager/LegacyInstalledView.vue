@@ -23,6 +23,7 @@ const emit = defineEmits<{
   (e: 'action-configure', plugin: PluginSummary): void
   (e: 'action-view-handlers', plugin: PluginSummary): void
   (e: 'action-view-readme', plugin: PluginSummary): void
+  (e: 'view-changelog', plugin: PluginSummary): void
   (e: 'action-open-repo', url: string): void
 }>()
 
@@ -306,6 +307,7 @@ function toPlugin(item: unknown): PluginSummary {
                 @toggle-activation="handleToggleActivation(extension)"
                 @view-handlers="emit('action-view-handlers', extension)"
                 @view-readme="emit('action-view-readme', extension)"
+                @view-changelog="emit('view-changelog', extension)"
               />
             </div>
           </v-col>

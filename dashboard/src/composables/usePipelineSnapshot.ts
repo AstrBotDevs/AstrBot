@@ -59,7 +59,7 @@ export function usePipelineSnapshot(options: UsePipelineSnapshotOptions = {}): {
         params: {
           umo: scopeMode === 'session' ? (umo || undefined) : undefined,
           force_refresh: forceRefresh ? true : undefined,
-          render: render ? true : undefined,
+          render,
           preview_prompt: render && previewPrompt ? previewPrompt : undefined
         }
       })

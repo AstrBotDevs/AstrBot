@@ -1,11 +1,13 @@
 <script setup>
-import { ref, watch, onMounted, computed } from "vue";
+import { ref, watch, computed } from "vue";
 import axios from "axios";
-import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
+import { enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
+import GitHubMarkdownViewer from "@/components/shared/GitHubMarkdownViewer.vue";
+import { preprocessPluginMarkdown } from "@/utils/preprocessPluginMarkdown";
 
 enableKatex();
 enableMermaid();
@@ -106,7 +108,7 @@ async function fetchContent() {
     );
     if (res.data.status === "ok") {
       if (res.data.data.content) {
-        content.value = res.data.data.content;
+        content.value = preprocessPluginMarkdown(res.data.data.content);
       } else {
         // 请求成功但无内容
         isEmpty.value = true;
@@ -189,12 +191,14 @@ const _show = computed({
         </div>
 
         <!-- 内容显示 -->
-        <div v-else-if="content" class="markdown-body">
-          <MarkdownRender
-            :content="content"
-            :typewriter="false"
-            class="markdown-content"
-          />
+        <div v-else-if="content" class="readme-dialog__content">
+          <div class="readme-dialog__container">
+            <GitHubMarkdownViewer
+              :content="content"
+              :header-icon="mode === 'changelog' ? 'mdi-history' : 'mdi-book-open-outline'"
+              :header-label="mode === 'changelog' ? 'CHANGELOG.md' : 'README.md'"
+            />
+          </div>
         </div>
 
         <!-- 错误提示 -->
@@ -246,195 +250,25 @@ const _show = computed({
   </v-dialog>
 </template>
 
-<style>
-/* 更贴近 GitHub 的 markdown 展示样式（不引入新依赖，仅调整样式）
- * 合并策略：颜色/背景走 upstream 的 var(--v-theme-*) token；保留本地布局增强（word-wrap、首尾 margin、task list、表格横向滚动）
- */
-.markdown-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
-  font-size: 16px;
-  line-height: 1.6;
-  word-wrap: break-word;
-  padding: 8px 0;
-  color: var(--v-theme-secondaryText);
+<style scoped>
+.readme-dialog__container {
+  max-width: 1012px;
+  margin: 0 auto;
+  padding: 32px;
 }
 
-.markdown-body > :first-child {
-  margin-top: 0;
+.readme-dialog__content {
+  min-height: 100%;
 }
 
-.markdown-body > :last-child {
-  margin-bottom: 0;
-}
 
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.markdown-body h1 {
-  font-size: 2em;
-  border-bottom: 1px solid var(--v-theme-border);
-  padding-bottom: 0.3em;
-}
-
-.markdown-body h2 {
-  font-size: 1.5em;
-  border-bottom: 1px solid var(--v-theme-border);
-  padding-bottom: 0.3em;
-}
-
-.markdown-body h3 {
-  font-size: 1.25em;
-}
-
-.markdown-body p {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.markdown-body hr {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: var(--v-theme-containerBg);
-  border: 0;
-}
-
-.markdown-body a {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-}
-
-.markdown-body a:hover {
-  text-decoration: underline;
-}
-
-/* Lists */
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 2em;
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.markdown-body li + li {
-  margin-top: 0.25em;
-}
-
-.markdown-body li > p {
-  margin-top: 0;
-}
-
-/* Task list */
-.markdown-body .task-list-item {
-  list-style-type: none;
-}
-
-.markdown-body .task-list-item input[type="checkbox"] {
-  margin: 0 0.35em 0 0;
-  vertical-align: middle;
-}
-
-/* Code */
-.markdown-body code {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  background-color: var(--v-theme-codeBg);
-  border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo,
-    monospace;
-  font-size: 85%;
-}
-
-.markdown-body pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: var(--v-theme-containerBg);
-  border: 1px solid var(--v-theme-border);
-  border-radius: 6px;
-  margin: 0 0 16px;
-}
-
-.markdown-body pre code {
-  background-color: transparent;
-  padding: 0;
-}
-
-/* Blockquote */
-.markdown-body blockquote {
-  padding: 0 1em;
-  color: var(--v-theme-secondaryText);
-  border-left: 0.25em solid var(--v-theme-border);
-  margin: 0 0 16px;
-}
-
-/* Images */
-.markdown-body img {
-  max-width: 100%;
-  height: auto;
-  margin: 0.5em 0;
-  box-sizing: border-box;
-  background-color: var(--v-theme-background);
-  border-radius: 6px;
-}
-
-/* Tables (GitHub-like + 横向滚动) */
-.markdown-body table {
-  border-spacing: 0;
-  border-collapse: collapse;
-  width: max-content;
-  min-width: 100%;
-  display: block;
-  overflow-x: auto;
-  margin: 0 0 16px;
-}
-
-.markdown-body table th,
-.markdown-body table td {
-  padding: 6px 13px;
-  border: 1px solid var(--v-theme-border);
-}
-
-.markdown-body table th {
-  font-weight: 600;
-}
-
-.markdown-body table tr {
-  background-color: var(--v-theme-surface);
-  border-top: 1px solid var(--v-theme-border);
-}
-
-.markdown-body table tr:nth-child(2n) {
-  background-color: var(--v-theme-containerBg);
+@media (max-width: 767px) {
+  .readme-dialog__container {
+    padding: 16px;
+  }
+  .github-style-content {
+    padding: 24px;
+  }
 }
 </style>
 
-<script>
-export default {
-  name: "ReadmeDialog",
-  components: {
-    MarkdownRender,
-  },
-  computed: {
-    _show: {
-      get() {
-        return this.show;
-      },
-      set(value) {
-        this.$emit("update:show", value);
-      },
-    },
-  },
-};
-</script>

@@ -12,7 +12,49 @@
       "info": "Info",
       "config": "Configuration",
       "behavior": "Behavior",
-      "overview": "Overview"
+      "overview": "Overview",
+      "changelog": "Changelog"
+    },
+    "welcome": {
+      "title": "Welcome to AstrBot Plugin Manager",
+      "subtitle": "Select a plugin to view details, or install more extensions from the marketplace",
+      "body": "AstrBot is a powerful chatbot framework that supports multiple platforms and models.\\nWith the plugin system, you can easily extend AstrBot’s capabilities.\\n\\n## Quick Start\\n- Select a plugin from the left list to view details\\n- Use the “Info / Configuration / Overview” tabs to check configuration, documentation and updates\\n- Use the top toolbar to install new plugins or batch update\\n\\n## Links\\n- GitHub: https://github.com/AstrBotDevs/AstrBot\\n- Docs: https://astrbot.app/",
+      "links": {
+        "github": "GitHub",
+        "docs": "Docs"
+      },
+      "actions": {
+        "viewOnGithub": "View on GitHub",
+        "retry": "Retry"
+      },
+      "readme": {
+        "loading": "Loading documentation...",
+        "errors": {
+          "fetchFailed": "Failed to load documentation. Please check your network connection.",
+          "rateLimited": "GitHub API rate limit exceeded. Please try again later."
+        },
+        "empty": {
+          "title": "No content available.",
+          "subtitle": "Please retry later or view it on GitHub."
+        }
+      },
+      "tip": {
+        "market": "Marketplace: click the “Extension Market” tab on the top to browse and install plugins."
+      }
+    },
+    "changelogPanel": {
+      "loading": "Loading changelog...",
+      "actions": {
+        "retry": "Retry"
+      },
+      "errors": {
+        "fetchFailed": "Failed to fetch changelog",
+        "fetchError": "An error occurred while fetching changelog"
+      },
+      "empty": {
+        "title": "No changelog available for this plugin.",
+        "subtitle": "Developers can add a CHANGELOG.md file in the plugin directory to provide changelog."
+      }
     }
   },
   "search": {
@@ -228,6 +270,12 @@
   "pipeline": {
     "tabTitle": "Execution Chain",
     "traceTabTitle": "Impact Chain",
+    "tabs": {
+      "pipeline": "Execution Chain",
+      "pipelineTooltip": "Shows which plugin handlers participate in each stage and highlights static risk markers. Useful for diagnosing conflicts and locating handlers. This is snapshot analysis output, not runtime logs.",
+      "trace": "Impact Chain",
+      "traceTooltip": "Uses static analysis to infer which internal fields plugins may affect, aggregated by impact target and stage. Great for tracing back from an \"affected field\" to possible source plugins. Not the same as a real runtime execution trace."
+    },
     "toolbar": {
       "refresh": "Refresh Snapshot",
       "promptPreview": "Prompt Preview"
@@ -271,14 +319,41 @@
       },
       "involved": "Involved"
     },
+    "filters": {
+      "onlyHighImpact": "Show Key Impact (Heuristic) Only",
+      "onlyHighImpactTooltip": "Only for narrowing down investigation scope: overwrite, clear, list mutation, stop, send, etc. will be marked as key impacts; it does not mean it definitely happens or is definitely a problem.",
+      "targetObject": "Impact Target (Field)",
+      "targetObjectPlaceholder": "Select an affected field path",
+      "targetObjectTooltip": "Filters by \"affected field\". For example, select system_prompt to see which plugins may rewrite the system prompt."
+    },
     "promptPreview": {
-      "title": "Prompt Injection Preview",
+      "title": "Prompt Preview",
       "emptyTitle": "No data",
       "emptyHint": "This snapshot does not contain prompt preview information",
       "overwriteWarn": "Multiple overwrite operations detected; final prompt may be overwritten and order may be unstable.",
-      "contexts": "contexts",
-      "injectedBy": "injected_by",
-      "chain": "Injection chain",
+      "simulatedInput": "Simulated User Input",
+      "simulatedInputHint": "Helps the preview render closer to real requests; it will not be used to search or filter the plugin list.",
+      "contexts": "Contexts",
+      "contextsNotPresent": "Contexts not injected (static preview)",
+      "contextsTooltip": "This preview does not inject runtime contexts (e.g., message history, external retrieval results), so \"context-related injections/concats\" may be empty or not visible.",
+      "injectedBy": "Injection Source (Inferred)",
+      "injectedByTooltip": "A statically inferred list of sources that may contribute to the injection chain, used to trace which handlers may affect prompt/system_prompt/persona_prompt.",
+      "dryRunHandlers": "Preview Handlers (Request Stage Only)",
+      "dryRunHandlersTooltip": "Runs a safe preview for request-stage only to detect potential overwrites/intercepts/warnings; it does not simulate a full end-to-end execution.",
+      "renderWarnings": "Preview Warnings",
+      "renderWarningsTooltip": "Warnings and reasons found during preview rendering/preview execution, e.g., actions blocked by security policy or cases where rendering cannot complete.",
+      "statusColumn": "Preview Result",
+      "statusExecuted": "Previewed",
+      "statusBlocked": "Blocked by policy",
+      "statusErrored": "Preview failed",
+      "statusSkipped": "Not run",
+      "stopColumn": "Stop Flag",
+      "stopTooltip": "This handler may stop the event chain during preview",
+      "diffColumn": "Change Summary",
+      "diffTooltip": "Whether this preview changes prompt/system_prompt",
+      "blockedColumn": "Policy Block",
+      "blockedTooltip": "Actions blocked by preview policy and reasons (e.g., send/request_llm)",
+      "chain": "Injection Chain",
       "headers": {
         "plugin": "Plugin",
         "handler": "Handler",
@@ -289,6 +364,47 @@
       "finalSystemPrompt": "Final System Prompt",
       "finalPrompt": "Final Prompt",
       "close": "Close"
+    },
+    "effectTargets": {
+      "provider_request.system_prompt": "System Prompt",
+      "provider_request.prompt": "User Prompt",
+      "provider_request.persona_prompt": "Persona Prompt",
+      "provider_request.contexts": "Contexts List",
+      "provider_request.func_tool": "Function Tool Request",
+      "llm_response.completion_text": "Model Response Text",
+      "result.chain": "Final Result Chain",
+      "event.message_str": "Raw Message Text",
+      "send": "Direct Send",
+      "stop": "Stop Subsequent Flow"
+    },
+    "effectOps": {
+      "overwrite": "Overwrite",
+      "clear": "Clear",
+      "append": "Append",
+      "mutate_list": "List Mutation",
+      "call": "Call"
+    },
+    "traceDetail": {
+      "title": "Impact Point Detail",
+      "impactLevel": "Impact Level",
+      "keyImpact": "Key Impact",
+      "normalImpact": "Normal Impact",
+      "confidence": "Inference Confidence",
+      "confidenceTooltip": "Confidence of static analysis: high/medium/low/unknown",
+      "stage": "Stage",
+      "targetField": "Impact Target (Field)",
+      "operation": "Operation",
+      "evidence": "Evidence",
+      "codeLocation": "Code Location",
+      "plugin": "Plugin",
+      "handler": "Handler",
+      "priority": "Priority",
+      "jumpToPipeline": "Locate in Execution Chain",
+      "filterByTarget": "View other points for this target",
+      "advancedInfo": "Advanced Info",
+      "rawTarget": "Raw target",
+      "rawOp": "Raw op",
+      "staticAnalysisNote": "These are statically inferred possible impacts, not runtime logs"
     }
   }
 }

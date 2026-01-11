@@ -7,6 +7,8 @@ import type { PluginPanelTab, PluginSummary } from './types'
 import PluginInfoPanel from './PluginInfoPanel.vue'
 import PluginConfigPanel from './PluginConfigPanel.vue'
 import PluginOverviewPanel from './PluginOverviewPanel.vue'
+import PluginChangelogPanel from './PluginChangelogPanel.vue'
+import PluginWelcomePanel from './PluginWelcomePanel.vue'
 
 const props = defineProps<{
   plugin: PluginSummary | null
@@ -76,17 +78,14 @@ watch(
 
 <template>
   <v-card class="h-100 d-flex flex-column" rounded="lg" variant="flat">
-    <div v-if="!hasPlugin" class="h-100 d-flex flex-column align-center justify-center pa-8">
-      <v-icon size="72" color="info" class="mb-4">mdi-puzzle-outline</v-icon>
-      <div class="text-h6 mb-2">未选择插件</div>
-      <div class="text-body-2 text-medium-emphasis">请在左侧列表选择一个插件以查看详情</div>
-    </div>
+    <PluginWelcomePanel v-if="!hasPlugin" />
 
     <template v-else>
       <v-tabs v-model="localActiveTab" color="primary" density="comfortable">
         <v-tab value="info">{{ tm('modManager.panelTabs.info') }}</v-tab>
         <v-tab value="config">{{ tm('modManager.panelTabs.config') }}</v-tab>
         <v-tab value="overview">{{ tm('modManager.panelTabs.overview') }}</v-tab>
+        <v-tab value="changelog">{{ tm('modManager.panelTabs.changelog') }}</v-tab>
       </v-tabs>
 
       <v-divider />
@@ -121,6 +120,12 @@ watch(
               :repoUrl="repoUrl"
               :active="isTabActive('overview')"
             />
+          </div>
+        </v-window-item>
+
+        <v-window-item value="changelog" class="h-100">
+          <div class="plugin-panel__tab pa-3">
+            <PluginChangelogPanel :pluginName="pluginName" :active="isTabActive('changelog')" />
           </div>
         </v-window-item>
       </v-window>

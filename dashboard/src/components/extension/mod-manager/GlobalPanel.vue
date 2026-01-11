@@ -6,8 +6,6 @@ import type { CommandConflictGroup, PluginSummary } from './types'
 import type { EffectTarget, PipelineStageId } from './pipeline/pipelineSnapshotTypes'
 import PipelineSnapshotPanel from './pipeline/PipelineSnapshotPanel.vue'
 
-const { tm } = useModuleI18n('features/extension')
-
 type GlobalPanelTab = 'pipeline' | 'trace'
 
 const props = withDefaults(
@@ -26,11 +24,15 @@ const emit = defineEmits<{
   (e: 'select-plugin', name: string): void
 }>()
 
+const { tm } = useModuleI18n('features/extension')
+const $t = tm
+
 const activeTab = ref<GlobalPanelTab>('pipeline')
 
 const traceNavigationToken = ref(0)
 const traceFocusTarget = ref<EffectTarget | null>(null)
 const traceStageId = ref<PipelineStageId | null>(null)
+const traceParticipantId = ref<string | null>(null)
 
 const handleSelectPlugin = (name: string) => {
   if (!name) return
@@ -38,10 +40,15 @@ const handleSelectPlugin = (name: string) => {
 }
 
 const handleNavigateTrace = (payload: { participantId: string; stageId: PipelineStageId | null; target: EffectTarget }) => {
+  traceParticipantId.value = payload.participantId || null
   traceFocusTarget.value = payload.target
   traceStageId.value = payload.stageId
   traceNavigationToken.value += 1
   activeTab.value = 'trace'
+}
+
+const handleNavigatePipeline = () => {
+  activeTab.value = 'pipeline'
 }
 </script>
 
@@ -49,8 +56,29 @@ const handleNavigateTrace = (payload: { participantId: string; stageId: Pipeline
   <v-card class="h-100 d-flex flex-column global-panel" rounded="lg" variant="flat">
     <div class="global-panel__header">
       <v-tabs v-model="activeTab" color="primary" density="comfortable">
-        <v-tab value="pipeline">{{ tm('pipeline.tabTitle') }}</v-tab>
-        <v-tab value="trace">{{ tm('pipeline.traceTabTitle') }}</v-tab>
+        <v-tab value="pipeline">
+          <span class="d-inline-flex align-center">
+            {{ $t('pipeline.tabs.pipeline') }}
+            <v-tooltip location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" size="small" class="ml-1">mdi-information-outline</v-icon>
+              </template>
+              {{ $t('pipeline.tabs.pipelineTooltip') }}
+            </v-tooltip>
+          </span>
+        </v-tab>
+
+        <v-tab value="trace">
+          <span class="d-inline-flex align-center">
+            {{ $t('pipeline.tabs.trace') }}
+            <v-tooltip location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-icon v-bind="tooltipProps" size="small" class="ml-1">mdi-information-outline</v-icon>
+              </template>
+              {{ $t('pipeline.tabs.traceTooltip') }}
+            </v-tooltip>
+          </span>
+        </v-tab>
       </v-tabs>
       <v-divider />
     </div>
@@ -63,8 +91,10 @@ const handleNavigateTrace = (payload: { participantId: string; stageId: Pipeline
         :trace-navigation-token="traceNavigationToken"
         :trace-focus-target="traceFocusTarget"
         :trace-stage-id="traceStageId"
+        :trace-participant-id="traceParticipantId"
         @select-plugin="handleSelectPlugin"
         @navigate-trace="handleNavigateTrace"
+        @navigate-pipeline="handleNavigatePipeline"
       />
     </div>
   </v-card>

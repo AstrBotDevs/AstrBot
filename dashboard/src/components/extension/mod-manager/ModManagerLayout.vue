@@ -20,6 +20,7 @@ const props = defineProps<{
   updatableCount: number
   search: string
   updatingAll?: boolean
+  failedMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -64,6 +65,9 @@ const selectedActiveNames = ref<string[]>([])
 
 const mainSplitRatio = ref(0.5)
 const rightPaneRatio = ref(0.5)
+
+const shouldAutoFitMainSplit = ref(false)
+const hasAutoFitMainSplit = ref(false)
 
 const cache = usePluginConfigCache()
 const { conflicts, conflictStats, loading: conflictsLoading } = useCommandConflicts()
@@ -117,10 +121,165 @@ async function logLayoutSizes(reason: string) {
   debugLog('layout', info)
 }
 
+function clampRatio(ratio: number, min: number, max: number): number {
+  const lo = Math.min(min, max)
+  const hi = Math.max(min, max)
+  if (!Number.isFinite(ratio)) return lo
+  return Math.min(hi, Math.max(lo, ratio))
+}
+
+type MeasuredPaneInfo = {
+  splitContainerWidth: number
+  dividerHalfWidth: number
+  desiredLeftWidth: number
+}
+
+function measureDesiredLeftPaneWidth(): MeasuredPaneInfo | null {
+  const splitContainer =
+    (mainRef.value?.querySelector('.resizable-split-pane') as HTMLElement | null) ?? null
+  const leftRoot = leftRef.value
+
+  if (!splitContainer || !leftRoot) return null
+
+  const splitContainerWidth = splitContainer.clientWidth
+  if (!Number.isFinite(splitContainerWidth) || splitContainerWidth <= 0) return null
+
+  const anyRowRoot =
+    (leftRoot.querySelector(
+      'tbody tr td .plugin-mini-avatar'
+    ) as HTMLElement | null)?.closest('td')?.querySelector('div.d-flex.align-center') ??
+    null
+
+  if (!anyRowRoot) return null
+
+  const anyNameCell = (leftRoot.querySelector('tbody tr td .plugin-mini-avatar') as HTMLElement | null)
+    ?.closest('td') as HTMLElement | null
+  if (!anyNameCell) return null
+
+  const nameCellStyle = window.getComputedStyle(anyNameCell)
+  const nameCellPadding =
+    (Number.parseFloat(nameCellStyle.paddingLeft) || 0) +
+    (Number.parseFloat(nameCellStyle.paddingRight) || 0)
+
+  const firstRow = leftRoot.querySelector('tbody tr') as HTMLElement | null
+  const firstRowCells = firstRow?.querySelectorAll('td') ?? null
+  const indexCellWidth =
+    firstRowCells && firstRowCells.length >= 1
+      ? firstRowCells[0].getBoundingClientRect().width
+      : 0
+  const selectCellWidth =
+    firstRowCells && firstRowCells.length >= 2
+      ? firstRowCells[1].getBoundingClientRect().width
+      : 0
+
+  const rowRoots = Array.from(
+    leftRoot.querySelectorAll('tbody tr td .plugin-mini-avatar')
+  )
+    .map(
+      (el) =>
+        (el as HTMLElement).closest('td')?.querySelector('div.d-flex.align-center') as HTMLElement | null
+    )
+    .filter((el): el is HTMLElement => Boolean(el))
+
+  if (rowRoots.length === 0) return null
+
+  const measureNaturalTextWidth = (el: HTMLElement): number => {
+    const text = el.textContent ?? ''
+    if (!text) return 0
+
+    const body = document.body
+    if (!body) {
+      return el.scrollWidth
+    }
+
+    const style = window.getComputedStyle(el)
+    const span = document.createElement('span')
+    span.textContent = text
+    span.style.position = 'absolute'
+    span.style.left = '-99999px'
+    span.style.top = '0'
+    span.style.visibility = 'hidden'
+    span.style.whiteSpace = 'nowrap'
+    span.style.font = style.font
+    span.style.letterSpacing = style.letterSpacing
+    span.style.textTransform = style.textTransform
+    span.style.padding = '0'
+    span.style.margin = '0'
+    span.style.border = '0'
+
+    body.appendChild(span)
+    const width = span.getBoundingClientRect().width
+    span.remove()
+
+    if (!Number.isFinite(width) || width <= 0) return 0
+    return width
+  }
+
+  let maxRequiredNameCellContentWidth = 0
+  for (const root of rowRoots) {
+    const textEl = root.querySelector('.text-truncate') as HTMLElement | null
+    if (!textEl) continue
+
+    const rootWidth = root.getBoundingClientRect().width
+    const textWidth = textEl.getBoundingClientRect().width
+    const otherWidth = Math.max(0, rootWidth - textWidth)
+
+    const naturalTextWidth = measureNaturalTextWidth(textEl)
+    if (!Number.isFinite(naturalTextWidth) || naturalTextWidth <= 0) continue
+
+    const required = otherWidth + naturalTextWidth
+    if (required > maxRequiredNameCellContentWidth) {
+      maxRequiredNameCellContentWidth = required
+    }
+  }
+
+  if (!Number.isFinite(maxRequiredNameCellContentWidth) || maxRequiredNameCellContentWidth <= 0) return null
+
+  const wrapper = leftRoot.querySelector('.v-data-table__wrapper') as HTMLElement | null
+  const scrollBarWidth = wrapper ? Math.max(0, wrapper.offsetWidth - wrapper.clientWidth) : 0
+
+  const desiredTableWidth =
+    Math.ceil(indexCellWidth + selectCellWidth + nameCellPadding + maxRequiredNameCellContentWidth) +
+    scrollBarWidth
+
+  const dividerHalfWidth = 6
+
+  return {
+    splitContainerWidth,
+    dividerHalfWidth,
+    desiredLeftWidth: desiredTableWidth
+  }
+}
+
+async function tryAutoFitMainSplitRatio(reason: string) {
+  if (!shouldAutoFitMainSplit.value || hasAutoFitMainSplit.value) return
+  if ((props.plugins?.length ?? 0) === 0) return
+
+  await nextTick()
+
+  const measured = measureDesiredLeftPaneWidth()
+  if (!measured) return
+
+  const minRatio = 0.125
+  const maxRatio = 0.875
+
+  const ratio =
+    (measured.desiredLeftWidth + measured.dividerHalfWidth) / measured.splitContainerWidth
+
+  mainSplitRatio.value = clampRatio(ratio, minRatio, maxRatio)
+  hasAutoFitMainSplit.value = true
+
+  debugLog('autoFitMainSplit', { reason, measured, ratio: mainSplitRatio.value })
+  logLayoutSizes('autoFitMainSplit')
+}
+
 onMounted(() => {
-  const mainStored = parseStoredRatio(localStorage.getItem(MAIN_SPLIT_RATIO_KEY))
+  const mainStoredRaw = localStorage.getItem(MAIN_SPLIT_RATIO_KEY)
+  const mainStored = parseStoredRatio(mainStoredRaw)
   if (mainStored != null) {
     mainSplitRatio.value = mainStored
+  } else {
+    shouldAutoFitMainSplit.value = true
   }
 
   const rightStored = parseStoredRatio(localStorage.getItem(RIGHT_PANE_RATIO_KEY))
@@ -130,6 +289,8 @@ onMounted(() => {
 
   logLayoutSizes('mounted')
   window.setTimeout(() => logLayoutSizes('mounted+500ms'), 500)
+
+  void tryAutoFitMainSplitRatio('mounted')
 })
 
 watch(
@@ -159,6 +320,7 @@ watch(
   (val) => {
     debugLog('props', val)
     logLayoutSizes('props-changed')
+    void tryAutoFitMainSplitRatio('props-changed')
   },
   { immediate: true, flush: 'post' }
 )
@@ -229,6 +391,7 @@ const handleOpenLegacyHandlers = () => {
         :updating-all="updatingAll"
         :installed-view-mode="installedViewMode"
         :selected-plugin="selectedPlugin"
+        :failed-message="failedMessage"
         @update:search="emit('update:search', $event)"
         @toggle-show-reserved="handleToggleShowReserved"
         @install="emit('install')"

@@ -461,8 +461,9 @@ watch(
  { flush: 'post' }
 );
 
-const updatableExtensions = computed(() => {
-  return extension_data?.data?.filter((ext) => ext.has_update) || [];
+const updatableExtensions = computed<PluginSummary[]>(() => {
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.filter((ext) => ext?.has_update) as PluginSummary[];
 });
 
 // 方法
@@ -589,7 +590,8 @@ const handleUninstallConfirm = (options) => {
 
 const updateExtension = async (extension_name, forceUpdate = false) => {
   // 查找插件信息
-  const ext = extension_data.data?.find((e) => e.name === extension_name);
+  const list = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const ext = list.find((e) => e.name === extension_name);
 
   // 如果没有检测到更新且不是强制更新，则弹窗确认
   if (!ext?.has_update && !forceUpdate) {
@@ -1328,6 +1330,7 @@ onBeforeUnmount(() => {
                     :updatable-count="updatableExtensions.length"
                     :search="pluginSearch"
                     :updating-all="updatingAll"
+                    :failed-message="extension_data.message"
                     @update:search="pluginSearch = $event"
                     @update:show-reserved="showReserved = $event"
                     @update:installed-view-mode="installedViewMode = $event"
@@ -1424,6 +1427,7 @@ onBeforeUnmount(() => {
                     @action-configure="(plugin) => openExtensionConfig(plugin.name)"
                     @action-view-handlers="showPluginInfo"
                     @action-view-readme="viewReadme"
+                    @view-changelog="viewChangelog"
                     @action-open-repo="(url) => window.open(url, '_blank')"
                   />
                 </div>
