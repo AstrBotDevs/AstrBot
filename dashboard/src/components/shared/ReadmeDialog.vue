@@ -1,159 +1,37 @@
 <script setup>
-import { ref, watch, computed, nextTick } from "vue";
-import axios from "axios";
+import { ref, watch, computed, onUnmounted } from "vue";
 import MarkdownIt from "markdown-it";
-import DOMPurify from "dompurify";
 import hljs from "highlight.js";
+import axios from "axios";
+import DOMPurify from "dompurify";
 import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";
 
-// 定义在 setup 中以便访问 i18n
-let md = null;
+// 1. 在 setup 作用域创建 MarkdownIt 实例
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+  breaks: false,
+});
 
-// 初始化 renderer 的函数（将在 setup 中调用）
-const initMarkdownIt = (t) => {
-  md = new MarkdownIt({
-    html: true,
-    linkify: true,
-    typographer: true,
-    breaks: false,
-    highlight: function (str, lang) {
-      if (lang && hljs.getLanguage(lang)) {
-        try {
-          return `<pre class="hljs"><code class="language-${lang}">${
-            hljs.highlight(str, { language: lang }).value
-          }</code></pre>`;
-        } catch (__) {}
-      }
-      return `<pre class="hljs"><code>${md.utils.escapeHtml(str)}</code></pre>`;
-    },
-  });
+md.enable(["table", "strikethrough"]);
+md.renderer.rules.table_open = () => '<div class="table-container"><table>';
+md.renderer.rules.table_close = () => "</table></div>";
 
-  md.enable(["table", "strikethrough"]);
-
-  // 自定义表格渲染规则：添加滚动容器
-  md.renderer.rules.table_open = () => '<div class="table-container"><table>';
-  md.renderer.rules.table_close = () => "</table></div>";
-
-  // 自定义渲染规则
-  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const lang = token.info.trim() || "";
-    const code = token.content;
-
-    let highlighted;
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        highlighted = hljs.highlight(code, { language: lang }).value;
-      } catch (__) {
-        highlighted = md.utils.escapeHtml(code);
-      }
-    } else {
-      highlighted = md.utils.escapeHtml(code);
-    }
-
-    const langLabel = lang
-      ? `<span class="code-lang-label">${lang}</span>`
-      : "";
-
-    return `<div class="code-block-wrapper">
-    ${langLabel}
-    <button class="copy-code-btn" title="${t("core.common.copy")}">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-    </button>
-    <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
-  </div>`;
-  };
-};
-
-// 配置 DOMPurify 允许的标签和属性
-const purifyConfig = {
-  ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "br",
-    "hr",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "pre",
-    "code",
-    "a",
-    "img",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "strong",
-    "em",
-    "del",
-    "s",
-    "details",
-    "summary",
-    "div",
-    "span",
-    "input", // 用于复选框
-    "button",
-    "svg",
-    "rect",
-    "path",
-    "polyline", // 用于复制成功的图标
-  ],
-  ALLOWED_ATTR: [
-    "href",
-    "src",
-    "alt",
-    "title",
-    "class",
-    "id",
-    "target",
-    "rel",
-    "type",
-    "checked",
-    "disabled", // 用于复选框
-    "open", // 用于 details
-    "align", // 用于居中（尊重原始 Markdown 意图）
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points", // 用于 polyline
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry", // SVG 属性
-  ],
-  ADD_ATTR: ["target"], // 允许添加 target 属性
+// 2. 复制按钮的 SVG 图标常量
+const ICONS = {
+  SUCCESS:
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>',
+  ERROR:
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+  COPY: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
 };
 
 const props = defineProps({
-  show: {
-    type: Boolean,
-    default: false,
-  },
-  pluginName: {
-    type: String,
-    default: "",
-  },
-  repoUrl: {
-    type: String,
-    default: null,
-  },
-  // 模式: 'readme' 或 'changelog'
+  show: { type: Boolean, default: false },
+  pluginName: { type: String, default: "" },
+  repoUrl: { type: String, default: null },
   mode: {
     type: String,
     default: "readme",
@@ -162,35 +40,123 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:show"]);
-
-// 国际化
-const { t } = useI18n();
-
-// 初始化 markdown-it
-initMarkdownIt(t);
+const { t, locale } = useI18n();
 
 const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
-const isEmpty = ref(false); // 请求成功但无内容
-const markdownContainer = ref(null);
+const isEmpty = ref(false);
+const copyFeedbackTimer = ref(null);
+const lastRequestId = ref(0);
+
+onUnmounted(() => {
+  if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
+});
 
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
-  if (!content.value || !md) return "";
-  const rawHtml = md.render(content.value);
-  const cleanHtml = DOMPurify.sanitize(rawHtml, purifyConfig);
+  // 强制依赖 locale，确保语言切换时重新渲染
+  const _ = locale?.value;
+  if (!content.value) return "";
 
-  // 手动处理链接，避免全局 hook 污染
-  // 创建一个临时容器来解析 HTML
+  // 设置 fence 规则，直接使用当前作用域的 t 函数
+  md.renderer.rules.fence = (tokens, idx) => {
+    const token = tokens[idx];
+    const lang = token.info.trim() || "";
+    const code = token.content;
+
+    const highlighted =
+      lang && hljs.getLanguage(lang)
+        ? hljs.highlight(code, { language: lang }).value
+        : md.utils.escapeHtml(code);
+
+    return `<div class="code-block-wrapper">
+      ${lang ? `<span class="code-lang-label">${lang}</span>` : ""}
+      <button class="copy-code-btn" title="${t("core.common.copy")}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      </button>
+      <pre class="hljs"><code class="language-${lang}">${highlighted}</code></pre>
+    </div>`;
+  };
+
+  const rawHtml = md.render(content.value);
+
+  const cleanHtml = DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: [
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "p",
+      "br",
+      "hr",
+      "ul",
+      "ol",
+      "li",
+      "blockquote",
+      "pre",
+      "code",
+      "a",
+      "img",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "strong",
+      "em",
+      "del",
+      "s",
+      "details",
+      "summary",
+      "div",
+      "span",
+      "input",
+      "button",
+      "svg",
+      "rect",
+      "path",
+      "polyline",
+    ],
+    ALLOWED_ATTR: [
+      "href",
+      "src",
+      "alt",
+      "title",
+      "class",
+      "id",
+      "target",
+      "rel",
+      "type",
+      "checked",
+      "disabled",
+      "open",
+      "align",
+      "width",
+      "height",
+      "viewBox",
+      "fill",
+      "stroke",
+      "stroke-width",
+      "points",
+      "d",
+      "x",
+      "y",
+      "rx",
+      "ry",
+    ],
+  });
+
+  // 3. 后处理方案：完全隔离，安全性最高
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
-
-  // 查找所有链接并添加 target="_blank"
-  const links = tempDiv.querySelectorAll("a");
-  links.forEach((link) => {
+  tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
-    if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+    // 强制所有外部链接使用安全的 _blank 策略
+    if (href && (href.startsWith("http") || href.startsWith("//"))) {
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     }
@@ -199,157 +165,21 @@ const renderedHtml = computed(() => {
   return tempDiv.innerHTML;
 });
 
-// 根据模式返回不同的配置
 const modeConfig = computed(() => {
-  if (props.mode === "changelog") {
-    return {
-      title: t("core.common.changelog.title"),
-      loading: t("core.common.changelog.loading"),
-      emptyTitle: t("core.common.changelog.empty.title"),
-      emptySubtitle: t("core.common.changelog.empty.subtitle"),
-      apiPath: "/api/plugin/changelog",
-    };
-  }
+  const isChangelog = props.mode === "changelog";
+  const keyBase = `core.common.${isChangelog ? "changelog" : "readme"}`;
   return {
-    title: t("core.common.readme.title"),
-    loading: t("core.common.readme.loading"),
-    emptyTitle: t("core.common.readme.empty.title"),
-    emptySubtitle: t("core.common.readme.empty.subtitle"),
-    apiPath: "/api/plugin/readme",
+    title: t(`${keyBase}.title`),
+    loading: t(`${keyBase}.loading`),
+    emptyTitle: t(`${keyBase}.empty.title`),
+    emptySubtitle: t(`${keyBase}.empty.subtitle`),
+    apiPath: `/api/plugin/${isChangelog ? "changelog" : "readme"}`,
   };
 });
 
-// 监听show的变化，当显示对话框时加载内容
-watch(
-  () => props.show,
-  (newVal) => {
-    if (newVal && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听pluginName的变化
-watch(
-  () => props.pluginName,
-  (newVal) => {
-    if (props.show && newVal) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听mode的变化
-watch(
-  () => props.mode,
-  () => {
-    if (props.show && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听 renderedHtml 变化 (仅作调试或是其他用途，不再绑定事件)
-watch(renderedHtml, () => {
-  // 事件委托模式下不需要手动初始化按钮事件
-});
-
-// 复制到剪贴板函数（带降级方案）
-async function copyTextToClipboard(text) {
-  // 1. 尝试使用 Clipboard API
-// 复制到剪贴板函数（带降级方案）
-async function copyTextToClipboard(text) {
-  // 1. 尝试使用 Clipboard API (仅在安全上下文有效)
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (err) {
-      console.warn("Clipboard API failed, trying fallback...", err);
-    }
-  }
-
-  // 2. 降级方案：使用 textarea + execCommand
-  try {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-
-    // 样式优化：确保元素存在于布局中但不可见，且防止视口滚动
-    textArea.style.position = "absolute"; // 改为 absolute，相对于 container 定位
-    textArea.style.left = "0";
-    textArea.style.top = "0";
-    textArea.style.width = "1px";
-    textArea.style.height = "1px";
-    textArea.style.padding = "0";
-    textArea.style.margin = "0";
-    textArea.style.border = "none";
-    textArea.style.outline = "none";
-    textArea.style.boxShadow = "none";
-    textArea.style.background = "transparent";
-    textArea.style.opacity = "0";
-
-    // 将 textarea 挂载到 markdown 容器内部，防止 v-dialog 的 focus trap 干扰
-    if (markdownContainer.value) {
-      markdownContainer.value.appendChild(textArea);
-    } else {
-      document.body.appendChild(textArea);
-    }
-
-    textArea.focus();
-    textArea.select();
-
-    const successful = document.execCommand("copy");
-
-    if (markdownContainer.value && markdownContainer.value.contains(textArea)) {
-      markdownContainer.value.removeChild(textArea);
-    } else {
-      document.body.removeChild(textArea);
-    }
-
-    return successful;
-  } catch (err) {
-    console.error("Fallback copy failed:", err);
-    return false;
-  }
-}
-
-// 处理点击事件（事件委托）
-async function handleContainerClick(event) {
-  const btn = event.target.closest(".copy-code-btn");
-  if (!btn) return;
-
-  const wrapper = btn.closest(".code-block-wrapper");
-  const code = wrapper.querySelector("code");
-
-  if (code) {
-    const success = await copyTextToClipboard(code.textContent);
-
-    if (success) {
-      // 显示成功状态
-      btn.setAttribute("title", t("core.common.copied")); // 使用 i18n
-      const originalHtml = btn.innerHTML;
-
-      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="20,6 9,17 4,12"></polyline>
-      </svg>`;
-      btn.style.color = "#4caf50";
-
-      setTimeout(() => {
-        btn.innerHTML = originalHtml;
-        btn.style.color = "";
-        btn.setAttribute("title", t("core.common.copy")); // 还原 title
-      }, 2000);
-    } else {
-      // 失败反馈
-      console.error("Copy failed");
-    }
-  }
-}
-
-// 获取内容
 async function fetchContent() {
   if (!props.pluginName) return;
-
+  const requestId = ++lastRequestId.value;
   loading.value = true;
   content.value = null;
   error.value = null;
@@ -359,44 +189,90 @@ async function fetchContent() {
     const res = await axios.get(
       `${modeConfig.value.apiPath}?name=${props.pluginName}`,
     );
+    if (requestId !== lastRequestId.value) return;
+
     if (res.data.status === "ok") {
-      if (res.data.data.content) {
-        content.value = res.data.data.content;
-      } else {
-        // 请求成功但无内容
-        isEmpty.value = true;
-      }
+      if (res.data.data.content) content.value = res.data.data.content;
+      else isEmpty.value = true;
     } else {
       error.value = res.data.message;
     }
   } catch (err) {
-    error.value = err.message;
+    if (requestId === lastRequestId.value) error.value = err.message;
   } finally {
-    loading.value = false;
+    if (requestId === lastRequestId.value) loading.value = false;
   }
 }
 
-// 打开GitHub中的仓库
-function openRepoInNewTab() {
-  if (props.repoUrl) {
-    window.open(props.repoUrl, "_blank");
+watch(
+  [() => props.show, () => props.pluginName, () => props.mode],
+  ([show, name]) => {
+    if (show && name) fetchContent();
+  },
+  { immediate: true },
+);
+
+function handleContainerClick(event) {
+  const btn = event.target.closest(".copy-code-btn");
+  if (!btn) return;
+  const code = btn.closest(".code-block-wrapper")?.querySelector("code");
+  if (code) {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(code.textContent)
+        .then(() => showCopyFeedback(btn, true))
+        .catch(() => tryFallbackCopy(code.textContent, btn));
+    } else {
+      tryFallbackCopy(code.textContent, btn);
+    }
   }
 }
 
-// 刷新内容
-function refreshContent() {
-  fetchContent();
+function tryFallbackCopy(text, btn) {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    Object.assign(textArea.style, {
+      position: "absolute",
+      opacity: "0",
+      zIndex: "-1",
+    });
+    btn.parentNode.appendChild(textArea);
+    textArea.select();
+    const success = document.execCommand("copy");
+    btn.parentNode.removeChild(textArea);
+    showCopyFeedback(btn, success);
+  } catch (err) {
+    showCopyFeedback(btn, false);
+  }
 }
 
-// 计算属性处理双向绑定
+function showCopyFeedback(btn, success) {
+  if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
+  btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
+  btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;
+  btn.style.color = success ? "var(--v-theme-success)" : "var(--v-theme-error)";
+
+  copyFeedbackTimer.value = setTimeout(() => {
+    if (document.body.contains(btn)) {
+      btn.innerHTML = ICONS.COPY;
+      btn.style.color = "";
+      btn.setAttribute("title", t("core.common.copy"));
+    }
+    copyFeedbackTimer.value = null;
+  }, 2000);
+}
+
 const _show = computed({
-  get() {
-    return props.show;
-  },
-  set(value) {
-    emit("update:show", value);
-  },
+  get: () => props.show,
+  set: (val) => emit("update:show", val),
 });
+
+// 安全打开外部链接
+function openExternalLink(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 </script>
 
 <template>
@@ -404,7 +280,7 @@ const _show = computed({
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h5">{{ modeConfig.title }}</span>
-        <v-btn icon @click="$emit('update:show', false)" variant="text">
+        <v-btn icon @click="_show = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -415,20 +291,19 @@ const _show = computed({
             v-if="repoUrl"
             color="primary"
             prepend-icon="mdi-github"
-            @click="openRepoInNewTab()"
+            @click="openExternalLink(repoUrl)"
           >
             {{ t("core.common.readme.buttons.viewOnGithub") }}
           </v-btn>
           <v-btn
             color="secondary"
             prepend-icon="mdi-refresh"
-            @click="refreshContent()"
+            @click="fetchContent"
           >
             {{ t("core.common.readme.buttons.refresh") }}
           </v-btn>
         </div>
 
-        <!-- 加载中 -->
         <div
           v-if="loading"
           class="d-flex flex-column align-center justify-center"
@@ -443,16 +318,13 @@ const _show = computed({
           <p class="text-body-1 text-center">{{ modeConfig.loading }}</p>
         </div>
 
-        <!-- 内容显示 -->
         <div
           v-else-if="renderedHtml"
-          ref="markdownContainer"
           class="markdown-body"
           v-html="renderedHtml"
           @click="handleContainerClick"
         ></div>
 
-        <!-- 错误提示 -->
         <div
           v-else-if="error"
           class="d-flex flex-column align-center justify-center"
@@ -469,7 +341,6 @@ const _show = computed({
           </p>
         </div>
 
-        <!-- 无内容提示 -->
         <div
           v-else-if="isEmpty"
           class="d-flex flex-column align-center justify-center"
@@ -489,11 +360,7 @@ const _show = computed({
       <v-divider></v-divider>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="$emit('update:show', false)"
-        >
+        <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
@@ -501,61 +368,55 @@ const _show = computed({
   </v-dialog>
 </template>
 
-<style>
-.markdown-body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+<style scoped>
+:deep(.markdown-body) {
+  --markdown-border: rgba(128, 128, 128, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    sans-serif;
   line-height: 1.6;
   padding: 8px 0;
   color: var(--v-theme-secondaryText);
 }
 
-/* 支持 align 属性居中 */
-.markdown-body [align="center"] {
+:deep(.markdown-body [align="center"]) {
   text-align: center;
 }
-
-.markdown-body [align="right"] {
+:deep(.markdown-body [align="right"]) {
   text-align: right;
 }
 
-/* 标题样式 */
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4),
+:deep(.markdown-body h5),
+:deep(.markdown-body h6) {
   margin-top: 24px;
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
 }
 
-.markdown-body h1 {
+:deep(.markdown-body h1) {
   font-size: 2em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-
-.markdown-body h2 {
+:deep(.markdown-body h2) {
   font-size: 1.5em;
   border-bottom: 1px solid var(--v-theme-border);
   padding-bottom: 0.3em;
 }
-
-.markdown-body p {
+:deep(.markdown-body p) {
   margin-top: 0;
   margin-bottom: 16px;
 }
 
-/* 代码块容器 */
-.markdown-body .code-block-wrapper {
+:deep(.markdown-body .code-block-wrapper) {
   position: relative;
   margin-bottom: 16px;
 }
-
-.markdown-body .code-lang-label {
+:deep(.markdown-body .code-lang-label) {
   position: absolute;
   top: 8px;
   left: 12px;
@@ -566,7 +427,7 @@ const _show = computed({
   z-index: 1;
 }
 
-.markdown-body .copy-code-btn {
+:deep(.markdown-body .copy-code-btn) {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -585,21 +446,21 @@ const _show = computed({
   z-index: 1;
 }
 
-.markdown-body .copy-code-btn:hover {
+:deep(.markdown-body .copy-code-btn:hover) {
   background: rgba(110, 118, 129, 0.6);
   color: #fff;
 }
 
-.markdown-body code {
+:deep(.markdown-body code) {
   padding: 0.2em 0.4em;
   margin: 0;
-  background-color: rgba(110, 118, 129, 0.4);
+  background-color: rgba(110, 118, 129, 0.2);
   border-radius: 6px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 85%;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-.markdown-body pre.hljs {
+:deep(.markdown-body pre.hljs) {
   padding: 16px;
   padding-top: 32px;
   overflow: auto;
@@ -610,20 +471,19 @@ const _show = computed({
   margin: 0;
 }
 
-.markdown-body pre.hljs code {
+:deep(.markdown-body pre.hljs code) {
   background-color: transparent;
   padding: 0;
   border-radius: 0;
   color: #c9d1d9;
 }
-
-.markdown-body ul,
-.markdown-body ol {
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
   padding-left: 2em;
   margin-bottom: 16px;
 }
 
-.markdown-body img {
+:deep(.markdown-body img) {
   max-width: 100%;
   margin: 8px 0;
   box-sizing: border-box;
@@ -631,9 +491,8 @@ const _show = computed({
   border-radius: 3px;
 }
 
-/* Shields.io 徽章样式 */
-.markdown-body img[src*="shields.io"],
-.markdown-body img[src*="badge"] {
+:deep(.markdown-body img[src*="shields.io"]),
+:deep(.markdown-body img[src*="badge"]) {
   display: inline-block;
   vertical-align: middle;
   height: auto;
@@ -641,59 +500,53 @@ const _show = computed({
   background-color: transparent;
 }
 
-.markdown-body blockquote {
+:deep(.markdown-body blockquote) {
   padding: 0 1em;
   color: var(--v-theme-secondaryText);
   border-left: 0.25em solid var(--v-theme-border);
   margin-bottom: 16px;
 }
 
-.markdown-body a {
+:deep(.markdown-body a) {
   color: var(--v-theme-primary);
   text-decoration: none;
 }
-
-.markdown-body a:hover {
+:deep(.markdown-body a:hover) {
   text-decoration: underline;
 }
 
-.markdown-body table {
+:deep(.markdown-body table) {
   border-spacing: 0;
   border-collapse: collapse;
   width: 100%;
-  margin-bottom: 0; /* margin 交给 container */
-  border: none; /* border 交给 container */
+  margin-bottom: 0;
+  border: 1px solid var(--markdown-border);
 }
-
-.markdown-body .table-container {
+:deep(.markdown-body .table-container) {
   width: 100%;
   overflow-x: auto;
   margin-bottom: 16px;
-  border: 1px solid #30363d;
+  border: 1px solid var(--markdown-border);
   border-radius: 6px;
 }
 
-.markdown-body table th,
-.markdown-body table td {
+:deep(.markdown-body table th),
+:deep(.markdown-body table td) {
   padding: 6px 13px;
-  border: 1px solid #30363d;
+  border: 1px solid var(--markdown-border);
 }
-
-.markdown-body table th {
+:deep(.markdown-body table th) {
   font-weight: 600;
-  background-color: rgba(110, 118, 129, 0.1);
+  background-color: rgba(128, 128, 128, 0.1);
 }
-
-.markdown-body table tr {
+:deep(.markdown-body table tr) {
   background-color: transparent;
-  border-top: 1px solid #30363d;
+}
+:deep(.markdown-body table tr:nth-child(2n)) {
+  background-color: rgba(128, 128, 128, 0.05);
 }
 
-.markdown-body table tr:nth-child(2n) {
-  background-color: rgba(110, 118, 129, 0.05);
-}
-
-.markdown-body hr {
+:deep(.markdown-body hr) {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
@@ -701,8 +554,7 @@ const _show = computed({
   border: 0;
 }
 
-/* 折叠内容样式 */
-.markdown-body details {
+:deep(.markdown-body details) {
   margin-bottom: 16px;
   border: 1px solid var(--v-theme-border);
   border-radius: 6px;
@@ -710,11 +562,10 @@ const _show = computed({
   background-color: var(--v-theme-surface);
 }
 
-.markdown-body details[open] {
+:deep(.markdown-body details[open]) {
   padding-bottom: 12px;
 }
-
-.markdown-body summary {
+:deep(.markdown-body summary) {
   cursor: pointer;
   font-weight: 600;
   padding: 4px 0;
@@ -724,38 +575,28 @@ const _show = computed({
   gap: 6px;
 }
 
-.markdown-body summary::before {
+:deep(.markdown-body summary::before) {
   content: "▶";
   font-size: 0.75em;
   transition: transform 0.2s ease;
 }
-
-.markdown-body details[open] summary::before {
+:deep(.markdown-body details[open] summary::before) {
   transform: rotate(90deg);
 }
-
-.markdown-body summary::-webkit-details-marker {
+:deep(.markdown-body summary::-webkit-details-marker) {
   display: none;
 }
-
-.markdown-body details > *:not(summary) {
+:deep(.markdown-body details > *:not(summary)) {
   margin-top: 12px;
 }
 
-/* 高亮样式覆盖 - 确保正确显示 */
-.markdown-body .hljs-keyword,
-.markdown-body .hljs-selector-tag,
-.markdown-body .hljs-title,
-.markdown-body .hljs-section,
-.markdown-body .hljs-doctag,
-.markdown-body .hljs-name,
-.markdown-body .hljs-strong {
+:deep(.markdown-body .hljs-keyword),
+:deep(.markdown-body .hljs-selector-tag),
+:deep(.markdown-body .hljs-title),
+:deep(.markdown-body .hljs-section),
+:deep(.markdown-body .hljs-doctag),
+:deep(.markdown-body .hljs-name),
+:deep(.markdown-body .hljs-strong) {
   font-weight: bold;
 }
 </style>
-
-<script>
-export default {
-  name: "ReadmeDialog",
-};
-</script>
