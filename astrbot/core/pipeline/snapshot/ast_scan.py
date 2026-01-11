@@ -4,8 +4,9 @@ import ast
 import inspect
 import sys
 import textwrap
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 from .ast_risk_scanner import _RiskScanner
 

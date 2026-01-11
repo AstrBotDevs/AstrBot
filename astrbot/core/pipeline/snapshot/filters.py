@@ -51,11 +51,11 @@ def summarize_filters(
                 "type": trigger_type,
                 "signature": cmd,
                 "extra": {
-                    "aliases": sorted(list(getattr(f, "alias", set()))),
+                    "aliases": sorted(getattr(f, "alias", set())),
                 },
             }
             parts.append(f"command={cmd}")
-            aliases = sorted(list(getattr(f, "alias", set())))
+            aliases = sorted(getattr(f, "alias", set()))
             if aliases:
                 parts.append(f"alias={','.join(aliases)}")
         elif isinstance(f, CommandGroupFilter):
@@ -65,7 +65,7 @@ def summarize_filters(
                 "type": "command_group",
                 "signature": cmd,
                 "extra": {
-                    "aliases": sorted(list(getattr(f, "alias", set()))),
+                    "aliases": sorted(getattr(f, "alias", set())),
                 },
             }
             parts.append(f"command_group={cmd}")

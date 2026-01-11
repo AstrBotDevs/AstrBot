@@ -10,11 +10,11 @@ from astrbot.core.star.star_handler import StarHandlerMetadata
 
 from .ast_scan import (
     StaticScanResult,
+    _format_parse_error,
     _NameCallScanner,
+    _parse_source_compat,
     _RiskScanner,
     _SelfCallScanner,
-    _format_parse_error,
-    _parse_source_compat,
 )
 
 logger = astrbot_logger
@@ -75,10 +75,18 @@ def _fallback_risks_from_metadata(
     ]
 
     event_name = getattr(getattr(handler, "event_type", None), "name", "") or ""
-    llm_mutations: dict[str, str] = {"prompt": "none", "system_prompt": "none", "persona_prompt": "none"}
+    llm_mutations: dict[str, str] = {
+        "prompt": "none",
+        "system_prompt": "none",
+        "persona_prompt": "none",
+    }
 
     if event_name == "OnLLMRequestEvent":
-        llm_mutations = {"prompt": "unknown", "system_prompt": "unknown", "persona_prompt": "unknown"}
+        llm_mutations = {
+            "prompt": "unknown",
+            "system_prompt": "unknown",
+            "persona_prompt": "unknown",
+        }
         risks.append(
             {
                 "type": "may_mutate_prompt",
@@ -142,7 +150,11 @@ def scan_static_risks(
                     "details": src_err or "inspect.getsource returned empty",
                 },
             ],
-            llm_mutations={"prompt": "unknown", "system_prompt": "unknown", "persona_prompt": "unknown"},
+            llm_mutations={
+                "prompt": "unknown",
+                "system_prompt": "unknown",
+                "persona_prompt": "unknown",
+            },
             effects=[],
         )
 
@@ -232,7 +244,11 @@ def scan_static_risks(
             },
         )
 
-    llm_mutations: dict[str, str] = {"prompt": "none", "system_prompt": "none", "persona_prompt": "none"}
+    llm_mutations: dict[str, str] = {
+        "prompt": "none",
+        "system_prompt": "none",
+        "persona_prompt": "none",
+    }
     for field in ("prompt", "system_prompt"):
         if field in v.assigns:
             llm_mutations[field] = "overwrite"
@@ -275,7 +291,9 @@ def scan_static_risks(
             },
         )
 
-    if any(r["type"] == "may_send_directly" for r in risks) and any(r["type"] == "may_set_result" for r in risks):
+    if any(r["type"] == "may_send_directly" for r in risks) and any(
+        r["type"] == "may_set_result" for r in risks
+    ):
         risks.append(
             {
                 "type": "duplicate_send_risk",
@@ -434,9 +452,17 @@ def scan_static_mutations_from_callable(
                 reason,
                 exc_info=True,
             )
-        return {"prompt": "unknown", "system_prompt": "unknown", "persona_prompt": "unknown"}, reason
+        return {
+            "prompt": "unknown",
+            "system_prompt": "unknown",
+            "persona_prompt": "unknown",
+        }, reason
     if not src:
-        return {"prompt": "unknown", "system_prompt": "unknown", "persona_prompt": "unknown"}, "inspect.getsource returned empty"
+        return {
+            "prompt": "unknown",
+            "system_prompt": "unknown",
+            "persona_prompt": "unknown",
+        }, "inspect.getsource returned empty"
 
     try:
         tree = _parse_source_compat(src)
@@ -450,7 +476,11 @@ def scan_static_mutations_from_callable(
             reason,
             exc_info=True,
         )
-        return {"prompt": "unknown", "system_prompt": "unknown", "persona_prompt": "unknown"}, reason
+        return {
+            "prompt": "unknown",
+            "system_prompt": "unknown",
+            "persona_prompt": "unknown",
+        }, reason
 
     v = _RiskScanner()
     v.visit(tree)
@@ -468,7 +498,11 @@ def scan_static_mutations_from_callable(
             v.persona_prompt_append,
         )
 
-    mutations: dict[str, str] = {"prompt": "none", "system_prompt": "none", "persona_prompt": "none"}
+    mutations: dict[str, str] = {
+        "prompt": "none",
+        "system_prompt": "none",
+        "persona_prompt": "none",
+    }
     for field in ("prompt", "system_prompt"):
         if field in v.assigns:
             mutations[field] = "overwrite"

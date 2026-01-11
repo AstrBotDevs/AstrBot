@@ -64,8 +64,10 @@ class _RiskScanner(ast.NodeVisitor):
 
     @classmethod
     def _is_persona_prompt_attr(cls, node: ast.AST) -> bool:
-        return isinstance(node, ast.Attribute) and node.attr == "prompt" and cls._is_persona_base(
-            node.value
+        return (
+            isinstance(node, ast.Attribute)
+            and node.attr == "prompt"
+            and cls._is_persona_base(node.value)
         )
 
     @classmethod
@@ -81,7 +83,9 @@ class _RiskScanner(ast.NodeVisitor):
     def _confidence_rank(level: str) -> int:
         return {"low": 0, "medium": 1, "high": 2}.get(level, -1)
 
-    def _record_stop_event(self, *, confidence: str, reason: str, node: ast.AST) -> None:
+    def _record_stop_event(
+        self, *, confidence: str, reason: str, node: ast.AST
+    ) -> None:
         self.stop_event_sites.append(
             {
                 "confidence": confidence,
@@ -127,8 +131,10 @@ class _RiskScanner(ast.NodeVisitor):
             lowered = name.lower()
             if name == "event" or lowered.endswith("event"):
                 self.event_vars.add(name)
-            if name in {"req", "request", "provider_request"} or lowered.endswith("_req") or (
-                "providerrequest" in lowered
+            if (
+                name in {"req", "request", "provider_request"}
+                or lowered.endswith("_req")
+                or ("providerrequest" in lowered)
             ):
                 self.req_vars.add(name)
             if "llm_response" in lowered or "llmresponse" in lowered:
@@ -157,7 +163,9 @@ class _RiskScanner(ast.NodeVisitor):
         return (
             isinstance(node, ast.Attribute)
             and node.attr == "chain"
-            and (self._is_get_result_call(node.value) or self._is_result_ref(node.value))
+            and (
+                self._is_get_result_call(node.value) or self._is_result_ref(node.value)
+            )
         )
 
     def _handle_result_var_assign(self, tgt: ast.AST, value: ast.AST) -> None:
@@ -172,7 +180,9 @@ class _RiskScanner(ast.NodeVisitor):
         return (
             isinstance(node, ast.Attribute)
             and node.attr == "chain"
-            and (self._is_get_result_call(node.value) or self._is_result_ref(node.value))
+            and (
+                self._is_get_result_call(node.value) or self._is_result_ref(node.value)
+            )
         )
 
     def _handle_chain_var_assign(self, tgt: ast.AST, value: ast.AST) -> None:
@@ -183,7 +193,9 @@ class _RiskScanner(ast.NodeVisitor):
         elif isinstance(value, ast.Name) and value.id in self.chain_vars:
             self.chain_vars.add(tgt.id)
 
-    def _handle_attr_write(self, target: ast.Attribute, value: ast.AST, node: ast.AST) -> None:
+    def _handle_attr_write(
+        self, target: ast.Attribute, value: ast.AST, node: ast.AST
+    ) -> None:
         base_name = self._name_id(target.value)
 
         if target.attr in {"prompt", "system_prompt"} and base_name in self.req_vars:
@@ -197,7 +209,11 @@ class _RiskScanner(ast.NodeVisitor):
             return
 
         if target.attr == "contexts" and base_name in self.req_vars:
-            op = "clear" if isinstance(value, ast.List) and not getattr(value, "elts", []) else "overwrite"
+            op = (
+                "clear"
+                if isinstance(value, ast.List) and not getattr(value, "elts", [])
+                else "overwrite"
+            )
             self._add_effect(
                 target="provider_request.contexts",
                 op=op,
@@ -208,7 +224,11 @@ class _RiskScanner(ast.NodeVisitor):
             return
 
         if target.attr == "extra_user_content_parts" and base_name in self.req_vars:
-            op = "clear" if isinstance(value, ast.List) and not getattr(value, "elts", []) else "overwrite"
+            op = (
+                "clear"
+                if isinstance(value, ast.List) and not getattr(value, "elts", [])
+                else "overwrite"
+            )
             self._add_effect(
                 target="provider_request.extra_user_content_parts",
                 op=op,
@@ -250,12 +270,18 @@ class _RiskScanner(ast.NodeVisitor):
         }:
             eff_target = f"llm_response.{target.attr}"
             op = "overwrite"
-            if target.attr in {"tools_call_name", "tools_call_args"} and isinstance(value, ast.List) and not getattr(
-                value, "elts", []
+            if (
+                target.attr in {"tools_call_name", "tools_call_args"}
+                and isinstance(value, ast.List)
+                and not getattr(value, "elts", [])
             ):
                 op = "clear"
-            confidence = "medium" if base_name in self._llm_response_vars_inferred else "high"
-            evidence_suffix = "inferred" if base_name in self._llm_response_vars_inferred else "param"
+            confidence = (
+                "medium" if base_name in self._llm_response_vars_inferred else "high"
+            )
+            evidence_suffix = (
+                "inferred" if base_name in self._llm_response_vars_inferred else "param"
+            )
             self._add_effect(
                 target=eff_target,
                 op=op,
@@ -289,8 +315,14 @@ class _RiskScanner(ast.NodeVisitor):
                 )
                 return
 
-        if target.attr == "chain" and (self._is_get_result_call(target.value) or self._is_result_ref(target.value)):
-            op = "clear" if isinstance(value, ast.List) and not getattr(value, "elts", []) else "overwrite"
+        if target.attr == "chain" and (
+            self._is_get_result_call(target.value) or self._is_result_ref(target.value)
+        ):
+            op = (
+                "clear"
+                if isinstance(value, ast.List) and not getattr(value, "elts", [])
+                else "overwrite"
+            )
             self._add_effect(
                 target="result.chain",
                 op=op,
@@ -375,11 +407,19 @@ class _RiskScanner(ast.NodeVisitor):
 
         if call_name == "stop_event":
             if self._fn_depth >= 2:
-                self._record_stop_event(confidence="low", reason="nested_callable", node=node)
+                self._record_stop_event(
+                    confidence="low", reason="nested_callable", node=node
+                )
             elif self._guard_stack:
-                self._record_stop_event(confidence="medium", reason=f"inside_{self._guard_stack[-1]}", node=node)
+                self._record_stop_event(
+                    confidence="medium",
+                    reason=f"inside_{self._guard_stack[-1]}",
+                    node=node,
+                )
             else:
-                self._record_stop_event(confidence="high", reason="unconditional", node=node)
+                self._record_stop_event(
+                    confidence="high", reason="unconditional", node=node
+                )
             self._add_effect(
                 target="stop",
                 op="call",
@@ -394,7 +434,13 @@ class _RiskScanner(ast.NodeVisitor):
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id in self.event_vars
         ):
-            self._add_effect(target="send", op="call", confidence="high", evidence="event.send_call", node=node)
+            self._add_effect(
+                target="send",
+                op="call",
+                confidence="high",
+                evidence="event.send_call",
+                node=node,
+            )
 
         if isinstance(node.func, ast.Attribute):
             method = node.func.attr
@@ -420,7 +466,11 @@ class _RiskScanner(ast.NodeVisitor):
                     node=node,
                 )
 
-            if isinstance(recv, ast.Name) and recv.id in self.chain_vars and method in list_ops:
+            if (
+                isinstance(recv, ast.Name)
+                and recv.id in self.chain_vars
+                and method in list_ops
+            ):
                 if method in list_ops_clear:
                     op = "clear"
                 elif method in list_ops_append:
@@ -435,8 +485,15 @@ class _RiskScanner(ast.NodeVisitor):
                     node=node,
                 )
 
-            if isinstance(recv, ast.Attribute) and isinstance(recv.value, ast.Name) and recv.value.id in self.req_vars:
-                if recv.attr in {"contexts", "extra_user_content_parts"} and method in list_ops:
+            if (
+                isinstance(recv, ast.Attribute)
+                and isinstance(recv.value, ast.Name)
+                and recv.value.id in self.req_vars
+            ):
+                if (
+                    recv.attr in {"contexts", "extra_user_content_parts"}
+                    and method in list_ops
+                ):
                     if method in list_ops_clear:
                         op = "clear"
                     elif method in list_ops_append:
@@ -459,8 +516,15 @@ class _RiskScanner(ast.NodeVisitor):
                         node=node,
                     )
 
-            if isinstance(recv, ast.Attribute) and isinstance(recv.value, ast.Name) and recv.value.id in self.llm_response_vars:
-                if recv.attr in {"tools_call_name", "tools_call_args"} and method in list_ops:
+            if (
+                isinstance(recv, ast.Attribute)
+                and isinstance(recv.value, ast.Name)
+                and recv.value.id in self.llm_response_vars
+            ):
+                if (
+                    recv.attr in {"tools_call_name", "tools_call_args"}
+                    and method in list_ops
+                ):
                     if method in list_ops_clear:
                         op = "clear"
                     elif method in list_ops_append:
@@ -523,7 +587,10 @@ class _RiskScanner(ast.NodeVisitor):
                     )
 
             base_name = self._name_id(node.target.value)
-            if base_name in self.req_vars and node.target.attr in {"prompt", "system_prompt"}:
+            if base_name in self.req_vars and node.target.attr in {
+                "prompt",
+                "system_prompt",
+            }:
                 self._add_effect(
                     target=f"provider_request.{node.target.attr}",
                     op="append",
@@ -533,7 +600,8 @@ class _RiskScanner(ast.NodeVisitor):
                 )
 
             if node.target.attr == "chain" and (
-                self._is_get_result_call(node.target.value) or self._is_result_ref(node.target.value)
+                self._is_get_result_call(node.target.value)
+                or self._is_result_ref(node.target.value)
             ):
                 self._add_effect(
                     target="result.chain",
@@ -553,8 +621,14 @@ class _RiskScanner(ast.NodeVisitor):
     def visit_Yield(self, node: ast.Yield) -> Any:
         if isinstance(node.value, ast.Call):
             fn = node.value.func
-            if isinstance(fn, ast.Name) and fn.id in {"MessageEventResult", "CommandResult"}:
+            if isinstance(fn, ast.Name) and fn.id in {
+                "MessageEventResult",
+                "CommandResult",
+            }:
                 self.yields_result = True
-            if isinstance(fn, ast.Attribute) and fn.attr in {"MessageEventResult", "CommandResult"}:
+            if isinstance(fn, ast.Attribute) and fn.attr in {
+                "MessageEventResult",
+                "CommandResult",
+            }:
                 self.yields_result = True
         self.generic_visit(node)

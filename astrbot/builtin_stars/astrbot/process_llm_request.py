@@ -46,7 +46,9 @@ class ProcessLLMRequest:
             default_persona = self.ctx.persona_manager.selected_default_persona_v3
             if not default_persona:
                 try:
-                    default_persona = await self.ctx.persona_manager.get_default_persona_v3(umo)
+                    default_persona = (
+                        await self.ctx.persona_manager.get_default_persona_v3(umo)
+                    )
                 except Exception:
                     default_persona = None
             if default_persona:
