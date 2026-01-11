@@ -249,56 +249,100 @@ watch(
   },
 );
 
-// 监听 renderedHtml 变化，初始化复制按钮
+// 监听 renderedHtml 变化 (仅作调试或是其他用途，不再绑定事件)
 watch(renderedHtml, () => {
-  nextTick(() => {
-    initCopyButtons();
-  });
+  // 事件委托模式下不需要手动初始化按钮事件
 });
 
-// 初始化复制按钮
-function initCopyButtons() {
-  if (!markdownContainer.value) return;
+// 复制到剪贴板函数（带降级方案）
+async function copyTextToClipboard(text) {
+  // 1. 尝试使用 Clipboard API
+// 复制到剪贴板函数（带降级方案）
+async function copyTextToClipboard(text) {
+  // 1. 尝试使用 Clipboard API (仅在安全上下文有效)
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      console.warn("Clipboard API failed, trying fallback...", err);
+    }
+  }
 
-  const copyButtons =
-    markdownContainer.value.querySelectorAll(".copy-code-btn");
+  // 2. 降级方案：使用 textarea + execCommand
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
 
-  copyButtons.forEach((btn) => {
-    btn.addEventListener("click", handleCopyCode);
-  });
+    // 样式优化：确保元素存在于布局中但不可见，且防止视口滚动
+    textArea.style.position = "absolute"; // 改为 absolute，相对于 container 定位
+    textArea.style.left = "0";
+    textArea.style.top = "0";
+    textArea.style.width = "1px";
+    textArea.style.height = "1px";
+    textArea.style.padding = "0";
+    textArea.style.margin = "0";
+    textArea.style.border = "none";
+    textArea.style.outline = "none";
+    textArea.style.boxShadow = "none";
+    textArea.style.background = "transparent";
+    textArea.style.opacity = "0";
+
+    // 将 textarea 挂载到 markdown 容器内部，防止 v-dialog 的 focus trap 干扰
+    if (markdownContainer.value) {
+      markdownContainer.value.appendChild(textArea);
+    } else {
+      document.body.appendChild(textArea);
+    }
+
+    textArea.focus();
+    textArea.select();
+
+    const successful = document.execCommand("copy");
+
+    if (markdownContainer.value && markdownContainer.value.contains(textArea)) {
+      markdownContainer.value.removeChild(textArea);
+    } else {
+      document.body.removeChild(textArea);
+    }
+
+    return successful;
+  } catch (err) {
+    console.error("Fallback copy failed:", err);
+    return false;
+  }
 }
 
-// 处理复制代码
-function handleCopyCode(event) {
-  const btn = event.currentTarget;
+// 处理点击事件（事件委托）
+async function handleContainerClick(event) {
+  const btn = event.target.closest(".copy-code-btn");
+  if (!btn) return;
+
   const wrapper = btn.closest(".code-block-wrapper");
   const code = wrapper.querySelector("code");
 
   if (code) {
-    navigator.clipboard
-      .writeText(code.textContent)
-      .then(() => {
-        // 显示成功状态
-        btn.setAttribute("title", t("core.common.copied")); // 使用 i18n
-        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    const success = await copyTextToClipboard(code.textContent);
+
+    if (success) {
+      // 显示成功状态
+      btn.setAttribute("title", t("core.common.copied")); // 使用 i18n
+      const originalHtml = btn.innerHTML;
+
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="20,6 9,17 4,12"></polyline>
       </svg>`;
-        btn.style.color = "#4caf50";
+      btn.style.color = "#4caf50";
 
-        setTimeout(() => {
-          btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>`;
-          btn.style.color = "";
-        }, 2000);
-        setTimeout(() => {
-          btn.setAttribute("title", t("core.common.copy")); // 还原 title
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-      });
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.style.color = "";
+        btn.setAttribute("title", t("core.common.copy")); // 还原 title
+      }, 2000);
+    } else {
+      // 失败反馈
+      console.error("Copy failed");
+    }
   }
 }
 
@@ -405,6 +449,7 @@ const _show = computed({
           ref="markdownContainer"
           class="markdown-body"
           v-html="renderedHtml"
+          @click="handleContainerClick"
         ></div>
 
         <!-- 错误提示 -->
