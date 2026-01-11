@@ -565,40 +565,11 @@ const openExtensionConfig = async (extension_name) => {
   }
 };
 
-// 递归清理对象中的空字符串列表项
-const cleanEmptyListItems = (obj) => {
-  if (obj === null || obj === undefined) return obj;
-  
-  if (Array.isArray(obj)) {
-    // 如果是数组，过滤掉空字符串
-    return obj.filter(item => {
-      if (typeof item === 'string') {
-        return item.trim() !== '';
-      }
-      return true;
-    }).map(item => cleanEmptyListItems(item));
-  }
-  
-  if (typeof obj === 'object') {
-    // 如果是对象，递归处理每个属性
-    const result = {};
-    for (const key in obj) {
-      result[key] = cleanEmptyListItems(obj[key]);
-    }
-    return result;
-  }
-  
-  return obj;
-};
-
 const updateConfig = async () => {
   try {
-    // 在保存前清理空字符串列表项
-    const cleanedConfig = cleanEmptyListItems(extension_config.config);
-    
     const res = await axios.post(
       "/api/config/plugin/update?plugin_name=" + curr_namespace.value,
-      cleanedConfig,
+      extension_config.config,
     );
     if (res.data.status === "ok") {
       toast(res.data.message, "success");
