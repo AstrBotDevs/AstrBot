@@ -97,6 +97,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "sanitize_context_by_modalities": False,
         "agent_runner_type": "local",
         "dify_agent_runner_provider_id": "",
         "coze_agent_runner_provider_id": "",
@@ -2639,6 +2640,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
                         "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.sanitize_context_by_modalities": {
+                        "description": "按模型能力清理历史上下文",
+                        "type": "bool",
+                        "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
