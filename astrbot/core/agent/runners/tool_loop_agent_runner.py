@@ -469,10 +469,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
-                        # 这里我们将直接结束 Agent Loop。
-                        # 发送消息逻辑在 ToolExecutor 中处理了。
+                        # 这里我们将直接结束 Agent Loop
+                        # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
