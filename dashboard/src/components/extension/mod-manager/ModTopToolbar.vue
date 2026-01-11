@@ -3,7 +3,7 @@
     class="mod-top-toolbar"
     color="surface"
     density="compact"
-    height="52"
+    height="60"
     elevation="1"
   >
     <v-spacer />
@@ -16,13 +16,18 @@
         density="compact"
         hide-details
         inset
-        label="显示系统插件"
+        :label="props.showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins')"
         @update:model-value="emit('toggle-show-reserved')"
       />
 
-      <v-btn icon size="small" variant="text" @click="emit('install')">
-        <v-icon size="20">mdi-plus</v-icon>
-        <v-tooltip activator="parent" location="top">安装插件</v-tooltip>
+      <v-btn
+        size="small"
+        variant="tonal"
+        color="primary"
+        prepend-icon="mdi-plus"
+        @click="emit('install')"
+      >
+        {{ tm('buttons.install') }}
       </v-btn>
 
       <v-badge
@@ -34,19 +39,53 @@
         offset-y="2"
       >
         <v-btn
-          icon
           size="small"
-          variant="text"
+          variant="tonal"
+          color="warning"
+          prepend-icon="mdi-download-multiple"
           :loading="isUpdatingAll"
           :disabled="isUpdatingAll || props.updatableCount <= 0"
           @click="emit('update-all')"
         >
-          <v-icon size="20">mdi-download-multiple</v-icon>
-          <v-tooltip activator="parent" location="top">
-            批量更新
-          </v-tooltip>
+          {{ tm('buttons.updateAll') }}
         </v-btn>
       </v-badge>
+
+      <!-- Failed plugin load info (extension_data.message) -->
+      <v-dialog v-if="hasFailedMessage" max-width="500px">
+        <template #activator="{ props: activatorProps }">
+          <v-btn
+            v-bind="activatorProps"
+            data-testid="failed-message-alert"
+            aria-label="插件加载失败"
+            icon
+            size="small"
+            color="error"
+            variant="tonal"
+            class="mod-top-toolbar__alert"
+          >
+            <v-icon size="20" color="error">mdi-alert-circle</v-icon>
+            <v-tooltip activator="parent" location="top">{{ tm('dialogs.error.title') }}</v-tooltip>
+          </v-btn>
+        </template>
+
+        <template #default="{ isActive }">
+          <v-card class="rounded-lg">
+            <v-card-title class="headline d-flex align-center">
+              <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+              {{ tm('dialogs.error.title') }}
+            </v-card-title>
+            <v-card-text>
+              <p class="text-body-1">{{ failedMessageText }}</p>
+              <p class="text-caption mt-2">{{ tm('dialogs.error.checkConsole') }}</p>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer></v-spacer>
+              <v-btn color="primary" @click="isActive.value = false">{{ tm('buttons.close') }}</v-btn>
+            </v-card-actions>
+          </v-card>
+        </template>
+      </v-dialog>
 
       <StyledMenu offset="10" location="bottom end">
         <template #activator="{ props: menuProps }">
@@ -80,8 +119,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useModuleI18n } from '@/i18n/composables'
 import StyledMenu from '@/components/shared/StyledMenu.vue'
 import type { InstalledViewMode, PluginSummary } from './types'
+
+const { tm } = useModuleI18n('features/extension')
 
 const props = defineProps<{
   search: string
@@ -90,6 +132,7 @@ const props = defineProps<{
   updatingAll?: boolean
   installedViewMode: InstalledViewMode
   selectedPlugin?: PluginSummary | null
+  failedMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -107,6 +150,9 @@ const searchModel = computed<string>({
 })
 
 const isUpdatingAll = computed(() => props.updatingAll ?? false)
+
+const failedMessageText = computed(() => (props.failedMessage ?? '').trim())
+const hasFailedMessage = computed(() => failedMessageText.value.length > 0)
 
 const nextViewMode = computed<InstalledViewMode>(() =>
   props.installedViewMode === 'mod' ? 'legacy' : 'mod'
@@ -127,6 +173,11 @@ const toggleViewMode = () => emit('set-view-mode', nextViewMode.value)
 .mod-top-toolbar {
   border-radius: 14px;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  overflow: visible;
+}
+
+.mod-top-toolbar :deep(.v-toolbar__content) {
+  overflow: visible;
 }
 
 .mod-top-toolbar__toggle {
@@ -135,5 +186,9 @@ const toggleViewMode = () => emit('set-view-mode', nextViewMode.value)
 
 .mod-top-toolbar__toggle :deep(.v-label) {
   white-space: nowrap;
+}
+
+.mod-top-toolbar__alert {
+  flex: 0 0 auto;
 }
 </style>

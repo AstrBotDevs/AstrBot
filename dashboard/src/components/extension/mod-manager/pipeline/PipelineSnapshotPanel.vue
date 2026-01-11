@@ -5,13 +5,13 @@ import { usePipelineSnapshot } from '@/composables/usePipelineSnapshot'
 import type { EffectTarget, PipelineSnapshot, PipelineStageId, SnapshotScopeMode, StageParticipant } from './pipelineSnapshotTypes'
 
 import { applyTraceFilter, buildAvailableTargets, buildTraceRows, groupTraceRowsByTarget } from './traceGrouping'
-import { buildTraceFocusGroupKey, inferTraceFocusTarget } from './traceFocus'
+import { inferTraceFocusTarget } from './traceFocus'
 
 import PipelineFishboneView from './PipelineFishboneView.vue'
 import TraceFishboneView from './TraceFishboneView.vue'
 import StageDetailPanel from './StageDetailPanel.vue'
 import ConflictListPanel from './ConflictListPanel.vue'
-import TracePanel from './TracePanel.vue'
+import TraceImpactDetailPanel from './TraceImpactDetailPanel.vue'
 import PromptPreviewDialog from './PromptPreviewDialog.vue'
 
 type SnapshotPanelMode = 'pipeline' | 'trace'
@@ -34,13 +34,18 @@ const props = withDefaults(
      * 仅用于 trace 模式：需要同时高亮的 stage（用于 target 下的 leaf 高亮）。
      */
     traceStageId?: PipelineStageId | null
+    /**
+     * 仅用于 trace 模式：外部导航时携带的参与者 id（用于定位影响链路，不默认选中影响点）。
+     */
+    traceParticipantId?: string | null
   }>(),
   {
     mode: 'pipeline',
     showReserved: true,
     traceNavigationToken: 0,
     traceFocusTarget: null,
-    traceStageId: null
+    traceStageId: null,
+    traceParticipantId: null
   }
 )
 
@@ -56,8 +61,7 @@ const selectedParticipantId = ref<string | null>(null)
 const showAllStages = ref(false)
 
 const traceSelectedTarget = ref<'__all__' | EffectTarget>('__all__')
-const traceOnlyHighImpact = ref(false)
-const traceFocusGroupKey = ref<string | null>(null)
+const traceSelectedImpactKey = ref<string | null>(null)
 
 const traceAllRows = computed(() => buildTraceRows(displaySnapshot.value))
 const traceAvailableTargets = computed(() => buildAvailableTargets(traceAllRows.value))
@@ -69,7 +73,7 @@ const traceTargetItems = computed(() => [
 const traceFilteredRows = computed(() =>
   applyTraceFilter(traceAllRows.value, {
     selectedTarget: traceSelectedTarget.value,
-    onlyHighImpact: traceOnlyHighImpact.value
+    onlyHighImpact: false
   })
 )
 
@@ -81,50 +85,53 @@ const traceActiveTarget = computed<EffectTarget | null>(() =>
   traceSelectedTarget.value === '__all__' ? null : (traceSelectedTarget.value as EffectTarget)
 )
 
-const focusTraceGroup = (key: string) => {
-  const k = String(key || '')
+const traceSelectedRow = computed(() => {
+  const key = traceSelectedImpactKey.value
+  if (!key) return null
+  return traceAllRows.value.find((r) => r.key === key) ?? null
+})
 
-  // 左侧点击“主干节点”时：将右侧筛选切到对应分组，便于钻取
-  // - stage 模式：主干是 stageId，因此重置 target 为 All（让右侧展示该 stage 下全部 target）
-  // - target 模式：主干是 targetKey，因此将 target 设置为该 key
-  if (!k.includes(':')) {
-    // 影响链路固定为按 target 聚合：主干 key 即 targetKey
-    traceSelectedTarget.value = k as EffectTarget
-  }
-
-  // 同 key 也触发滚动：先清空再赋值
-  traceFocusGroupKey.value = null
-  traceFocusGroupKey.value = k
+const selectImpactKey = (key: string) => {
+  traceSelectedImpactKey.value = key || null
 }
 
-const promptDialog = ref(false)
 
-const PREVIEW_PROMPT_STORAGE_KEY = 'astrbot.pipeline.previewPrompt'
-const previewPrompt = ref<string>(localStorage.getItem(PREVIEW_PROMPT_STORAGE_KEY) ?? '')
+const applyExternalTraceFocus = () => {
+  if (props.mode !== 'trace') return
+
+  const token = Number(props.traceNavigationToken || 0)
+  const hasExternal = token > 0 || Boolean(props.traceFocusTarget) || Boolean(props.traceStageId) || Boolean(props.traceParticipantId)
+  if (!hasExternal) return
+
+  const target = (props.traceFocusTarget || 'result.chain') as EffectTarget
+  const stageId = props.traceStageId ?? null
+
+  selectedStageId.value = stageId
+  traceSelectedTarget.value = target
+
+  // 外部跳转时：只定位到 target/stage，不默认展开/选中任何具体影响点
+  traceSelectedImpactKey.value = null
+}
 
 watch(
-  previewPrompt,
-  (value) => {
-    try {
-      localStorage.setItem(PREVIEW_PROMPT_STORAGE_KEY, String(value ?? ''))
-    } catch {
-      // ignore storage errors (e.g., private mode)
-    }
-  },
-  { flush: 'post' }
+  () => [props.mode, props.traceNavigationToken, props.traceFocusTarget, props.traceStageId, props.traceParticipantId] as const,
+  () => applyExternalTraceFocus(),
+  { flush: 'post', immediate: true }
 )
+
+const promptDialog = ref(false)
 
 const { snapshot, loading, error, refresh } = usePipelineSnapshot({
   scopeMode,
   umo: computed(() => (sessionUmo.value.trim() ? sessionUmo.value.trim() : null)),
   autoRefresh: true,
-  render: true,
-  previewPrompt
+  render: false // 首屏只加载静态快照，不触发 dry-run
 })
 
 const emit = defineEmits<{
   (e: 'select-plugin', pluginName: string): void
   (e: 'navigate-trace', payload: { participantId: string; stageId: PipelineStageId | null; target: EffectTarget }): void
+  (e: 'navigate-pipeline', payload: { stageId: PipelineStageId; participantId: string }): void
 }>()
 
 const displaySnapshot = computed<PipelineSnapshot | null>(() => {
@@ -210,11 +217,11 @@ const handleRefresh = async (forceRefresh = false) => {
   const mode = scopeMode.value
   const umo = mode === 'session' ? (sessionUmo.value.trim() || null) : null
   await refresh({
+    // 刷新按钮只刷新静态快照，不触发 dry-run
     scopeMode: mode,
     umo,
     forceRefresh,
-    render: true,
-    previewPrompt: previewPrompt.value.trim() || undefined
+    render: false
   })
 }
 
@@ -259,45 +266,27 @@ const handleSelectPlugin = (name: string) => {
   emit('select-plugin', name)
 }
 
+const handleNavigatePipeline = (payload: { stageId: PipelineStageId; participantId: string }) => {
+  emit('navigate-pipeline', payload)
+}
+
 const handleViewImpactChain = (payload: { participantId: string; stageId: PipelineStageId | null }) => {
   const participant = findParticipantById(displaySnapshot.value, payload.participantId)
   const target = inferTraceFocusTarget({ participant, stageId: payload.stageId })
   emit('navigate-trace', { participantId: payload.participantId, stageId: payload.stageId, target })
 }
 
-const applyExternalTraceFocus = () => {
-  if (props.mode !== 'trace') return
-
-  const token = Number(props.traceNavigationToken || 0)
-  const hasExternal =
-    token > 0 || Boolean(props.traceFocusTarget) || Boolean(props.traceStageId)
-
-  if (!hasExternal) return
-
-  const target = (props.traceFocusTarget || 'result.chain') as EffectTarget
-  const stageId = props.traceStageId ?? null
-
-  selectedStageId.value = stageId
-  traceSelectedTarget.value = target
-
-  const groupKey = buildTraceFocusGroupKey(target, stageId)
-  traceFocusGroupKey.value = null
-  traceFocusGroupKey.value = groupKey
-}
-
-watch(
-  () => [props.mode, props.traceNavigationToken, props.traceFocusTarget, props.traceStageId] as const,
-  () => applyExternalTraceFocus(),
-  { flush: 'post', immediate: true }
-)
 
 const openPromptPreview = async () => {
   if (!hasPromptPreview.value) return
+  const mode = scopeMode.value
+  const umo = mode === 'session' ? (sessionUmo.value.trim() || null) : null
 
-  // Ensure the preview uses the latest `previewPrompt` even if the user didn't press Enter / Refresh.
-  // This avoids showing stale snapshots where prompt stays as default "preview".
-  await handleRefresh(false)
+  // 打开预览前先请求渲染数据
+  const previewPrompt = String(displaySnapshot.value?.llm_prompt_preview?.prompt ?? '').trim() || '（预览）用户输入：<未提供>'
+  await refresh({ scopeMode: mode, umo, forceRefresh: false, render: true, previewPrompt })
 
+  // 然后再打开对话框
   promptDialog.value = true
 }
 
@@ -352,35 +341,23 @@ const scopeItems = computed(() => [
         label="显示全部阶段"
       />
 
-      <v-text-field
-        v-model="previewPrompt"
-        density="compact"
-        variant="outlined"
-        hide-details
-        placeholder="预览用户提示词（影响“最终 Prompt”）"
-        style="max-width: 360px"
-        @keydown.enter="handleRefresh(true)"
-      />
-
-      <v-select
-        v-model="traceSelectedTarget"
-        :items="traceTargetItems"
-        label="目标对象"
-        density="compact"
-        variant="outlined"
-        hide-details
-        :disabled="props.mode !== 'trace'"
-        style="max-width: 320px"
-      />
-
-      <v-switch
-        v-model="traceOnlyHighImpact"
-        density="compact"
-        hide-details
-        inset
-        label="仅看高影响"
-        :disabled="props.mode !== 'trace'"
-      />
+      <v-tooltip location="bottom">
+        <template #activator="{ props: tooltipProps }">
+          <v-select
+            v-bind="tooltipProps"
+            v-model="traceSelectedTarget"
+            :items="traceTargetItems"
+            :label="tm('pipeline.filters.targetObject')"
+            :placeholder="tm('pipeline.filters.targetObjectPlaceholder')"
+            density="compact"
+            variant="outlined"
+            hide-details
+            :disabled="props.mode !== 'trace'"
+            style="max-width: 320px"
+          />
+        </template>
+        {{ tm('pipeline.filters.targetObjectTooltip') }}
+      </v-tooltip>
 
       <v-chip size="small" color="secondary" variant="tonal" class="font-weight-medium">
         {{ traceFilteredCount }} 条
@@ -411,9 +388,10 @@ const scopeItems = computed(() => [
           :groups="traceRootGroupsAll"
           :active-stage-id="selectedStageId"
           :active-target="traceActiveTarget"
+          :active-impact-key="traceSelectedImpactKey"
           @select-stage="handleSelectStage"
           @select-target="(t) => (traceSelectedTarget = t)"
-          @focus-group="focusTraceGroup"
+          @select-impact="selectImpactKey"
         />
         <PipelineFishboneView
           v-else
@@ -470,14 +448,11 @@ const scopeItems = computed(() => [
           </v-window>
 
           <div v-else class="h-100 d-flex flex-column" style="min-height: 0">
-            <TracePanel
+            <TraceImpactDetailPanel
               class="flex-grow-1"
-              :snapshot="displaySnapshot"
-              v-model:selected-target="traceSelectedTarget"
-              v-model:only-high-impact="traceOnlyHighImpact"
-              :focus-group-key="traceFocusGroupKey"
-              @select-stage="handleSelectStage"
-              @select-participant="handleSelectParticipant"
+              :row="traceSelectedRow"
+              @select-plugin="handleSelectPlugin"
+              @navigate-pipeline="handleNavigatePipeline"
             />
           </div>
 

@@ -82,4 +82,4 @@ export interface PluginConfigCacheApi {
 export type InstalledViewMode = 'mod' | 'legacy'
 
 // 插件面板 Tab
-export type PluginPanelTab = 'info' | 'config' | 'behavior' | 'overview'
+export type PluginPanelTab = 'info' | 'config' | 'behavior' | 'overview' | 'changelog'

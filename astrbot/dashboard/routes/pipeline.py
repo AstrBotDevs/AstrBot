@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import time
+from copy import deepcopy
 from typing import Any, cast
 
 from quart import request
@@ -28,6 +32,13 @@ from .route import Response, Route, RouteContext
 
 
 class PipelineRoute(Route):
+    _static_cache: dict[tuple[str, str, bool], tuple[dict[str, Any], float]] = {}
+    _render_cache: dict[tuple[str, str, str, bool], tuple[dict[str, Any], float]] = {}
+    _inflight: dict[tuple[str, tuple[Any, ...]], asyncio.Future] = {}
+    _cache_lock: asyncio.Lock = asyncio.Lock()
+    STATIC_CACHE_TTL: float = 15.0
+    RENDER_CACHE_TTL: float = 10.0
+
     def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle | None = None) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
@@ -307,7 +318,32 @@ class PipelineRoute(Route):
         preview_prompt_provided = bool(preview_prompt_raw_str)
         preview_prompt = preview_prompt_raw_str if preview_prompt_provided else "（预览）用户输入：<未提供>"
 
-        snapshot = build_pipeline_snapshot(umo=umo, force_refresh=force_refresh, debug=debug)
+        cls = self.__class__
+        scope_mode = "session" if umo else "global"
+        static_key = (scope_mode, str(umo or ""), bool(debug))
+
+        base_snapshot: dict[str, Any] | None = None
+        if not force_refresh:
+            now = time.monotonic()
+            async with cls._cache_lock:
+                entry = cls._static_cache.get(static_key)
+                if entry is not None:
+                    cached_snapshot, ts = entry
+                    if now - ts <= cls.STATIC_CACHE_TTL:
+                        base_snapshot = cached_snapshot
+                    else:
+                        cls._static_cache.pop(static_key, None)
+
+        if base_snapshot is None:
+            base_snapshot = build_pipeline_snapshot(umo=umo, force_refresh=force_refresh, debug=debug)
+            async with cls._cache_lock:
+                now = time.monotonic()
+                for k, (_, ts) in list(cls._static_cache.items()):
+                    if now - ts > cls.STATIC_CACHE_TTL:
+                        cls._static_cache.pop(k, None)
+                cls._static_cache[static_key] = (deepcopy(base_snapshot), now)
+
+        snapshot = deepcopy(base_snapshot)
 
         if render:
             snapshot.setdefault("_debug", {})
@@ -382,12 +418,75 @@ class PipelineRoute(Route):
                 snapshot.setdefault("_debug", {})
                 snapshot["_debug"]["persona_prompt_influencers_len"] = len(persona_influencers)
 
-                rendered = await self._render_final_prompt_preview(
-                    umo=render_umo,
-                    prompt=preview_prompt,
-                    debug=debug,
-                    persona_prompt_influencers=persona_influencers,
-                )
+                preview_hash = hashlib.sha256(preview_prompt.encode("utf-8")).hexdigest()
+                render_cache_key = (str(snapshot.get("snapshot_id") or ""), str(render_umo or ""), preview_hash, bool(debug))
+
+                rendered: dict[str, Any] | None = None
+                if not force_refresh:
+                    now = time.monotonic()
+                    async with cls._cache_lock:
+                        entry = cls._render_cache.get(render_cache_key)
+                        if entry is not None:
+                            cached_rendered, ts = entry
+                            if now - ts <= cls.RENDER_CACHE_TTL:
+                                rendered = deepcopy(cached_rendered)
+                            else:
+                                cls._render_cache.pop(render_cache_key, None)
+
+                if rendered is None:
+                    inflight_key = ("render", render_cache_key)
+                    fut: asyncio.Future | None = None
+                    owner = False
+
+                    async with cls._cache_lock:
+                        if not force_refresh and rendered is None:
+                            entry = cls._render_cache.get(render_cache_key)
+                            if entry is not None:
+                                cached_rendered, ts = entry
+                                if time.monotonic() - ts <= cls.RENDER_CACHE_TTL:
+                                    rendered = deepcopy(cached_rendered)
+
+                        if rendered is None:
+                            fut = cls._inflight.get(inflight_key)
+                            if fut is None:
+                                fut = asyncio.get_running_loop().create_future()
+                                cls._inflight[inflight_key] = fut
+                                owner = True
+
+                    if rendered is None and fut is not None and not owner:
+                        rendered = cast(dict[str, Any], await fut)
+
+                    if rendered is None and owner:
+                        try:
+                            computed = await self._render_final_prompt_preview(
+                                umo=render_umo,
+                                prompt=preview_prompt,
+                                debug=debug,
+                                persona_prompt_influencers=persona_influencers,
+                            )
+                            rendered = computed
+                            async with cls._cache_lock:
+                                now = time.monotonic()
+                                for k, (_, ts) in list(cls._render_cache.items()):
+                                    if now - ts > cls.RENDER_CACHE_TTL:
+                                        cls._render_cache.pop(k, None)
+                                cls._render_cache[render_cache_key] = (deepcopy(computed), now)
+                                inflight_fut = cls._inflight.pop(inflight_key, None)
+                                if inflight_fut is not None and not inflight_fut.done():
+                                    inflight_fut.set_result(deepcopy(computed))
+                        except Exception as e:
+                            async with cls._cache_lock:
+                                inflight_fut = cls._inflight.pop(inflight_key, None)
+                                if inflight_fut is not None and not inflight_fut.done():
+                                    inflight_fut.set_exception(e)
+                            raise
+
+                if rendered is None:
+                    rendered = {
+                        "prompt": "",
+                        "system_prompt": "",
+                    }
+
                 rendered_prompt = rendered.get("prompt") or ""
                 rendered_system_prompt = rendered.get("system_prompt") or ""
 

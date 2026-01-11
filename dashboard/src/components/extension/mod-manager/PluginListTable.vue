@@ -553,9 +553,19 @@ const getRowProps = ({ item }: { item: PluginSummary }) => {
 
             <v-tooltip v-if="isUpgradable(item)" location="top">
               <template #activator="{ props: tipProps }">
-                <v-icon v-bind="tipProps" size="16" color="warning">mdi-alert</v-icon>
+                <v-btn
+                  v-bind="tipProps"
+                  icon
+                  size="x-small"
+                  color="warning"
+                  variant="text"
+                  aria-label="update-plugin"
+                  @click.stop="emit('action-update', item.name)"
+                >
+                  <v-icon size="20">mdi-alert</v-icon>
+                </v-btn>
               </template>
-              <span>新版本：{{ getOnlineVersion(item) }}</span>
+              <span>新版本：{{ getOnlineVersion(item) }}（点击更新）</span>
             </v-tooltip>
 
             <v-tooltip v-if="getConflict(item.name)?.count" location="top">

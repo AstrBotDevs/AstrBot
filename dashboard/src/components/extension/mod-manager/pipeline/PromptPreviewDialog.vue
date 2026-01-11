@@ -31,9 +31,6 @@ const executedHandlers = computed(() => (props.preview?.render_executed_handlers
 const renderWarnings = computed(() => (props.preview?.render_warnings ?? []).filter(Boolean))
 
 const renderedSystemPrompt = computed(() => String(props.preview?.rendered_system_prompt ?? props.preview?.system_prompt ?? ''))
-const renderedPrompt = computed(() => String(props.preview?.rendered_prompt ?? props.preview?.prompt ?? ''))
-
-const showFinalPrompt = computed(() => renderedPrompt.value.trim().length > 0)
 
 const systemPromptSegments = computed<SystemPromptSegment[]>(() => props.preview?.rendered_system_prompt_segments ?? [])
 const useSegmentedSystemPrompt = computed(() => systemPromptSegments.value.length > 0)
@@ -96,7 +93,7 @@ const finalPromptText = computed(() => finalPromptSegments.value.map((s) => Stri
 const contextsSummary = computed(() => {
   const ctx = props.preview?.contexts
   if (!ctx) return '—'
-  if (!ctx.present) return 'present=false'
+  if (!ctx.present) return tm('pipeline.promptPreview.contextsNotPresent')
   const parts: string[] = ['present=true']
   if (ctx.source) parts.push(`source=${ctx.source}`)
   if (typeof ctx.count === 'number') parts.push(`count=${ctx.count}`)
@@ -137,7 +134,14 @@ const hasOverwriteConflict = computed(() => {
   return overwritesPrompt > 1 || overwritesSystem > 1
 })
 
-const statusLabel = (s: any) => String(s || 'unknown')
+const statusLabel = (s: any) => {
+  const v = String(s || '')
+  if (v === 'executed') return tm('pipeline.promptPreview.statusExecuted')
+  if (v === 'blocked') return tm('pipeline.promptPreview.statusBlocked')
+  if (v === 'errored') return tm('pipeline.promptPreview.statusErrored')
+  if (v === 'skipped') return tm('pipeline.promptPreview.statusSkipped')
+  return v || 'unknown'
+}
 const statusColor = (s: any) => {
   const v = String(s || '')
   if (v === 'executed') return 'success'
@@ -267,24 +271,41 @@ const close = () => emit('update:show', false)
           </v-alert>
 
           <div class="d-flex flex-wrap ga-2 mb-3">
-            <v-chip size="small" color="secondary" variant="tonal" class="font-weight-medium">
-              {{ tm('pipeline.promptPreview.contexts') }}: {{ contextsSummary }}
-            </v-chip>
-            <v-chip size="small" color="secondary" variant="tonal" class="font-weight-medium">
-              {{ tm('pipeline.promptPreview.injectedBy') }}: {{ injectedBy.length }}
-            </v-chip>
-            <v-chip
-              v-if="executedHandlers.length"
-              size="small"
-              color="secondary"
-              variant="tonal"
-              class="font-weight-medium"
-            >
-              Dry-run handlers: {{ executedHandlers.length }}
-            </v-chip>
-            <v-chip v-if="renderWarnings.length" size="small" color="warning" variant="tonal" class="font-weight-medium">
-              Render warnings: {{ renderWarnings.length }}
-            </v-chip>
+            <v-tooltip location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-chip v-bind="tooltipProps" size="small" color="secondary" variant="tonal" class="font-weight-medium">
+                  {{ tm('pipeline.promptPreview.contexts') }}: {{ contextsSummary }}
+                </v-chip>
+              </template>
+              {{ tm('pipeline.promptPreview.contextsTooltip') }}
+            </v-tooltip>
+
+            <v-tooltip location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-chip v-bind="tooltipProps" size="small" color="secondary" variant="tonal" class="font-weight-medium">
+                  {{ tm('pipeline.promptPreview.injectedBy') }}: {{ injectedBy.length }}
+                </v-chip>
+              </template>
+              {{ tm('pipeline.promptPreview.injectedByTooltip') }}
+            </v-tooltip>
+
+            <v-tooltip v-if="executedHandlers.length" location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-chip v-bind="tooltipProps" size="small" color="secondary" variant="tonal" class="font-weight-medium">
+                  {{ tm('pipeline.promptPreview.dryRunHandlers') }}: {{ executedHandlers.length }}
+                </v-chip>
+              </template>
+              {{ tm('pipeline.promptPreview.dryRunHandlersTooltip') }}
+            </v-tooltip>
+
+            <v-tooltip v-if="renderWarnings.length" location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-chip v-bind="tooltipProps" size="small" color="warning" variant="tonal" class="font-weight-medium">
+                  {{ tm('pipeline.promptPreview.renderWarnings') }}: {{ renderWarnings.length }}
+                </v-chip>
+              </template>
+              {{ tm('pipeline.promptPreview.renderWarningsTooltip') }}
+            </v-tooltip>
           </div>
 
           <v-alert
@@ -405,13 +426,6 @@ const close = () => emit('update:show', false)
           </v-alert>
 
 
-          <v-card v-if="showFinalPrompt" variant="tonal" class="mb-4">
-            <v-card-title class="text-subtitle-1 font-weight-bold">{{ tm('pipeline.promptPreview.finalPrompt') }}</v-card-title>
-            <v-card-text>
-              <pre class="ppd__pre"><code>{{ renderedPrompt }}</code></pre>
-            </v-card-text>
-          </v-card>
-
           <v-card variant="tonal" class="mb-4">
             <v-card-title class="text-subtitle-1 font-weight-bold">{{ tm('pipeline.promptPreview.chain') }}</v-card-title>
             <v-card-text>
@@ -451,10 +465,40 @@ const close = () => emit('update:show', false)
                     <th class="text-left">Plugin</th>
                     <th class="text-left">Handler</th>
                     <th class="text-left">P</th>
-                    <th class="text-left">Status</th>
-                    <th class="text-left">Stop</th>
-                    <th class="text-left">Diff</th>
-                    <th class="text-left">Blocked</th>
+                    <th class="text-left">{{ tm('pipeline.promptPreview.statusColumn') }}</th>
+                    <th class="text-left">
+                      <span class="d-inline-flex align-center">
+                        {{ tm('pipeline.promptPreview.stopColumn') }}
+                        <v-tooltip location="bottom">
+                          <template #activator="{ props: tipProps }">
+                            <v-icon v-bind="tipProps" size="14" color="grey" class="ml-1">mdi-information-outline</v-icon>
+                          </template>
+                          {{ tm('pipeline.promptPreview.stopTooltip') }}
+                        </v-tooltip>
+                      </span>
+                    </th>
+                    <th class="text-left">
+                      <span class="d-inline-flex align-center">
+                        {{ tm('pipeline.promptPreview.diffColumn') }}
+                        <v-tooltip location="bottom">
+                          <template #activator="{ props: tipProps }">
+                            <v-icon v-bind="tipProps" size="14" color="grey" class="ml-1">mdi-information-outline</v-icon>
+                          </template>
+                          {{ tm('pipeline.promptPreview.diffTooltip') }}
+                        </v-tooltip>
+                      </span>
+                    </th>
+                    <th class="text-left">
+                      <span class="d-inline-flex align-center">
+                        {{ tm('pipeline.promptPreview.blockedColumn') }}
+                        <v-tooltip location="bottom">
+                          <template #activator="{ props: tipProps }">
+                            <v-icon v-bind="tipProps" size="14" color="grey" class="ml-1">mdi-information-outline</v-icon>
+                          </template>
+                          {{ tm('pipeline.promptPreview.blockedTooltip') }}
+                        </v-tooltip>
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
