@@ -20,11 +20,19 @@ from astrbot.core.pipeline.snapshot.risks import (
     scan_static_risks,
     scan_static_self_calls_from_callable,
 )
-from astrbot.core.pipeline.snapshot.stages import STAGES_ORDER, build_stage_snapshot, stage_for_event_type
+from astrbot.core.pipeline.snapshot.stages import (
+    STAGES_ORDER,
+    build_stage_snapshot,
+    stage_for_event_type,
+)
 from astrbot.core.pipeline.snapshot.utils import sha256_hex, stable_id, utc_now_iso
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import StarMetadata, star_registry
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata, star_handlers_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 
 @dataclass(frozen=True)
@@ -79,7 +87,9 @@ def _collect_active_plugins(scope: SnapshotScope) -> list[StarMetadata]:
             if meta.reserved:
                 active.append(meta)
                 continue
-            if meta.name and SessionPluginManager.is_plugin_enabled_for_session(scope.umo, meta.name):
+            if meta.name and SessionPluginManager.is_plugin_enabled_for_session(
+                scope.umo, meta.name
+            ):
                 active.append(meta)
             continue
 
@@ -87,7 +97,9 @@ def _collect_active_plugins(scope: SnapshotScope) -> list[StarMetadata]:
     return active
 
 
-def _iter_handlers_in_scope(active_plugins: list[StarMetadata]) -> list[StarHandlerMetadata]:
+def _iter_handlers_in_scope(
+    active_plugins: list[StarMetadata],
+) -> list[StarHandlerMetadata]:
     active_modules = {p.module_path for p in active_plugins if p.module_path}
     handlers: list[StarHandlerMetadata] = []
     for h in star_handlers_registry:
@@ -108,7 +120,9 @@ def _build_participant(
     risks: list[dict[str, Any]],
     effects: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    participant_id = stable_id(stage_id, handler.event_type.name, handler.handler_full_name)
+    participant_id = stable_id(
+        stage_id, handler.event_type.name, handler.handler_full_name
+    )
 
     meta: dict[str, Any] = {
         "event_type": handler.event_type.name,
@@ -160,7 +174,9 @@ def _build_command_descriptors(
         if isinstance(_trigger, dict):
             extra = _trigger.get("extra") or {}
             if isinstance(extra, dict):
-                aliases = [str(x) for x in (extra.get("aliases") or []) if str(x).strip()]
+                aliases = [
+                    str(x) for x in (extra.get("aliases") or []) if str(x).strip()
+                ]
 
         descriptors.append(
             {
@@ -195,7 +211,9 @@ def _scan_persona_prompt_modifiers(
         if not meta.activated:
             continue
         cls = meta.star_cls_type
-        module_path = meta.module_path or (getattr(cls, "__module__", None) if cls else None)
+        module_path = meta.module_path or (
+            getattr(cls, "__module__", None) if cls else None
+        )
         if not cls or not module_path:
             continue
 
@@ -235,7 +253,9 @@ def _scan_persona_prompt_modifiers(
                     reason,
                 )
 
-            def _record_injected_by(*, target_method: str, persona_mutation: str) -> None:
+            def _record_injected_by(
+                *, target_method: str, persona_mutation: str
+            ) -> None:
                 cls_name = (
                     getattr(cls, "__qualname__", None)
                     or getattr(cls, "__name__", None)
@@ -252,7 +272,9 @@ def _scan_persona_prompt_modifiers(
                             "handler_module_path": safe_module_path,
                         },
                         "priority": 0,
-                        "mutation": "append" if persona_mutation == "append" else "overwrite",
+                        "mutation": "append"
+                        if persona_mutation == "append"
+                        else "overwrite",
                         "field": "persona_prompt",
                         "source_type": "persona",
                     }
@@ -311,7 +333,9 @@ def _scan_persona_prompt_modifiers(
                             "handler_module_path": safe_module_path,
                         },
                         "priority": 0,
-                        "mutation": "append" if persona_mutation == "append" else "overwrite",
+                        "mutation": "append"
+                        if persona_mutation == "append"
+                        else "overwrite",
                         "field": "persona_prompt",
                         "source_type": "persona",
                     }
@@ -347,7 +371,9 @@ def _scan_persona_prompt_modifiers(
                 m = mutations.get("persona_prompt")
                 if m in {"append", "overwrite"}:
                     if kind == "method":
-                        handler_full_name = f"{base_module_for_handler}.{cls_name}.{name}"
+                        handler_full_name = (
+                            f"{base_module_for_handler}.{cls_name}.{name}"
+                        )
                         _record_injected_by_callable(
                             handler_full_name=handler_full_name,
                             handler_name=name,
@@ -418,13 +444,29 @@ def _scan_persona_prompt_modifiers(
                 if called_name in cls_dict:
                     called_fn = getattr(cls, called_name, None)
                     if callable(called_fn):
-                        queue.append(("method", called_name, called_fn, 1, f"{method_name}->self.{called_name}"))
+                        queue.append(
+                            (
+                                "method",
+                                called_name,
+                                called_fn,
+                                1,
+                                f"{method_name}->self.{called_name}",
+                            )
+                        )
 
             if module_obj:
                 for called_name in sorted(entry_name_calls):
                     target = getattr(module_obj, called_name, None)
                     if callable(target):
-                        queue.append(("module_fn", called_name, target, 1, f"{method_name}->{called_name}()"))
+                        queue.append(
+                            (
+                                "module_fn",
+                                called_name,
+                                target,
+                                1,
+                                f"{method_name}->{called_name}()",
+                            )
+                        )
 
             while queue:
                 kind, name, target, depth, chain = queue.pop(0)
@@ -446,13 +488,29 @@ def _scan_persona_prompt_modifiers(
                         if next_name in cls_dict:
                             next_fn = getattr(cls, next_name, None)
                             if callable(next_fn):
-                                queue.append(("method", next_name, next_fn, depth + 1, f"{chain}->self.{next_name}"))
+                                queue.append(
+                                    (
+                                        "method",
+                                        next_name,
+                                        next_fn,
+                                        depth + 1,
+                                        f"{chain}->self.{next_name}",
+                                    )
+                                )
 
                 if module_obj:
                     for next_name in sorted(called_names):
                         next_fn = getattr(module_obj, next_name, None)
                         if callable(next_fn):
-                            queue.append(("module_fn", next_name, next_fn, depth + 1, f"{chain}->{next_name}()"))
+                            queue.append(
+                                (
+                                    "module_fn",
+                                    next_name,
+                                    next_fn,
+                                    depth + 1,
+                                    f"{chain}->{next_name}()",
+                                )
+                            )
 
     return injected_by, scan_debug
 
@@ -486,8 +544,8 @@ def build_pipeline_snapshot(
     participants: list[dict[str, Any]] = []
     llm_mutations_by_handler_full_name: dict[str, dict[str, str]] = {}
 
-    persona_prompt_modifiers, persona_prompt_scan_debug = _scan_persona_prompt_modifiers(
-        active_plugins, debug=debug
+    persona_prompt_modifiers, persona_prompt_scan_debug = (
+        _scan_persona_prompt_modifiers(active_plugins, debug=debug)
     )
     if debug:
         logger.info(
@@ -592,7 +650,9 @@ def build_pipeline_snapshot(
 
     plugin_refs = [
         _plugin_ref(p, p.module_path or "")
-        for p in sorted(active_plugins, key=lambda x: (x.name or "", x.module_path or ""))
+        for p in sorted(
+            active_plugins, key=lambda x: (x.name or "", x.module_path or "")
+        )
     ]
 
     snapshot_material: list[str] = []
@@ -634,7 +694,9 @@ def build_pipeline_snapshot(
             "persona_prompt_scan": persona_prompt_scan_debug,
             "persona_prompt_modifiers_count": len(persona_prompt_modifiers or []),
             "llm_prompt_preview_present": bool(llm_preview),
-            "llm_prompt_preview_injected_by_len": len((llm_preview or {}).get("injected_by") or []),
+            "llm_prompt_preview_injected_by_len": len(
+                (llm_preview or {}).get("injected_by") or []
+            ),
         }
 
     return payload

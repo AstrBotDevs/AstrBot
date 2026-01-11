@@ -8,7 +8,7 @@ from astrbot.core.pipeline.snapshot.stages import STAGES_ORDER
 from astrbot.core.pipeline.snapshot.utils import stable_id
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.star.star import StarMetadata, star_map
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.star.star_handler import EventType
 
 
 def _plugin_ref(meta: StarMetadata | None, fallback_name: str) -> dict[str, Any]:
@@ -47,7 +47,9 @@ def _tool_origin_ref(tool: Any) -> tuple[dict[str, Any], str]:
     return _plugin_ref(None, origin), origin
 
 
-def detect_command_conflicts(command_desc: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def detect_command_conflicts(
+    command_desc: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     by_cmd: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for d in command_desc:
         if not d.get("enabled"):
@@ -122,7 +124,9 @@ def detect_command_conflicts(command_desc: list[dict[str, Any]]) -> list[dict[st
     return conflicts
 
 
-def detect_tool_name_conflicts(active_plugins: list[StarMetadata]) -> list[dict[str, Any]]:
+def detect_tool_name_conflicts(
+    active_plugins: list[StarMetadata],
+) -> list[dict[str, Any]]:
     active_modules = {p.module_path for p in active_plugins if p.module_path}
 
     by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -327,7 +331,9 @@ def build_llm_prompt_preview(
     }
 
 
-def detect_prompt_overwrite_conflicts(llm_preview: dict[str, Any] | None) -> list[dict[str, Any]]:
+def detect_prompt_overwrite_conflicts(
+    llm_preview: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     if not llm_preview:
         return []
     injected = llm_preview.get("injected_by") or []
@@ -338,10 +344,14 @@ def detect_prompt_overwrite_conflicts(llm_preview: dict[str, Any] | None) -> lis
         ("prompt", "prompt_overwrite_conflict"),
     ):
         overwriters = [
-            x for x in injected if x.get("field") == field and x.get("mutation") == "overwrite"
+            x
+            for x in injected
+            if x.get("field") == field and x.get("mutation") == "overwrite"
         ]
         appenders = [
-            x for x in injected if x.get("field") == field and x.get("mutation") == "append"
+            x
+            for x in injected
+            if x.get("field") == field and x.get("mutation") == "append"
         ]
         if len(overwriters) <= 1 and not (overwriters and appenders):
             continue
@@ -360,7 +370,9 @@ def detect_prompt_overwrite_conflicts(llm_preview: dict[str, Any] | None) -> lis
         severity = "error" if len(overwriters) > 1 else "warn"
         conflicts.append(
             {
-                "id": stable_id(conflict_type, str(len(overwriters)), str(len(appenders))),
+                "id": stable_id(
+                    conflict_type, str(len(overwriters)), str(len(appenders))
+                ),
                 "type": conflict_type,
                 "severity": severity,
                 "title": f"提示词覆盖冲突: {field}",
@@ -372,7 +384,9 @@ def detect_prompt_overwrite_conflicts(llm_preview: dict[str, Any] | None) -> lis
     return conflicts
 
 
-def _detect_result_chain_mutation_risk(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _detect_result_chain_mutation_risk(
+    participants: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     冲突类型：result_chain_mutation_risk
 
@@ -471,7 +485,11 @@ def _detect_result_chain_mutation_risk(participants: list[dict[str, Any]]) -> li
             op_summary_parts.append(f"高影响操作({', '.join(high_ops)})")
         if mid_ops:
             op_summary_parts.append(f"中影响操作({', '.join(mid_ops)})")
-        op_summary = " / ".join(op_summary_parts) if op_summary_parts else "对 result.chain 的修改"
+        op_summary = (
+            " / ".join(op_summary_parts)
+            if op_summary_parts
+            else "对 result.chain 的修改"
+        )
 
         title = f"result.chain 改写风险: {stage}/{et}"
         if severity == "error":
@@ -494,7 +512,13 @@ def _detect_result_chain_mutation_risk(participants: list[dict[str, Any]]) -> li
         )
         conflicts.append(
             {
-                "id": stable_id("result_chain_mutation_risk", stage, et, severity, ",".join(handler_ids)),
+                "id": stable_id(
+                    "result_chain_mutation_risk",
+                    stage,
+                    et,
+                    severity,
+                    ",".join(handler_ids),
+                ),
                 "type": "result_chain_mutation_risk",
                 "severity": severity,
                 "title": title,
@@ -508,7 +532,9 @@ def _detect_result_chain_mutation_risk(participants: list[dict[str, Any]]) -> li
     return conflicts
 
 
-def detect_stop_interception(participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def detect_stop_interception(
+    participants: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     by_stage_event: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for p in participants:
         stage = str(p.get("_stage") or "")
@@ -537,7 +563,17 @@ def detect_stop_interception(participants: list[dict[str, Any]]) -> list[dict[st
         if "may_stop_event" not in risk_types:
             continue
 
-        stop_risk = next((r for r in (p.get("risks") or []) if r.get("type") == "may_stop_event"), None) or {}
+        stop_risk = (
+            next(
+                (
+                    r
+                    for r in (p.get("risks") or [])
+                    if r.get("type") == "may_stop_event"
+                ),
+                None,
+            )
+            or {}
+        )
         confidence = stop_risk.get("confidence")
         confidence_reason = stop_risk.get("confidence_reason")
 
@@ -552,13 +588,17 @@ def detect_stop_interception(participants: list[dict[str, Any]]) -> list[dict[st
             downstream_stages = STAGES_ORDER[start + 1 :]
 
         references = [{"kind": "handler", "id": p.get("id") or ""}]
-        references.extend({"kind": "handler", "id": hid} for hid in subsequent_handler_ids)
+        references.extend(
+            {"kind": "handler", "id": hid} for hid in subsequent_handler_ids
+        )
         references.extend({"kind": "stage", "id": sid} for sid in downstream_stages)
 
         description_parts: list[str] = []
         description_parts.append("检测到 handler 可能 stop_event。")
         if subsequent_handler_ids:
-            description_parts.append("同 stage/event_type 内的后续 handler 可能被拦截。")
+            description_parts.append(
+                "同 stage/event_type 内的后续 handler 可能被拦截。"
+            )
         if downstream_stages:
             description_parts.append("下游 stages 也可能不执行。")
         description_parts.append("静态分析无法证明 stop 一定发生，也无法确定发生时机。")

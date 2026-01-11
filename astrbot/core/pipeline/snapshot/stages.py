@@ -77,7 +77,9 @@ def stage_for_event_type(event_type: EventType) -> list[str]:
     return []
 
 
-def build_stage_snapshot(stage_id: str, participants: list[dict[str, Any]]) -> dict[str, Any]:
+def build_stage_snapshot(
+    stage_id: str, participants: list[dict[str, Any]]
+) -> dict[str, Any]:
     meta = STAGE_META.get(stage_id) or {
         "title": stage_id,
         "description": "",

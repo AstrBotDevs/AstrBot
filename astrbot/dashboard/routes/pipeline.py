@@ -12,7 +12,6 @@ from sqlmodel import col, select
 
 from astrbot import logger
 from astrbot.api import sp
-from astrbot.api.event import AstrMessageEvent
 from astrbot.builtin_stars.astrbot.process_llm_request import ProcessLLMRequest
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.po import Conversation, ConversationV2
@@ -27,7 +26,6 @@ from astrbot.core.provider.entities import ProviderRequest
 
 from .route import Response, Route, RouteContext
 
-
 # preview event is implemented in `astrbot.core.pipeline.prompt_preview_dry_run`
 
 
@@ -39,7 +37,9 @@ class PipelineRoute(Route):
     STATIC_CACHE_TTL: float = 15.0
     RENDER_CACHE_TTL: float = 10.0
 
-    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle | None = None) -> None:
+    def __init__(
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle | None = None
+    ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.routes = {
@@ -60,7 +60,9 @@ class PipelineRoute(Route):
             async with self.core_lifecycle.db.get_db() as session:
                 session = cast(AsyncSession, session)
                 result = await session.execute(
-                    select(ConversationV2.user_id).order_by(col(ConversationV2.updated_at).desc()).limit(1),
+                    select(ConversationV2.user_id)
+                    .order_by(col(ConversationV2.updated_at).desc())
+                    .limit(1),
                 )
                 row = result.first()
                 if not row:
@@ -110,11 +112,16 @@ class PipelineRoute(Route):
         # so persona injection can run (ProcessLLMRequest._ensure_persona checks req.conversation).
         if not conv:
             platform_id = (umo.split(":", 1)[0] if ":" in umo else "") or "unknown"
-            conv = Conversation(platform_id=platform_id, user_id=umo, cid="preview", persona_id="")
+            conv = Conversation(
+                platform_id=platform_id, user_id=umo, cid="preview", persona_id=""
+            )
 
         extra_debug: dict[str, Any] | None = None
         if debug:
-            extra_debug = {"umo": umo, "conversation_persona_id": getattr(conv, "persona_id", "") or ""}
+            extra_debug = {
+                "umo": umo,
+                "conversation_persona_id": getattr(conv, "persona_id", "") or "",
+            }
 
         req = ProviderRequest(prompt=prompt, system_prompt="", conversation=conv)
 
@@ -127,7 +134,9 @@ class PipelineRoute(Route):
         if plugin_set == ["*"]:
             plugin_set = None
 
-        plugins_name = compute_effective_plugins_name_for_preview(umo=umo, plugin_set=plugin_set)
+        plugins_name = compute_effective_plugins_name_for_preview(
+            umo=umo, plugin_set=plugin_set
+        )
 
         provider_settings = cfg.get("provider_settings") or {}
 
@@ -164,21 +173,35 @@ class PipelineRoute(Route):
             return None, "unset"
 
         try:
-            persona_id_effective, persona_id_source = await _resolve_persona_id_for_preview()
+            (
+                persona_id_effective,
+                persona_id_source,
+            ) = await _resolve_persona_id_for_preview()
 
-            if (not persona_id_effective or persona_id_effective == "default") and persona_id_effective != "[%None]":
-                default_persona = getattr(ctx.persona_manager, "selected_default_persona_v3", None)
+            if (
+                not persona_id_effective or persona_id_effective == "default"
+            ) and persona_id_effective != "[%None]":
+                default_persona = getattr(
+                    ctx.persona_manager, "selected_default_persona_v3", None
+                )
                 if not default_persona:
                     try:
-                        default_persona = await ctx.persona_manager.get_default_persona_v3(umo)
+                        default_persona = (
+                            await ctx.persona_manager.get_default_persona_v3(umo)
+                        )
                     except Exception:
                         default_persona = None
                 if isinstance(default_persona, dict) and default_persona.get("name"):
-                    persona_id_effective = str(default_persona.get("name") or "").strip() or persona_id_effective
+                    persona_id_effective = (
+                        str(default_persona.get("name") or "").strip()
+                        or persona_id_effective
+                    )
                     persona_id_source = "persona_manager_default"
         except Exception as e:
             if debug:
-                logger.error("prompt preview: failed to resolve persona_id: %s", e, exc_info=True)
+                logger.error(
+                    "prompt preview: failed to resolve persona_id: %s", e, exc_info=True
+                )
 
         # IMPORTANT:
         # We must use the *raw* persona system_prompt as the anchor text for attribution.
@@ -191,30 +214,47 @@ class PipelineRoute(Route):
                     (
                         x
                         for x in (getattr(ctx.persona_manager, "personas", None) or [])
-                        if str(getattr(x, "persona_id", "") or "") == str(persona_id_effective)
+                        if str(getattr(x, "persona_id", "") or "")
+                        == str(persona_id_effective)
                     ),
                     None,
                 )
                 if p is not None:
-                    raw_persona_prompt_text = str(getattr(p, "system_prompt", "") or "") or None
+                    raw_persona_prompt_text = (
+                        str(getattr(p, "system_prompt", "") or "") or None
+                    )
                 else:
-                    p2 = await ctx.persona_manager.get_persona(str(persona_id_effective))
-                    raw_persona_prompt_text = str(getattr(p2, "system_prompt", "") or "") or None
+                    p2 = await ctx.persona_manager.get_persona(
+                        str(persona_id_effective)
+                    )
+                    raw_persona_prompt_text = (
+                        str(getattr(p2, "system_prompt", "") or "") or None
+                    )
             except Exception as e:
                 raw_persona_prompt_text = None
                 if debug:
-                    logger.error("prompt preview: failed to load raw persona prompt: %s", e, exc_info=True)
+                    logger.error(
+                        "prompt preview: failed to load raw persona prompt: %s",
+                        e,
+                        exc_info=True,
+                    )
         try:
             if raw_persona_prompt_text is not None:
                 persona_prompt_text = raw_persona_prompt_text
             else:
-                tmp_req = ProviderRequest(prompt=prompt, system_prompt="", conversation=conv)
+                tmp_req = ProviderRequest(
+                    prompt=prompt, system_prompt="", conversation=conv
+                )
                 proc = ProcessLLMRequest(ctx)
                 await proc._ensure_persona(tmp_req, provider_settings, umo)
                 persona_prompt_text = str(tmp_req.system_prompt or "") or None
         except Exception as e:
             if debug:
-                logger.error("prompt preview: failed to resolve persona prompt text: %s", e, exc_info=True)
+                logger.error(
+                    "prompt preview: failed to resolve persona prompt text: %s",
+                    e,
+                    exc_info=True,
+                )
 
         if debug and extra_debug is not None:
             extra_debug["persona_prompt_text_len"] = len(str(persona_prompt_text or ""))
@@ -265,20 +305,30 @@ class PipelineRoute(Route):
         # Use dry-run event to block side effects and record stop_event impacts.
         # Note: persona/system injection is implemented by AstrBot's built-in OnLLMRequestEvent handler,
         # so we DO NOT call ProcessLLMRequest here to avoid duplicate injection.
-        dry_event = DryRunAstrMessageEvent(umo=umo, message_str=str(req.prompt or ""), plugins_name=plugins_name)
+        dry_event = DryRunAstrMessageEvent(
+            umo=umo, message_str=str(req.prompt or ""), plugins_name=plugins_name
+        )
 
-        render_handlers, render_warnings, rendered_system_prompt_segments = await dry_run_execute_on_llm_request(
+        (
+            render_handlers,
+            render_warnings,
+            rendered_system_prompt_segments,
+        ) = await dry_run_execute_on_llm_request(
             event=dry_event,
             req=req,
             persona_prompt_text=persona_prompt_text,
-            persona_prompt_sources=cast(list, persona_sources) if persona_sources else None,
+            persona_prompt_sources=cast(list, persona_sources)
+            if persona_sources
+            else None,
             debug=debug,
         )
 
         if debug and extra_debug is not None:
             extra_debug["persona_id_effective"] = persona_id_effective or ""
             extra_debug["persona_id_source"] = persona_id_source
-            extra_debug["persona_prompt_influencers_len"] = len(list(persona_prompt_influencers or []))
+            extra_debug["persona_prompt_influencers_len"] = len(
+                list(persona_prompt_influencers or [])
+            )
             extra_debug["persona_sources_len"] = len(persona_sources)
 
         contexts_source = "conversation_history" if req.contexts else "unknown"
@@ -305,7 +355,12 @@ class PipelineRoute(Route):
     async def get_snapshot(self):
         umo = request.args.get("umo")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
-        debug = str(request.args.get("debug", "")).strip().lower() in {"1", "true", "yes", "on"}
+        debug = str(request.args.get("debug", "")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
         render_raw = request.args.get("render")
         if render_raw is None:
@@ -316,7 +371,11 @@ class PipelineRoute(Route):
         preview_prompt_raw = request.args.get("preview_prompt")
         preview_prompt_raw_str = str(preview_prompt_raw or "").strip()
         preview_prompt_provided = bool(preview_prompt_raw_str)
-        preview_prompt = preview_prompt_raw_str if preview_prompt_provided else "（预览）用户输入：<未提供>"
+        preview_prompt = (
+            preview_prompt_raw_str
+            if preview_prompt_provided
+            else "（预览）用户输入：<未提供>"
+        )
 
         cls = self.__class__
         scope_mode = "session" if umo else "global"
@@ -335,7 +394,9 @@ class PipelineRoute(Route):
                         cls._static_cache.pop(static_key, None)
 
         if base_snapshot is None:
-            base_snapshot = build_pipeline_snapshot(umo=umo, force_refresh=force_refresh, debug=debug)
+            base_snapshot = build_pipeline_snapshot(
+                umo=umo, force_refresh=force_refresh, debug=debug
+            )
             async with cls._cache_lock:
                 now = time.monotonic()
                 for k, (_, ts) in list(cls._static_cache.items()):
@@ -348,10 +409,16 @@ class PipelineRoute(Route):
         if render:
             snapshot.setdefault("_debug", {})
             snapshot["_debug"]["render_requested"] = True
-            snapshot["_debug"]["render_preview_prompt_provided"] = preview_prompt_provided
-            snapshot["_debug"]["render_preview_prompt_effective_is_default"] = not preview_prompt_provided
+            snapshot["_debug"]["render_preview_prompt_provided"] = (
+                preview_prompt_provided
+            )
+            snapshot["_debug"][
+                "render_preview_prompt_effective_is_default"
+            ] = not preview_prompt_provided
             snapshot["_debug"]["render_preview_prompt_len"] = len(preview_prompt)
-            snapshot["_debug"]["render_has_llm_prompt_preview"] = bool(snapshot.get("llm_prompt_preview"))
+            snapshot["_debug"]["render_has_llm_prompt_preview"] = bool(
+                snapshot.get("llm_prompt_preview")
+            )
 
         if render and snapshot.get("llm_prompt_preview"):
             render_umo_source = "request" if umo else "fallback"
@@ -374,7 +441,9 @@ class PipelineRoute(Route):
             try:
                 persona_influencers: list[dict[str, Any]] = []
                 try:
-                    injected_by = (snapshot.get("llm_prompt_preview") or {}).get("injected_by") or []
+                    injected_by = (snapshot.get("llm_prompt_preview") or {}).get(
+                        "injected_by"
+                    ) or []
                     seen: set[tuple[str, str, str, int]] = set()
                     for item in injected_by:
                         if not isinstance(item, dict):
@@ -397,7 +466,9 @@ class PipelineRoute(Route):
                             ).get("handler_full_name")
                             or ""
                         ).strip()
-                        mutation = str(item.get("mutation") or "unknown").strip() or "unknown"
+                        mutation = (
+                            str(item.get("mutation") or "unknown").strip() or "unknown"
+                        )
                         priority = int(item.get("priority") or 0)
                         key = (plugin_name, handler_full_name, mutation, priority)
                         if key in seen:
@@ -416,10 +487,19 @@ class PipelineRoute(Route):
                     persona_influencers = []
 
                 snapshot.setdefault("_debug", {})
-                snapshot["_debug"]["persona_prompt_influencers_len"] = len(persona_influencers)
+                snapshot["_debug"]["persona_prompt_influencers_len"] = len(
+                    persona_influencers
+                )
 
-                preview_hash = hashlib.sha256(preview_prompt.encode("utf-8")).hexdigest()
-                render_cache_key = (str(snapshot.get("snapshot_id") or ""), str(render_umo or ""), preview_hash, bool(debug))
+                preview_hash = hashlib.sha256(
+                    preview_prompt.encode("utf-8")
+                ).hexdigest()
+                render_cache_key = (
+                    str(snapshot.get("snapshot_id") or ""),
+                    str(render_umo or ""),
+                    preview_hash,
+                    bool(debug),
+                )
 
                 rendered: dict[str, Any] | None = None
                 if not force_refresh:
@@ -470,7 +550,10 @@ class PipelineRoute(Route):
                                 for k, (_, ts) in list(cls._render_cache.items()):
                                     if now - ts > cls.RENDER_CACHE_TTL:
                                         cls._render_cache.pop(k, None)
-                                cls._render_cache[render_cache_key] = (deepcopy(computed), now)
+                                cls._render_cache[render_cache_key] = (
+                                    deepcopy(computed),
+                                    now,
+                                )
                                 inflight_fut = cls._inflight.pop(inflight_key, None)
                                 if inflight_fut is not None and not inflight_fut.done():
                                     inflight_fut.set_result(deepcopy(computed))
@@ -491,9 +574,13 @@ class PipelineRoute(Route):
                 rendered_system_prompt = rendered.get("system_prompt") or ""
 
                 snapshot["_debug"]["rendered_prompt_len"] = len(rendered_prompt)
-                snapshot["_debug"]["rendered_system_prompt_len"] = len(rendered_system_prompt)
+                snapshot["_debug"]["rendered_system_prompt_len"] = len(
+                    rendered_system_prompt
+                )
 
-                snapshot["_debug"]["rendered_has_segments_field"] = "rendered_system_prompt_segments" in rendered
+                snapshot["_debug"]["rendered_has_segments_field"] = (
+                    "rendered_system_prompt_segments" in rendered
+                )
                 segs = rendered.get("rendered_system_prompt_segments")
                 snapshot["_debug"]["rendered_segments_type"] = type(segs).__name__
                 if isinstance(segs, list):
@@ -528,6 +615,10 @@ class PipelineRoute(Route):
             except Exception as e:
                 snapshot.setdefault("_debug", {})
                 snapshot["_debug"]["render_error"] = f"{e.__class__.__name__}: {e}"
-                logger.error("pipeline snapshot render failed: %s", snapshot["_debug"]["render_error"], exc_info=True)
+                logger.error(
+                    "pipeline snapshot render failed: %s",
+                    snapshot["_debug"]["render_error"],
+                    exc_info=True,
+                )
 
         return Response().ok(snapshot).__dict__

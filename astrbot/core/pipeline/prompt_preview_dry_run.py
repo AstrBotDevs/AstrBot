@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 
 from astrbot import logger
 from astrbot.core.message.components import Plain
@@ -14,7 +15,11 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map, star_registry
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata, star_handlers_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 
 
 class DryRunBlockedSideEffect(RuntimeError):
@@ -52,7 +57,8 @@ class DryRunHandlerDiff:
                 "after_len": len(self.system_prompt_after or ""),
             },
             "extra_user_content_parts": {
-                "changed": self.extra_user_content_parts_before_len != self.extra_user_content_parts_after_len,
+                "changed": self.extra_user_content_parts_before_len
+                != self.extra_user_content_parts_after_len,
                 "before_len": int(self.extra_user_content_parts_before_len),
                 "after_len": int(self.extra_user_content_parts_after_len),
             },
@@ -94,7 +100,9 @@ def _serialize_handler_record(r: DryRunHandlerRecord) -> dict[str, Any]:
         "handler": r.handler,
         "priority": int(r.priority),
         "status": str(r.status),
-        "blocked": [{"action": b.action, "reason": b.reason} for b in (r.blocked or [])],
+        "blocked": [
+            {"action": b.action, "reason": b.reason} for b in (r.blocked or [])
+        ],
         "error": r.error,
         "stop_event": bool(r.stop_event),
         "diff": r.diff,
@@ -125,8 +133,16 @@ def _segments_join(segments: list[SystemPromptSegment]) -> str:
 
 def _segments_to_char_stream(
     segments: list[SystemPromptSegment],
-) -> list[tuple[str, SystemPromptSegmentSource | None, list[SystemPromptSegmentSource] | None]]:
-    out: list[tuple[str, SystemPromptSegmentSource | None, list[SystemPromptSegmentSource] | None]] = []
+) -> list[
+    tuple[str, SystemPromptSegmentSource | None, list[SystemPromptSegmentSource] | None]
+]:
+    out: list[
+        tuple[
+            str,
+            SystemPromptSegmentSource | None,
+            list[SystemPromptSegmentSource] | None,
+        ]
+    ] = []
     for seg in segments or []:
         text = str(seg.get("text") or "")
         if not text:
@@ -139,7 +155,13 @@ def _segments_to_char_stream(
 
 
 def _char_stream_to_segments(
-    chars: list[tuple[str, SystemPromptSegmentSource | None, list[SystemPromptSegmentSource] | None]],
+    chars: list[
+        tuple[
+            str,
+            SystemPromptSegmentSource | None,
+            list[SystemPromptSegmentSource] | None,
+        ]
+    ],
 ) -> list[SystemPromptSegment]:
     out: list[SystemPromptSegment] = []
     if not chars:
@@ -211,7 +233,9 @@ def _content_part_display(part: Any) -> str:
     return str(part)
 
 
-def _compact_system_segments(segments: list[SystemPromptSegment]) -> list[SystemPromptSegment]:
+def _compact_system_segments(
+    segments: list[SystemPromptSegment],
+) -> list[SystemPromptSegment]:
     out: list[SystemPromptSegment] = []
     for seg in segments or []:
         text = str(seg.get("text") or "")
@@ -225,7 +249,9 @@ def _compact_system_segments(segments: list[SystemPromptSegment]) -> list[System
     return out
 
 
-def _merge_same_plugin_segments(segments: list[SystemPromptSegment]) -> list[SystemPromptSegment]:
+def _merge_same_plugin_segments(
+    segments: list[SystemPromptSegment],
+) -> list[SystemPromptSegment]:
     """
     Merge consecutive segments from the same plugin into larger blocks.
 
@@ -247,7 +273,11 @@ def _merge_same_plugin_segments(segments: list[SystemPromptSegment]) -> list[Sys
 
     def get_source(seg: SystemPromptSegment) -> SystemPromptSegmentSource | None:
         src = seg.get("source")
-        return cast(SystemPromptSegmentSource | None, src) if isinstance(src, dict) else None
+        return (
+            cast(SystemPromptSegmentSource | None, src)
+            if isinstance(src, dict)
+            else None
+        )
 
     def plugin_key(src: SystemPromptSegmentSource | None) -> str | None:
         if not src:
@@ -255,7 +285,9 @@ def _merge_same_plugin_segments(segments: list[SystemPromptSegment]) -> list[Sys
         k = str(src.get("plugin") or "").strip()
         return k or None
 
-    def source_key(src: SystemPromptSegmentSource) -> tuple[str, str, int, str, str, str]:
+    def source_key(
+        src: SystemPromptSegmentSource,
+    ) -> tuple[str, str, int, str, str, str]:
         return (
             str(src.get("plugin") or ""),
             str(src.get("handler") or ""),
@@ -287,7 +319,13 @@ def _merge_same_plugin_segments(segments: list[SystemPromptSegment]) -> list[Sys
             return
 
         merged_sources = cur_sources if len(cur_sources) > 1 else None
-        out.append({"text": merged_text, "source": cur_primary_source, "sources": merged_sources})
+        out.append(
+            {
+                "text": merged_text,
+                "source": cur_primary_source,
+                "sources": merged_sources,
+            }
+        )
 
         cur_text = []
         cur_primary_source = None
@@ -343,7 +381,9 @@ def _merge_same_plugin_segments(segments: list[SystemPromptSegment]) -> list[Sys
     return out
 
 
-def _neutralize_whitespace_segments(segments: list[SystemPromptSegment]) -> list[SystemPromptSegment]:
+def _neutralize_whitespace_segments(
+    segments: list[SystemPromptSegment],
+) -> list[SystemPromptSegment]:
     """
     Normalize whitespace-only segments for UI rendering.
 
@@ -358,11 +398,15 @@ def _neutralize_whitespace_segments(segments: list[SystemPromptSegment]) -> list
         if text.strip() == "":
             out.append({"text": text, "source": None, "sources": None})
             continue
-        out.append({"text": text, "source": seg.get("source"), "sources": seg.get("sources")})
+        out.append(
+            {"text": text, "source": seg.get("source"), "sources": seg.get("sources")}
+        )
     return _compact_system_segments(out)
 
 
-def _ensure_boundary(segments: list[SystemPromptSegment], index: int) -> list[SystemPromptSegment]:
+def _ensure_boundary(
+    segments: list[SystemPromptSegment], index: int
+) -> list[SystemPromptSegment]:
     if index <= 0:
         return segments
     total = sum(len(str(s.get("text") or "")) for s in (segments or []))
@@ -451,7 +495,13 @@ def _apply_system_prompt_change(
                 pos += seg_len
                 continue
 
-            out.append({"text": text, "source": seg.get("source"), "sources": seg.get("sources")})
+            out.append(
+                {
+                    "text": text,
+                    "source": seg.get("source"),
+                    "sources": seg.get("sources"),
+                }
+            )
             pos += seg_len
 
         if not inserted and start == pos and insert_segments:
@@ -459,7 +509,9 @@ def _apply_system_prompt_change(
 
         out = _compact_system_segments(out)
         if _segments_join(out) != after:
-            return ([{"text": after, "source": None, "sources": None}] if after else []), True
+            return (
+                [{"text": after, "source": None, "sources": None}] if after else []
+            ), True
         return out, False
 
     # Prefix/suffix anchored character attribution (prevents accidental mid-string matches)
@@ -474,7 +526,13 @@ def _apply_system_prompt_change(
         segments = [{"text": before, "source": None, "sources": None}] if before else []
         before_chars = _segments_to_char_stream(segments)
 
-    out_chars: list[tuple[str, SystemPromptSegmentSource | None, list[SystemPromptSegmentSource] | None]] = []
+    out_chars: list[
+        tuple[
+            str,
+            SystemPromptSegmentSource | None,
+            list[SystemPromptSegmentSource] | None,
+        ]
+    ] = []
 
     def build_handler_source(mutation: str) -> SystemPromptSegmentSource:
         return {
@@ -515,7 +573,9 @@ def _apply_system_prompt_change(
 
     out = _compact_system_segments(_char_stream_to_segments(out_chars))
     if _segments_join(out) != after:
-        return ([{"text": after, "source": None, "sources": None}] if after else []), True
+        return (
+            [{"text": after, "source": None, "sources": None}] if after else []
+        ), True
     return out, False
 
 
@@ -581,7 +641,9 @@ class DryRunAstrMessageEvent(AstrMessageEvent):
         message_obj.self_id = "preview_bot"
         message_obj.session_id = session_id
         message_obj.message_id = "preview"
-        message_obj.sender = MessageMember(user_id="preview_user", nickname="preview_user")
+        message_obj.sender = MessageMember(
+            user_id="preview_user", nickname="preview_user"
+        )
         message_obj.message = [Plain(message_str)]
         message_obj.message_str = message_str
         message_obj.raw_message = None
@@ -679,13 +741,19 @@ def compute_effective_plugins_name_for_preview(
         return allowed
 
     # Respect explicit plugin_set allowlist, then apply session-level enable/disable
-    filtered = [n for n in plugin_set if n and SessionPluginManager.is_plugin_enabled_for_session(umo, n)]
+    filtered = [
+        n
+        for n in plugin_set
+        if n and SessionPluginManager.is_plugin_enabled_for_session(umo, n)
+    ]
     return sorted(set(filtered))
 
 
-def _sort_handlers_for_llm_request(handlers: Iterable[StarHandlerMetadata]) -> list[StarHandlerMetadata]:
+def _sort_handlers_for_llm_request(
+    handlers: Iterable[StarHandlerMetadata],
+) -> list[StarHandlerMetadata]:
     return sorted(
-        list(handlers),
+        handlers,
         key=lambda h: (-_priority(h), str(h.handler_full_name or "")),
     )
 
@@ -720,7 +788,11 @@ async def dry_run_execute_on_llm_request(
     extra_user_segments: list[SystemPromptSegment] = []
     initial_extra_parts = list(getattr(req, "extra_user_content_parts", []) or [])
     if initial_extra_parts:
-        extra_user_segments = [{"text": _content_part_display(p), "source": None, "sources": None} for p in initial_extra_parts if _content_part_display(p)]
+        extra_user_segments = [
+            {"text": _content_part_display(p), "source": None, "sources": None}
+            for p in initial_extra_parts
+            if _content_part_display(p)
+        ]
 
     if debug:
         logger.info(
@@ -766,7 +838,9 @@ async def dry_run_execute_on_llm_request(
         except DryRunBlockedSideEffect as e:
             record.status = "blocked"
             record.blocked = event.dry_run_blocked_actions or [
-                DryRunBlockedAction(action=e.action, reason="预览 Dry-run 阻止了副作用调用。")
+                DryRunBlockedAction(
+                    action=e.action, reason="预览 Dry-run 阻止了副作用调用。"
+                )
             ]
             record.error = f"{e.__class__.__name__}: {str(e)}"
             warnings.append(
@@ -778,7 +852,9 @@ async def dry_run_execute_on_llm_request(
             warnings.append(
                 f"{plugin_ref.get('name')} - {handler_ref.get('handler_name')}：执行异常（{e.__class__.__name__}）。"
             )
-            logger.error("prompt preview dry-run: handler error: %s", record.error, exc_info=True)
+            logger.error(
+                "prompt preview dry-run: handler error: %s", record.error, exc_info=True
+            )
 
         after_prompt = str(req.prompt or "")
         after_system = str(req.system_prompt or "")
@@ -806,7 +882,10 @@ async def dry_run_execute_on_llm_request(
             }
 
             appended = False
-            if len(after_extra_keys) >= len(before_extra_keys) and after_extra_keys[: len(before_extra_keys)] == before_extra_keys:
+            if (
+                len(after_extra_keys) >= len(before_extra_keys)
+                and after_extra_keys[: len(before_extra_keys)] == before_extra_keys
+            ):
                 # pure append
                 new_parts = after_extra_parts[len(before_extra_parts) :]
                 appended_source: SystemPromptSegmentSource = {
@@ -821,14 +900,20 @@ async def dry_run_execute_on_llm_request(
                     txt = _content_part_display(p)
                     if not txt:
                         continue
-                    extra_user_segments.append({"text": txt, "source": appended_source, "sources": None})
+                    extra_user_segments.append(
+                        {"text": txt, "source": appended_source, "sources": None}
+                    )
                 appended = True
 
             if not appended:
                 warnings.append(
                     f"{plugin_ref.get('name')} - {handler_ref.get('handler_name')}：extra_user_content_parts 发生非 append 变更（不可精确归因），已重置为不可归因段。"
                 )
-                extra_user_segments = [{"text": _content_part_display(p), "source": None, "sources": None} for p in after_extra_parts if _content_part_display(p)]
+                extra_user_segments = [
+                    {"text": _content_part_display(p), "source": None, "sources": None}
+                    for p in after_extra_parts
+                    if _content_part_display(p)
+                ]
 
             extra_user_segments = _compact_system_segments(extra_user_segments)
 
@@ -844,14 +929,20 @@ async def dry_run_execute_on_llm_request(
                 warnings.append(
                     "system_prompt 分段归因发生不同步（可能由非标准修改导致），已重置为不可归因段以保持一致性。"
                 )
-                system_segments = [{"text": before_system, "source": None, "sources": None}] if before_system else []
+                system_segments = (
+                    [{"text": before_system, "source": None, "sources": None}]
+                    if before_system
+                    else []
+                )
 
             inserted_override: list[SystemPromptSegment] | None = None
             persona_text = str(persona_prompt_text or "")
             persona_sources = list(persona_prompt_sources or [])
 
             if persona_text and persona_sources:
-                prefix_len, suffix_len = _common_prefix_suffix_len(before_system, after_system)
+                prefix_len, suffix_len = _common_prefix_suffix_len(
+                    before_system, after_system
+                )
                 before_mid_end = len(before_system) - suffix_len
                 after_mid_end = len(after_system) - suffix_len
                 before_mid = before_system[prefix_len:before_mid_end]
@@ -897,7 +988,9 @@ async def dry_run_execute_on_llm_request(
 
                     if primary is None and persona_sources:
                         try:
-                            primary = cast(SystemPromptSegmentSource, persona_sources[0])
+                            primary = cast(
+                                SystemPromptSegmentSource, persona_sources[0]
+                            )
                         except Exception:
                             primary = None
 
@@ -930,10 +1023,14 @@ async def dry_run_execute_on_llm_request(
 
                     inserted_override = []
                     if left:
-                        inserted_override.append({"text": left, "source": side_source, "sources": None})
+                        inserted_override.append(
+                            {"text": left, "source": side_source, "sources": None}
+                        )
                     inserted_override.append(persona_seg)
                     if right:
-                        inserted_override.append({"text": right, "source": side_source, "sources": None})
+                        inserted_override.append(
+                            {"text": right, "source": side_source, "sources": None}
+                        )
 
                     if debug:
                         logger.info(
@@ -942,7 +1039,9 @@ async def dry_run_execute_on_llm_request(
                             len(mid),
                             len(right),
                             len(persona_sources),
-                            (side_source or {}).get("plugin") if isinstance(side_source, dict) else None,
+                            (side_source or {}).get("plugin")
+                            if isinstance(side_source, dict)
+                            else None,
                             insert_mutation,
                         )
 
@@ -966,9 +1065,15 @@ async def dry_run_execute_on_llm_request(
                     [
                         {
                             "text_len": len(str(s.get("text") or "")),
-                            "source_plugin": (s.get("source") or {}).get("plugin") if isinstance(s.get("source"), dict) else None,
-                            "source_field": (s.get("source") or {}).get("field") if isinstance(s.get("source"), dict) else None,
-                            "sources_len": len(s.get("sources") or []) if isinstance(s.get("sources"), list) else 0,
+                            "source_plugin": (s.get("source") or {}).get("plugin")
+                            if isinstance(s.get("source"), dict)
+                            else None,
+                            "source_field": (s.get("source") or {}).get("field")
+                            if isinstance(s.get("source"), dict)
+                            else None,
+                            "sources_len": len(s.get("sources") or [])
+                            if isinstance(s.get("sources"), list)
+                            else 0,
                         }
                         for s in head
                     ],
@@ -1009,7 +1114,11 @@ async def dry_run_execute_on_llm_request(
 
     # Keep return contract (3-tuple), attach extra segments to req for snapshot rendering.
     try:
-        setattr(req, "_prompt_preview_extra_user_content_segments", _compact_system_segments(extra_user_segments))
+        setattr(
+            req,
+            "_prompt_preview_extra_user_content_segments",
+            _compact_system_segments(extra_user_segments),
+        )
     except Exception:
         pass
 
@@ -1051,20 +1160,28 @@ def build_prompt_preview_render_result(
         "rendered_prompt": rendered_prompt,
         "rendered_system_prompt": rendered_system_prompt,
         "render_warnings": [str(x) for x in (render_warnings or []) if str(x).strip()],
-        "render_executed_handlers": [_serialize_handler_record(r) for r in (render_handlers or [])],
+        "render_executed_handlers": [
+            _serialize_handler_record(r) for r in (render_handlers or [])
+        ],
     }
 
     if rendered_system_prompt_segments is not None:
         segs = _compact_system_segments(list(rendered_system_prompt_segments))
         segs = _merge_same_plugin_segments(segs)
-        result["rendered_system_prompt_segments"] = _neutralize_whitespace_segments(segs)
+        result["rendered_system_prompt_segments"] = _neutralize_whitespace_segments(
+            segs
+        )
 
     if rendered_extra_user_content_segments is None:
-        rendered_extra_user_content_segments = getattr(req, "_prompt_preview_extra_user_content_segments", None)
+        rendered_extra_user_content_segments = getattr(
+            req, "_prompt_preview_extra_user_content_segments", None
+        )
 
     if rendered_extra_user_content_segments is not None:
         segs = _compact_system_segments(list(rendered_extra_user_content_segments))
         segs = _merge_same_plugin_segments(segs)
-        result["rendered_extra_user_content_segments"] = _neutralize_whitespace_segments(segs)
+        result["rendered_extra_user_content_segments"] = (
+            _neutralize_whitespace_segments(segs)
+        )
 
     return result
