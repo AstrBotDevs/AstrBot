@@ -521,5 +521,13 @@
         "description": "直连地址列表"
       }
     }
+  },
+  "help": {
+    "documentation": "官方文档",
+    "support": "加群询问",
+    "helpText": "不了解配置？请见 {documentation} 或 {support}。",
+    "helpPrefix": "不了解配置？请见",
+    "helpMiddle": "或",
+    "helpSuffix": "。"
   }
 }

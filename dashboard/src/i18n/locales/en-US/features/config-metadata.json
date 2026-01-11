@@ -523,5 +523,13 @@
         "description": "Direct Connection Address List"
       }
     }
+  },
+  "help": {
+    "documentation": "Official Documentation",
+    "support": "Join Support Group",
+    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
+    "helpPrefix": "Don't understand the configuration? See",
+    "helpMiddle": "or",
+    "helpSuffix": "."
   }
 }

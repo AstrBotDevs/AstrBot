@@ -170,7 +170,11 @@ async function loadPlugins() {
       // 只显示已激活且非系统的插件，并按名称排序
       pluginList.value = (response.data.data || [])
         .filter(plugin => plugin.activated && !plugin.reserved)
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => {
+          const nameA = a.name || '';
+          const nameB = b.name || '';
+          return nameA.localeCompare(nameB);
+        })
     }
   } catch (error) {
     console.error('加载插件列表失败:', error)
