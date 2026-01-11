@@ -191,7 +191,16 @@ class InternalAgentSubStage(Stage):
         if req.image_urls:
             provider_cfg = provider.provider_config.get("modalities", ["image"])
             if "image" not in provider_cfg:
-                logger.debug(f"用户设置提供商 {provider} 不支持图像，清空图像列表。")
+                logger.debug(
+                    f"用户设置提供商 {provider} 不支持图像，将图像替换为占位符。"
+                )
+                # 为每个图片添加占位符到 prompt
+                image_count = len(req.image_urls)
+                placeholder = " ".join(["[图片]"] * image_count)
+                if req.prompt:
+                    req.prompt = f"{placeholder} {req.prompt}"
+                else:
+                    req.prompt = placeholder
                 req.image_urls = []
         if req.func_tool:
             provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
@@ -364,8 +373,16 @@ class InternalAgentSubStage(Stage):
             # 检查消息内容是否有效，避免空消息触发钩子
             has_provider_request = event.get_extra("provider_request") is not None
             has_valid_message = bool(event.message_str and event.message_str.strip())
+            # 检查是否有图片或其他媒体内容
+            has_media_content = any(
+                isinstance(comp, (Image, File)) for comp in event.message_obj.message
+            )
 
-            if not has_provider_request and not has_valid_message:
+            if (
+                not has_provider_request
+                and not has_valid_message
+                and not has_media_content
+            ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
 
