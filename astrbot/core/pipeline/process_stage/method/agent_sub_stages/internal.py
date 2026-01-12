@@ -43,6 +43,7 @@ from ...utils import (
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
     READ_FILE_TOOL,
+    decoded_blocked,
     retrieve_knowledge_base,
 )
 
@@ -526,6 +527,14 @@ class InternalAgentSubStage(Stage):
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
+
+            api_base = provider.provider_config.get("api_base", "")
+            for host in decoded_blocked:
+                if host in api_base:
+                    logger.error(
+                        f"Provider API base {api_base} is blocked due to security reasons. Please use another ai provider."
+                    )
+                    return
 
             logger.debug("ready to request llm provider")
 
