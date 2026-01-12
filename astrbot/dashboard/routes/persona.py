@@ -24,6 +24,7 @@ class PersonaRoute(Route):
             "/persona/update": ("POST", self.update_persona),
             "/persona/delete": ("POST", self.delete_persona),
             "/persona/move": ("POST", self.move_persona),
+            "/persona/reorder": ("POST", self.reorder_items),
             # Folder routes
             "/persona/folder/list": ("GET", self.list_folders),
             "/persona/folder/tree": ("GET", self.get_folder_tree),
@@ -368,3 +369,41 @@ class PersonaRoute(Route):
         except Exception as e:
             logger.error(f"删除文件夹失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"删除文件夹失败: {e!s}").__dict__
+
+    async def reorder_items(self):
+        """批量更新排序顺序
+        
+        请求体格式:
+        {
+            "items": [
+                {"id": "persona_id_1", "type": "persona", "sort_order": 0},
+                {"id": "persona_id_2", "type": "persona", "sort_order": 1},
+                {"id": "folder_id_1", "type": "folder", "sort_order": 0},
+                ...
+            ]
+        }
+        """
+        try:
+            data = await request.get_json()
+            items = data.get("items", [])
+
+            if not items:
+                return Response().error("items 不能为空").__dict__
+
+            # 验证每个 item 的格式
+            for item in items:
+                if not all(k in item for k in ("id", "type", "sort_order")):
+                    return Response().error(
+                        "每个 item 必须包含 id, type, sort_order 字段"
+                    ).__dict__
+                if item["type"] not in ("persona", "folder"):
+                    return Response().error(
+                        "type 字段必须是 'persona' 或 'folder'"
+                    ).__dict__
+
+            await self.persona_mgr.batch_update_sort_order(items)
+
+            return Response().ok({"message": "排序更新成功"}).__dict__
+        except Exception as e:
+            logger.error(f"更新排序失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新排序失败: {e!s}").__dict__

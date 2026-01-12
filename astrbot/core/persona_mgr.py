@@ -180,6 +180,20 @@ class PersonaManager:
         """
         await self.db.delete_persona_folder(folder_id)
 
+    async def batch_update_sort_order(self, items: list[dict]) -> None:
+        """批量更新 personas 和/或 folders 的排序顺序
+        
+        Args:
+            items: 包含以下键的字典列表：
+                - id: persona_id 或 folder_id
+                - type: "persona" 或 "folder"
+                - sort_order: 新的排序顺序值
+        """
+        await self.db.batch_update_sort_order(items)
+        # 刷新缓存
+        self.personas = await self.get_all_personas()
+        self.get_v3_persona_data()
+
     async def get_folder_tree(self) -> list[dict]:
         """获取文件夹树形结构
         

@@ -776,6 +776,45 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return list(result.scalars().all())
 
+    async def batch_update_sort_order(
+        self,
+        items: list[dict],
+    ) -> None:
+        """Batch update sort_order for personas and/or folders.
+        
+        Args:
+            items: List of dicts with keys:
+                - id: The persona_id or folder_id
+                - type: Either "persona" or "folder"
+                - sort_order: The new sort_order value
+        """
+        if not items:
+            return
+        
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                for item in items:
+                    item_id = item.get("id")
+                    item_type = item.get("type")
+                    sort_order = item.get("sort_order")
+                    
+                    if item_id is None or item_type is None or sort_order is None:
+                        continue
+                    
+                    if item_type == "persona":
+                        await session.execute(
+                            update(Persona)
+                            .where(col(Persona.persona_id) == item_id)
+                            .values(sort_order=sort_order)
+                        )
+                    elif item_type == "folder":
+                        await session.execute(
+                            update(PersonaFolder)
+                            .where(col(PersonaFolder.folder_id) == item_id)
+                            .values(sort_order=sort_order)
+                        )
+
     async def insert_preference_or_update(self, scope, scope_id, key, value):
         """Insert a new preference record or update if it exists."""
         async with self.get_db() as session:

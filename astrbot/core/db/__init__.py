@@ -346,6 +346,21 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def batch_update_sort_order(
+        self,
+        items: list[dict],
+    ) -> None:
+        """Batch update sort_order for personas and/or folders.
+        
+        Args:
+            items: List of dicts with keys:
+                - id: The persona_id or folder_id
+                - type: Either "persona" or "folder"
+                - sort_order: The new sort_order value
+        """
+        ...
+
+    @abc.abstractmethod
     async def insert_preference_or_update(
         self,
         scope: str,
