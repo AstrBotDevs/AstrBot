@@ -39,17 +39,19 @@
                     </div>
                 </div>
 
-                <!-- 加载状态 -->
-                <div v-if="loading" class="loading-container">
-                    <v-row>
-                        <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="4" xl="3">
-                            <v-skeleton-loader type="card" rounded="lg" />
-                        </v-col>
-                    </v-row>
-                </div>
+                <!-- 加载状态 - 只有加载超过阈值才显示骨架屏 -->
+                <v-fade-transition>
+                    <div v-if="showSkeleton" class="loading-container">
+                        <v-row>
+                            <v-col v-for="n in 6" :key="n" cols="12" sm="6" lg="4" xl="3">
+                                <v-skeleton-loader type="card" rounded="lg" />
+                            </v-col>
+                        </v-row>
+                    </div>
+                </v-fade-transition>
 
                 <!-- 内容区域 -->
-                <div v-else>
+                <div v-if="!loading">
                     <!-- 子文件夹区域 -->
                     <div v-if="currentFolders.length > 0" class="folders-section mb-6">
                         <h3 class="text-subtitle-1 font-weight-medium mb-3">
@@ -298,11 +300,45 @@ export default defineComponent({
             // 消息提示
             showMessage: false,
             message: '',
-            messageType: 'success' as 'success' | 'error'
+            messageType: 'success' as 'success' | 'error',
+
+            // 骨架屏延迟显示控制
+            showSkeleton: false,
+            skeletonTimer: null as ReturnType<typeof setTimeout> | null
         };
     },
     computed: {
         ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'currentFolders', 'currentPersonas', 'loading'])
+    },
+    watch: {
+        // 监听 loading 状态变化，实现延迟显示骨架屏
+        loading: {
+            handler(newVal: boolean) {
+                if (newVal) {
+                    // 加载开始时，延迟 150ms 后才显示骨架屏
+                    // 如果加载在 150ms 内完成，则不显示骨架屏，避免闪烁
+                    this.skeletonTimer = setTimeout(() => {
+                        if (this.loading) {
+                            this.showSkeleton = true;
+                        }
+                    }, 150);
+                } else {
+                    // 加载结束，立即隐藏骨架屏并清除定时器
+                    if (this.skeletonTimer) {
+                        clearTimeout(this.skeletonTimer);
+                        this.skeletonTimer = null;
+                    }
+                    this.showSkeleton = false;
+                }
+            },
+            immediate: true
+        }
+    },
+    beforeUnmount() {
+        // 组件卸载时清除定时器
+        if (this.skeletonTimer) {
+            clearTimeout(this.skeletonTimer);
+        }
     },
     async mounted() {
         await this.initialize();
