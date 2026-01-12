@@ -1,6 +1,8 @@
 import os
 import uuid
-from shipyard import ShipyardClient, SessionShip, Spec
+
+from shipyard import SessionShip, ShipyardClient, Spec
+
 from astrbot.api import logger
 
 
@@ -11,7 +13,7 @@ class SandboxClient:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(SandboxClient, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):

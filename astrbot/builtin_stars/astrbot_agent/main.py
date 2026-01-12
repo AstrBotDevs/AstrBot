@@ -1,13 +1,14 @@
 import os
+
 import astrbot.api.star as star
-from astrbot.api import logger
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
-from astrbot.api import AstrBotConfig
-from .tools.fs import CreateFileTool, ReadFileTool
-from .tools.shell import ExecuteShellTool
-from .tools.python import PythonTool
+
 from .commands.file import FileCommand
+from .tools.fs import CreateFileTool, ReadFileTool
+from .tools.python import PythonTool
+from .tools.shell import ExecuteShellTool
 
 
 class Main(star.Star):
@@ -21,7 +22,7 @@ class Main(star.Star):
         os.environ["SHIPYARD_ENDPOINT"] = self.endpoint
         os.environ["SHIPYARD_ACCESS_TOKEN"] = self.access_token
 
-        context.add_llm_tool(
+        context.add_llm_tools(
             CreateFileTool(), ExecuteShellTool(), PythonTool(), ReadFileTool()
         )
 
