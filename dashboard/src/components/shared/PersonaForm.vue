@@ -229,6 +229,7 @@ export default {
             mcpServers: [],
             availableTools: [],
             loadingTools: false,
+            existingPersonaIds: [], // 已存在的人格ID列表
             personaForm: {
                 persona_id: '',
                 system_prompt: '',
@@ -238,7 +239,8 @@ export default {
             },
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
-                v => (v && v.length >= 0) || this.tm('validation.minLength', { min: 2 }),
+                v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
+                v => !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
@@ -278,6 +280,8 @@ export default {
                     this.initFormWithPersona(this.editingPersona);
                 } else {
                     this.initForm();
+                    // 只在创建新人格时加载已存在的人格列表
+                    this.loadExistingPersonaIds();
                 }
                 this.loadMcpServers();
                 this.loadTools();
@@ -367,6 +371,18 @@ export default {
                 this.availableTools = [];
             } finally {
                 this.loadingTools = false;
+            }
+        },
+
+        async loadExistingPersonaIds() {
+            try {
+                const response = await axios.get('/api/persona/list');
+                if (response.data.status === 'ok') {
+                    this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
+                }
+            } catch (error) {
+                // 加载失败不影响表单使用，只是无法进行前端重名校验
+                this.existingPersonaIds = [];
             }
         },
 

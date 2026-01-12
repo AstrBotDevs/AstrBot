@@ -57,7 +57,8 @@
     "required": "此字段为必填项",
     "minLength": "最少需要 {min} 个字符",
     "alphanumeric": "只能包含字母、数字、下划线和连字符",
-    "dialogRequired": "{type}不能为空"
+    "dialogRequired": "{type}不能为空",
+    "personaIdExists": "该人格名称已存在"
   },
   "messages": {
     "loadError": "加载人格列表失败",

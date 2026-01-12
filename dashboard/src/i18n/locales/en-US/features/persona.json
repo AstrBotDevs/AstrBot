@@ -57,7 +57,8 @@
     "required": "This field is required",
     "minLength": "Minimum {min} characters required",
     "alphanumeric": "Only letters, numbers, underscores and hyphens are allowed",
-    "dialogRequired": "{type} cannot be empty"
+    "dialogRequired": "{type} cannot be empty",
+    "personaIdExists": "This persona name already exists"
   },
   "messages": {
     "loadError": "Failed to load persona list",
