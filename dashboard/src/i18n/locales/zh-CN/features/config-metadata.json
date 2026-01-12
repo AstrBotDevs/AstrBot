@@ -169,6 +169,14 @@
         "display_reasoning_text": {
           "description": "显示思考内容"
         },
+        "llm_safety_mode": {
+          "description": "健康模式",
+          "hint": "引导模型输出健康、安全、积极的内容，避免有害或敏感话题。"
+        },
+        "safety_mode_strategy": {
+          "description": "健康模式策略",
+          "hint": "选择健康模式的实现方式。"
+        },
         "identifier": {
           "description": "用户识别",
           "hint": "启用后,会在提示词前包含用户 ID 信息。"

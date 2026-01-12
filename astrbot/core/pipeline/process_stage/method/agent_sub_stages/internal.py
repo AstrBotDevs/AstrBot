@@ -34,7 +34,11 @@ from .....astr_agent_run_util import AgentRunner, run_agent
 from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
-from ...utils import KNOWLEDGE_BASE_QUERY_TOOL, retrieve_knowledge_base
+from ...utils import (
+    KNOWLEDGE_BASE_QUERY_TOOL,
+    LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    retrieve_knowledge_base,
+)
 
 
 class InternalAgentSubStage(Stage):
@@ -83,6 +87,11 @@ class InternalAgentSubStage(Stage):
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+
+        self.llm_safety_mode = settings.get("llm_safety_mode", True)
+        self.safety_mode_strategy = settings.get(
+            "safety_mode_strategy", "system_prompt"
+        )
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -446,6 +455,17 @@ class InternalAgentSubStage(Stage):
             return None
         return provider
 
+    def _apply_llm_safety_mode(self, req: ProviderRequest) -> None:
+        """Apply LLM safety mode to the provider request."""
+        if self.safety_mode_strategy == "system_prompt":
+            req.system_prompt = (
+                f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt or ''}"
+            )
+        else:
+            logger.warning(
+                f"Unsupported llm_safety_mode strategy: {self.safety_mode_strategy}.",
+            )
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -561,6 +581,10 @@ class InternalAgentSubStage(Stage):
 
                 # sanitize contexts (including history) by provider modalities
                 self._sanitize_context_by_modalities(provider, req)
+
+                # apply llm safety mode
+                if self.llm_safety_mode:
+                    self._apply_llm_safety_mode(req)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

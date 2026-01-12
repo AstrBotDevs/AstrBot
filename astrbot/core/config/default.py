@@ -106,6 +106,8 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
+        "llm_safety_mode": True,
+        "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
             "enable": False,
             "provider": "moonshotai",
@@ -2619,6 +2621,34 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                    "provider_settings.streaming_response": {
+                        "description": "流式输出",
+                        "type": "bool",
+                    },
+                    "provider_settings.unsupported_streaming_strategy": {
+                        "description": "不支持流式回复的平台",
+                        "type": "string",
+                        "options": ["realtime_segmenting", "turn_off"],
+                        "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时，立即发送当前已接收的内容",
+                        "labels": ["实时分段回复", "关闭流式回复"],
+                        "condition": {
+                            "provider_settings.streaming_response": True,
+                        },
+                    },
+                    "provider_settings.llm_safety_mode": {
+                        "description": "健康模式",
+                        "type": "bool",
+                        "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。",
+                    },
+                    "provider_settings.safety_mode_strategy": {
+                        "description": "健康模式策略",
+                        "type": "string",
+                        "options": ["system_prompt"],
+                        "hint": "选择健康模式的实现策略。",
+                        "condition": {
+                            "provider_settings.llm_safety_mode": True,
+                        },
+                    },
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
@@ -2664,20 +2694,6 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.streaming_response": {
-                        "description": "流式输出",
-                        "type": "bool",
-                    },
-                    "provider_settings.unsupported_streaming_strategy": {
-                        "description": "不支持流式回复的平台",
-                        "type": "string",
-                        "options": ["realtime_segmenting", "turn_off"],
-                        "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时，立即发送当前已接收的内容",
-                        "labels": ["实时分段回复", "关闭流式回复"],
-                        "condition": {
-                            "provider_settings.streaming_response": True,
                         },
                     },
                     "provider_settings.wake_prefix": {
