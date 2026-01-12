@@ -37,7 +37,9 @@
     "noToolsFound": "No matching tools found",
     "loadingTools": "Loading tools...",
     "allToolsAvailable": "Use all available tools",
-    "noToolsSelected": "No tools selected"
+    "noToolsSelected": "No tools selected",
+    "createInFolder": "Will be created in \"{folder}\"",
+    "rootFolder": "All Personas"
   },
   "dialog": {
     "create": {

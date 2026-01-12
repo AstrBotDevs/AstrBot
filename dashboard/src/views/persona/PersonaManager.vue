@@ -109,7 +109,8 @@
 
         <!-- 创建/编辑 Persona 对话框 -->
         <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
-            :current-folder-id="currentFolderId ?? undefined" @saved="handlePersonaSaved" @error="showError" />
+            :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
+            @saved="handlePersonaSaved" @error="showError" />
 
         <!-- 查看 Persona 详情对话框 -->
         <v-dialog v-model="showViewDialog" max-width="700px">
@@ -308,7 +309,26 @@ export default defineComponent({
         };
     },
     computed: {
-        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'currentFolders', 'currentPersonas', 'loading'])
+        ...mapState(usePersonaStore, ['folderTree', 'currentFolderId', 'currentFolders', 'currentPersonas', 'loading']),
+        currentFolderName(): string | null {
+            if (!this.currentFolderId) {
+                return null; // 根目录，PersonaForm 会使用 tm('form.rootFolder')
+            }
+            // 递归查找文件夹名称
+            const findName = (nodes: FolderTreeNode[], id: string): string | null => {
+                for (const node of nodes) {
+                    if (node.folder_id === id) {
+                        return node.name;
+                    }
+                    if (node.children && node.children.length > 0) {
+                        const found = findName(node.children, id);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            };
+            return findName(this.folderTree, this.currentFolderId);
+        }
     },
     watch: {
         // 监听 loading 状态变化，实现延迟显示骨架屏

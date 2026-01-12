@@ -6,6 +6,18 @@
             </v-card-title>
 
             <v-card-text>
+                <!-- 创建位置提示 -->
+                <v-alert
+                    v-if="!editingPersona"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                    icon="mdi-folder-outline"
+                >
+                    {{ tm('form.createInFolder', { folder: folderDisplayName }) }}
+                </v-alert>
+
                 <v-form ref="personaForm" v-model="formValid">
                     <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
                         :rules="personaIdRules" :disabled="editingPersona" variant="outlined" density="comfortable"
@@ -213,6 +225,10 @@ export default {
         currentFolderId: {
             type: String,
             default: null
+        },
+        currentFolderName: {
+            type: String,
+            default: null
         }
     },
     emits: ['update:modelValue', 'saved', 'error'],
@@ -269,6 +285,18 @@ export default {
                 (tool.description && tool.description.toLowerCase().includes(search)) ||
                 (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
             );
+        },
+        folderDisplayName() {
+            // 优先使用传入的文件夹名称
+            if (this.currentFolderName) {
+                return this.currentFolderName;
+            }
+            // 如果没有文件夹 ID，显示根目录
+            if (!this.currentFolderId) {
+                return this.tm('form.rootFolder');
+            }
+            // 否则显示文件夹 ID（作为备用）
+            return this.currentFolderId;
         }
     },
 

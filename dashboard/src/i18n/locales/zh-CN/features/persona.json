@@ -37,7 +37,9 @@
     "noToolsFound": "未找到匹配的工具",
     "loadingTools": "正在加载工具...",
     "allToolsAvailable": "使用所有可用工具",
-    "noToolsSelected": "未选择任何工具"
+    "noToolsSelected": "未选择任何工具",
+    "createInFolder": "将在「{folder}」中创建",
+    "rootFolder": "全部人格"
   },
   "dialog": {
     "create": {

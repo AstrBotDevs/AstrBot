@@ -18,9 +18,11 @@
   />
 
   <!-- 创建人格对话框 -->
-  <PersonaForm 
+  <PersonaForm
     v-model="showCreateDialog"
     :editing-persona="undefined"
+    :current-folder-id="currentFolderId ?? undefined"
+    :current-folder-name="currentFolderName ?? undefined"
     @saved="handlePersonaCreated"
     @error="handleError" />
 </template>
@@ -70,6 +72,28 @@ const defaultPersona: SelectableItem = {
   name: tm('personaSelector.defaultPersona'),
   system_prompt: 'You are a helpful and friendly assistant.'
 }
+
+// 递归查找文件夹名称
+function findFolderName(nodes: FolderTreeNode[], folderId: string): string | null {
+  for (const node of nodes) {
+    if (node.folder_id === folderId) {
+      return node.name
+    }
+    if (node.children && node.children.length > 0) {
+      const found = findFolderName(node.children, folderId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// 当前文件夹名称
+const currentFolderName = computed(() => {
+  if (!currentFolderId.value) {
+    return null // 根目录，PersonaForm 会使用 tm('form.rootFolder')
+  }
+  return findFolderName(folderTree.value, currentFolderId.value)
+})
 
 // 标签配置
 const labels = computed(() => ({
