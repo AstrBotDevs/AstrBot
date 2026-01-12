@@ -2,7 +2,7 @@
 
 > 我们热爱开源软件，并始终致力于为所有用户提供健康、安全、可靠的使用体验。 ❤️
 
-For Enlish edition, please refer to the section below the Chinese version.
+For English edition, please refer to the section below the Chinese version.
 
 **最后更新：** 2026-01-12
 

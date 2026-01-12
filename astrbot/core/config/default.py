@@ -242,7 +242,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "OneBot v11 (QQ 个人号等)": {
+                    "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
