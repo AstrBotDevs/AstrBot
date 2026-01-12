@@ -16,46 +16,35 @@ class PersonaCommands:
         self,
         folder_tree: list[dict],
         all_personas: list["Persona"],
-        prefix: str = "",
-        is_last: bool = True,
+        depth: int = 0,
     ) -> list[str]:
-        """递归构建树状输出，使用线条表示层级"""
+        """递归构建树状输出，使用短线条表示层级"""
         lines: list[str] = []
+        # 使用短线条作为缩进前缀，每层只用 "│" 加一个空格
+        prefix = "│ " * depth
 
-        for i, folder in enumerate(folder_tree):
-            is_folder_last = i == len(folder_tree) - 1
+        for folder in folder_tree:
+            # 输出文件夹
+            lines.append(f"{prefix}├ 📁 {folder['name']}/")
             
             # 获取该文件夹下的人格
             folder_personas = [
                 p for p in all_personas if p.folder_id == folder["folder_id"]
             ]
-            children = folder.get("children", [])
-            has_content = len(folder_personas) > 0 or len(children) > 0
-            
-            # 输出文件夹
-            connector = "└─" if is_folder_last else "├─"
-            lines.append(f"{prefix}{connector} 📁 {folder['name']}")
-            
-            # 计算子项的前缀
-            child_prefix = prefix + ("   " if is_folder_last else "│  ")
+            child_prefix = "│ " * (depth + 1)
             
             # 输出该文件夹下的人格
-            total_items = len(folder_personas) + len(children)
-            item_idx = 0
-            
             for persona in folder_personas:
-                item_idx += 1
-                item_connector = "└─" if item_idx == total_items else "├─"
-                lines.append(f"{child_prefix}{item_connector} 👤 {persona.persona_id}")
+                lines.append(f"{child_prefix}├ 👤 {persona.persona_id}")
 
             # 递归处理子文件夹
+            children = folder.get("children", [])
             if children:
                 lines.extend(
                     self._build_tree_output(
                         children,
                         all_personas,
-                        child_prefix,
-                        is_folder_last,
+                        depth + 1,
                     )
                 )
 
