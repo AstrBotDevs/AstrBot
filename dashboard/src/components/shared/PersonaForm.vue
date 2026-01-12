@@ -209,6 +209,10 @@ export default {
         editingPersona: {
             type: Object,
             default: null
+        },
+        currentFolderId: {
+            type: String,
+            default: null
         }
     },
     emits: ['update:modelValue', 'saved', 'error'],
@@ -229,7 +233,8 @@ export default {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                folder_id: null
             },
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
@@ -310,7 +315,8 @@ export default {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                folder_id: this.currentFolderId
             };
             this.toolSelectValue = '0';
             this.expandedPanels = [];
@@ -321,7 +327,8 @@ export default {
                 persona_id: persona.persona_id,
                 system_prompt: persona.system_prompt,
                 begin_dialogs: [...(persona.begin_dialogs || [])],
-                tools: persona.tools === null ? null : [...(persona.tools || [])]
+                tools: persona.tools === null ? null : [...(persona.tools || [])],
+                folder_id: persona.folder_id
             };
             // 根据 tools 的值设置 toolSelectValue
             this.toolSelectValue = persona.tools === null ? '0' : '1';

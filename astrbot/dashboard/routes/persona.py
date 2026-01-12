@@ -254,6 +254,9 @@ class PersonaRoute(Route):
         """获取文件夹列表"""
         try:
             parent_id = request.args.get("parent_id")
+            # 空字符串视为 None（根目录）
+            if parent_id == "":
+                parent_id = None
             folders = await self.persona_mgr.get_folders(parent_id)
             return (
                 Response()

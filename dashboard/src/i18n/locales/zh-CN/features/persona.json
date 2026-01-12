@@ -9,6 +9,7 @@
     "delete": "删除",
     "cancel": "取消",
     "save": "保存",
+    "move": "移动",
     "addDialogPair": "添加对话对"
   },
   "labels": {
@@ -48,7 +49,9 @@
   },
   "empty": {
     "title": "暂无人格配置",
-    "description": "来创建一个吧！"
+    "description": "来创建一个吧！",
+    "folderEmpty": "此文件夹为空",
+    "folderEmptyDescription": "创建新的人格或文件夹开始使用"
   },
   "validation": {
     "required": "此字段为必填项",
@@ -63,5 +66,62 @@
     "deleteConfirm": "确定要删除人格 \"{id}\" 吗？此操作不可撤销。",
     "deleteSuccess": "删除成功",
     "deleteError": "删除失败"
+  },
+  "persona": {
+    "personasTitle": "人格",
+    "toolsCount": "个工具",
+    "contextMenu": {
+      "moveTo": "移动到..."
+    },
+    "messages": {
+      "moveSuccess": "人格移动成功",
+      "moveError": "移动人格失败"
+    }
+  },
+  "folder": {
+    "sidebarTitle": "文件夹",
+    "rootFolder": "根目录",
+    "foldersTitle": "文件夹",
+    "noFolders": "暂无文件夹",
+    "createButton": "新建文件夹",
+    "searchPlaceholder": "搜索文件夹...",
+    "form": {
+      "name": "文件夹名称",
+      "description": "描述（可选）"
+    },
+    "validation": {
+      "nameRequired": "文件夹名称不能为空"
+    },
+    "contextMenu": {
+      "open": "打开",
+      "rename": "重命名",
+      "moveTo": "移动到...",
+      "delete": "删除"
+    },
+    "createDialog": {
+      "title": "创建新文件夹"
+    },
+    "renameDialog": {
+      "title": "重命名文件夹"
+    },
+    "deleteDialog": {
+      "title": "删除文件夹",
+      "message": "确定要删除文件夹 \"{name}\" 吗？",
+      "warning": "文件夹内的所有人格将被移动到根目录。"
+    },
+    "messages": {
+      "createSuccess": "文件夹创建成功",
+      "createError": "创建文件夹失败",
+      "renameSuccess": "文件夹重命名成功",
+      "renameError": "重命名文件夹失败",
+      "deleteSuccess": "文件夹删除成功",
+      "deleteError": "删除文件夹失败"
+    }
+  },
+  "moveDialog": {
+    "title": "移动到文件夹",
+    "description": "为 \"{name}\" 选择目标文件夹",
+    "success": "移动成功",
+    "error": "移动失败"
   }
 }
