@@ -198,3 +198,52 @@ export interface BaseFolderProps {
   // i18n 键配置
   i18nKeys?: FolderI18nKeys;
 }
+
+/**
+ * 可选择的项目基础接口
+ */
+export interface SelectableItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  folder_id?: string | null;
+  [key: string]: any;
+}
+
+/**
+ * 文件夹项目选择器操作接口
+ */
+export interface FolderItemSelectorOperations<T extends SelectableItem> {
+  // 加载文件夹树
+  loadFolderTree: () => Promise<FolderTreeNode[]>;
+  
+  // 加载指定文件夹下的项目
+  loadItemsInFolder: (folderId: string | null) => Promise<T[]>;
+  
+  // 创建项目（可选）
+  createItem?: (data: any) => Promise<T>;
+}
+
+/**
+ * 文件夹项目选择器标签配置
+ */
+export interface FolderItemSelectorLabels {
+  // 对话框
+  dialogTitle?: string;
+  notSelected?: string;
+  buttonText?: string;
+  
+  // 项目列表
+  noItems?: string;
+  defaultItem?: string;
+  noDescription?: string;
+  emptyFolder?: string;
+  
+  // 按钮
+  createButton?: string;
+  confirmButton?: string;
+  cancelButton?: string;
+  
+  // 文件夹
+  rootFolder?: string;
+}
