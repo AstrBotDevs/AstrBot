@@ -19,6 +19,7 @@ class Main(star.Star):
         self.config = config
         self.endpoint = config.get("endpoint", "http://localhost:8000")
         self.access_token = config.get("access_token", "")
+        os.environ["ASTRBOT_SANDBOX_TYPE"] = config.get("booter", "shipyard-bay")
         os.environ["SHIPYARD_ENDPOINT"] = self.endpoint
         os.environ["SHIPYARD_ACCESS_TOKEN"] = self.access_token
 

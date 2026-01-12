@@ -29,12 +29,13 @@ class CreateFileTool(FunctionTool):
     )
 
     async def run(self, event: AstrMessageEvent, path: str, content: str):
-        sb = await SandboxClient().get_ship(event.unified_msg_origin)
+        sb = await SandboxClient().get_booter(event.unified_msg_origin)
         try:
             result = await sb.fs.create_file(path, content)
             return json.dumps(result)
         except Exception as e:
             return f"Error creating file: {str(e)}"
+
 
 @dataclass
 class ReadFileTool(FunctionTool):
@@ -54,7 +55,7 @@ class ReadFileTool(FunctionTool):
     )
 
     async def run(self, event: AstrMessageEvent, path: str):
-        sb = await SandboxClient().get_ship(event.unified_msg_origin)
+        sb = await SandboxClient().get_booter(event.unified_msg_origin)
         try:
             result = await sb.fs.read_file(path)
             return result

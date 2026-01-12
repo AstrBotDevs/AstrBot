@@ -22,7 +22,7 @@ class FileCommand:
     async def _upload_file_to_sandbox(self, event: AstrMessageEvent) -> list[str]:
         """将用户上传的文件上传到沙箱"""
         sender_id = event.get_sender_id()
-        sb = await SandboxClient().get_ship(event.unified_msg_origin)
+        sb = await SandboxClient().get_booter(event.unified_msg_origin)
         fpath_ls = self.user_file_uploads[sender_id]
         errors = []
         for path in fpath_ls:

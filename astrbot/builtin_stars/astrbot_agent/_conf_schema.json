@@ -1,10 +1,25 @@
 {
+    "booter": {
+        "description": "Select booter to initialize the sandbox environment.",
+        "type": "string",
+        "options": [
+            "shipyard-bay",
+            "boxlite"
+        ],
+        "default": "shipyard-bay"
+    },
     "endpoint": {
         "description": "The endpoint URL of the Shipyard server.",
-        "type": "string"
+        "type": "string",
+        "condition": {
+            "booter": "shipyard-bay"
+        }
     },
     "access_token": {
         "description": "The access token for authenticating with the Shipyard server.",
-        "type": "string"
+        "type": "string",
+        "condition": {
+            "booter": "shipyard-bay"
+        }
     }
 }

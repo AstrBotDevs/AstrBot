@@ -31,7 +31,7 @@ class PythonTool(FunctionTool):
     )
 
     async def run(self, event: AstrMessageEvent, code: str, silent: bool = False):
-        sb = await SandboxClient().get_ship(event.unified_msg_origin)
+        sb = await SandboxClient().get_booter(event.unified_msg_origin)
         try:
             result = await sb.python.exec(code, silent=silent)
             output = result.get("output", {})
