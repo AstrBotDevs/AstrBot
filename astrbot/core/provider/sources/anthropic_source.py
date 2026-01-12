@@ -1,7 +1,6 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from mimetypes import guess_type
 
 import anthropic
 from anthropic import AsyncAnthropic
@@ -458,6 +457,18 @@ class ProviderAnthropic(Provider):
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
 
+    def _detect_image_mime_type(self, data: bytes) -> str:
+        """根据图片二进制数据的 magic bytes 检测 MIME 类型"""
+        if data[:8] == b"\x89PNG\r\n\x1a\n":
+            return "image/png"
+        if data[:2] == b"\xff\xd8":
+            return "image/jpeg"
+        if data[:6] in (b"GIF87a", b"GIF89a"):
+            return "image/gif"
+        if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return "image/webp"
+        return "image/jpeg"
+
     async def assemble_context(
         self,
         text: str,
@@ -469,21 +480,16 @@ class ProviderAnthropic(Provider):
         async def resolve_image_url(image_url: str) -> dict | None:
             if image_url.startswith("http"):
                 image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
+                image_data, mime_type = await self.encode_image_bs64(image_path)
             elif image_url.startswith("file:///"):
                 image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
+                image_data, mime_type = await self.encode_image_bs64(image_path)
             else:
-                image_data = await self.encode_image_bs64(image_url)
+                image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
                 logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                 return None
-
-            # Get mime type for the image
-            mime_type, _ = guess_type(image_url)
-            if not mime_type:
-                mime_type = "image/jpeg"  # Default to JPEG if can't determine
 
             return {
                 "type": "image",
@@ -542,14 +548,22 @@ class ProviderAnthropic(Provider):
         # 否则返回多模态格式
         return {"role": "user", "content": content}
 
-    async def encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
+    async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
+        """将图片转换为 base64，同时检测实际 MIME 类型"""
         if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
+            raw_base64 = image_url.replace("base64://", "")
+            try:
+                image_bytes = base64.b64decode(raw_base64)
+                mime_type = self._detect_image_mime_type(image_bytes)
+            except Exception:
+                mime_type = "image/jpeg"
+            return f"data:{mime_type};base64,{raw_base64}", mime_type
         with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-        return ""
+            image_bytes = f.read()
+            mime_type = self._detect_image_mime_type(image_bytes)
+            image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
+            return f"data:{mime_type};base64,{image_bs64}", mime_type
+        return "", "image/jpeg"
 
     def get_current_key(self) -> str:
         return self.chosen_api_key
