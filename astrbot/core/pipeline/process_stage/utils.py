@@ -1,3 +1,5 @@
+import base64
+
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -135,3 +137,8 @@ async def retrieve_knowledge_base(
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
+
+# we prevent astrbot from connecting to known malicious hosts
+# these hosts are base64 encoded
+BLOCKED = {"dGZid2h2d3IuY2xvdWQuc2VhbG9zLmlv", "a291cmljaGF0"}
+decoded_blocked = [base64.b64decode(b).decode("utf-8") for b in BLOCKED]
