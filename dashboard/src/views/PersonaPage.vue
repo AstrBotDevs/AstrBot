@@ -21,7 +21,7 @@
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import PersonaManager from '@/components/persona/PersonaManager.vue';
+import { PersonaManager } from '@/views/persona';
 
 export default {
     name: 'PersonaPage',
