@@ -989,17 +989,6 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:1234/v1",
                         "custom_headers": {},
                     },
-                    "ModelStack": {
-                        "id": "modelstack",
-                        "provider": "modelstack",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://modelstack.app/v1",
-                        "timeout": 120,
-                        "custom_headers": {},
-                    },
                     "Gemini_OpenAI_API": {
                         "id": "google_gemini_openai",
                         "provider": "google",
