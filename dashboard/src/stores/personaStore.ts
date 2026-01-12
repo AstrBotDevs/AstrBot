@@ -49,6 +49,7 @@ export const usePersonaStore = defineStore({
     currentFolders: [] as PersonaFolder[],
     currentPersonas: [] as Persona[],
     breadcrumbPath: [] as FolderTreeNode[],
+    expandedFolderIds: [] as string[], // Store expanded folder IDs
     loading: false,
     treeLoading: false,
   }),
@@ -64,6 +65,30 @@ export const usePersonaStore = defineStore({
   },
 
   actions: {
+    /**
+     * Toggle folder expansion state
+     */
+    toggleFolderExpansion(folderId: string) {
+      const index = this.expandedFolderIds.indexOf(folderId);
+      if (index === -1) {
+        this.expandedFolderIds.push(folderId);
+      } else {
+        this.expandedFolderIds.splice(index, 1);
+      }
+    },
+
+    /**
+     * Set folder expansion state
+     */
+    setFolderExpansion(folderId: string, expanded: boolean) {
+      const index = this.expandedFolderIds.indexOf(folderId);
+      if (expanded && index === -1) {
+        this.expandedFolderIds.push(folderId);
+      } else if (!expanded && index !== -1) {
+        this.expandedFolderIds.splice(index, 1);
+      }
+    },
+
     /**
      * 加载文件夹树形结构
      */

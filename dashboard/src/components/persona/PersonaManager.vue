@@ -342,6 +342,8 @@ export default {
             try {
                 await this.movePersonaToFolder(persona_id, target_folder_id);
                 this.showSuccess(this.tm('persona.messages.moveSuccess'));
+                // Navigate to the target folder
+                await this.navigateToFolder(target_folder_id);
             } catch (error) {
                 this.showError(error.message || this.tm('persona.messages.moveError'));
             }

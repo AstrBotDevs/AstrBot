@@ -31,6 +31,9 @@
 </template>
 
 <script>
+import { usePersonaStore } from '@/stores/personaStore';
+import { mapState, mapActions } from 'pinia';
+
 export default {
     name: 'FolderTreeNode',
     props: {
@@ -54,13 +57,16 @@ export default {
     emits: ['folder-click', 'folder-context-menu', 'persona-dropped'],
     data() {
         return {
-            isExpanded: false,
             isDragOver: false
         };
     },
     computed: {
+        ...mapState(usePersonaStore, ['expandedFolderIds']),
         hasChildren() {
             return this.folder.children && this.folder.children.length > 0;
+        },
+        isExpanded() {
+            return this.expandedFolderIds.includes(this.folder.folder_id);
         }
     },
     watch: {
@@ -69,14 +75,15 @@ export default {
             handler(newQuery) {
                 // 搜索时自动展开匹配的节点
                 if (newQuery && this.hasChildren) {
-                    this.isExpanded = true;
+                    this.setFolderExpansion(this.folder.folder_id, true);
                 }
             }
         }
     },
     methods: {
+        ...mapActions(usePersonaStore, ['toggleFolderExpansion', 'setFolderExpansion']),
         toggleExpand() {
-            this.isExpanded = !this.isExpanded;
+            this.toggleFolderExpansion(this.folder.folder_id);
         },
         handleContextMenu(event) {
             this.$emit('folder-context-menu', { event, folder: this.folder });
