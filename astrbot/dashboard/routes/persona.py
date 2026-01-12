@@ -28,6 +28,7 @@ class PersonaRoute(Route):
             # Folder routes
             "/persona/folder/list": ("GET", self.list_folders),
             "/persona/folder/tree": ("GET", self.get_folder_tree),
+            "/persona/folder/detail": ("POST", self.get_folder_detail),
             "/persona/folder/create": ("POST", self.create_folder),
             "/persona/folder/update": ("POST", self.update_folder),
             "/persona/folder/delete": ("POST", self.delete_folder),
@@ -119,6 +120,8 @@ class PersonaRoute(Route):
             system_prompt = data.get("system_prompt", "").strip()
             begin_dialogs = data.get("begin_dialogs", [])
             tools = data.get("tools")
+            folder_id = data.get("folder_id")  # None 表示根目录
+            sort_order = data.get("sort_order", 0)
 
             if not persona_id:
                 return Response().error("人格ID不能为空").__dict__
@@ -139,6 +142,8 @@ class PersonaRoute(Route):
                 system_prompt=system_prompt,
                 begin_dialogs=begin_dialogs if begin_dialogs else None,
                 tools=tools if tools else None,
+                folder_id=folder_id,
+                sort_order=sort_order,
             )
 
             return (
@@ -151,6 +156,8 @@ class PersonaRoute(Route):
                             "system_prompt": persona.system_prompt,
                             "begin_dialogs": persona.begin_dialogs or [],
                             "tools": persona.tools or [],
+                            "folder_id": persona.folder_id,
+                            "sort_order": persona.sort_order,
                             "created_at": persona.created_at.isoformat()
                             if persona.created_at
                             else None,
@@ -282,6 +289,42 @@ class PersonaRoute(Route):
         except Exception as e:
             logger.error(f"获取文件夹树失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取文件夹树失败: {e!s}").__dict__
+
+    async def get_folder_detail(self):
+        """获取指定文件夹的详细信息"""
+        try:
+            data = await request.get_json()
+            folder_id = data.get("folder_id")
+
+            if not folder_id:
+                return Response().error("缺少必要参数: folder_id").__dict__
+
+            folder = await self.persona_mgr.get_folder(folder_id)
+            if not folder:
+                return Response().error("文件夹不存在").__dict__
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "folder_id": folder.folder_id,
+                        "name": folder.name,
+                        "parent_id": folder.parent_id,
+                        "description": folder.description,
+                        "sort_order": folder.sort_order,
+                        "created_at": folder.created_at.isoformat()
+                        if folder.created_at
+                        else None,
+                        "updated_at": folder.updated_at.isoformat()
+                        if folder.updated_at
+                        else None,
+                    },
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"获取文件夹详情失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取文件夹详情失败: {e!s}").__dict__
 
     async def create_folder(self):
         """创建文件夹"""

@@ -252,8 +252,19 @@ class BaseDatabase(abc.ABC):
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        folder_id: str | None = None,
+        sort_order: int = 0,
     ) -> Persona:
-        """Insert a new persona record."""
+        """Insert a new persona record.
+        
+        Args:
+            persona_id: Unique identifier for the persona
+            system_prompt: System prompt for the persona
+            begin_dialogs: Optional list of initial dialog strings
+            tools: Optional list of tool names (None means all tools, [] means no tools)
+            folder_id: Optional folder ID to place the persona in (None means root)
+            sort_order: Sort order within the folder (default 0)
+        """
         ...
 
     @abc.abstractmethod

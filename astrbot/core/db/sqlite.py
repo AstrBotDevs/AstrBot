@@ -560,6 +560,8 @@ class SQLiteDatabase(BaseDatabase):
         system_prompt,
         begin_dialogs=None,
         tools=None,
+        folder_id=None,
+        sort_order=0,
     ):
         """Insert a new persona record."""
         async with self.get_db() as session:
@@ -570,8 +572,12 @@ class SQLiteDatabase(BaseDatabase):
                     system_prompt=system_prompt,
                     begin_dialogs=begin_dialogs or [],
                     tools=tools,
+                    folder_id=folder_id,
+                    sort_order=sort_order,
                 )
                 session.add(new_persona)
+                await session.flush()
+                await session.refresh(new_persona)
                 return new_persona
 
     async def get_persona_by_id(self, persona_id):

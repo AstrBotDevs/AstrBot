@@ -239,8 +239,19 @@ class PersonaManager:
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        folder_id: str | None = None,
+        sort_order: int = 0,
     ) -> Persona:
-        """创建新的 persona。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
+        """创建新的 persona。
+        
+        Args:
+            persona_id: Persona 唯一标识
+            system_prompt: 系统提示词
+            begin_dialogs: 预设对话列表
+            tools: 工具列表，None 表示使用所有工具，空列表表示不使用任何工具
+            folder_id: 所属文件夹 ID，None 表示根目录
+            sort_order: 排序顺序
+        """
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
         new_persona = await self.db.insert_persona(
@@ -248,6 +259,8 @@ class PersonaManager:
             system_prompt,
             begin_dialogs,
             tools=tools,
+            folder_id=folder_id,
+            sort_order=sort_order,
         )
         self.personas.append(new_persona)
         self.get_v3_persona_data()
