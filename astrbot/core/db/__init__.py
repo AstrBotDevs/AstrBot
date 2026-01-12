@@ -13,6 +13,7 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     Persona,
+    PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
@@ -279,6 +280,69 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def delete_persona(self, persona_id: str) -> None:
         """Delete a persona by its ID."""
+        ...
+
+    # ====
+    # Persona Folder Management
+    # ====
+
+    @abc.abstractmethod
+    async def insert_persona_folder(
+        self,
+        name: str,
+        parent_id: str | None = None,
+        description: str | None = None,
+        sort_order: int = 0,
+    ) -> PersonaFolder:
+        """Insert a new persona folder."""
+        ...
+
+    @abc.abstractmethod
+    async def get_persona_folder_by_id(self, folder_id: str) -> PersonaFolder | None:
+        """Get a persona folder by its folder_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_persona_folders(
+        self, parent_id: str | None = None
+    ) -> list[PersonaFolder]:
+        """Get all persona folders, optionally filtered by parent_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_all_persona_folders(self) -> list[PersonaFolder]:
+        """Get all persona folders."""
+        ...
+
+    @abc.abstractmethod
+    async def update_persona_folder(
+        self,
+        folder_id: str,
+        name: str | None = None,
+        parent_id: T.Any = None,
+        description: T.Any = None,
+        sort_order: int | None = None,
+    ) -> PersonaFolder | None:
+        """Update a persona folder."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_persona_folder(self, folder_id: str) -> None:
+        """Delete a persona folder by its folder_id."""
+        ...
+
+    @abc.abstractmethod
+    async def move_persona_to_folder(
+        self, persona_id: str, folder_id: str | None
+    ) -> Persona | None:
+        """Move a persona to a folder (or root if folder_id is None)."""
+        ...
+
+    @abc.abstractmethod
+    async def get_personas_by_folder(
+        self, folder_id: str | None = None
+    ) -> list[Persona]:
+        """Get all personas in a specific folder."""
         ...
 
     @abc.abstractmethod
