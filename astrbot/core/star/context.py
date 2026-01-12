@@ -102,6 +102,8 @@ class Context:
 
         该方法不会自动执行工具调用。如果想使用工具调用，请使用 `tool_loop_agent()`。
 
+        .. versionadded:: 4.5.7 (sdk)
+
         Args:
             chat_provider_id: 要使用的聊天提供者 ID。
             prompt: 发送给 LLM 的提示词，如果同时提供 `contexts` 和 `prompt`，
@@ -151,6 +153,8 @@ class Context:
     ) -> LLMResponse:
         """运行一个允许 LLM 迭代调用工具直到产生最终答案的代理循环。
 
+        .. versionadded:: 4.5.7 (sdk)
+
         Args:
             event: 消息事件对象。
             chat_provider_id: 要使用的聊天提供者 ID。
@@ -174,6 +178,7 @@ class Context:
             Exception: LLM 生成过程中的其他错误。
 
         Note:
+            kwargs 参数不会被直接传递给LLM，而是由代理循环/运行器处理（例如 `stream`、`agent_hooks`、`agent_context` 等 `runner.reset()` 的参数）。
             如果不传递 agent_context 参数，该方法会重新创建一个新的代理上下文。
             版本 4.5.7 新增。
         """
@@ -439,7 +444,7 @@ class Context:
             ValueError: session 字符串不合法时抛出。
 
         Note:
-            当 session 为字符串时，会尝试解析为 MessageSesion 对象。
+            当 session 为字符串时，会尝试解析为 MessageSession 对象。(类名为MessageSesion是因为历史遗留拼写错误)
             qq_official(QQ 官方 API 平台) 不支持此方法。
         """
         if isinstance(session, str):
@@ -583,7 +588,7 @@ class Context:
         desc: str,
         func_obj: Callable[..., Awaitable[Any]],
     ) -> None:
-        """为函数调用（function-calling / tools-use）添加工具。
+        """[DEPRECATED]为函数调用（function-calling / tools-use）添加工具。
 
         Args:
             name: 函数名。
@@ -609,7 +614,7 @@ class Context:
         self.provider_manager.llm_tools.add_func(name, func_args, desc, func_obj)
 
     def unregister_llm_tool(self, name: str) -> None:
-        """删除一个函数调用工具。
+        """[DEPRECATED]删除一个函数调用工具。
 
         Args:
             name: 工具名称。
@@ -630,7 +635,7 @@ class Context:
         use_regex=False,
         ignore_prefix=False,
     ):
-        """注册一个命令。
+        """[DEPRECATED]注册一个命令。
 
         Args:
             star_name: 插件（Star）名称。
@@ -642,7 +647,7 @@ class Context:
             ignore_prefix: 是否忽略命令前缀。
 
         Note:
-            [已弃用] 推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
+            推荐使用装饰器注册指令。该方法将在未来的版本中被移除。
         """
         md = StarHandlerMetadata(
             event_type=EventType.AdapterMessageEvent,
@@ -662,7 +667,7 @@ class Context:
         star_handlers_registry.append(md)
 
     def register_task(self, task: Awaitable, desc: str):
-        """注册一个异步任务。
+        """[DEPRECATED]注册一个异步任务。
 
         Args:
             task: 异步任务。
