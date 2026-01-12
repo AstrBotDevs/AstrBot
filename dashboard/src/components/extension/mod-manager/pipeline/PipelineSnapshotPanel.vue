@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useModuleI18n } from '@/i18n/composables'
 import { usePipelineSnapshot } from '@/composables/usePipelineSnapshot'
 import type { EffectTarget, PipelineSnapshot, PipelineStageId, SnapshotScopeMode, StageParticipant } from './pipelineSnapshotTypes'
@@ -13,6 +14,8 @@ import StageDetailPanel from './StageDetailPanel.vue'
 import ConflictListPanel from './ConflictListPanel.vue'
 import TraceImpactDetailPanel from './TraceImpactDetailPanel.vue'
 import PromptPreviewDialog from './PromptPreviewDialog.vue'
+
+import ResizableSplitPane from '../ResizableSplitPane.vue'
 
 type SnapshotPanelMode = 'pipeline' | 'trace'
 type RightTab = 'detail' | 'conflicts'
@@ -51,6 +54,9 @@ const props = withDefaults(
 
 const { tm } = useModuleI18n('features/extension')
 
+const display = useDisplay()
+const isSmallScreen = computed(() => display.width.value <= 960)
+
 const scopeMode = ref<SnapshotScopeMode>('global')
 const sessionUmo = ref<string>('')
 
@@ -59,6 +65,27 @@ const selectedStageId = ref<PipelineStageId | null>(null)
 const selectedParticipantId = ref<string | null>(null)
 
 const showAllStages = ref(false)
+
+const SPLIT_RATIO_KEY = 'psp-split-ratio'
+
+function parseStoredRatio(raw: string | null): number | null {
+  if (!raw) return null
+  const num = Number(raw)
+  if (!Number.isFinite(num)) return null
+  if (num <= 0 || num >= 1) return null
+  return num
+}
+
+const splitRatio = ref(parseStoredRatio(localStorage.getItem(SPLIT_RATIO_KEY)) ?? 0.67)
+
+watch(
+  splitRatio,
+  (val) => {
+    if (!Number.isFinite(val)) return
+    localStorage.setItem(SPLIT_RATIO_KEY, String(val))
+  },
+  { flush: 'post' }
+)
 
 const traceSelectedTarget = ref<'__all__' | EffectTarget>('__all__')
 const traceSelectedImpactKey = ref<string | null>(null)
@@ -381,88 +408,179 @@ const scopeItems = computed(() => [
     <v-progress-linear v-if="loading" indeterminate color="primary" />
 
     <div class="psp__content d-flex flex-grow-1" style="min-height: 0">
-      <div class="psp__left">
-        <TraceFishboneView
-          v-if="props.mode === 'trace'"
-          class="psp__fishbone"
-          :groups="traceRootGroupsAll"
-          :active-stage-id="selectedStageId"
-          :active-target="traceActiveTarget"
-          :active-impact-key="traceSelectedImpactKey"
-          @select-stage="handleSelectStage"
-          @select-target="(t) => (traceSelectedTarget = t)"
-          @select-impact="selectImpactKey"
-        />
-        <PipelineFishboneView
-          v-else
-          class="psp__fishbone"
-          :snapshot="displaySnapshot"
-          :selected-stage-id="selectedStageId"
-          :selected-participant-id="selectedParticipantId"
-          :show-all-stages="showAllStages"
-          @select-stage="handleSelectStage"
-          @select-participant="handleSelectParticipant"
-        />
-      </div>
-
-      <div class="psp__right">
-        <div v-if="props.mode === 'pipeline'" class="psp__right-tabs">
-          <v-btn-toggle v-model="rightTab" mandatory density="compact" class="psp__right-toggle w-100">
-            <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">
-              {{ tm('pipeline.rightTabs.detail') }}
-            </v-btn>
-            <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">
-              {{ tm('pipeline.rightTabs.conflicts') }}
-            </v-btn>
-          </v-btn-toggle>
-
-          <v-divider />
+      <template v-if="isSmallScreen">
+        <div class="psp__left">
+          <TraceFishboneView
+            v-if="props.mode === 'trace'"
+            class="psp__fishbone"
+            :groups="traceRootGroupsAll"
+            :active-stage-id="selectedStageId"
+            :active-target="traceActiveTarget"
+            :active-impact-key="traceSelectedImpactKey"
+            @select-stage="handleSelectStage"
+            @select-target="(t) => (traceSelectedTarget = t)"
+            @select-impact="selectImpactKey"
+          />
+          <PipelineFishboneView
+            v-else
+            class="psp__fishbone"
+            :snapshot="displaySnapshot"
+            :selected-stage-id="selectedStageId"
+            :selected-participant-id="selectedParticipantId"
+            :show-all-stages="showAllStages"
+            @select-stage="handleSelectStage"
+            @select-participant="handleSelectParticipant"
+          />
         </div>
 
-        <div class="psp__right-body">
-          <v-window
-            v-if="props.mode === 'pipeline'"
-            v-model="rightTab"
-            class="psp__window flex-grow-1"
-            style="min-height: 0"
-          >
-            <v-window-item value="detail" class="h-100">
-              <StageDetailPanel
-                :snapshot="displaySnapshot"
-                :stage-id="selectedStageId"
-                :selected-participant-id="selectedParticipantId"
-                @select-participant="handleSelectParticipant"
-                @select-plugin="handleSelectPlugin"
-                @view-impact-chain="handleViewImpactChain"
-              />
-            </v-window-item>
+        <div class="psp__right">
+          <div v-if="props.mode === 'pipeline'" class="psp__right-tabs">
+            <v-btn-toggle v-model="rightTab" mandatory density="compact" class="psp__right-toggle w-100">
+              <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">
+                {{ tm('pipeline.rightTabs.detail') }}
+              </v-btn>
+              <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">
+                {{ tm('pipeline.rightTabs.conflicts') }}
+              </v-btn>
+            </v-btn-toggle>
 
-            <v-window-item value="conflicts" class="h-100">
-              <ConflictListPanel
-                :snapshot="displaySnapshot"
-                @select-stage="handleSelectStage"
-                @select-participant="handleSelectParticipant"
-                @select-plugin="handleSelectPlugin"
-              />
-            </v-window-item>
-          </v-window>
+            <v-divider />
+          </div>
 
-          <div v-else class="h-100 d-flex flex-column" style="min-height: 0">
-            <TraceImpactDetailPanel
-              class="flex-grow-1"
-              :row="traceSelectedRow"
-              @select-plugin="handleSelectPlugin"
-              @navigate-pipeline="handleNavigatePipeline"
+          <div class="psp__right-body">
+            <v-window
+              v-if="props.mode === 'pipeline'"
+              v-model="rightTab"
+              class="psp__window flex-grow-1"
+              style="min-height: 0"
+            >
+              <v-window-item value="detail" class="h-100">
+                <StageDetailPanel
+                  :snapshot="displaySnapshot"
+                  :stage-id="selectedStageId"
+                  :selected-participant-id="selectedParticipantId"
+                  @select-participant="handleSelectParticipant"
+                  @select-plugin="handleSelectPlugin"
+                  @view-impact-chain="handleViewImpactChain"
+                />
+              </v-window-item>
+
+              <v-window-item value="conflicts" class="h-100">
+                <ConflictListPanel
+                  :snapshot="displaySnapshot"
+                  @select-stage="handleSelectStage"
+                  @select-participant="handleSelectParticipant"
+                  @select-plugin="handleSelectPlugin"
+                />
+              </v-window-item>
+            </v-window>
+
+            <div v-else class="h-100 d-flex flex-column" style="min-height: 0">
+              <TraceImpactDetailPanel
+                class="flex-grow-1"
+                :row="traceSelectedRow"
+                @select-plugin="handleSelectPlugin"
+                @navigate-pipeline="handleNavigatePipeline"
+              />
+            </div>
+
+            <div v-if="error" class="psp__error px-4 py-3">
+              <v-alert type="error" variant="tonal" density="comfortable">
+                {{ error }}
+              </v-alert>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <ResizableSplitPane v-else v-model="splitRatio" direction="horizontal" class="psp__split">
+        <template #first>
+          <div class="psp__left">
+            <TraceFishboneView
+              v-if="props.mode === 'trace'"
+              class="psp__fishbone"
+              :groups="traceRootGroupsAll"
+              :active-stage-id="selectedStageId"
+              :active-target="traceActiveTarget"
+              :active-impact-key="traceSelectedImpactKey"
+              @select-stage="handleSelectStage"
+              @select-target="(t) => (traceSelectedTarget = t)"
+              @select-impact="selectImpactKey"
+            />
+            <PipelineFishboneView
+              v-else
+              class="psp__fishbone"
+              :snapshot="displaySnapshot"
+              :selected-stage-id="selectedStageId"
+              :selected-participant-id="selectedParticipantId"
+              :show-all-stages="showAllStages"
+              @select-stage="handleSelectStage"
+              @select-participant="handleSelectParticipant"
             />
           </div>
+        </template>
 
-          <div v-if="error" class="psp__error px-4 py-3">
-            <v-alert type="error" variant="tonal" density="comfortable">
-              {{ error }}
-            </v-alert>
+        <template #second>
+          <div class="psp__right">
+            <div v-if="props.mode === 'pipeline'" class="psp__right-tabs">
+              <v-btn-toggle v-model="rightTab" mandatory density="compact" class="psp__right-toggle w-100">
+                <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">
+                  {{ tm('pipeline.rightTabs.detail') }}
+                </v-btn>
+                <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">
+                  {{ tm('pipeline.rightTabs.conflicts') }}
+                </v-btn>
+              </v-btn-toggle>
+
+              <v-divider />
+            </div>
+
+            <div class="psp__right-body">
+              <v-window
+                v-if="props.mode === 'pipeline'"
+                v-model="rightTab"
+                class="psp__window flex-grow-1"
+                style="min-height: 0"
+              >
+                <v-window-item value="detail" class="h-100">
+                  <StageDetailPanel
+                    :snapshot="displaySnapshot"
+                    :stage-id="selectedStageId"
+                    :selected-participant-id="selectedParticipantId"
+                    @select-participant="handleSelectParticipant"
+                    @select-plugin="handleSelectPlugin"
+                    @view-impact-chain="handleViewImpactChain"
+                  />
+                </v-window-item>
+
+                <v-window-item value="conflicts" class="h-100">
+                  <ConflictListPanel
+                    :snapshot="displaySnapshot"
+                    @select-stage="handleSelectStage"
+                    @select-participant="handleSelectParticipant"
+                    @select-plugin="handleSelectPlugin"
+                  />
+                </v-window-item>
+              </v-window>
+
+              <div v-else class="h-100 d-flex flex-column" style="min-height: 0">
+                <TraceImpactDetailPanel
+                  class="flex-grow-1"
+                  :row="traceSelectedRow"
+                  @select-plugin="handleSelectPlugin"
+                  @navigate-pipeline="handleNavigatePipeline"
+                />
+              </div>
+
+              <div v-if="error" class="psp__error px-4 py-3">
+                <v-alert type="error" variant="tonal" density="comfortable">
+                  {{ error }}
+                </v-alert>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </template>
+      </ResizableSplitPane>
     </div>
 
     <PromptPreviewDialog v-model:show="promptDialog" :preview="displaySnapshot?.llm_prompt_preview ?? null" />
@@ -499,10 +617,13 @@ const scopeItems = computed(() => [
   min-width: 0;
 }
 
+.psp__split {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .psp__right {
-  width: clamp(360px, 42vw, 760px);
-  max-width: 60%;
-  min-width: 360px;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -579,12 +700,6 @@ const scopeItems = computed(() => [
   .psp__left {
     border-right: 0;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  }
-
-  .psp__right {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
   }
 }
 </style>

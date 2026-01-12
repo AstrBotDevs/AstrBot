@@ -126,7 +126,12 @@ watch(
 
         <div v-else-if="content" class="readme-scroll__content">
           <div class="readme-scroll__container">
-            <GitHubMarkdownViewer :content="content" header-icon="mdi-book-open-outline" header-label="README.md" />
+            <GitHubMarkdownViewer
+              :content="content"
+              header-icon="mdi-book-open-outline"
+              header-label="README.md"
+              :show-header="false"
+            />
           </div>
         </div>
 

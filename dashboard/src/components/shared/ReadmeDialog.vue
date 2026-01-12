@@ -197,6 +197,7 @@ const _show = computed({
               :content="content"
               :header-icon="mode === 'changelog' ? 'mdi-history' : 'mdi-book-open-outline'"
               :header-label="mode === 'changelog' ? 'CHANGELOG.md' : 'README.md'"
+              :show-header="false"
             />
           </div>
         </div>

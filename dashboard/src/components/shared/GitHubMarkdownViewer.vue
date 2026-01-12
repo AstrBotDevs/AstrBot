@@ -7,18 +7,20 @@ type Props = {
   headerIcon?: string
   headerLabel?: string
   typewriter?: boolean
+  showHeader?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
   headerIcon: 'mdi-book-open-outline',
   headerLabel: 'README.md',
-  typewriter: false
+  typewriter: false,
+  showHeader: true
 })
 </script>
 
 <template>
   <div class="github-style-container">
-    <div class="github-style-header">
+    <div v-if="showHeader" class="github-style-header">
       <v-icon size="16" class="mr-2">{{ headerIcon }}</v-icon>
       <span class="text-caption font-weight-bold">{{ headerLabel }}</span>
     </div>
