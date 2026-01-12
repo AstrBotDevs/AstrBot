@@ -42,7 +42,8 @@
       "title": "Security Warning",
       "aiocqhttpTokenMissing": "To enhance connection security, it is strongly recommended to set ws_reverse_token. Not setting a token may lead to security risks.",
       "learnMore": "Learn More"
-    }
+    },
+    "invalidPlatformId": "Platform ID cannot contain ':' or '!'."
   },
   "messages": {
     "updateSuccess": "Update successful!",

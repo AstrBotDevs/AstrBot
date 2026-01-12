@@ -421,6 +421,10 @@ export default {
         return false;
       }
 
+      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
+        return false;
+      }
+
       // 如果是使用现有配置文件模式
       if (this.aBConfigRadioVal === '0') {
         return !!this.selectedAbConfId;
@@ -637,6 +641,12 @@ export default {
         return;
       }
 
+      if (!this.isPlatformIdValid(id)) {
+        this.loading = false;
+        this.showError(this.tm('dialog.invalidPlatformId'));
+        return;
+      }
+
       try {
         // 更新平台配置
         let resp = await axios.post('/api/config/platform/update', {
@@ -662,6 +672,12 @@ export default {
       }
     },
     async savePlatform() {
+      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
+        this.loading = false;
+        this.showError(this.tm('dialog.invalidPlatformId'));
+        return;
+      }
+
       // 检查 ID 是否已存在
       const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id);
       if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
@@ -806,6 +822,13 @@ export default {
 
     showError(message) {
       this.$emit('show-toast', { message: message, type: 'error' });
+    },
+
+    isPlatformIdValid(id) {
+      if (!id) {
+        return false;
+      }
+      return !/[!:]/.test(id);
     },
 
     // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
