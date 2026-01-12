@@ -2,6 +2,8 @@
 
 > 我们热爱开源软件，并始终致力于为所有用户提供健康、安全、可靠的使用体验。 ❤️
 
+For Enlish edition, please refer to the section below the Chinese version.
+
 **最后更新：** 2026-01-12
 
 感谢您使用 **AstrBot**。
@@ -66,7 +68,7 @@ AstrBot 团队**已尽合理努力在技术和策略层面设置安全与内容�
 * 世界上任何的系统均无法保证完全无误、绝对安全或无法被滥用；
 * 用户仍有责任自行合理配置、监督并正确使用本系统。
 
-如果您要关闭 AstrBot 默认启用的“健康模式”，请在 cmd_config.json 中将 `provider_settings.llm_safety_mode` 设置为 `False`。
+如果您要关闭 AstrBot 默认启用的“健康模式”，请在 cmd_config.json 中将 `provider_settings.llm_safety_mode` 设置为 `False`。但请注意，关闭健康模式不是推荐的使用方式，可能导致系统输出不安全或不适当的内容。关闭该功能所产生的任何风险与后果，均由用户自行承担，AstrBot 团队不对此承担任何责任。
 
 ## 7. 心理健康提示
 
@@ -189,7 +191,7 @@ However, please understand that:
 * No system in the world can be guaranteed to be completely error-free, absolutely secure, or immune to misuse;
 * Users remain responsible for properly configuring, supervising, and using the system.
 
-If you wish to disable AstrBot’s default “Safety Mode,” please set `provider_settings.llm_safety_mode` to `False` in `cmd_config.json`.
+If you wish to disable AstrBot’s default “Safety Mode,” please set `provider_settings.llm_safety_mode` to `False` in `cmd_config.json`. However, please note that disabling Safety Mode is not recommended and may lead to unsafe or inappropriate outputs. Any risks or consequences arising from disabling this feature are solely borne by the user, and the AstrBot Team assumes no responsibility.
 
 ## 7. Mental Health Notice
 
