@@ -100,7 +100,8 @@
       "delete": "删除"
     },
     "createDialog": {
-      "title": "创建新文件夹"
+      "title": "创建新文件夹",
+      "createButton": "创建"
     },
     "renameDialog": {
       "title": "重命名文件夹"

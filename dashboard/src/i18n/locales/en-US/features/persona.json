@@ -100,7 +100,8 @@
       "delete": "Delete"
     },
     "createDialog": {
-      "title": "Create New Folder"
+      "title": "Create New Folder",
+      "createButton": "Create"
     },
     "renameDialog": {
       "title": "Rename Folder"

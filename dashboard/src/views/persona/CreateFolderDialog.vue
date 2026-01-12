@@ -47,7 +47,7 @@ export default defineComponent({
                 descriptionLabel: this.tm('folder.form.description'),
                 nameRequired: this.tm('folder.validation.nameRequired'),
                 cancelButton: this.tm('buttons.cancel'),
-                createButton: this.tm('buttons.create')
+                createButton: this.tm('folder.createDialog.createButton')
             };
         }
     },
