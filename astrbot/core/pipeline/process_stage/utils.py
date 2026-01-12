@@ -19,6 +19,7 @@ Rules:
 - Output same language as the user's input.
 """
 
+
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     name: str = "astr_kb_search"
