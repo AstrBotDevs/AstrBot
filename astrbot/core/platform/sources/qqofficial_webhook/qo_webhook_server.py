@@ -1,9 +1,12 @@
-import quart
-import logging
 import asyncio
-from botpy import BotAPI, BotHttp, Client, Token, BotWebSocket, ConnectionSession
-from astrbot.api import logger
+import logging
+from typing import cast
+
+import quart
+from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from astrbot.api import logger
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -27,7 +30,9 @@ class QQOfficialWebhook:
 
         self.server = quart.Quart(__name__)
         self.server.add_url_rule(
-            "/astrbot-qo-webhook/callback", view_func=self.callback, methods=["POST"]
+            "/astrbot-qo-webhook/callback",
+            view_func=self.callback,
+            methods=["POST"],
         )
         self.client = botpy_client
         self.event_queue = event_queue
@@ -62,7 +67,8 @@ class QQOfficialWebhook:
         seed = await self.repeat_seed(self.secret)
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
         msg = validation_payload.get("event_ts", "") + validation_payload.get(
-            "plain_token", ""
+            "plain_token",
+            "",
         )
         # sign
         signature = private_key.sign(msg.encode()).hex()
@@ -73,7 +79,19 @@ class QQOfficialWebhook:
         return response
 
     async def callback(self):
-        msg: dict = await quart.request.json
+        """内部服务器的回调入口"""
+        return await self.handle_callback(quart.request)
+
+    async def handle_callback(self, request) -> dict:
+        """处理 webhook 回调，可被统一 webhook 入口复用
+
+        Args:
+            request: Quart 请求对象
+
+        Returns:
+            响应数据
+        """
+        msg: dict = await request.json
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
 
         event = msg.get("t")
@@ -82,7 +100,7 @@ class QQOfficialWebhook:
 
         if opcode == 13:
             # validation
-            signed = await self.webhook_validation(data)
+            signed = await self.webhook_validation(cast(dict, data))
             print(signed)
             return signed
 
@@ -99,7 +117,7 @@ class QQOfficialWebhook:
 
     async def start_polling(self):
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。"
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。",
         )
         await self.server.run_task(
             host=self.callback_server_host,

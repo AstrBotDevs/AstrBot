@@ -1,6 +1,9 @@
-import discord
-from astrbot import logger
 import sys
+from collections.abc import Awaitable, Callable
+
+import discord
+
+from astrbot import logger
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -12,7 +15,7 @@ else:
 class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
-    def __init__(self, token: str, proxy: str = None):
+    def __init__(self, token: str, proxy: str | None = None):
         self.token = token
         self.proxy = proxy
 
@@ -25,13 +28,16 @@ class DiscordBotClient(discord.Bot):
         super().__init__(intents=intents, proxy=proxy)
 
         # 回调函数
-        self.on_message_received = None
-        self.on_ready_once_callback = None
+        self.on_message_received: Callable[[dict], Awaitable[None]] | None = None
+        self.on_ready_once_callback: Callable[[], Awaitable[None]] | None = None
         self._ready_once_fired = False
 
-    @override
     async def on_ready(self):
         """当机器人成功连接并准备就绪时触发"""
+        if self.user is None:
+            logger.error("[Discord] 客户端未正确加载用户信息 (self.user is None)")
+            return
+
         logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
         logger.info("[Discord] 客户端已准备就绪。")
 
@@ -41,11 +47,15 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    f"[Discord] on_ready_once_callback 执行失败: {e}", exc_info=True
+                    f"[Discord] on_ready_once_callback 执行失败: {e}",
+                    exc_info=True,
                 )
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
+        if self.user is None:
+            raise RuntimeError("Bot is not ready: self.user is None")
+
         is_mentioned = self.user in message.mentions
         return {
             "message": message,
@@ -63,6 +73,12 @@ class DiscordBotClient(discord.Bot):
 
     def _create_interaction_data(self, interaction: discord.Interaction) -> dict:
         """从 discord.Interaction 创建数据字典"""
+        if self.user is None:
+            raise RuntimeError("Bot is not ready: self.user is None")
+
+        if interaction.user is None:
+            raise ValueError("Interaction received without a valid user")
+
         return {
             "interaction": interaction,
             "bot_id": str(self.user.id),
@@ -77,14 +93,13 @@ class DiscordBotClient(discord.Bot):
             "type": "interaction",
         }
 
-    @override
     async def on_message(self, message: discord.Message):
         """当接收到消息时触发"""
         if message.author.bot:
             return
 
         logger.debug(
-            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}"
+            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}",
         )
 
         if self.on_message_received:
@@ -103,12 +118,12 @@ class DiscordBotClient(discord.Bot):
             command_name = interaction_data.get("name", "")
             if options := interaction_data.get("options", []):
                 params = " ".join(
-                    [f"{opt['name']}:{opt.get('value', '')}" for opt in options]
+                    [f"{opt['name']}:{opt.get('value', '')}" for opt in options],
                 )
                 return f"/{command_name} {params}"
             return f"/{command_name}"
 
-        elif interaction_type == discord.InteractionType.component:
+        if interaction_type == discord.InteractionType.component:
             custom_id = interaction_data.get("custom_id", "")
             component_type = interaction_data.get("component_type", "")
             return f"component:{custom_id}:{component_type}"

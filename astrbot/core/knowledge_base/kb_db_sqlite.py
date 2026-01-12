@@ -1,18 +1,18 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from sqlmodel import col, desc
-from sqlalchemy import text, func, select, update, delete
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlmodel import col, desc
 
 from astrbot.core import logger
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
     KBDocument,
     KBMedia,
     KnowledgeBase,
 )
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 class KBSQLiteDatabase:
@@ -21,6 +21,7 @@ class KBSQLiteDatabase:
 
         Args:
             db_path: 数据库文件路径, 默认为 data/knowledge_base/kb.db
+
         """
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
@@ -85,77 +86,77 @@ class KBSQLiteDatabase:
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_kb_kb_id "
-                        "ON knowledge_bases(kb_id)"
-                    )
+                        "ON knowledge_bases(kb_id)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_kb_name "
-                        "ON knowledge_bases(kb_name)"
-                    )
+                        "ON knowledge_bases(kb_name)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_kb_created_at "
-                        "ON knowledge_bases(created_at)"
-                    )
+                        "ON knowledge_bases(created_at)",
+                    ),
                 )
 
                 # 创建文档表索引
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_doc_doc_id "
-                        "ON kb_documents(doc_id)"
-                    )
+                        "ON kb_documents(doc_id)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_doc_kb_id "
-                        "ON kb_documents(kb_id)"
-                    )
+                        "ON kb_documents(kb_id)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_doc_name "
-                        "ON kb_documents(doc_name)"
-                    )
+                        "ON kb_documents(doc_name)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_doc_type "
-                        "ON kb_documents(file_type)"
-                    )
+                        "ON kb_documents(file_type)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_doc_created_at "
-                        "ON kb_documents(created_at)"
-                    )
+                        "ON kb_documents(created_at)",
+                    ),
                 )
 
                 # 创建多媒体表索引
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_media_media_id "
-                        "ON kb_media(media_id)"
-                    )
+                        "ON kb_media(media_id)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_media_doc_id "
-                        "ON kb_media(doc_id)"
-                    )
+                        "ON kb_media(doc_id)",
+                    ),
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_media_kb_id ON kb_media(kb_id)"
-                    )
+                        "CREATE INDEX IF NOT EXISTS idx_media_kb_id ON kb_media(kb_id)",
+                    ),
                 )
                 await session.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_media_type "
-                        "ON kb_media(media_type)"
-                    )
+                        "ON kb_media(media_type)",
+                    ),
                 )
 
                 await session.commit()
@@ -208,7 +209,10 @@ class KBSQLiteDatabase:
             return result.scalar_one_or_none()
 
     async def list_documents_by_kb(
-        self, kb_id: str, offset: int = 0, limit: int = 100
+        self,
+        kb_id: str,
+        offset: int = 0,
+        limit: int = 100,
     ) -> list[KBDocument]:
         """列出知识库的所有文档"""
         async with self.get_db() as session:
@@ -226,7 +230,7 @@ class KBSQLiteDatabase:
         """统计知识库的文档数量"""
         async with self.get_db() as session:
             stmt = select(func.count(col(KBDocument.id))).where(
-                col(KBDocument.kb_id) == kb_id
+                col(KBDocument.kb_id) == kb_id,
             )
             result = await session.execute(stmt)
             return result.scalar() or 0
@@ -252,12 +256,11 @@ class KBSQLiteDatabase:
     async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB):
         """删除单个文档及其相关数据"""
         # 在知识库表中删除
-        async with self.get_db() as session:
-            async with session.begin():
-                # 删除文档记录
-                delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
-                await session.execute(delete_stmt)
-                await session.commit()
+        async with self.get_db() as session, session.begin():
+            # 删除文档记录
+            delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
+            await session.execute(delete_stmt)
+            await session.commit()
 
         # 在 vec db 中删除相关向量
         await vec_db.delete_documents(metadata_filters={"kb_doc_id": doc_id})
@@ -282,18 +285,17 @@ class KBSQLiteDatabase:
         """更新知识库统计信息"""
         chunk_cnt = await vec_db.count_documents()
 
-        async with self.get_db() as session:
-            async with session.begin():
-                update_stmt = (
-                    update(KnowledgeBase)
-                    .where(col(KnowledgeBase.kb_id) == kb_id)
-                    .values(
-                        doc_count=select(func.count(col(KBDocument.id)))
-                        .where(col(KBDocument.kb_id) == kb_id)
-                        .scalar_subquery(),
-                        chunk_count=chunk_cnt,
-                    )
+        async with self.get_db() as session, session.begin():
+            update_stmt = (
+                update(KnowledgeBase)
+                .where(col(KnowledgeBase.kb_id) == kb_id)
+                .values(
+                    doc_count=select(func.count(col(KBDocument.id)))
+                    .where(col(KBDocument.kb_id) == kb_id)
+                    .scalar_subquery(),
+                    chunk_count=chunk_cnt,
                 )
+            )
 
-                await session.execute(update_stmt)
-                await session.commit()
+            await session.execute(update_stmt)
+            await session.commit()

@@ -2,7 +2,9 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installed": "已安装",
+    "installedPlugins": "已安装的插件",
+    "installedMcpServers": "已安装的 MCP 服务器",
+    "handlersOperation": "管理行为",
     "market": "插件市场"
   },
   "search": {
@@ -25,6 +27,7 @@
     "configure": "配置",
     "viewInfo": "行为",
     "viewDocs": "文档",
+    "viewRepo": "仓库",
     "close": "关闭",
     "save": "保存",
     "saveAndClose": "保存并关闭",
@@ -32,7 +35,9 @@
     "actions": "操作",
     "back": "返回",
     "selectFile": "选择文件",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "updateAll": "更新全部插件",
+    "deleteSource": "删除源"
   },
   "status": {
     "enabled": "启用",
@@ -77,7 +82,35 @@
     "allPlugins": "📦 全部插件",
     "showFullName": "完整名称",
     "devDocs": "插件开发文档",
-    "submitRepo": "提交插件仓库"
+    "submitRepo": "提交插件仓库",
+    "customSource": "自定义插件源",
+    "source": "插件源",
+    "availableSources": "可用源",
+    "sourceManagement": "插件源管理",
+    "addSource": "添加插件源",
+    "sourceName": "源名称",
+    "sourceUrl": "源地址",
+    "defaultSource": "默认插件源",
+    "removeSource": "删除插件源",
+    "confirmRemoveSource": "确定要删除此插件源吗？",
+    "sourceAdded": "插件源添加成功",
+    "sourceRemoved": "插件源删除成功",
+    "sourceError": "操作失败",
+    "selectSource": "选择插件源",
+    "currentSource": "当前插件源",
+    "editSource": "编辑插件源",
+    "sourceUpdated": "插件源更新成功",
+    "defaultOfficialSource": "默认官方源",
+    "sourceExists": "该插件源已存在",
+    "installPlugin": "安装插件"
+  },
+  "sort": {
+    "default": "默认排序",
+    "stars": "Star数",
+    "author": "作者名",
+    "updated": "更新时间",
+    "ascending": "升序",
+    "descending": "降序"
   },
   "tags": {
     "danger": "危险"
@@ -85,7 +118,7 @@
   "dialogs": {
     "error": {
       "title": "错误信息",
-      "checkConsole": "详情请检查控制台"
+      "checkConsole": "详情请检查平台日志"
     },
     "config": {
       "title": "插件配置",
@@ -97,7 +130,11 @@
     },
     "uninstall": {
       "title": "删除确认",
-      "message": "你确定要删除当前插件吗？"
+      "message": "你确定要删除当前插件吗？",
+      "deleteConfig": "同时删除插件配置文件",
+      "deleteData": "同时删除插件持久化数据",
+      "configHint": "配置文件位于 data/config 目录",
+      "dataHint": "删除 data/plugin_data 和 data/plugins_data 目录下的数据"
     },
     "install": {
       "title": "安装插件",
@@ -109,6 +146,11 @@
       "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
       "confirm": "继续",
       "cancel": "取消"
+    },
+    "forceUpdate": {
+      "title": "未检测到新版本",
+      "message": "当前插件未检测到新版本，是否强制重新安装？这将从远程仓库拉取最新代码。",
+      "confirm": "强制更新"
     }
   },
   "messages": {
@@ -129,7 +171,12 @@
     "confirmDelete": "确定要删除插件吗？",
     "fillUrlOrFile": "请填写插件链接或上传插件文件",
     "dontFillBoth": "请不要同时填写插件链接和上传文件",
-    "supportedFormats": "支持 .zip 格式的插件文件"
+    "supportedFormats": "支持 .zip 格式的插件文件",
+    "updateAllSuccess": "所有可更新的插件都已更新！",
+    "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
+    "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
+    "invalidUrl": "请输入有效的URL地址",
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
   },
   "upload": {
     "fromFile": "从文件安装",
@@ -144,7 +191,8 @@
       "reloadPlugin": "重载插件",
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
-      "updateTo": "更新到"
+      "updateTo": "更新到",
+      "reinstall": "重新安装"
     },
     "status": {
       "hasUpdate": "有新版本可用",
@@ -158,5 +206,15 @@
     "errors": {
       "confirmNotRegistered": "$confirm 未正确注册"
     }
+  },
+  "conflicts": {
+    "title": "检测到指令冲突",
+    "message": "这会导致部分指令工作异常，建议前往【指令管理】面板进行处理。",
+    "pairs": "对指令冲突",
+    "goToManage": "前往处理",
+    "later": "稍后处理"
+  },
+  "pluginChangelog": {
+    "menuTitle": "查看更新日志"
   }
 }

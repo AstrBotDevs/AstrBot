@@ -9,7 +9,20 @@
                 <ProxySelector></ProxySelector>
             </v-list-item>
 
+            <v-list-subheader>{{ tm('sidebar.title') }}</v-list-subheader>
+
+            <v-list-item :subtitle="tm('sidebar.customize.subtitle')" :title="tm('sidebar.customize.title')">
+                <SidebarCustomizer></SidebarCustomizer>
+            </v-list-item>
+
             <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
+
+            <v-list-item :subtitle="tm('system.backup.subtitle')" :title="tm('system.backup.title')">
+                <v-btn style="margin-top: 16px;" color="primary" @click="openBackupDialog">
+                    <v-icon class="mr-2">mdi-backup-restore</v-icon>
+                    {{ tm('system.backup.button') }}
+                </v-btn>
+            </v-list-item>
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
                 <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
@@ -24,6 +37,7 @@
 
     <WaitingForRestart ref="wfr"></WaitingForRestart>
     <MigrationDialog ref="migrationDialog"></MigrationDialog>
+    <BackupDialog ref="backupDialog"></BackupDialog>
 
 </template>
 
@@ -33,12 +47,15 @@ import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
+import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
+import BackupDialog from '@/components/shared/BackupDialog.vue';
 import { useModuleI18n } from '@/i18n/composables';
 
 const { tm } = useModuleI18n('features/settings');
 
 const wfr = ref(null);
 const migrationDialog = ref(null);
+const backupDialog = ref(null);
 
 const restartAstrBot = () => {
     axios.post('/api/stat/restart-core').then(() => {
@@ -56,6 +73,12 @@ const startMigration = async () => {
         } catch (error) {
             console.error('Migration dialog error:', error);
         }
+    }
+}
+
+const openBackupDialog = () => {
+    if (backupDialog.value) {
+        backupDialog.value.open();
     }
 }
 </script>

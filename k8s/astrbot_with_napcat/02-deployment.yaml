@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: astrbot-stack
+  namespace: astrbot-ns
+  labels:
+    app: astrbot-stack
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Use Recreate strategy for stateful applications
+  selector:
+    matchLabels:
+      app: astrbot-stack
+  template:
+    metadata:
+      labels:
+        app: astrbot-stack
+    spec:
+      # 设置固定主机名，避免 Pod 重启后主机名变化触发风控
+      hostname: napcat-host
+      subdomain: astrbot-stack
+      # 优雅关闭时间，给 NapCat 足够时间保存状态
+      terminationGracePeriodSeconds: 60
+      
+      # 初始化容器：首次生成随机 machine-id，后续复用
+      initContainers:
+        - name: init-machine-id
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # 仅在 machine-id 不存在时随机生成一个
+              if [ ! -f /machine-id-data/machine-id ]; then
+                # 使用 /dev/urandom 生成随机 UUID (32位十六进制)
+                cat /proc/sys/kernel/random/uuid | tr -d '-' > /machine-id-data/machine-id
+                echo "Machine ID generated: $(cat /machine-id-data/machine-id)"
+              else
+                echo "Machine ID exists: $(cat /machine-id-data/machine-id)"
+              fi
+          volumeMounts:
+            - name: machine-id-data
+              mountPath: /machine-id-data
+      
+      containers:
+        - name: napcat
+          image: mlikiowa/napcat-docker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAPCAT_UID
+              value: "1000"
+            - name: NAPCAT_GID
+              value: "1000"
+            - name: MODE
+              value: "astrbot"
+            - name: TZ
+              value: "Asia/Shanghai"
+          ports:
+            - containerPort: 6099
+              name: napcat-web
+          # 资源限制：确保 Guaranteed QoS，减少被驱逐的可能
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: shared-data
+              mountPath: /AstrBot/data
+            - name: napcat-config
+              mountPath: /app/napcat/config
+            - name: napcat-qq
+              mountPath: /app/.config/QQ
+            # 挂载持久化的 machine-id
+            - name: machine-id-data
+              mountPath: /etc/machine-id
+              subPath: machine-id
+              readOnly: true
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+        
+        - name: astrbot
+          image: soulter/astrbot:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TZ
+              value: "Asia/Shanghai"
+          ports:
+            - containerPort: 6185
+              name: astrbot-web
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: shared-data
+              mountPath: /AstrBot/data
+            - name: localtime
+              mountPath: /etc/localtime
+              readOnly: true
+
+      volumes:
+        - name: shared-data
+          persistentVolumeClaim:
+            claimName: astrbot-data-shared-pvc
+        - name: napcat-config
+          persistentVolumeClaim:
+            claimName: napcat-config-pvc
+        - name: napcat-qq
+          persistentVolumeClaim:
+            claimName: napcat-qq-pvc
+        # 持久化 machine-id（首次随机生成，后续复用）
+        - name: machine-id-data
+          persistentVolumeClaim:
+            claimName: napcat-machine-id-pvc
+        - name: localtime
+          hostPath:
+            path: /etc/localtime
+            type: File

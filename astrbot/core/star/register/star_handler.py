@@ -1,35 +1,47 @@
 from __future__ import annotations
+
+import re
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any
+
 import docstring_parser
 
-from ..star_handler import star_handlers_registry, StarHandlerMetadata, EventType
-from ..filter.command import CommandFilter
-from ..filter.command_group import CommandGroupFilter
-from ..filter.event_message_type import EventMessageTypeFilter, EventMessageType
-from ..filter.platform_adapter_type import (
-    PlatformAdapterTypeFilter,
-    PlatformAdapterType,
-)
-from ..filter.permission import PermissionTypeFilter, PermissionType
-from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
-from ..filter.regex import RegexFilter
-from typing import Awaitable, Any, Callable
-from astrbot.core.provider.func_tool_manager import SUPPORTED_TYPES
-from astrbot.core.provider.register import llm_tools
+from astrbot.core import logger
 from astrbot.core.agent.agent import Agent
-from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core import logger
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
+from astrbot.core.provider.register import llm_tools
+
+from ..filter.command import CommandFilter
+from ..filter.command_group import CommandGroupFilter
+from ..filter.custom_filter import CustomFilterAnd, CustomFilterOr
+from ..filter.event_message_type import EventMessageType, EventMessageTypeFilter
+from ..filter.permission import PermissionType, PermissionTypeFilter
+from ..filter.platform_adapter_type import (
+    PlatformAdapterType,
+    PlatformAdapterTypeFilter,
+)
+from ..filter.regex import RegexFilter
+from ..star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 
-def get_handler_full_name(awaitable: Callable[..., Awaitable[Any]]) -> str:
+def get_handler_full_name(
+    awaitable: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+) -> str:
     """获取 Handler 的全名"""
     return f"{awaitable.__module__}_{awaitable.__name__}"
 
 
 def get_handler_or_create(
-    handler: Callable[..., Awaitable[Any]],
+    handler: Callable[
+        ...,
+        Awaitable[MessageEventResult | str | None]
+        | AsyncGenerator[MessageEventResult | str | None],
+    ],
     event_type: EventType,
     dont_add=False,
     **kwargs,
@@ -39,27 +51,26 @@ def get_handler_or_create(
     md = star_handlers_registry.get_handler_by_full_name(handler_full_name)
     if md:
         return md
-    else:
-        md = StarHandlerMetadata(
-            event_type=event_type,
-            handler_full_name=handler_full_name,
-            handler_name=handler.__name__,
-            handler_module_path=handler.__module__,
-            handler=handler,
-            event_filters=[],
-        )
+    md = StarHandlerMetadata(
+        event_type=event_type,
+        handler_full_name=handler_full_name,
+        handler_name=handler.__name__,
+        handler_module_path=handler.__module__,
+        handler=handler,
+        event_filters=[],
+    )
 
-        # 插件handler的附加额外信息
-        if handler.__doc__:
-            md.desc = handler.__doc__.strip()
-        if "desc" in kwargs:
-            md.desc = kwargs["desc"]
-            del kwargs["desc"]
-        md.extras_configs = kwargs
+    # 插件handler的附加额外信息
+    if handler.__doc__:
+        md.desc = handler.__doc__.strip()
+    if "desc" in kwargs:
+        md.desc = kwargs["desc"]
+        del kwargs["desc"]
+    md.extras_configs = kwargs
 
-        if not dont_add:
-            star_handlers_registry.append(md)
-        return md
+    if not dont_add:
+        star_handlers_registry.append(md)
+    return md
 
 
 def register_command(
@@ -78,20 +89,22 @@ def register_command(
                 command_name.parent_group.get_complete_command_names()
             )
             new_command = CommandFilter(
-                sub_command, alias, None, parent_command_names=parent_command_names
+                sub_command,
+                alias,
+                None,
+                parent_command_names=parent_command_names,
             )
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
             logger.warning(
-                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。"
+                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。",
             )
+    # 裸指令
+    elif command_name is None:
+        logger.warning("注册裸指令时未提供 command_name 参数。")
     else:
-        # 裸指令
-        if command_name is None:
-            logger.warning("注册裸指令时未提供 command_name 参数。")
-        else:
-            new_command = CommandFilter(command_name, alias, None)
-            add_to_event_filters = True
+        new_command = CommandFilter(command_name, alias, None)
+        add_to_event_filters = True
 
     def decorator(awaitable):
         if not add_to_event_filters:
@@ -99,7 +112,9 @@ def register_command(
                 True  # 打一个标记，表示这是一个子指令，再 wakingstage 阶段这个 handler 将会直接被跳过（其父指令会接管）
             )
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         if new_command:
             new_command.init_handler_md(handler_md)
@@ -116,6 +131,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         custom_type_filter: 在裸指令时为CustomFilter对象
                                         在指令组时为父指令的RegisteringCommandable对象，即self或者command_group的返回
         raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+
     """
     add_to_event_filters = False
     raise_error = True
@@ -140,25 +156,28 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
         if (
-            not add_to_event_filters
-            and isinstance(awaitable, RegisteringCommandable)
-            or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable))
-        ):
+            not add_to_event_filters and isinstance(awaitable, RegisteringCommandable)
+        ) or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable)):
             # 指令组 与 根指令组，添加到本层的grouphandle中一起判断
             awaitable.parent_group.add_custom_filter(custom_filter)
         else:
             handler_md = get_handler_or_create(
-                awaitable, EventType.AdapterMessageEvent, **kwargs
+                awaitable,
+                EventType.AdapterMessageEvent,
+                **kwargs,
             )
 
             if not add_to_event_filters and not isinstance(
-                awaitable, RegisteringCommandable
+                awaitable,
+                RegisteringCommandable,
             ):
                 # 底层子指令
                 handle_full_name = get_handler_full_name(awaitable)
                 for (
                     sub_handle
                 ) in parent_register_commandable.parent_group.sub_command_filters:
+                    if isinstance(sub_handle, CommandGroupFilter):
+                        continue
                     # 所有符合fullname一致的子指令handle添加自定义过滤器。
                     # 不确定是否会有多个子指令有一样的fullname，比如一个方法添加多个command装饰器？
                     sub_handle_md = sub_handle.get_handler_md()
@@ -170,8 +189,12 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
             else:
                 # 裸指令
+                # 确保运行时是可调用的 handler，针对类型检查器添加忽略
+                assert isinstance(awaitable, Callable)
                 handler_md = get_handler_or_create(
-                    awaitable, EventType.AdapterMessageEvent, **kwargs
+                    awaitable,
+                    EventType.AdapterMessageEvent,
+                    **kwargs,
                 )
                 handler_md.event_filters.append(custom_filter)
 
@@ -194,20 +217,23 @@ def register_command_group(
             logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
         else:
             new_group = CommandGroupFilter(
-                sub_command, alias, parent_group=command_group_name.parent_group
+                sub_command,
+                alias,
+                parent_group=command_group_name.parent_group,
             )
             command_group_name.parent_group.add_sub_command_filter(new_group)
+    # 根指令组
+    elif command_group_name is None:
+        logger.warning("根指令组的名称未指定")
     else:
-        # 根指令组
-        if command_group_name is None:
-            logger.warning("根指令组的名称未指定")
-        else:
-            new_group = CommandGroupFilter(command_group_name, alias)
+        new_group = CommandGroupFilter(command_group_name, alias)
 
     def decorator(obj):
         if new_group:
             handler_md = get_handler_or_create(
-                obj, EventType.AdapterMessageEvent, **kwargs
+                obj,
+                EventType.AdapterMessageEvent,
+                **kwargs,
             )
             handler_md.event_filters.append(new_group)
 
@@ -220,11 +246,9 @@ def register_command_group(
 class RegisteringCommandable:
     """用于指令组级联注册"""
 
-    group: Callable[..., Callable[..., "RegisteringCommandable"]] = (
-        register_command_group
-    )
+    group: Callable[..., Callable[..., RegisteringCommandable]] = register_command_group
     command: Callable[..., Callable[..., None]] = register_command
-    custom_filter: Callable[..., Callable[..., None]] = register_custom_filter
+    custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
     def __init__(self, parent_group: CommandGroupFilter):
         self.parent_group = parent_group
@@ -235,7 +259,9 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         handler_md.event_filters.append(EventMessageTypeFilter(event_message_type))
         return awaitable
@@ -244,14 +270,15 @@ def register_event_message_type(event_message_type: EventMessageType, **kwargs):
 
 
 def register_platform_adapter_type(
-    platform_adapter_type: PlatformAdapterType, **kwargs
+    platform_adapter_type: PlatformAdapterType,
+    **kwargs,
 ):
     """注册一个 PlatformAdapterType"""
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
         handler_md.event_filters.append(
-            PlatformAdapterTypeFilter(platform_adapter_type)
+            PlatformAdapterTypeFilter(platform_adapter_type),
         )
         return awaitable
 
@@ -263,7 +290,9 @@ def register_regex(regex: str, **kwargs):
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(
-            awaitable, EventType.AdapterMessageEvent, **kwargs
+            awaitable,
+            EventType.AdapterMessageEvent,
+            **kwargs,
         )
         handler_md.event_filters.append(RegexFilter(regex))
         return awaitable
@@ -277,12 +306,13 @@ def register_permission_type(permission_type: PermissionType, raise_error: bool 
     Args:
         permission_type: PermissionType
         raise_error: 如果没有权限，是否抛出错误到消息平台，并且停止事件传播。默认为 True
+
     """
 
     def decorator(awaitable):
         handler_md = get_handler_or_create(awaitable, EventType.AdapterMessageEvent)
         handler_md.event_filters.append(
-            PermissionTypeFilter(permission_type, raise_error)
+            PermissionTypeFilter(permission_type, raise_error),
         )
         return awaitable
 
@@ -300,12 +330,34 @@ def register_on_astrbot_loaded(**kwargs):
 
 
 def register_on_platform_loaded(**kwargs):
-    """
-    当平台加载完成时
-    """
+    """当平台加载完成时"""
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnPlatformLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_waiting_llm_request(**kwargs):
+    """当等待调用 LLM 时的通知事件（在获取锁之前）
+
+    此钩子在消息确定要调用 LLM 但还未开始排队等锁时触发，
+    适合用于发送"正在思考中..."等用户反馈提示。
+
+    Examples:
+    ```py
+    @on_waiting_llm_request()
+    async def on_waiting_llm(self, event: AstrMessageEvent) -> None:
+        await event.send("🤔 正在思考中...")
+    ```
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(
+            awaitable, EventType.OnWaitingLLMRequestEvent, **kwargs
+        )
         return awaitable
 
     return decorator
@@ -324,6 +376,7 @@ def register_on_llm_request(**kwargs):
     ```
 
     请务必接收两个参数：event, request
+
     """
 
     def decorator(awaitable):
@@ -346,6 +399,7 @@ def register_on_llm_response(**kwargs):
     ```
 
     请务必接收两个参数：event, request
+
     """
 
     def decorator(awaitable):
@@ -365,7 +419,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
     async def get_weather(event: AstrMessageEvent, location: str):
         \'\'\'获取天气信息。
 
-        Args:
+    Args:
             location(string): 地点
         \'\'\'
         # 处理逻辑
@@ -386,31 +440,56 @@ def register_llm_tool(name: str | None = None, **kwargs):
     event.stop_event()
     yield
     ```
-    """
 
+    """
     name_ = name
     registering_agent = None
     if kwargs.get("registering_agent"):
         registering_agent = kwargs["registering_agent"]
 
-    def decorator(awaitable: Callable[..., Awaitable[Any]]):
+    def decorator(
+        awaitable: Callable[
+            ...,
+            AsyncGenerator[MessageEventResult | str | None]
+            | Awaitable[MessageEventResult | str | None],
+        ],
+    ):
         llm_tool_name = name_ if name_ else awaitable.__name__
         func_doc = awaitable.__doc__ or ""
         docstring = docstring_parser.parse(func_doc)
         args = []
         for arg in docstring.params:
-            if arg.type_name not in SUPPORTED_TYPES:
+            sub_type_name = None
+            type_name = arg.type_name
+            if not type_name:
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型：{arg.type_name}"
+                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释。",
                 )
-            args.append(
-                {
-                    "type": arg.type_name,
-                    "name": arg.arg_name,
-                    "description": arg.description,
-                }
-            )
-        # print(llm_tool_name, registering_agent)
+            # parse type_name to handle cases like "list[string]"
+            match = re.match(r"(\w+)\[(\w+)\]", type_name)
+            if match:
+                type_name = match.group(1)
+                sub_type_name = match.group(2)
+            type_name = PY_TO_JSON_TYPE.get(type_name, type_name)
+            if sub_type_name:
+                sub_type_name = PY_TO_JSON_TYPE.get(sub_type_name, sub_type_name)
+            if type_name not in SUPPORTED_TYPES or (
+                sub_type_name and sub_type_name not in SUPPORTED_TYPES
+            ):
+                raise ValueError(
+                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型：{arg.type_name}",
+                )
+
+            arg_json_schema = {
+                "type": type_name,
+                "name": arg.arg_name,
+                "description": arg.description,
+            }
+            if sub_type_name:
+                if type_name == "array":
+                    arg_json_schema["items"] = {"type": sub_type_name}
+            args.append(arg_json_schema)
+
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
@@ -454,6 +533,7 @@ def register_agent(
         instruction: Agent 的指令
         tools: Agent 使用的工具列表
         run_hooks: Agent 运行时的钩子函数
+
     """
     tools_ = tools or []
 
@@ -478,7 +558,9 @@ def register_on_decorating_result(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnDecoratingResultEvent, **kwargs
+            awaitable,
+            EventType.OnDecoratingResultEvent,
+            **kwargs,
         )
         return awaitable
 
@@ -490,7 +572,9 @@ def register_after_message_sent(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(
-            awaitable, EventType.OnAfterMessageSentEvent, **kwargs
+            awaitable,
+            EventType.OnAfterMessageSentEvent,
+            **kwargs,
         )
         return awaitable
 

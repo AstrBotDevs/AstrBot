@@ -1,54 +1,66 @@
 ![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
-</p>
-
 <div align="center">
 
-<br>
-
-<div>
-<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=1" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-</div>
-
-<br>
-
-<div>
-<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?style=for-the-badge&color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge&color=76bad9" alt="python">
-<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?style=for-the-badge&color=76bad9"/></a>
-<a href="https://qm.qq.com/cgi-bin/qm/qr?k=wtbaNx7EioxeaqS9z7RQWVXPIxg2zYr7&jump_from=webapi&authKey=vlqnv/AV2DbJEvGIcxdlNSpfxVy+8vVqijgreRdnVKOaydpc+YSw4MctmEbr0k5"><img alt="QQ_community" src="https://img.shields.io/badge/QQ群-775869627-purple?style=for-the-badge&color=76bad9"></a>
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-<img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&style=for-the-badge&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600">
-</div>
-
-<br>
 
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
+
+<div>
+<a href="https://trendshift.io/repositories/12875" target="_blank"><img src="https://trendshift.io/api/badge/repositories/12875" alt="Soulter%2FAstrBot | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://hellogithub.com/repository/AstrBotDevs/AstrBot" target="_blank"><img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=d127d50cd5e54c5382328acc3bb25483&claim_uid=ZO9by7qCXgSd6Lp&t=2" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+</div>
+
+<br>
+
+<div>
+<img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
+<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
+<img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
+<a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
+<a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
+<img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.soulter.top%2Fastrbot%2Fplugin-num&query=%24.result&suffix=%E4%B8%AA&label=%E6%8F%92%E4%BB%B6%E5%B8%82%E5%9C%BA&cacheSeconds=3600">
+<img src="https://gitcode.com/Soulter/AstrBot/star/badge.svg" href="https://gitcode.com/Soulter/AstrBot">
+</div>
+
+<br>
+
 <a href="https://astrbot.app/">文档</a> ｜
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的一站式 Agent 聊天机器人平台及开发框架。
+AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
+
+![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
 
 ## 主要功能
 
-1. **大模型对话**。支持接入多种大模型服务。支持多模态、工具调用、MCP、原生知识库、人设等功能。
-2. **多消息平台支持**。支持接入 QQ、企业微信、微信公众号、飞书、Telegram、钉钉、Discord、KOOK 等平台。支持速率限制、白名单、百度内容审核。
-3. **Agent**。完善适配的 Agentic 能力。支持多轮工具调用、内置沙盒代码执行器、网页搜索等功能。
-4. **插件扩展**。深度优化的插件机制，支持[开发插件](https://astrbot.app/dev/plugin.html)扩展功能，社区插件生态丰富。
-5. **WebUI**。可视化配置和管理机器人，功能齐全。
+1. 💯 免费 & 开源。
+1. ✨ AI 大模型对话，多模态，Agent，MCP，知识库，人格设定。
+2. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
+2. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
+3. 📦 插件扩展，已有近 800 个插件可一键安装。
+5. 💻 WebUI 支持。
+6. 🌐 国际化（i18n）支持。
 
-## 部署方式
+## 快速开始
 
 #### Docker 部署(推荐 🥳)
 
 推荐使用 Docker / Docker Compose 方式部署 AstrBot。
 
 请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
+
+#### uv 部署
+
+```bash
+uvx astrbot
+```
 
 #### 宝塔面板部署
 
@@ -101,101 +113,72 @@ uv run main.py
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
-## 🌍 社区
-
-### QQ 群组
-
-- 1 群：322154837
-- 3 群：630166526
-- 5 群：822130018
-- 6 群：753075035
-- 开发者群：975206796
-
-### Telegram 群组
-
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-
-### Discord 群组
-
-<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-
-## ⚡ 消息平台支持情况
+## 支持的消息平台
 
 **官方维护**
 
-| 平台    | 支持性 |
-| -------- | ------- |
-| QQ(官方平台) | ✔    |
-| QQ(OneBot)      | ✔    |
-| Telegram   | ✔    |
-| 企微应用    | ✔    |
-| 企微智能机器人 | ✔ |
-| 微信客服    | ✔    |
-| 微信公众号    | ✔    |
-| 飞书   | ✔    |
-| 钉钉   | ✔    |
-| Slack   | ✔    |
-| Discord   | ✔    |
-| Satori   | ✔    |
-| Misskey   | ✔    |
-| Whatsapp | 将支持 |
-| LINE | 将支持 |
+- QQ (官方平台 & OneBot)
+- Telegram
+- 企微应用 & 企微智能机器人
+- 微信客服 & 微信公众号
+- 飞书
+- 钉钉
+- Slack
+- Discord
+- Satori
+- Misskey
+- Whatsapp (将支持)
+- LINE (将支持)
 
 **社区维护**
 
-| 平台    | 支持性 |
-| -------- | ------- |
-| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)   | ✔    |
-| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)   | ✔    |
-| [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)   | ✔    |
-| [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)   | ✔    |
+- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
+- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
+- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
 
-## ⚡ 提供商支持情况
+## 支持的模型服务
 
 **大模型服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| OpenAI | ✔    | 支持任何兼容 OpenAI API 的服务 |
-| Anthropic | ✔    |  |
-| Google Gemini | ✔   |  |
-| Moonshot AI | ✔   |  |
-| 智谱 AI | ✔   |  |
-| DeepSeek | ✔   |  |
-| Ollama | ✔     | 本地部署 DeepSeek 等开源语言模型 |
-| LM Studio | ✔    | 本地部署 DeepSeek 等开源语言模型 |
-| [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | ✔  |  |
-| [302.AI](https://share.302.ai/rr1M3l) | ✔   |  |
-| [小马算力](https://www.tokenpony.cn/3YPyf) | ✔   |  |
-| 硅基流动 | ✔    |  |
-| PPIO 派欧云 | ✔    |  |
-| ModelScope | ✔    |  |
-| OneAPI | ✔    |  |
-| Dify | ✔    |  |
-| 阿里云百炼应用 | ✔    |  |
-| Coze | ✔    |  |
+- OpenAI 及兼容服务
+- Anthropic
+- Google Gemini
+- Moonshot AI
+- 智谱 AI
+- DeepSeek
+- Ollama (本地部署)
+- LM Studio (本地部署)
+- [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
+- [302.AI](https://share.302.ai/rr1M3l)
+- [小马算力](https://www.tokenpony.cn/3YPyf)
+- [硅基流动](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
+- [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE)
+- ModelScope
+- OneAPI
+
+**LLMOps 平台**
+
+- Dify
+- 阿里云百炼应用
+- Coze
 
 **语音转文本服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| Whisper | ✔    | 支持 API、本地部署 |
-| SenseVoice | ✔   | 本地部署 |
+- OpenAI Whisper
+- SenseVoice
 
 **文本转语音服务**
 
-| 名称  | 支持性 | 备注 |
-| -------- | ------- | ------- |
-| OpenAI TTS | ✔    |  |
-| Gemini TTS | ✔    |  |
-| GSVI | ✔    | GPT-Sovits-Inference |
-| GPT-SoVITs | ✔     | GPT-Sovits |
-| FishAudio | ✔    | |
-| Edge TTS | ✔    | Edge 浏览器的免费 TTS |
-| 阿里云百炼 TTS | ✔    |  |
-| Azure TTS | ✔   | |
-| Minimax TTS | ✔   | |
-| 火山引擎 TTS | ✔   | |
+- OpenAI TTS
+- Gemini TTS
+- GPT-Sovits-Inference
+- GPT-Sovits
+- FishAudio
+- Edge TTS
+- 阿里云百炼 TTS
+- Azure TTS
+- Minimax TTS
+- 火山引擎 TTS
 
 ## ❤️ 贡献
 
@@ -215,6 +198,26 @@ pip install pre-commit
 pre-commit install
 ```
 
+## 🌍 社区
+
+### QQ 群组
+
+- 1 群：322154837
+- 3 群：630166526
+- 5 群：822130018
+- 6 群：753075035
+- 7 群：743746109
+- 8 群：1030353265
+- 开发者群：975206796
+
+### Telegram 群组
+
+<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
+### Discord 群组
+
+<a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
+
 ## ❤️ Special Thanks
 
 特别感谢所有 Contributors 和插件开发者对 AstrBot 的贡献 ❤️
@@ -229,7 +232,7 @@ pre-commit install
 
 ## ⭐ Star History
 
-> [!TIP] 
+> [!TIP]
 > 如果本项目对您的生活 / 工作产生了帮助，或者您关注本项目的未来发展，请给项目 Star，这是我们维护这个开源项目的动力 <3
 
 <div align="center">
@@ -240,4 +243,10 @@ pre-commit install
 
 </details>
 
+<div align="center">
+
 _私は、高性能ですから!_
+
+<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
+</div
+

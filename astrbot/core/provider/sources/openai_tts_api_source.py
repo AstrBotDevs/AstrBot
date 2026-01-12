@@ -1,14 +1,19 @@
 import os
 import uuid
-from openai import AsyncOpenAI, NOT_GIVEN
-from ..provider import TTSProvider
-from ..entities import ProviderType
-from ..register import register_provider_adapter
+
+from openai import NOT_GIVEN, AsyncOpenAI
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from ..entities import ProviderType
+from ..provider import TTSProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "openai_tts_api", "OpenAI TTS API", provider_type=ProviderType.TEXT_TO_SPEECH
+    "openai_tts_api",
+    "OpenAI TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderOpenAITTSAPI(TTSProvider):
     def __init__(
@@ -26,7 +31,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
-            base_url=provider_config.get("api_base", None),
+            base_url=provider_config.get("api_base"),
             timeout=timeout,
         )
 
@@ -36,7 +41,10 @@ class ProviderOpenAITTSAPI(TTSProvider):
         temp_dir = os.path.join(get_astrbot_data_path(), "temp")
         path = os.path.join(temp_dir, f"openai_tts_api_{uuid.uuid4()}.wav")
         async with self.client.audio.speech.with_streaming_response.create(
-            model=self.model_name, voice=self.voice, response_format="wav", input=text
+            model=self.model_name,
+            voice=self.voice,
+            response_format="wav",
+            input=text,
         ) as response:
             with open(path, "wb") as f:
                 async for chunk in response.iter_bytes(chunk_size=1024):

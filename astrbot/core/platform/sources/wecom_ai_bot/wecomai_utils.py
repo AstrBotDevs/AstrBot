@@ -1,16 +1,17 @@
-"""
-企业微信智能机器人工具模块
+"""企业微信智能机器人工具模块
 提供常量定义、工具函数和辅助方法
 """
 
-import string
-import random
-import hashlib
-import base64
-import aiohttp
 import asyncio
+import base64
+import hashlib
+import secrets
+import string
+from typing import Any
+
+import aiohttp
 from Crypto.Cipher import AES
-from typing import Any, Tuple
+
 from astrbot.api import logger
 
 
@@ -49,9 +50,10 @@ def generate_random_string(length: int = 10) -> str:
 
     Returns:
         随机字符串
+
     """
     letters = string.ascii_letters + string.digits
-    return "".join(random.choice(letters) for _ in range(length))
+    return "".join(secrets.choice(letters) for _ in range(length))
 
 
 def calculate_image_md5(image_data: bytes) -> str:
@@ -62,6 +64,7 @@ def calculate_image_md5(image_data: bytes) -> str:
 
     Returns:
         MD5 哈希值（十六进制字符串）
+
     """
     return hashlib.md5(image_data).hexdigest()
 
@@ -74,6 +77,7 @@ def encode_image_base64(image_data: bytes) -> str:
 
     Returns:
         Base64 编码的字符串
+
     """
     return base64.b64encode(image_data).decode("utf-8")
 
@@ -87,11 +91,12 @@ def format_session_id(session_type: str, session_id: str) -> str:
 
     Returns:
         格式化后的会话 ID
+
     """
     return f"wecom_ai_bot_{session_type}_{session_id}"
 
 
-def parse_session_id(formatted_session_id: str) -> Tuple[str, str]:
+def parse_session_id(formatted_session_id: str) -> tuple[str, str]:
     """解析格式化的会话 ID
 
     Args:
@@ -99,6 +104,7 @@ def parse_session_id(formatted_session_id: str) -> Tuple[str, str]:
 
     Returns:
         (会话类型, 原始会话ID)
+
     """
     parts = formatted_session_id.split("_", 3)
     if (
@@ -120,6 +126,7 @@ def safe_json_loads(json_str: str, default: Any = None) -> Any:
 
     Returns:
         解析结果或默认值
+
     """
     import json
 
@@ -139,13 +146,15 @@ def format_error_response(error_code: int, error_msg: str) -> str:
 
     Returns:
         格式化的错误响应字符串
+
     """
     return f"Error {error_code}: {error_msg}"
 
 
 async def process_encrypted_image(
-    image_url: str, aes_key_base64: str
-) -> Tuple[bool, str]:
+    image_url: str,
+    aes_key_base64: str,
+) -> tuple[bool, str]:
     """下载并解密加密图片
 
     Args:
@@ -155,6 +164,7 @@ async def process_encrypted_image(
     Returns:
         Tuple[bool, str]: status 为 True 时 data 是解密后的图片数据的 base64 编码，
             status 为 False 时 data 是错误信息
+
     """
     # 1. 下载加密图片
     logger.info("开始下载加密图片: %s", image_url)
@@ -165,7 +175,7 @@ async def process_encrypted_image(
                 encrypted_data = await response.read()
         logger.info("图片下载成功，大小: %d 字节", len(encrypted_data))
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-        error_msg = f"下载图片失败: {str(e)}"
+        error_msg = f"下载图片失败: {e!s}"
         logger.error(error_msg)
         return False, error_msg
 

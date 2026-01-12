@@ -3,6 +3,7 @@
   "cancel": "Cancel",
   "close": "Close",
   "copy": "Copy",
+  "copied": "Copied",
   "delete": "Delete",
   "edit": "Edit",
   "add": "Add",
@@ -27,6 +28,7 @@
   "uninstall": "Uninstall",
   "update": "Update",
   "language": "Language",
+  "settings": "Settings",
   "locale": "en-US",
   "type": "Type",
   "press": "Press",
@@ -34,6 +36,7 @@
   "yes": "Yes",
   "no": "No",
   "imagePreview": "Image Preview",
+  "autoDetect": "Auto Detect",
   "dialog": {
     "confirmTitle": "Confirm Action",
     "confirmMessage": "Are you sure you want to perform this action?",
@@ -60,19 +63,46 @@
       "subtitle": "Please check the extension marketplace or contact the extension author for more information."
     }
   },
+  "changelog": {
+    "title": "Changelog",
+    "loading": "Loading changelog...",
+    "empty": {
+      "title": "No changelog available for this plugin",
+      "subtitle": "Developers can add a CHANGELOG.md file in the plugin directory to provide changelog"
+    }
+  },
   "editor": {
     "fullscreen": "Fullscreen Edit",
     "editingTitle": "Editing Content"
   },
+  "templateList": {
+    "addEntry": "Add Entry",
+    "empty": "No entries yet, pick a template to add",
+    "missingTemplate": "Template not found, please remove and add again.",
+    "unknownTemplate": "Template not specified"
+  },
   "list": {
     "addItemPlaceholder": "Add new item, press Enter to confirm",
-    "addButton": "Add"
+    "addButton": "Add",
+    "addMore": "Add More",
+    "batchImport": "Batch Import",
+    "batchImportTitle": "Batch Import",
+    "batchImportLabel": "One item per line",
+    "batchImportPlaceholder": "Example:\nItem 1\nItem 2\nItem 3\nItem 4",
+    "batchImportHint": "Each line will be treated as a separate item, empty lines will be ignored",
+    "batchImportButton": "Import {count} items",
+    "noItems": "No items",
+    "noItemsHint": "No items yet, type in the input above and press Enter to add",
+    "inputPlaceholder": "Type and press Enter to add",
+    "editTitle": "Edit List Items",
+    "modifyButton": "Modify"
   },
   "itemCard": {
     "enabled": "Enabled",
     "disabled": "Disabled",
     "delete": "Delete",
     "edit": "Edit",
+    "copy": "Copy",
     "noData": "No data available"
   }
-} 
+}

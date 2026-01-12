@@ -1,16 +1,14 @@
-"""
-检索模块
-"""
+"""检索模块"""
 
 from .manager import RetrievalManager, RetrievalResult
-from .sparse_retriever import SparseRetriever, SparseResult
-from .rank_fusion import RankFusion, FusedResult
+from .rank_fusion import FusedResult, RankFusion
+from .sparse_retriever import SparseResult, SparseRetriever
 
 __all__ = [
+    "FusedResult",
+    "RankFusion",
     "RetrievalManager",
     "RetrievalResult",
-    "SparseRetriever",
     "SparseResult",
-    "RankFusion",
-    "FusedResult",
+    "SparseRetriever",
 ]

@@ -1,15 +1,20 @@
 import os
-import uuid
-import aiohttp
 import urllib.parse
-from ..provider import TTSProvider
-from ..entities import ProviderType
-from ..register import register_provider_adapter
+import uuid
+
+import aiohttp
+
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from ..entities import ProviderType
+from ..provider import TTSProvider
+from ..register import register_provider_adapter
 
 
 @register_provider_adapter(
-    "gsvi_tts_api", "GSVI TTS API", provider_type=ProviderType.TEXT_TO_SPEECH
+    "gsvi_tts_api",
+    "GSVI TTS API",
+    provider_type=ProviderType.TEXT_TO_SPEECH,
 )
 class ProviderGSVITTS(TTSProvider):
     def __init__(
@@ -19,8 +24,7 @@ class ProviderGSVITTS(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.api_base = provider_config.get("api_base", "http://127.0.0.1:5000")
-        if self.api_base.endswith("/"):
-            self.api_base = self.api_base[:-1]
+        self.api_base = self.api_base.removesuffix("/")
         self.character = provider_config.get("character")
         self.emotion = provider_config.get("emotion")
 
@@ -49,7 +53,7 @@ class ProviderGSVITTS(TTSProvider):
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}"
+                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}",
                     )
 
         return path

@@ -1,6 +1,8 @@
-from astrbot.core.config.astrbot_config import AstrBotConfig
 from dataclasses import dataclass
+
 from quart import Quart
+
+from astrbot.core.config.astrbot_config import AstrBotConfig
 
 
 @dataclass
@@ -10,6 +12,8 @@ class RouteContext:
 
 
 class Route:
+    routes: list | dict
+
     def __init__(self, context: RouteContext):
         self.app = context.app
         self.config = context.config

@@ -57,7 +57,7 @@
     </v-card>
 
     <!-- 上传对话框 -->
-    <v-dialog v-model="showUploadDialog" max-width="600px" persistent @after-enter="initUploadSettings">
+    <v-dialog v-model="showUploadDialog" max-width="650px" persistent @after-enter="initUploadSettings">
       <v-card>
         <v-card-title class="pa-4 d-flex align-center">
           <span class="text-h5">{{ t('upload.title') }}</span>
@@ -67,40 +67,91 @@
 
         <v-divider />
 
-        <v-card-text class="pa-6">
-          <!-- 文件选择 -->
-          <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
-            @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
-            <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
-            <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-            <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf, .docx,
-              .xls, .xlsx</p>
-            <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
-            <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-            <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
-              @change="handleFileSelect" />
-          </div>
+        <v-tabs v-model="uploadMode" grow class="mb-4">
+          <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
+          <v-tab value="url">
+            {{ t('upload.fromUrl') }}
+            <v-badge color="warning" :content="t('upload.beta')" inline class="ml-2" />
+          </v-tab>
+        </v-tabs>
 
-          <div v-if="selectedFiles.length > 0" class="mt-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
-              <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
-            </div>
-            <div class="files-list">
-              <div v-for="(file, index) in selectedFiles" :key="index"
-                class="file-item pa-3 mb-2 rounded bg-surface-variant">
-                <div class="d-flex align-center justify-space-between">
-                  <div class="d-flex align-center gap-2">
-                    <v-icon>{{ getFileIcon(file.name) }}</v-icon>
-                    <div>
-                      <div class="font-weight-medium">{{ file.name }}</div>
-                      <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+        <v-card-text class="pa-6 pt-2">
+          <v-window v-model="uploadMode">
+            <!-- 文件上传 -->
+            <v-window-item value="file">
+              <!-- 文件选择 -->
+              <div class="upload-dropzone" :class="{ 'dragover': isDragging }" @drop.prevent="handleDrop"
+                @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
+                <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
+                <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
+                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf,
+                  .docx,
+                  .xls, .xlsx</p>
+                <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
+                <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
+                  @change="handleFileSelect" />
+              </div>
+
+              <div v-if="selectedFiles.length > 0" class="mt-4">
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <span class="text-subtitle-2">已选择 {{ selectedFiles.length }} 个文件</span>
+                  <v-btn variant="text" size="small" @click="selectedFiles = []">清空</v-btn>
+                </div>
+                <div class="files-list">
+                  <div v-for="(file, index) in selectedFiles" :key="index"
+                    class="file-item pa-3 mb-2 rounded bg-surface-variant">
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center gap-2">
+                        <v-icon>{{ getFileIcon(file.name) }}</v-icon>
+                        <div>
+                          <div class="font-weight-medium">{{ file.name }}</div>
+                          <div class="text-caption">{{ formatFileSize(file.size) }}</div>
+                        </div>
+                      </div>
+                      <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
                     </div>
                   </div>
-                  <v-btn icon="mdi-close" variant="text" size="small" @click="removeFile(index)" />
                 </div>
               </div>
+            </v-window-item>
+
+            <!-- URL上传 -->
+            <v-window-item value="url" class="pt-2">
+              <!-- Tavily Key 快速配置 -->
+              <div v-if="tavilyConfigStatus === 'not_configured' || tavilyConfigStatus === 'error'" class="mb-4">
+                <v-alert :type="tavilyConfigStatus === 'error' ? 'error' : 'info'" variant="tonal" density="compact">
+                  <div class="d-flex align-center justify-space-between">
+                    <span>
+                      {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置 Tavily Key' }}
+                    </span>
+                    <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
+                      配置
+                    </v-btn>
+                  </div>
+                </v-alert>
+              </div>
+
+              <v-text-field v-model="uploadUrl" :label="t('upload.urlPlaceholder')" variant="outlined" clearable :disabled="tavilyConfigStatus === 'not_configured'"
+                autofocus :hint="t('upload.urlHint', { supported: 'HTML' })" persistent-hint />
+            </v-window-item>
+          </v-window>
+
+          <!-- 清洗设置 (仅在URL模式下显示) -->
+          <div v-if="uploadMode === 'url'" class="mt-6">
+            <div class="d-flex align-center mb-4">
+              <h3 class="text-h6">{{ t('upload.cleaningSettings') }}</h3>
             </div>
+            <v-row>
+              <v-col cols="12" sm="4">
+                <v-switch v-model="uploadSettings.enable_cleaning" :label="t('upload.enableCleaning')" color="primary" />
+              </v-col>
+              <v-col cols="12" sm="8">
+                <v-select v-model="uploadSettings.cleaning_provider_id" :items="llmProviders" item-title="id"
+                  item-value="id" :label="t('upload.cleaningProvider')" :hint="t('upload.cleaningProviderHint')"
+                  persistent-hint variant="outlined" density="compact" :disabled="!uploadSettings.enable_cleaning" />
+              </v-col>
+            </v-row>
           </div>
 
           <!-- 分块设置 -->
@@ -151,8 +202,8 @@
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="uploadDocument" :loading="uploading"
-            :disabled="selectedFiles.length === 0">
+          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
+            :disabled="isUploadDisabled">
             {{ t('upload.submit') }}
           </v-btn>
         </v-card-actions>
@@ -185,11 +236,15 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <!-- Tavily Key 配置对话框 -->
+    <TavilyKeyDialog v-model="showTavilyDialog" @success="onTavilyKeySet" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import TavilyKeyDialog from './TavilyKeyDialog.vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
@@ -216,10 +271,13 @@ const selectedFiles = ref<File[]>([])
 const deleteTarget = ref<any>(null)
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-
-// 上传进度 - 用于轮询多个任务
+const uploadMode = ref('file') // 'file' or 'url'
+const uploadUrl = ref('')
+const llmProviders = ref<any[]>([])
 const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
+const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
+const showTavilyDialog = ref(false)
 
 const snackbar = ref({
   show: false,
@@ -239,7 +297,9 @@ const uploadSettings = ref({
   chunk_overlap: null as number | null,
   batch_size: 32,
   tasks_limit: 3,
-  max_retries: 3
+  max_retries: 3,
+  enable_cleaning: false,
+  cleaning_provider_id: null as string | null
 })
 
 // 初始化上传设置
@@ -249,9 +309,30 @@ const initUploadSettings = () => {
     chunk_overlap: props.kb?.chunk_overlap || null,
     batch_size: 32,
     tasks_limit: 3,
-    max_retries: 3
+    max_retries: 3,
+    enable_cleaning: false,
+    cleaning_provider_id: null
   }
 }
+
+const isUploadDisabled = computed(() => {
+  if (uploading.value) {
+    return true
+  }
+  if (uploadMode.value === 'file') {
+    return selectedFiles.value.length === 0
+  }
+  if (uploadMode.value === 'url') {
+    if (!uploadUrl.value) {
+      return true
+    }
+    if (uploadSettings.value.enable_cleaning && !uploadSettings.value.cleaning_provider_id) {
+      return true
+    }
+    return false
+  }
+  return true
+})
 
 // 表格列
 const headers = [
@@ -314,8 +395,17 @@ const handleDrop = (event: DragEvent) => {
   }
 }
 
-// 上传文档
-const uploadDocument = async () => {
+// 上传调度器
+const startUpload = async () => {
+  if (uploadMode.value === 'file') {
+    await uploadFiles()
+  } else if (uploadMode.value === 'url') {
+    await uploadFromUrl()
+  }
+}
+
+// 上传文件
+const uploadFiles = async () => {
   if (selectedFiles.value.length === 0) {
     showSnackbar(t('upload.fileRequired'), 'warning')
     return
@@ -385,6 +475,80 @@ const uploadDocument = async () => {
   } catch (error) {
     console.error('Failed to upload document:', error)
     showSnackbar(t('documents.uploadFailed'), 'error')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 从 URL 上传
+const uploadFromUrl = async () => {
+  if (!uploadUrl.value) {
+    showSnackbar(t('upload.urlRequired'), 'warning')
+    return
+  }
+
+  uploading.value = true
+
+  try {
+    const payload: any = {
+      kb_id: props.kbId,
+      url: uploadUrl.value,
+      batch_size: uploadSettings.value.batch_size,
+      tasks_limit: uploadSettings.value.tasks_limit,
+      max_retries: uploadSettings.value.max_retries
+    }
+    if (uploadSettings.value.chunk_size) {
+      payload.chunk_size = uploadSettings.value.chunk_size
+    }
+    if (uploadSettings.value.chunk_overlap) {
+      payload.chunk_overlap = uploadSettings.value.chunk_overlap
+    }
+    if (uploadSettings.value.enable_cleaning) {
+      payload.enable_cleaning = true
+      if (uploadSettings.value.cleaning_provider_id) {
+        payload.cleaning_provider_id = uploadSettings.value.cleaning_provider_id
+      }
+    }
+
+
+    const response = await axios.post('/api/kb/document/upload/url', payload)
+
+    if (response.data.status === 'ok') {
+      const result = response.data.data
+      const taskId = result.task_id
+
+      showSnackbar(`正在从 URL 后台提取内容...`, 'info')
+
+      // 添加占位条目
+      const uploadingDoc = {
+        doc_id: `uploading_${taskId}_0`,
+        doc_name: result.url,
+        file_type: 'url',
+        file_size: 0, // URL has no size
+        chunk_count: 0,
+        created_at: new Date().toISOString(),
+        uploading: true,
+        taskId: taskId,
+        uploadProgress: {
+          stage: 'waiting',
+          current: 0,
+          total: 100
+        }
+      }
+
+      documents.value = [uploadingDoc, ...documents.value]
+      closeUploadDialog()
+
+      if (taskId) {
+        startProgressPolling(taskId)
+      }
+    } else {
+      showSnackbar(response.data.message || t('documents.uploadFailed'), 'error')
+    }
+  } catch (error: any) {
+    console.error('Failed to upload from URL:', error)
+    const message = error.response?.data?.message || t('documents.uploadFailed')
+    showSnackbar(message, 'error')
   } finally {
     uploading.value = false
   }
@@ -490,6 +654,8 @@ const getUploadPercentage = (item: any) => {
 const getStageText = (stage: string) => {
   const stageMap: Record<string, string> = {
     'waiting': '等待中...',
+    'extracting': '提取内容...',
+    'cleaning': '清洗内容...',
     'parsing': '解析文档...',
     'chunking': '文本分块...',
     'embedding': '生成向量...'
@@ -501,6 +667,8 @@ const getStageText = (stage: string) => {
 const closeUploadDialog = () => {
   showUploadDialog.value = false
   selectedFiles.value = []
+  uploadUrl.value = ''
+  uploadMode.value = 'file'
   initUploadSettings()
 }
 
@@ -551,6 +719,7 @@ const getFileIcon = (fileType: string) => {
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
+  if (type.includes('url')) return 'mdi-link-variant'
   return 'mdi-file'
 }
 
@@ -559,6 +728,7 @@ const getFileColor = (fileType: string) => {
   if (type.includes('pdf')) return 'error'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
+  if (type.includes('url')) return 'primary'
   return 'grey'
 }
 
@@ -585,8 +755,53 @@ const formatDate = (dateStr: string) => {
   })
 }
 
+// 加载LLM providers
+const loadLlmProviders = async () => {
+  try {
+    const response = await axios.get('/api/config/provider/list', {
+      params: { provider_type: 'chat_completion' }
+    })
+    if (response.data.status === 'ok') {
+      llmProviders.value = response.data.data
+    }
+  } catch (error) {
+    console.error('Failed to load LLM providers:', error)
+  }
+}
+
+// 检查Tavily Key配置
+const checkTavilyConfig = async () => {
+  tavilyConfigStatus.value = 'loading'
+  try {
+    const response = await axios.get('/api/config/abconf', {
+      params: { id: 'default' }
+    })
+    if (response.data.status === 'ok') {
+      const config = response.data.data.config
+      const tavilyKeys = config?.provider_settings?.websearch_tavily_key
+      if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
+        tavilyConfigStatus.value = 'configured'
+      } else {
+        tavilyConfigStatus.value = 'not_configured'
+      }
+    } else {
+      tavilyConfigStatus.value = 'error'
+    }
+  } catch (error) {
+    console.warn('Failed to check Tavily key config:', error)
+    tavilyConfigStatus.value = 'error'
+  }
+}
+
+const onTavilyKeySet = () => {
+  showSnackbar('Tavily API Key 配置成功', 'success')
+  checkTavilyConfig()
+}
+
 onMounted(() => {
   loadDocuments()
+  loadLlmProviders()
+  checkTavilyConfig()
 })
 
 onUnmounted(() => {

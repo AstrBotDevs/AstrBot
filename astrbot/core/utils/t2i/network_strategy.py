@@ -1,13 +1,16 @@
-import aiohttp
 import asyncio
-import ssl
-import certifi
 import logging
 import random
-from . import RenderStrategy
+import ssl
+
+import aiohttp
+import certifi
+
 from astrbot.core.config import VERSION
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.t2i.template_manager import TemplateManager
+
+from . import RenderStrategy
 
 ASTRBOT_T2I_DEFAULT_ENDPOINT = "https://t2i.soulter.top/text2img"
 
@@ -38,7 +41,7 @@ class NetworkRenderStrategy(RenderStrategy):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    "https://api.soulter.top/astrbot/t2i-endpoints"
+                    "https://api.soulter.top/astrbot/t2i-endpoints",
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -49,14 +52,13 @@ class NetworkRenderStrategy(RenderStrategy):
                             if ep.get("active") and ep.get("url")
                         ]
                         logger.info(
-                            f"Successfully got {len(self.endpoints)} official T2I endpoints."
+                            f"Successfully got {len(self.endpoints)} official T2I endpoints.",
                         )
         except Exception as e:
             logger.error(f"Failed to get official endpoints: {e}")
 
     def _clean_url(self, url: str):
-        if url.endswith("/"):
-            url = url[:-1]
+        url = url.removesuffix("/")
         if not url.endswith("text2img"):
             url += "/text2img"
         return url
@@ -69,7 +71,6 @@ class NetworkRenderStrategy(RenderStrategy):
         options: dict | None = None,
     ) -> str:
         """使用自定义文转图模板"""
-
         default_options = {"full_page": True, "type": "jpeg", "quality": 40}
         if options:
             default_options |= options
@@ -89,21 +90,26 @@ class NetworkRenderStrategy(RenderStrategy):
                 if return_url:
                     ssl_context = ssl.create_default_context(cafile=certifi.where())
                     connector = aiohttp.TCPConnector(ssl=ssl_context)
-                    async with aiohttp.ClientSession(
-                        trust_env=True, connector=connector
-                    ) as session:
-                        async with session.post(
-                            f"{endpoint}/generate", json=post_data
-                        ) as resp:
-                            if resp.status == 200:
-                                ret = await resp.json()
-                                return f"{endpoint}/{ret['data']['id']}"
-                            else:
-                                raise Exception(f"HTTP {resp.status}")
+                    async with (
+                        aiohttp.ClientSession(
+                            trust_env=True,
+                            connector=connector,
+                        ) as session,
+                        session.post(
+                            f"{endpoint}/generate",
+                            json=post_data,
+                        ) as resp,
+                    ):
+                        if resp.status == 200:
+                            ret = await resp.json()
+                            return f"{endpoint}/{ret['data']['id']}"
+                        raise Exception(f"HTTP {resp.status}")
                 else:
                     # download_image_by_url 失败时抛异常
                     return await download_image_by_url(
-                        f"{endpoint}/generate", post=True, post_data=post_data
+                        f"{endpoint}/generate",
+                        post=True,
+                        post_data=post_data,
                     )
             except Exception as e:
                 last_exception = e
@@ -114,15 +120,18 @@ class NetworkRenderStrategy(RenderStrategy):
         raise RuntimeError(f"All endpoints failed: {last_exception}")
 
     async def render(
-        self, text: str, return_url: bool = False, template_name: str | None = "base"
+        self,
+        text: str,
+        return_url: bool = False,
+        template_name: str | None = "base",
     ) -> str:
-        """
-        返回图像的文件路径
-        """
+        """返回图像的文件路径"""
         if not template_name:
             template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
         text = text.replace("`", "\\`")
         return await self.render_custom_template(
-            tmpl_str, {"text": text, "version": f"v{VERSION}"}, return_url
+            tmpl_str,
+            {"text": text, "version": f"v{VERSION}"},
+            return_url,
         )

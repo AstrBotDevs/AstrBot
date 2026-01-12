@@ -1,49 +1,57 @@
-import time
 import asyncio
-import uuid
-import aiohttp
-import re
 import base64
-from typing import Awaitable, Any
-from slack_sdk.web.async_client import AsyncWebClient
+import re
+import time
+import uuid
+from typing import Any, cast
+
+import aiohttp
 from slack_sdk.socket_mode.request import SocketModeRequest
+from slack_sdk.web.async_client import AsyncWebClient
+
+from astrbot.api import logger
+from astrbot.api.event import MessageChain
+from astrbot.api.message_components import *
 from astrbot.api.platform import (
-    Platform,
     AstrBotMessage,
     MessageMember,
     MessageType,
+    Platform,
     PlatformMetadata,
 )
-from astrbot.api.event import MessageChain
-from .slack_event import SlackMessageEvent
-from .client import SlackWebhookClient, SlackSocketClient
-from astrbot.api.message_components import *  # noqa: F403
-from astrbot.api import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.webhook_utils import log_webhook_info
+
 from ...register import register_platform_adapter
+from .client import SlackSocketClient, SlackWebhookClient
+from .slack_event import SlackMessageEvent
 
 
 @register_platform_adapter(
-    "slack", "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。"
+    "slack",
+    "适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
+    support_streaming_message=False,
 )
 class SlackAdapter(Platform):
     def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
+        self,
+        platform_config: dict,
+        platform_settings: dict,
+        event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(event_queue)
-
-        self.config = platform_config
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
-        self.unique_session = platform_settings.get("unique_session", False)
 
         self.bot_token = platform_config.get("bot_token")
         self.app_token = platform_config.get("app_token")
         self.signing_secret = platform_config.get("signing_secret")
         self.connection_mode = platform_config.get("slack_connection_mode", "socket")
+        self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
         self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
-            "slack_webhook_path", "/astrbot-slack-webhook/callback"
+            "slack_webhook_path",
+            "/astrbot-slack-webhook/callback",
         )
 
         if not self.bot_token:
@@ -58,7 +66,8 @@ class SlackAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="slack",
             description="适用于 Slack 的消息平台适配器，支持 Socket Mode 和 Webhook Mode。",
-            id=self.config.get("id"),
+            id=cast(str, self.config.get("id")),
+            support_streaming_message=False,
         )
 
         # 初始化 Slack Web Client
@@ -69,10 +78,13 @@ class SlackAdapter(Platform):
         self.bot_self_id = None
 
     async def send_by_session(
-        self, session: MessageSesion, message_chain: MessageChain
+        self,
+        session: MessageSesion,
+        message_chain: MessageChain,
     ):
-        blocks, text = SlackMessageEvent._parse_slack_blocks(
-            message_chain=message_chain, web_client=self.web_client
+        blocks, text = await SlackMessageEvent._parse_slack_blocks(
+            message_chain=message_chain,
+            web_client=self.web_client,
         )
 
         try:
@@ -104,13 +116,13 @@ class SlackAdapter(Platform):
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
-        abm.self_id = self.bot_self_id
+        abm.self_id = cast(str, self.bot_self_id)
 
         # 获取用户信息
         user_id = event.get("user", "")
         try:
             user_info = await self.web_client.users_info(user=user_id)
-            user_data = user_info["user"]
+            user_data = cast(dict, user_info["user"])
             user_name = user_data.get("real_name") or user_data.get("name", user_id)
         except Exception:
             user_name = user_id
@@ -121,7 +133,7 @@ class SlackAdapter(Platform):
         channel_id = event.get("channel", "")
         try:
             channel_info = await self.web_client.conversations_info(channel=channel_id)
-            is_im = channel_info["channel"]["is_im"]
+            is_im = cast(dict, channel_info["channel"])["is_im"]
 
             if is_im:
                 abm.type = MessageType.FRIEND_MESSAGE
@@ -134,12 +146,10 @@ class SlackAdapter(Platform):
             abm.group_id = channel_id
 
         # 设置会话ID
-        if self.unique_session and abm.type == MessageType.GROUP_MESSAGE:
-            abm.session_id = f"{user_id}_{channel_id}"
+        if abm.type == MessageType.GROUP_MESSAGE:
+            abm.session_id = abm.group_id
         else:
-            abm.session_id = (
-                channel_id if abm.type == MessageType.GROUP_MESSAGE else user_id
-            )
+            abm.session_id = user_id
 
         abm.message_id = event.get("client_msg_id", uuid.uuid4().hex)
         abm.timestamp = int(float(event.get("ts", time.time())))
@@ -150,7 +160,7 @@ class SlackAdapter(Platform):
         abm.message = []
 
         # 优先使用 blocks 字段解析消息
-        if "blocks" in event and event["blocks"]:
+        if event.get("blocks"):
             abm.message = self._parse_blocks(event["blocks"])
             # 更新 message_str
             abm.message_str = ""
@@ -164,9 +174,10 @@ class SlackAdapter(Platform):
                 for mention in mentions:
                     try:
                         mentioned_user = await self.web_client.users_info(user=mention)
-                        user_data = mentioned_user["user"]
+                        user_data = cast(dict, mentioned_user["user"])
                         user_name = user_data.get("real_name") or user_data.get(
-                            "name", mention
+                            "name",
+                            mention,
                         )
                         abm.message.append(At(qq=mention, name=user_name))
                     except Exception:
@@ -189,7 +200,7 @@ class SlackAdapter(Platform):
                 else:
                     # TODO: 下载鉴权
                     abm.message.append(
-                        File(name=file_name, file=file_url, url=file_url)
+                        File(name=file_name, file=file_url, url=file_url),
                     )
 
         abm.raw_message = event
@@ -209,39 +220,41 @@ class SlackAdapter(Platform):
                     if element.get("type") == "rich_text_section":
                         # 处理富文本段落
                         section_elements = element.get("elements", [])
-                        text_content = ""
-
+                        text_parts = []
                         for section_element in section_elements:
                             element_type = section_element.get("type", "")
 
                             if element_type == "text":
                                 # 普通文本
-                                text_content += section_element.get("text", "")
+                                text_parts.append(section_element.get("text", ""))
                             elif element_type == "user":
                                 # @用户提及
                                 user_id = section_element.get("user_id", "")
                                 if user_id:
                                     # 将之前的文本内容先添加到组件中
+                                    text_content = "".join(text_parts)
                                     if text_content.strip():
                                         message_components.append(
-                                            Plain(text=text_content)
+                                            Plain(text=text_content),
                                         )
-                                        text_content = ""
+                                    text_parts = []
                                     # 添加@提及组件
                                     message_components.append(At(qq=user_id, name=""))
                             elif element_type == "channel":
                                 # #频道提及
                                 channel_id = section_element.get("channel_id", "")
-                                text_content += f"#{channel_id}"
+                                text_parts.append(f"#{channel_id}")
                             elif element_type == "link":
                                 # 链接
                                 url = section_element.get("url", "")
                                 link_text = section_element.get("text", url)
-                                text_content += f"[{link_text}]({url})"
+                                text_parts.append(f"[{link_text}]({url})")
                             elif element_type == "emoji":
                                 # 表情符号
                                 emoji_name = section_element.get("name", "")
-                                text_content += f":{emoji_name}:"
+                                text_parts.append(f":{emoji_name}:")
+
+                        text_content = "".join(text_parts)
 
                         if text_content.strip():
                             message_components.append(Plain(text=text_content))
@@ -307,13 +320,12 @@ class SlackAdapter(Platform):
                     content = await resp.read()
                     base64_content = base64.b64encode(content).decode("utf-8")
                     return base64_content
-                else:
-                    logger.error(
-                        f"Failed to download slack file: {resp.status} {await resp.text()}"
-                    )
-                    raise Exception(f"下载文件失败: {resp.status}")
+                logger.error(
+                    f"Failed to download slack file: {resp.status} {await resp.text()}",
+                )
+                raise Exception(f"下载文件失败: {resp.status}")
 
-    async def run(self) -> Awaitable[Any]:
+    async def run(self) -> None:
         self.bot_self_id = await self.get_bot_user_id()
         logger.info(f"Slack auth test OK. Bot ID: {self.bot_self_id}")
 
@@ -323,7 +335,9 @@ class SlackAdapter(Platform):
 
             # 创建 Socket 客户端
             self.socket_client = SlackSocketClient(
-                self.web_client, self.app_token, self._handle_socket_event
+                self.web_client,
+                self.app_token,
+                self._handle_socket_event,
             )
 
             logger.info("Slack 适配器 (Socket Mode) 启动中...")
@@ -343,14 +357,21 @@ class SlackAdapter(Platform):
                 self._handle_webhook_event,
             )
 
-            logger.info(
-                f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}..."
-            )
-            await self.webhook_client.start()
+            # 如果启用统一 webhook 模式，则不启动独立服务器
+            webhook_uuid = self.config.get("webhook_uuid")
+            if self.unified_webhook_mode and webhook_uuid:
+                log_webhook_info(f"{self.meta().id}(Slack)", webhook_uuid)
+                # 保持运行状态，等待 shutdown
+                await self.webhook_client.shutdown_event.wait()
+            else:
+                logger.info(
+                    f"Slack 适配器 (Webhook Mode) 启动中，监听 {self.webhook_host}:{self.webhook_port}{self.webhook_path}...",
+                )
+                await self.webhook_client.start()
 
         else:
             raise ValueError(
-                f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'"
+                f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'",
             )
 
     async def _handle_webhook_event(self, event_data: dict):
@@ -373,12 +394,19 @@ class SlackAdapter(Platform):
             if abm:
                 await self.handle_msg(abm)
 
+    async def webhook_callback(self, request: Any) -> Any:
+        """统一 Webhook 回调入口"""
+        if self.connection_mode != "webhook" or not self.webhook_client:
+            return {"error": "Slack adapter is not in webhook mode"}, 400
+
+        return await self.webhook_client.handle_callback(request)
+
     async def terminate(self):
         if self.socket_client:
             await self.socket_client.stop()
         if self.webhook_client:
             await self.webhook_client.stop()
-        logger.info("Slack 适配器已被优雅地关闭")
+        logger.info("Slack 适配器已被关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
@@ -396,3 +424,10 @@ class SlackAdapter(Platform):
 
     def get_client(self):
         return self.web_client
+
+    def unified_webhook(self) -> bool:
+        return bool(
+            self.config.get("unified_webhook_mode", False)
+            and self.config.get("slack_connection_mode", "") == "webhook"
+            and self.config.get("webhook_uuid")
+        )

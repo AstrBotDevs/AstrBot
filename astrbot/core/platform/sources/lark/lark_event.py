@@ -1,27 +1,42 @@
+import base64
 import json
 import os
 import uuid
-import base64
-import lark_oapi as lark
 from io import BytesIO
-from typing import List
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Plain, Image as AstrBotImage, At
-from astrbot.core.utils.io import download_image_by_url
-from lark_oapi.api.im.v1 import *
+
+import lark_oapi as lark
+from lark_oapi.api.im.v1 import (
+    CreateImageRequest,
+    CreateImageRequestBody,
+    CreateMessageReactionRequest,
+    CreateMessageReactionRequestBody,
+    Emoji,
+    ReplyMessageRequest,
+    ReplyMessageRequestBody,
+)
+
 from astrbot import logger
+from astrbot.api.event import AstrMessageEvent, MessageChain
+from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import Image as AstrBotImage
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.io import download_image_by_url
 
 
 class LarkMessageEvent(AstrMessageEvent):
     def __init__(
-        self, message_str, message_obj, platform_meta, session_id, bot: lark.Client
+        self,
+        message_str,
+        message_obj,
+        platform_meta,
+        session_id,
+        bot: lark.Client,
     ):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
 
     @staticmethod
-    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> List:
+    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
         ret = []
         _stage = []
         for comp in message.chain:
@@ -37,7 +52,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     file_path = comp.file.replace("file:///", "")
                 elif comp.file and comp.file.startswith("http"):
                     image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path
+                    file_path = image_file_path if image_file_path else ""
                 elif comp.file and comp.file.startswith("base64://"):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
@@ -47,10 +62,17 @@ class LarkMessageEvent(AstrMessageEvent):
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
-                    file_path = comp.file
+                    file_path = comp.file if comp.file else ""
 
                 if image_file is None:
-                    image_file = open(file_path, "rb")
+                    if not file_path:
+                        logger.error("[Lark] 图片路径为空，无法上传")
+                        continue
+                    try:
+                        image_file = open(file_path, "rb")
+                    except Exception as e:
+                        logger.error(f"[Lark] 无法打开图片文件: {e}")
+                        continue
 
                 request = (
                     CreateImageRequest.builder()
@@ -58,13 +80,24 @@ class LarkMessageEvent(AstrMessageEvent):
                         CreateImageRequestBody.builder()
                         .image_type("message")
                         .image(image_file)
-                        .build()
+                        .build(),
                     )
                     .build()
                 )
+
+                if lark_client.im is None:
+                    logger.error("[Lark] API Client im 模块未初始化，无法上传图片")
+                    continue
+
                 response = await lark_client.im.v1.image.acreate(request)
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
+                    continue
+
+                if response.data is None:
+                    logger.error("[Lark] 上传图片成功但未返回数据(data is None)")
+                    continue
+
                 image_key = response.data.image_key
                 logger.debug(image_key)
                 ret.append(_stage)
@@ -83,7 +116,7 @@ class LarkMessageEvent(AstrMessageEvent):
             "zh_cn": {
                 "title": "",
                 "content": res,
-            }
+            },
         }
 
         request = (
@@ -95,10 +128,14 @@ class LarkMessageEvent(AstrMessageEvent):
                 .msg_type("post")
                 .uuid(str(uuid.uuid4()))
                 .reply_in_thread(False)
-                .build()
+                .build(),
             )
             .build()
         )
+
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法回复消息")
+            return
 
         response = await self.bot.im.v1.message.areply(request)
 
@@ -108,20 +145,25 @@ class LarkMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def react(self, emoji: str):
+        if self.bot.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
+            return
+
         request = (
             CreateMessageReactionRequest.builder()
             .message_id(self.message_obj.message_id)
             .request_body(
                 CreateMessageReactionRequestBody.builder()
                 .reaction_type(Emoji.builder().emoji_type(emoji).build())
-                .build()
+                .build(),
             )
             .build()
         )
+
         response = await self.bot.im.v1.message_reaction.acreate(request)
         if not response.success():
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
-            return None
+            return
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
@@ -131,7 +173,7 @@ class LarkMessageEvent(AstrMessageEvent):
             else:
                 buffer.chain.extend(chain.chain)
         if not buffer:
-            return
+            return None
         buffer.squash_plain()
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

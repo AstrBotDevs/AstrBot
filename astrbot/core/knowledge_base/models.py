@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlmodel import Field, SQLModel, Text, UniqueConstraint, MetaData
+from sqlmodel import Field, MetaData, SQLModel, Text, UniqueConstraint
 
 
 class BaseKBModel(SQLModel, table=False):
@@ -17,7 +17,9 @@ class KnowledgeBase(BaseKBModel, table=True):
     __tablename__ = "knowledge_bases"  # type: ignore
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     kb_id: str = Field(
         max_length=36,
@@ -63,7 +65,9 @@ class KBDocument(BaseKBModel, table=True):
     __tablename__ = "kb_documents"  # type: ignore
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     doc_id: str = Field(
         max_length=36,
@@ -95,7 +99,9 @@ class KBMedia(BaseKBModel, table=True):
     __tablename__ = "kb_media"  # type: ignore
 
     id: int | None = Field(
-        primary_key=True, sa_column_kwargs={"autoincrement": True}, default=None
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
     )
     media_id: str = Field(
         max_length=36,

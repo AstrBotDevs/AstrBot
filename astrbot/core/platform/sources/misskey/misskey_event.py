@@ -1,19 +1,20 @@
 import asyncio
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.platform import PlatformMetadata, AstrBotMessage
 from astrbot.api.message_components import Plain
+from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 
 from .misskey_utils import (
-    serialize_message_chain,
-    resolve_visibility_from_raw_message,
-    is_valid_user_session_id,
-    is_valid_room_session_id,
     add_at_mention_if_needed,
-    extract_user_id_from_session_id,
     extract_room_id_from_session_id,
+    extract_user_id_from_session_id,
+    is_valid_room_session_id,
+    is_valid_user_session_id,
+    resolve_visibility_from_raw_message,
+    serialize_message_chain,
 )
 
 
@@ -43,7 +44,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         """发送消息，使用适配器的完整上传和发送逻辑"""
         try:
             logger.debug(
-                f"[MisskeyEvent] send 方法被调用，消息链包含 {len(message.chain)} 个组件"
+                f"[MisskeyEvent] send 方法被调用，消息链包含 {len(message.chain)} 个组件",
             )
 
             # 使用适配器的 send_by_session 方法，它包含文件上传逻辑
@@ -65,7 +66,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             )
 
             logger.debug(
-                f"[MisskeyEvent] 检查适配器方法: hasattr(self.client, 'send_by_session') = {hasattr(self.client, 'send_by_session')}"
+                f"[MisskeyEvent] 检查适配器方法: hasattr(self.client, 'send_by_session') = {hasattr(self.client, 'send_by_session')}",
             )
 
             # 调用适配器的 send_by_session 方法
@@ -88,25 +89,27 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                     user_info = {
                         "username": user_data.get("username", ""),
                         "nickname": user_data.get(
-                            "name", user_data.get("username", "")
+                            "name",
+                            user_data.get("username", ""),
                         ),
                     }
                     content = add_at_mention_if_needed(content, user_info, has_at)
 
                 # 根据会话类型选择发送方式
                 if hasattr(self.client, "send_message") and is_valid_user_session_id(
-                    self.session_id
+                    self.session_id,
                 ):
                     user_id = extract_user_id_from_session_id(self.session_id)
                     await self.client.send_message(user_id, content)
                 elif hasattr(
-                    self.client, "send_room_message"
+                    self.client,
+                    "send_room_message",
                 ) and is_valid_room_session_id(self.session_id):
                     room_id = extract_room_id_from_session_id(self.session_id)
                     await self.client.send_room_message(room_id, content)
                 elif original_message_id and hasattr(self.client, "create_note"):
                     visibility, visible_user_ids = resolve_visibility_from_raw_message(
-                        raw_message
+                        raw_message,
                     )
                     await self.client.create_note(
                         content,
@@ -124,7 +127,9 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             logger.error(f"[MisskeyEvent] 发送失败: {e}")
 
     async def send_streaming(
-        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
     ):
         if not use_fallback:
             buffer = None
@@ -134,7 +139,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                 else:
                     buffer.chain.extend(chain.chain)
             if not buffer:
-                return
+                return None
             buffer.squash_plain()
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)

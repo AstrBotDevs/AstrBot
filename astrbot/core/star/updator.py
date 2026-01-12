@@ -1,12 +1,13 @@
 import os
-import zipfile
 import shutil
+import zipfile
 
-from ..updator import RepoZipUpdator
-from astrbot.core.utils.io import remove_dir, on_error
-from ..star.star import StarMetadata
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
+from astrbot.core.utils.io import on_error, remove_dir
+
+from ..star.star import StarMetadata
+from ..updator import RepoZipUpdator
 
 
 class PluginUpdator(RepoZipUpdator):
@@ -44,7 +45,7 @@ class PluginUpdator(RepoZipUpdator):
             remove_dir(plugin_path)
         except BaseException as e:
             logger.error(
-                f"删除旧版本插件 {plugin_path} 文件夹失败: {str(e)}，使用覆盖安装。"
+                f"删除旧版本插件 {plugin_path} 文件夹失败: {e!s}，使用覆盖安装。",
             )
 
         self.unzip_file(plugin_path + ".zip", plugin_path)
@@ -64,18 +65,17 @@ class PluginUpdator(RepoZipUpdator):
             if os.path.isdir(os.path.join(target_dir, update_dir, f)):
                 if os.path.exists(os.path.join(target_dir, f)):
                     shutil.rmtree(os.path.join(target_dir, f), onerror=on_error)
-            else:
-                if os.path.exists(os.path.join(target_dir, f)):
-                    os.remove(os.path.join(target_dir, f))
+            elif os.path.exists(os.path.join(target_dir, f)):
+                os.remove(os.path.join(target_dir, f))
             shutil.move(os.path.join(target_dir, update_dir, f), target_dir)
 
         try:
             logger.info(
-                f"删除临时文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}"
+                f"删除临时文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
             )
             shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
             os.remove(zip_path)
         except BaseException:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}"
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
             )

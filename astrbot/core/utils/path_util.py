@@ -19,24 +19,23 @@ def path_Mapping(mappings, srcPath: str) -> str:
             # 切割后大于4个项目，或者只有1个项目，那肯定是错误的，只能是2，3，4个项目
             logger.warning(f"路径映射规则错误: {mapping}")
             continue
-        else:
-            # rule.len == 3 or 4
-            if os.path.exists(rule[0] + ":" + rule[1]):
-                # 前面两个项目合并路径存在，说明是本地Window路径。后面一个或两个项目组成的路径本地大概率无法解析，直接拼接
-                from_ = rule[0] + ":" + rule[1]
-                if len(rule) == 3:
-                    to_ = rule[2]
-                else:
-                    to_ = rule[2] + ":" + rule[3]
+        # rule.len == 3 or 4
+        elif os.path.exists(rule[0] + ":" + rule[1]):
+            # 前面两个项目合并路径存在，说明是本地Window路径。后面一个或两个项目组成的路径本地大概率无法解析，直接拼接
+            from_ = rule[0] + ":" + rule[1]
+            if len(rule) == 3:
+                to_ = rule[2]
             else:
-                # 前面两个项目合并路径不存在，说明第一个项目是本地Linux路径，后面一个或两个项目直接拼接。
-                from_ = rule[0]
-                if len(rule) == 3:
-                    to_ = rule[1] + ":" + rule[2]
-                else:
-                    # 这种情况下存在四个项目，说明规则也是错误的
-                    logger.warning(f"路径映射规则错误: {mapping}")
-                    continue
+                to_ = rule[2] + ":" + rule[3]
+        else:
+            # 前面两个项目合并路径不存在，说明第一个项目是本地Linux路径，后面一个或两个项目直接拼接。
+            from_ = rule[0]
+            if len(rule) == 3:
+                to_ = rule[1] + ":" + rule[2]
+            else:
+                # 这种情况下存在四个项目，说明规则也是错误的
+                logger.warning(f"路径映射规则错误: {mapping}")
+                continue
 
         from_ = from_.removesuffix("/")
         from_ = from_.removesuffix("\\")

@@ -1,23 +1,26 @@
 <template>
-  <div class="d-flex align-center justify-space-between">
-    <span v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
-          style="color: rgb(var(--v-theme-primaryText));">
-      未选择
-    </span>
-    <div v-else class="d-flex flex-wrap gap-1">
-      <v-chip 
-        v-for="name in modelValue" 
-        :key="name" 
-        size="small" 
-        color="primary" 
-        variant="tonal"
-        closable
-        @click:close="removeKnowledgeBase(name)">
-        {{ name }}
-      </v-chip>
+  <div class="d-flex align-center justify-space-between" style="gap: 8px;">
+    <div style="flex: 1; min-width: 0; overflow: hidden;">
+      <span v-if="!modelValue || (Array.isArray(modelValue) && modelValue.length === 0)" 
+            style="color: rgb(var(--v-theme-primaryText));">
+        {{ tm('knowledgeBaseSelector.notSelected') }}
+      </span>
+      <div v-else class="d-flex flex-wrap gap-1">
+        <v-chip 
+          v-for="name in modelValue" 
+          :key="name" 
+          size="small" 
+          color="primary" 
+          variant="tonal"
+          closable
+          @click:close="removeKnowledgeBase(name)"
+          style="max-width: 100%;">
+          <span class="text-truncate" style="max-width: 200px;">{{ name }}</span>
+        </v-chip>
+      </div>
     </div>
-    <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText }}
+    <v-btn size="small" color="primary" variant="tonal" @click="openDialog" style="flex-shrink: 0;">
+      {{ buttonText || tm('knowledgeBaseSelector.buttonText') }}
     </v-btn>
   </div>
 
@@ -25,7 +28,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        选择知识库
+        {{ tm('knowledgeBaseSelector.dialogTitle') }}
       </v-card-title>
       
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
@@ -47,9 +50,9 @@
             </template>
             <v-list-item-title>{{ kb.kb_name }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ kb.description || '无描述' }}
-              <span v-if="kb.doc_count !== undefined"> - {{ kb.doc_count }} 个文档</span>
-              <span v-if="kb.chunk_count !== undefined"> - {{ kb.chunk_count }} 个块</span>
+              {{ kb.description || tm('knowledgeBaseSelector.noDescription') }}
+              <span v-if="kb.doc_count !== undefined"> - {{ tm('knowledgeBaseSelector.documentCount', { count: kb.doc_count }) }}</span>
+              <span v-if="kb.chunk_count !== undefined"> - {{ tm('knowledgeBaseSelector.chunkCount', { count: kb.chunk_count }) }}</span>
             </v-list-item-subtitle>
             
             <template v-slot:append>
@@ -65,9 +68,9 @@
           <!-- 当没有知识库时显示创建提示 -->
           <div v-if="knowledgeBaseList.length === 0" class="text-center py-8">
             <v-icon size="64" color="grey-lighten-1">mdi-database-off</v-icon>
-            <p class="text-grey mt-4 mb-4">暂无知识库</p>
+            <p class="text-grey mt-4 mb-4">{{ tm('knowledgeBaseSelector.noKnowledgeBases') }}</p>
             <v-btn color="primary" variant="tonal" @click="goToKnowledgeBasePage">
-              创建知识库
+              {{ tm('knowledgeBaseSelector.createKnowledgeBase') }}
             </v-btn>
           </div>
         </v-list>
@@ -75,14 +78,14 @@
       
       <v-card-actions class="pa-4">
         <div v-if="selectedKnowledgeBases.length > 0" class="text-caption text-grey">
-          已选择 {{ selectedKnowledgeBases.length }} 个知识库
+          {{ tm('knowledgeBaseSelector.selectedCount', { count: selectedKnowledgeBases.length }) }}
         </div>
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelSelection">取消</v-btn>
+        <v-btn variant="text" @click="cancelSelection">{{ tm('knowledgeBaseSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
           @click="confirmSelection">
-          确认选择
+          {{ tm('knowledgeBaseSelector.confirmSelection') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -93,6 +96,7 @@
 import { ref, watch } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
+import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -101,12 +105,13 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '选择知识库...'
+    default: ''
   }
 })
 
 const emit = defineEmits(['update:modelValue'])
 const router = useRouter()
+const { tm } = useModuleI18n('core.shared')
 
 const dialog = ref(false)
 const knowledgeBaseList = ref([])
@@ -219,5 +224,12 @@ function goToKnowledgeBasePage() {
 
 .gap-1 {
   gap: 4px;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
 }
 </style>

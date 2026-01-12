@@ -1,19 +1,17 @@
 import traceback
 from pathlib import Path
+
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 
-from .retrieval.manager import RetrievalManager, RetrievalResult
-from .retrieval.sparse_retriever import SparseRetriever
-from .retrieval.rank_fusion import RankFusion
-from .kb_db_sqlite import KBSQLiteDatabase
-
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
+from .kb_db_sqlite import KBSQLiteDatabase
 from .kb_helper import KBHelper
-
-from .models import KnowledgeBase
-
+from .models import KBDocument, KnowledgeBase
+from .retrieval.manager import RetrievalManager, RetrievalResult
+from .retrieval.rank_fusion import RankFusion
+from .retrieval.sparse_retriever import SparseRetriever
 
 FILES_PATH = "data/knowledge_base"
 DB_PATH = Path(FILES_PATH) / "kb.db"
@@ -94,6 +92,8 @@ class KnowledgeBaseManager:
         top_m_final: int | None = None,
     ) -> KBHelper:
         """创建新的知识库实例"""
+        if embedding_provider_id is None:
+            raise ValueError("创建知识库时必须提供embedding_provider_id")
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -106,21 +106,26 @@ class KnowledgeBaseManager:
             top_k_sparse=top_k_sparse if top_k_sparse is not None else 50,
             top_m_final=top_m_final if top_m_final is not None else 5,
         )
-        async with self.kb_db.get_db() as session:
-            session.add(kb)
-            await session.commit()
-            await session.refresh(kb)
+        try:
+            async with self.kb_db.get_db() as session:
+                session.add(kb)
+                await session.flush()
 
-            kb_helper = KBHelper(
-                kb_db=self.kb_db,
-                kb=kb,
-                provider_manager=self.provider_manager,
-                kb_root_dir=FILES_PATH,
-                chunker=CHUNKER,
-            )
-            await kb_helper.initialize()
-        self.kb_insts[kb.kb_id] = kb_helper
-        return kb_helper
+                kb_helper = KBHelper(
+                    kb_db=self.kb_db,
+                    kb=kb,
+                    provider_manager=self.provider_manager,
+                    kb_root_dir=FILES_PATH,
+                    chunker=CHUNKER,
+                )
+                await kb_helper.initialize()
+                await session.commit()
+                self.kb_insts[kb.kb_id] = kb_helper
+                return kb_helper
+        except Exception as e:
+            if "kb_name" in str(e):
+                raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+            raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
         """获取知识库实例"""
@@ -257,6 +262,7 @@ class KnowledgeBaseManager:
 
         Returns:
             str: 格式化的上下文文本
+
         """
         lines = ["以下是相关的知识库内容,请参考这些信息回答用户的问题:\n"]
 
@@ -285,3 +291,47 @@ class KnowledgeBaseManager:
                 await self.kb_db.close()
             except Exception as e:
                 logger.error(f"关闭知识库元数据数据库失败: {e}")
+
+    async def upload_from_url(
+        self,
+        kb_id: str,
+        url: str,
+        chunk_size: int = 512,
+        chunk_overlap: int = 50,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> KBDocument:
+        """从 URL 上传文档到指定的知识库
+
+        Args:
+            kb_id: 知识库 ID
+            url: 要提取内容的网页 URL
+            chunk_size: 文本块大小
+            chunk_overlap: 文本块重叠大小
+            batch_size: 批处理大小
+            tasks_limit: 并发任务限制
+            max_retries: 最大重试次数
+            progress_callback: 进度回调函数
+
+        Returns:
+            KBDocument: 上传的文档对象
+
+        Raises:
+            ValueError: 如果知识库不存在或 URL 为空
+            IOError: 如果网络请求失败
+        """
+        kb_helper = await self.get_kb(kb_id)
+        if not kb_helper:
+            raise ValueError(f"Knowledge base with id {kb_id} not found.")
+
+        return await kb_helper.upload_from_url(
+            url=url,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=progress_callback,
+        )

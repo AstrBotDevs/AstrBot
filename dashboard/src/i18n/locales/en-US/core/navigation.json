@@ -2,22 +2,32 @@
   "dashboard": "Dashboard",
   "platforms": "Platforms",
   "providers": "Providers",
+  "commands": "Commands",
   "persona": "Persona",
   "toolUse": "MCP Tools",
   "config": "Config",
-  "extension": "Extensions",
   "chat": "Chat",
+  "extension": "Extensions",
   "conversation": "Conversations",
-  "sessionManagement": "Session Management",
+  "sessionManagement": "Custom Rules",
   "console": "Console",
   "alkaid": "Alkaid Lab",
   "knowledgeBase": "Knowledge Base",
   "about": "About",
   "settings": "Settings",
+  "changelog": "Changelog",
   "documentation": "Documentation",
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
     "more": "More Features"
+  },
+  "changelogDialog": {
+    "title": "Changelog",
+    "loading": "Loading...",
+    "error": "Failed to load",
+    "notFound": "Changelog for this version not found",
+    "selectVersion": "Select Version",
+    "current": "Current"
   }
 }

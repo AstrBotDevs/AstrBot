@@ -1,0 +1,93 @@
+{
+  "title": "Command Management",
+  "summary": {
+    "total": "Displayed commands",
+    "disabled": "Disabled",
+    "conflicts": "Conflicts"
+  },
+  "conflictAlert": {
+    "title": "Command Conflicts Detected",
+    "description": "There are {count} conflicting commands. Conflicting commands will trigger multiple plugins simultaneously, which may cause unexpected behavior.",
+    "hint": "Click the \"Rename\" button to rename conflicting commands and resolve conflicts."
+  },
+  "table": {
+    "headers": {
+      "command": "Command",
+      "type": "Type",
+      "plugin": "Plugin",
+      "description": "Description",
+      "permission": "Permission",
+      "status": "Status",
+      "actions": "Actions"
+    }
+  },
+  "type": {
+    "command": "Command",
+    "group": "Group",
+    "subCommand": "Sub-command"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "conflict": "Conflict"
+  },
+  "permission": {
+    "everyone": "Everyone",
+    "admin": "Admin"
+  },
+  "tooltips": {
+    "enable": "Enable command",
+    "disable": "Disable command",
+    "rename": "Rename command",
+    "viewDetails": "View details"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "Rename Command",
+      "newName": "New command name",
+      "aliases": "Manage aliases",
+      "addAlias": "Add alias",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    },
+    "details": {
+      "title": "Command Details",
+      "type": "Command Type",
+      "handler": "Handler",
+      "module": "Module Path",
+      "originalCommand": "Original Command",
+      "effectiveCommand": "Effective Command",
+      "parentGroup": "Parent Group",
+      "subCommands": "Sub-commands",
+      "aliases": "Aliases",
+      "permission": "Permission",
+      "conflictStatus": "Conflict Status"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "Command status updated",
+    "toggleFailed": "Failed to update command status",
+    "renameSuccess": "Command renamed",
+    "renameFailed": "Rename failed",
+    "loadFailed": "Failed to load commands"
+  },
+  "search": {
+    "placeholder": "Search commands..."
+  },
+  "empty": {
+    "noCommands": "No Commands",
+    "noCommandsDesc": "No commands found"
+  },
+  "filters": {
+    "all": "All",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "conflict": "Conflict",
+    "byPlugin": "Filter by plugin",
+    "byType": "Filter by type",
+    "byPermission": "Filter by permission",
+    "byStatus": "Filter by status",
+    "showSystemPlugins": "Show system plugins commands",
+    "systemPluginConflictHint": "System plugin conflicts detected. Resolve conflicts to hide."
+  }
+}

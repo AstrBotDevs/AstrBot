@@ -1,9 +1,11 @@
-from ..stage import Stage, register_stage
-from ..context import PipelineContext
-from typing import AsyncGenerator, Union
+from collections.abc import AsyncGenerator
+
+from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core import logger
+
+from ..context import PipelineContext
+from ..stage import Stage, register_stage
 
 
 @register_stage
@@ -27,8 +29,9 @@ class WhitelistCheckStage(Stage):
         self.wl_log = ctx.astrbot_config["platform_settings"]["id_whitelist_log"]
 
     async def process(
-        self, event: AstrMessageEvent
-    ) -> Union[None, AsyncGenerator[None, None]]:
+        self,
+        event: AstrMessageEvent,
+    ) -> None | AsyncGenerator[None, None]:
         if not self.enable_whitelist_check:
             # 白名单检查未启用
             return
@@ -60,6 +63,6 @@ class WhitelistCheckStage(Stage):
         ):
             if self.wl_log:
                 logger.info(
-                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。"
+                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。",
                 )
             event.stop_event()

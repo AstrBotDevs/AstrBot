@@ -394,6 +394,9 @@ export default {
       // 配置抽屉
       showConfigDrawer: false,
       configDrawerTargetId: null,
+
+      // 保存更新前的平台 ID，防止用户修改 ID 后丢失原始定位
+      originalUpdatingPlatformId: null,
     };
   },
   setup() {
@@ -415,6 +418,10 @@ export default {
     canSave() {
       // 基本条件：必须选择平台类型
       if (!this.selectedPlatformType) {
+        return false;
+      }
+
+      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
         return false;
       }
 
@@ -481,6 +488,7 @@ export default {
     updatingPlatformConfig: {
       handler(newConfig) {
         if (this.updatingMode && newConfig && newConfig.id) {
+          this.originalUpdatingPlatformId = newConfig.id;
           this.getPlatformConfigs(newConfig.id);
         }
       },
@@ -533,6 +541,8 @@ export default {
 
       this.showConfigDrawer = false;
       this.configDrawerTargetId = null;
+
+      this.originalUpdatingPlatformId = null;
     },
     closeDialog() {
       this.resetForm();
@@ -624,20 +634,30 @@ export default {
       }
     },
     async updatePlatform() {
-      let id = this.updatingPlatformConfig.id;
+      const id = this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
       if (!id) {
         this.loading = false;
         this.showError('更新失败，缺少平台 ID。');
         return;
       }
 
+      if (!this.isPlatformIdValid(id)) {
+        this.loading = false;
+        this.showError(this.tm('dialog.invalidPlatformId'));
+        return;
+      }
+
       try {
         // 更新平台配置
-        await axios.post('/api/config/platform/update', {
+        let resp = await axios.post('/api/config/platform/update', {
           id: id,
           config: this.updatingPlatformConfig
-        });
+        })
 
+        if (resp.data.status === 'error') {
+          throw new Error(resp.data.message || '平台更新失败');
+        }
+        
         // 同时更新路由表
         await this.saveRoutesInternal();
 
@@ -652,6 +672,12 @@ export default {
       }
     },
     async savePlatform() {
+      if (!this.isPlatformIdValid(this.selectedPlatformConfig?.id)) {
+        this.loading = false;
+        this.showError(this.tm('dialog.invalidPlatformId'));
+        return;
+      }
+
       // 检查 ID 是否已存在
       const existingPlatform = this.config_data.platform?.find(p => p.id === this.selectedPlatformConfig.id);
       if (existingPlatform || this.selectedPlatformConfig.id === 'webchat') {
@@ -798,6 +824,13 @@ export default {
       this.$emit('show-toast', { message: message, type: 'error' });
     },
 
+    isPlatformIdValid(id) {
+      if (!id) {
+        return false;
+      }
+      return !/[!:]/.test(id);
+    },
+
     // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
     async getPlatformConfigs(platformId) {
       if (!platformId) {
@@ -885,7 +918,10 @@ export default {
 
     // 内部保存路由表方法（不显示成功提示）
     async saveRoutesInternal() {
-      if (!this.updatingPlatformConfig || !this.updatingPlatformConfig.id) {
+      const originalPlatformId = this.originalUpdatingPlatformId || this.updatingPlatformConfig?.id;
+      const newPlatformId = this.updatingPlatformConfig?.id || originalPlatformId;
+
+      if (!originalPlatformId && !newPlatformId) {
         throw new Error('无法获取平台 ID');
       }
 
@@ -895,9 +931,11 @@ export default {
         const fullRoutingTable = routesRes.data.data.routing;
 
         // 删除该平台的所有旧路由
-        const platformId = this.updatingPlatformConfig.id;
         for (const umop in fullRoutingTable) {
-          if (this.isUmopMatchPlatform(umop, platformId)) {
+          if (
+            (originalPlatformId && this.isUmopMatchPlatform(umop, originalPlatformId)) ||
+            (newPlatformId && this.isUmopMatchPlatform(umop, newPlatformId))
+          ) {
             delete fullRoutingTable[umop];
           }
         }
@@ -906,7 +944,8 @@ export default {
         for (const route of this.platformRoutes) {
           const messageType = route.messageType === '*' ? '*' : route.messageType;
           const sessionId = route.sessionId === '*' ? '*' : route.sessionId;
-          const newUmop = `${platformId}:${messageType}:${sessionId}`;
+          const platformIdForRoute = newPlatformId || originalPlatformId;
+          const newUmop = `${platformIdForRoute}:${messageType}:${sessionId}`;
 
           if (route.configId) {
             fullRoutingTable[newUmop] = route.configId;

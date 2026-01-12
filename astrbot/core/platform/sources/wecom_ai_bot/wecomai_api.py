@@ -1,18 +1,19 @@
-"""
-企业微信智能机器人 API 客户端
+"""企业微信智能机器人 API 客户端
 处理消息加密解密、API 调用等
 """
 
-import json
 import base64
 import hashlib
-from typing import Dict, Any, Optional, Tuple, Union
-from Crypto.Cipher import AES
-import aiohttp
+import json
+from typing import Any
 
-from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
-from .wecomai_utils import WecomAIBotConstants
+import aiohttp
+from Crypto.Cipher import AES
+
 from astrbot import logger
+
+from .wecomai_utils import WecomAIBotConstants
+from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
 
 
 class WecomAIBotAPIClient:
@@ -24,14 +25,19 @@ class WecomAIBotAPIClient:
         Args:
             token: 企业微信机器人 Token
             encoding_aes_key: 消息加密密钥
+
         """
         self.token = token
         self.encoding_aes_key = encoding_aes_key
         self.wxcpt = WXBizJsonMsgCrypt(token, encoding_aes_key, "")  # receiveid 为空串
 
     async def decrypt_message(
-        self, encrypted_data: bytes, msg_signature: str, timestamp: str, nonce: str
-    ) -> Tuple[int, Optional[Dict[str, Any]]]:
+        self,
+        encrypted_data: bytes,
+        msg_signature: str,
+        timestamp: str,
+        nonce: str,
+    ) -> tuple[int, dict[str, Any] | None]:
         """解密企业微信消息
 
         Args:
@@ -42,10 +48,14 @@ class WecomAIBotAPIClient:
 
         Returns:
             (错误码, 解密后的消息数据字典)
+
         """
         try:
             ret, decrypted_msg = self.wxcpt.DecryptMsg(
-                encrypted_data, msg_signature, timestamp, nonce
+                encrypted_data,
+                msg_signature,
+                timestamp,
+                nonce,
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
@@ -70,8 +80,11 @@ class WecomAIBotAPIClient:
             return WecomAIBotConstants.DECRYPT_ERROR, None
 
     async def encrypt_message(
-        self, plain_message: str, nonce: str, timestamp: str
-    ) -> Optional[str]:
+        self,
+        plain_message: str,
+        nonce: str,
+        timestamp: str,
+    ) -> str | None:
         """加密消息
 
         Args:
@@ -81,6 +94,7 @@ class WecomAIBotAPIClient:
 
         Returns:
             加密后的消息，失败时返回 None
+
         """
         try:
             ret, encrypted_msg = self.wxcpt.EncryptMsg(plain_message, nonce, timestamp)
@@ -97,7 +111,11 @@ class WecomAIBotAPIClient:
             return None
 
     def verify_url(
-        self, msg_signature: str, timestamp: str, nonce: str, echostr: str
+        self,
+        msg_signature: str,
+        timestamp: str,
+        nonce: str,
+        echostr: str,
     ) -> str:
         """验证回调 URL
 
@@ -109,10 +127,14 @@ class WecomAIBotAPIClient:
 
         Returns:
             验证结果字符串
+
         """
         try:
             ret, echo_result = self.wxcpt.VerifyURL(
-                msg_signature, timestamp, nonce, echostr
+                msg_signature,
+                timestamp,
+                nonce,
+                echostr,
             )
 
             if ret != WecomAIBotConstants.SUCCESS:
@@ -127,8 +149,10 @@ class WecomAIBotAPIClient:
             return "verify fail"
 
     async def process_encrypted_image(
-        self, image_url: str, aes_key_base64: Optional[str] = None
-    ) -> Tuple[bool, Union[bytes, str]]:
+        self,
+        image_url: str,
+        aes_key_base64: str | None = None,
+    ) -> tuple[bool, bytes | str]:
         """下载并解密加密图片
 
         Args:
@@ -137,6 +161,7 @@ class WecomAIBotAPIClient:
 
         Returns:
             (是否成功, 图片数据或错误信息)
+
         """
         try:
             # 下载图片
@@ -161,7 +186,7 @@ class WecomAIBotAPIClient:
 
             # Base64 解码密钥
             aes_key = base64.b64decode(
-                aes_key_base64 + "=" * (-len(aes_key_base64) % 4)
+                aes_key_base64 + "=" * (-len(aes_key_base64) % 4),
             )
             if len(aes_key) != 32:
                 raise ValueError("无效的 AES 密钥长度: 应为 32 字节")
@@ -183,17 +208,17 @@ class WecomAIBotAPIClient:
             return True, decrypted_data
 
         except aiohttp.ClientError as e:
-            error_msg = f"图片下载失败: {str(e)}"
+            error_msg = f"图片下载失败: {e!s}"
             logger.error(error_msg)
             return False, error_msg
 
         except ValueError as e:
-            error_msg = f"参数错误: {str(e)}"
+            error_msg = f"参数错误: {e!s}"
             logger.error(error_msg)
             return False, error_msg
 
         except Exception as e:
-            error_msg = f"图片处理异常: {str(e)}"
+            error_msg = f"图片处理异常: {e!s}"
             logger.error(error_msg)
             return False, error_msg
 
@@ -212,6 +237,7 @@ class WecomAIBotStreamMessageBuilder:
 
         Returns:
             JSON 格式的流消息字符串
+
         """
         plain = {
             "msgtype": WecomAIBotConstants.MSG_TYPE_STREAM,
@@ -221,7 +247,9 @@ class WecomAIBotStreamMessageBuilder:
 
     @staticmethod
     def make_image_stream(
-        stream_id: str, image_data: bytes, finish: bool = False
+        stream_id: str,
+        image_data: bytes,
+        finish: bool = False,
     ) -> str:
         """构建图片流消息
 
@@ -232,6 +260,7 @@ class WecomAIBotStreamMessageBuilder:
 
         Returns:
             JSON 格式的流消息字符串
+
         """
         image_md5 = hashlib.md5(image_data).hexdigest()
         image_base64 = base64.b64encode(image_data).decode("utf-8")
@@ -245,7 +274,7 @@ class WecomAIBotStreamMessageBuilder:
                     {
                         "msgtype": WecomAIBotConstants.MSG_TYPE_IMAGE,
                         "image": {"base64": image_base64, "md5": image_md5},
-                    }
+                    },
                 ],
             },
         }
@@ -253,7 +282,10 @@ class WecomAIBotStreamMessageBuilder:
 
     @staticmethod
     def make_mixed_stream(
-        stream_id: str, content: str, msg_items: list, finish: bool = False
+        stream_id: str,
+        content: str,
+        msg_items: list,
+        finish: bool = False,
     ) -> str:
         """构建混合类型流消息
 
@@ -265,6 +297,7 @@ class WecomAIBotStreamMessageBuilder:
 
         Returns:
             JSON 格式的流消息字符串
+
         """
         plain = {
             "msgtype": WecomAIBotConstants.MSG_TYPE_STREAM,
@@ -283,6 +316,7 @@ class WecomAIBotStreamMessageBuilder:
 
         Returns:
             JSON 格式的文本消息字符串
+
         """
         plain = {"msgtype": "text", "text": {"content": content}}
         return json.dumps(plain, ensure_ascii=False)
@@ -292,7 +326,7 @@ class WecomAIBotMessageParser:
     """企业微信智能机器人消息解析器"""
 
     @staticmethod
-    def parse_text_message(data: Dict[str, Any]) -> Optional[str]:
+    def parse_text_message(data: dict[str, Any]) -> str | None:
         """解析文本消息
 
         Args:
@@ -300,6 +334,7 @@ class WecomAIBotMessageParser:
 
         Returns:
             文本内容，解析失败返回 None
+
         """
         try:
             return data.get("text", {}).get("content")
@@ -308,7 +343,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_image_message(data: Dict[str, Any]) -> Optional[str]:
+    def parse_image_message(data: dict[str, Any]) -> str | None:
         """解析图片消息
 
         Args:
@@ -316,6 +351,7 @@ class WecomAIBotMessageParser:
 
         Returns:
             图片 URL，解析失败返回 None
+
         """
         try:
             return data.get("image", {}).get("url")
@@ -324,7 +360,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_stream_message(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_stream_message(data: dict[str, Any]) -> dict[str, Any] | None:
         """解析流消息
 
         Args:
@@ -332,6 +368,7 @@ class WecomAIBotMessageParser:
 
         Returns:
             流消息数据，解析失败返回 None
+
         """
         try:
             stream_data = data.get("stream", {})
@@ -346,7 +383,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_mixed_message(data: Dict[str, Any]) -> Optional[list]:
+    def parse_mixed_message(data: dict[str, Any]) -> list | None:
         """解析混合消息
 
         Args:
@@ -354,6 +391,7 @@ class WecomAIBotMessageParser:
 
         Returns:
             消息项列表，解析失败返回 None
+
         """
         try:
             return data.get("mixed", {}).get("msg_item", [])
@@ -362,7 +400,7 @@ class WecomAIBotMessageParser:
             return None
 
     @staticmethod
-    def parse_event_message(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_event_message(data: dict[str, Any]) -> dict[str, Any] | None:
         """解析事件消息
 
         Args:
@@ -370,6 +408,7 @@ class WecomAIBotMessageParser:
 
         Returns:
             事件数据，解析失败返回 None
+
         """
         try:
             return data.get("event", {})

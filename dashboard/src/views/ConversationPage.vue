@@ -42,6 +42,17 @@
                     </v-btn>
                     <v-btn 
                         v-if="selectedItems.length > 0" 
+                        color="success" 
+                        prepend-icon="mdi-download"
+                        variant="tonal" 
+                        @click="exportConversations" 
+                        :disabled="loading"
+                        size="small"
+                        class="mr-2">
+                        {{ tm('batch.exportSelected', { count: selectedItems.length }) }}
+                    </v-btn>
+                    <v-btn 
+                        v-if="selectedItems.length > 0" 
                         color="error" 
                         prepend-icon="mdi-delete"
                         variant="tonal" 
@@ -187,7 +198,7 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -195,7 +206,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="false" />
+                        <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
                     </div>
                 </v-card-text>
 
@@ -318,18 +329,10 @@
 import axios from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import MarkdownIt from 'markdown-it';
 import { useCommonStore } from '@/stores/common';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
-
-// 配置markdown-it，默认安全设置
-const md = new MarkdownIt({
-    html: false,        // 禁用HTML标签（关键！）
-    breaks: true,       // 换行转<br>
-    linkify: true,      // 自动转链接
-    typographer: false  // 禁用智能引号（避免干扰）
-});
 
 export default {
     name: 'ConversationPage',
@@ -341,11 +344,13 @@ export default {
     setup() {
         const { t, locale } = useI18n();
         const { tm } = useModuleI18n('features/conversation');
+        const customizerStore = useCustomizerStore();
 
         return {
             t,
             tm,
-            locale
+            locale,
+            customizerStore
         };
     },
 
@@ -485,24 +490,32 @@ export default {
             };
         },
 
+        // 检测是否为暗色模式
+        isDark() {
+            console.log('isDark', this.customizerStore.uiTheme);
+            return this.customizerStore.uiTheme === 'PurpleThemeDark';
+        },
+
         // 将对话历史转换为 MessageList 组件期望的格式
         formattedMessages() {
             return this.conversationHistory.map(msg => {
-                console.log('处理消息:', msg.role, msg.image_url, msg.audio_url);
+                console.log('处理消息:', msg.role, msg.content);
+                
+                // 将消息内容转换为 MessagePart[] 格式
+                const messageParts = this.convertContentToMessageParts(msg.content);
+                
                 if (msg.role === 'user') {
                     return {
                         content: {
                             type: 'user',
-                            message: this.extractTextFromContent(msg.content),
-                            image_url: this.extractImagesFromContent(msg.content),
+                            message: messageParts
                         }
                     };
                 } else {
                     return {
                         content: {
                             type: 'bot',
-                            message: this.extractTextFromContent(msg.content),
-                            embedded_images: this.extractImagesFromContent(msg.content),
+                            message: messageParts
                         }
                     };
                 }
@@ -901,6 +914,53 @@ export default {
             }
         },
 
+        // 导出选中的对话
+        async exportConversations() {
+            if (this.selectedItems.length === 0) {
+                this.showErrorMessage(this.tm('messages.noItemSelectedForExport'));
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // 准备导出的数据
+                const conversations = this.selectedItems.map(item => ({
+                    user_id: item.user_id,
+                    cid: item.cid
+                }));
+
+                const response = await axios.post('/api/conversation/export', {
+                    conversations: conversations
+                }, {
+                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
+                });
+
+                // 创建一个下载链接
+                const url = window.URL.createObjectURL(response.data);
+                const link = document.createElement('a');
+                link.href = url;
+                
+                // 生成文件名（使用时间戳）
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const filename = `conversations_export_${timestamp}.jsonl`;
+                
+                link.setAttribute('download', filename);
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                
+                this.showSuccessMessage(this.tm('messages.exportSuccess'));
+            } catch (error) {
+                console.error(this.tm('messages.exportError'), error);
+                this.showErrorMessage(error.response?.data?.message || error.message || this.tm('messages.exportError'));
+            } finally {
+                this.loading = false;
+            }
+        },
+
         // 格式化时间戳
         formatTimestamp(timestamp) {
             if (!timestamp) return this.tm('status.unknown');
@@ -932,7 +992,61 @@ export default {
             this.showMessage = true;
         },
 
-        // 从内容中提取文本
+        // 将消息内容转换为 MessagePart[] 格式
+        convertContentToMessageParts(content) {
+            const parts = [];
+            
+            if (typeof content === 'string') {
+                // 纯文本内容
+                if (content.trim()) {
+                    parts.push({
+                        type: 'plain',
+                        text: content
+                    });
+                }
+            } else if (Array.isArray(content)) {
+                // 数组格式（OpenAI 格式）
+                content.forEach(item => {
+                    if (item.type === 'text' && item.text) {
+                        parts.push({
+                            type: 'plain',
+                            text: item.text
+                        });
+                    } else if (item.type === 'image_url' && item.image_url?.url) {
+                        parts.push({
+                            type: 'image',
+                            embedded_url: item.image_url.url
+                        });
+                    }
+                });
+            } else if (typeof content === 'object' && content !== null) {
+                // 对象格式，尝试提取文本和图片
+                const textParts = [];
+                for (const [key, value] of Object.entries(content)) {
+                    if (typeof value === 'string' && value.trim()) {
+                        textParts.push(value);
+                    }
+                }
+                if (textParts.length > 0) {
+                    parts.push({
+                        type: 'plain',
+                        text: textParts.join('\n')
+                    });
+                }
+            }
+            
+            // 如果没有提取到任何内容，添加一个空文本
+            if (parts.length === 0) {
+                parts.push({
+                    type: 'plain',
+                    text: ''
+                });
+            }
+            
+            return parts;
+        },
+
+        // 从内容中提取文本（保留用于其他用途）
         extractTextFromContent(content) {
             if (typeof content === 'string') {
                 return content;
@@ -946,7 +1060,7 @@ export default {
             return '';
         },
 
-        // 从内容中提取图片URL
+        // 从内容中提取图片URL（保留用于其他用途）
         extractImagesFromContent(content) {
             if (Array.isArray(content)) {
                 return content.filter(item => item.type === 'image_url')
@@ -985,6 +1099,11 @@ export default {
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;
+}
+
+/* 暗色模式下的聊天消息容器 */
+.v-theme--dark .conversation-messages-container {
+    background-color: #1e1e1e;
 }
 
 /* 对话详情卡片 */

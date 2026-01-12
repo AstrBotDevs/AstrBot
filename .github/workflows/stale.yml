@@ -1,27 +1,64 @@
-# This workflow warns and then closes issues and PRs that have had no activity for a specified amount of time.
+# 本工作流用于标记并关闭长期不活跃的 Issue。
+# 目前仅针对带 `bug` 标签的 Issue 生效，不会处理 PR。
 #
-# You can adjust the behavior by modifying this file.
-# For more information, see:
-# https://github.com/actions/stale
-name: Mark stale issues and pull requests
+# 文档: https://github.com/actions/stale
+name: Mark stale bug issues
 
 on:
   schedule:
-  - cron: '21 23 * * *'
+    # 每天 UTC 08:30 执行 (北京时间 16:30)
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: '仅预览, 不实际执行 (Dry run mode)'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   stale:
-
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      pull-requests: write
 
     steps:
-    - uses: actions/stale@v10
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        stale-issue-message: 'Stale issue message'
-        stale-pr-message: 'Stale pull request message'
-        stale-issue-label: 'no-issue-activity'
-        stale-pr-label: 'no-pr-activity'
+      - uses: actions/stale@v10
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          operations-per-run: 200
+
+          # 只处理带 bug 标签的 Issue
+          any-of-labels: 'bug'
+
+          # 不处理 PR
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+
+          # 不活跃判定与关闭策略: 先标记 stale, 再延迟关闭
+          days-before-issue-stale: 60
+          days-before-issue-close: 30
+
+          stale-issue-label: 'stale'
+          stale-issue-message: |
+            This issue has been automatically marked as **stale** because it has not had any activity.
+            It will be closed in a certain period of time if no further activity occurs.
+            If this issue is still relevant, please leave a comment.
+
+            ---
+
+            该 Issue 已较长时间无活动, 已被标记为 `stale`。
+            如无后续活动, 将在一段时间后自动关闭。
+            如仍需跟进, 请回复评论。
+          close-issue-message: |
+            This issue has been automatically closed due to inactivity.
+            If the problem still exists, feel free to reopen or create a new issue with updated information.
+
+            ---
+
+            该 Issue 因长期无活动已自动关闭。
+            如问题仍存在, 欢迎补充复现信息并重新打开或新建 Issue。
+
+          remove-stale-when-updated: true
+
+          debug-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}

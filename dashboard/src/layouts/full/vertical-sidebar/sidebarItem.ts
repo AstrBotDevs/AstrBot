@@ -34,11 +34,6 @@ const sidebarItem: menu[] = [
     to: '/config',
   },
   {
-    title: 'core.navigation.toolUse',
-    icon: 'mdi-function-variant',
-    to: '/tool-use'
-  },
-  {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
     to: '/extension'
@@ -47,11 +42,6 @@ const sidebarItem: menu[] = [
     title: 'core.navigation.knowledgeBase',
     icon: 'mdi-book-open-variant',
     to: '/knowledge-base',
-  },
-  {
-    title: 'core.navigation.chat',
-    icon: 'mdi-chat',
-    to: '/chat'
   },
   {
     title: 'core.navigation.groups.more',
@@ -69,7 +59,7 @@ const sidebarItem: menu[] = [
       },
       {
         title: 'core.navigation.sessionManagement',
-        icon: 'mdi-account-group',
+        icon: 'mdi-pencil-ruler',
         to: '/session-management'
       },
       {

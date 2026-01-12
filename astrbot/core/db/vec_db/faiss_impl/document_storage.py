@@ -1,12 +1,13 @@
-import os
 import json
-from datetime import datetime
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
-from sqlalchemy import Text, Column
+from sqlalchemy import Column, Text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import Field, SQLModel, select, col, func, text, MetaData
+from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
+
 from astrbot.core import logger
 
 
@@ -20,7 +21,9 @@ class Document(BaseDocModel, table=True):
     __tablename__ = "documents"  # type: ignore
 
     id: int | None = Field(
-        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
     )
     doc_id: str = Field(nullable=False)
     text: str = Field(nullable=False)
@@ -36,7 +39,8 @@ class DocumentStorage:
         self.engine: AsyncEngine | None = None
         self.async_session_maker: sessionmaker | None = None
         self.sqlite_init_path = os.path.join(
-            os.path.dirname(__file__), "sqlite_init.sql"
+            os.path.dirname(__file__),
+            "sqlite_init.sql",
         )
 
     async def initialize(self):
@@ -50,26 +54,26 @@ class DocumentStorage:
                 await conn.execute(
                     text(
                         "ALTER TABLE documents ADD COLUMN kb_doc_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) STORED"
-                    )
+                        "GENERATED ALWAYS AS (json_extract(metadata, '$.kb_doc_id')) STORED",
+                    ),
                 )
                 await conn.execute(
                     text(
                         "ALTER TABLE documents ADD COLUMN user_id TEXT "
-                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED"
-                    )
+                        "GENERATED ALWAYS AS (json_extract(metadata, '$.user_id')) STORED",
+                    ),
                 )
 
                 # Create indexes
                 await conn.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_doc_id ON documents(kb_doc_id)"
-                    )
+                        "CREATE INDEX IF NOT EXISTS idx_documents_kb_doc_id ON documents(kb_doc_id)",
+                    ),
                 )
                 await conn.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)"
-                    )
+                        "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
+                    ),
                 )
             except BaseException:
                 pass
@@ -113,10 +117,11 @@ class DocumentStorage:
 
         Returns:
             list: The list of documents that match the filters.
+
         """
         if self.engine is None:
             logger.warning(
-                "Database connection is not initialized, returning empty result"
+                "Database connection is not initialized, returning empty result",
             )
             return []
 
@@ -125,7 +130,7 @@ class DocumentStorage:
 
             for key, val in metadata_filters.items():
                 query = query.where(
-                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}")
+                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
                 ).params(**{f"filter_{key}": val})
 
             if ids is not None and len(ids) > 0:
@@ -153,24 +158,27 @@ class DocumentStorage:
 
         Returns:
             int: The integer ID of the inserted document.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
-        async with self.get_session() as session:
-            async with session.begin():
-                document = Document(
-                    doc_id=doc_id,
-                    text=text,
-                    metadata_=json.dumps(metadata),
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                )
-                session.add(document)
-                await session.flush()  # Flush to get the ID
-                return document.id  # type: ignore
+        async with self.get_session() as session, session.begin():
+            document = Document(
+                doc_id=doc_id,
+                text=text,
+                metadata_=json.dumps(metadata),
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            session.add(document)
+            await session.flush()  # Flush to get the ID
+            return document.id  # type: ignore
 
     async def insert_documents_batch(
-        self, doc_ids: list[str], texts: list[str], metadatas: list[dict]
+        self,
+        doc_ids: list[str],
+        texts: list[str],
+        metadatas: list[dict],
     ) -> list[int]:
         """Batch insert documents and return their integer IDs.
 
@@ -181,44 +189,44 @@ class DocumentStorage:
 
         Returns:
             list[int]: List of integer IDs of the inserted documents.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
-        async with self.get_session() as session:
-            async with session.begin():
-                import json
+        async with self.get_session() as session, session.begin():
+            import json
 
-                documents = []
-                for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
-                    document = Document(
-                        doc_id=doc_id,
-                        text=text,
-                        metadata_=json.dumps(metadata),
-                        created_at=datetime.now(),
-                        updated_at=datetime.now(),
-                    )
-                    documents.append(document)
-                    session.add(document)
+            documents = []
+            for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
+                document = Document(
+                    doc_id=doc_id,
+                    text=text,
+                    metadata_=json.dumps(metadata),
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+                documents.append(document)
+                session.add(document)
 
-                await session.flush()  # Flush to get all IDs
-                return [doc.id for doc in documents]  # type: ignore
+            await session.flush()  # Flush to get all IDs
+            return [doc.id for doc in documents]  # type: ignore
 
     async def delete_document_by_doc_id(self, doc_id: str):
         """Delete a document by its doc_id.
 
         Args:
             doc_id (str): The doc_id of the document to delete.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
-        async with self.get_session() as session:
-            async with session.begin():
-                query = select(Document).where(col(Document.doc_id) == doc_id)
-                result = await session.execute(query)
-                document = result.scalar_one_or_none()
+        async with self.get_session() as session, session.begin():
+            query = select(Document).where(col(Document.doc_id) == doc_id)
+            result = await session.execute(query)
+            document = result.scalar_one_or_none()
 
-                if document:
-                    await session.delete(document)
+            if document:
+                await session.delete(document)
 
     async def get_document_by_doc_id(self, doc_id: str):
         """Retrieve a document by its doc_id.
@@ -228,6 +236,7 @@ class DocumentStorage:
 
         Returns:
             dict: The document data or None if not found.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
@@ -246,46 +255,46 @@ class DocumentStorage:
         Args:
             doc_id (str): The doc_id.
             new_text (str): The new text to update the document with.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
-        async with self.get_session() as session:
-            async with session.begin():
-                query = select(Document).where(col(Document.doc_id) == doc_id)
-                result = await session.execute(query)
-                document = result.scalar_one_or_none()
+        async with self.get_session() as session, session.begin():
+            query = select(Document).where(col(Document.doc_id) == doc_id)
+            result = await session.execute(query)
+            document = result.scalar_one_or_none()
 
-                if document:
-                    document.text = new_text
-                    document.updated_at = datetime.now()
-                    session.add(document)
+            if document:
+                document.text = new_text
+                document.updated_at = datetime.now()
+                session.add(document)
 
     async def delete_documents(self, metadata_filters: dict):
         """Delete documents by their metadata filters.
 
         Args:
             metadata_filters (dict): The metadata filters to apply.
+
         """
         if self.engine is None:
             logger.warning(
-                "Database connection is not initialized, skipping delete operation"
+                "Database connection is not initialized, skipping delete operation",
             )
             return
 
-        async with self.get_session() as session:
-            async with session.begin():
-                query = select(Document)
+        async with self.get_session() as session, session.begin():
+            query = select(Document)
 
-                for key, val in metadata_filters.items():
-                    query = query.where(
-                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}")
-                    ).params(**{f"filter_{key}": val})
+            for key, val in metadata_filters.items():
+                query = query.where(
+                    text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
+                ).params(**{f"filter_{key}": val})
 
-                result = await session.execute(query)
-                documents = result.scalars().all()
+            result = await session.execute(query)
+            documents = result.scalars().all()
 
-                for doc in documents:
-                    await session.delete(doc)
+            for doc in documents:
+                await session.delete(doc)
 
     async def count_documents(self, metadata_filters: dict | None = None) -> int:
         """Count documents in the database.
@@ -295,6 +304,7 @@ class DocumentStorage:
 
         Returns:
             int: The count of documents.
+
         """
         if self.engine is None:
             logger.warning("Database connection is not initialized, returning 0")
@@ -306,7 +316,7 @@ class DocumentStorage:
             if metadata_filters:
                 for key, val in metadata_filters.items():
                     query = query.where(
-                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}")
+                        text(f"json_extract(metadata, '$.{key}') = :filter_{key}"),
                     ).params(**{f"filter_{key}": val})
 
             result = await session.execute(query)
@@ -318,12 +328,13 @@ class DocumentStorage:
 
         Returns:
             list: A list of user IDs.
+
         """
         assert self.engine is not None, "Database connection is not initialized."
 
         async with self.get_session() as session:
             query = text(
-                "SELECT DISTINCT user_id FROM documents WHERE user_id IS NOT NULL"
+                "SELECT DISTINCT user_id FROM documents WHERE user_id IS NOT NULL",
             )
             result = await session.execute(query)
             rows = result.fetchall()
@@ -337,6 +348,7 @@ class DocumentStorage:
 
         Returns:
             dict: The converted dictionary.
+
         """
         return {
             "id": document.id,
@@ -361,6 +373,7 @@ class DocumentStorage:
             dict: The converted dictionary.
 
         Note: This method is kept for backward compatibility but is no longer used internally.
+
         """
         return {
             "id": row[0],

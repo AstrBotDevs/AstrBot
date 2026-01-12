@@ -1,0 +1,93 @@
+{
+  "title": "指令管理",
+  "summary": {
+    "total": "展示的指令数",
+    "disabled": "已禁用",
+    "conflicts": "有冲突"
+  },
+  "conflictAlert": {
+    "title": "检测到指令冲突",
+    "description": "当前有 {count} 对指令存在冲突，冲突的指令会同时触发多个插件响应，可能导致意外行为。",
+    "hint": "请点击「重命名」按钮修改冲突指令的名称以解决冲突。"
+  },
+  "table": {
+    "headers": {
+      "command": "指令",
+      "type": "类型",
+      "plugin": "所属插件",
+      "description": "描述",
+      "permission": "权限",
+      "status": "状态",
+      "actions": "操作"
+    }
+  },
+  "type": {
+    "command": "指令",
+    "group": "指令组",
+    "subCommand": "子指令"
+  },
+  "status": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "conflict": "有冲突"
+  },
+  "permission": {
+    "everyone": "所有人",
+    "admin": "管理员"
+  },
+  "tooltips": {
+    "enable": "启用指令",
+    "disable": "禁用指令",
+    "rename": "重命名指令",
+    "viewDetails": "查看详情"
+  },
+  "dialogs": {
+    "rename": {
+      "title": "重命名指令",
+      "newName": "新指令名",
+      "aliases": "管理别名",
+      "addAlias": "添加别名",
+      "cancel": "取消",
+      "confirm": "确认"
+    },
+    "details": {
+      "title": "指令详情",
+      "type": "指令类型",
+      "handler": "处理函数",
+      "module": "模块路径",
+      "originalCommand": "原始指令",
+      "effectiveCommand": "生效指令",
+      "parentGroup": "所属指令组",
+      "subCommands": "子指令列表",
+      "aliases": "别名",
+      "permission": "权限要求",
+      "conflictStatus": "冲突状态"
+    }
+  },
+  "messages": {
+    "toggleSuccess": "指令状态已更新",
+    "toggleFailed": "更新指令状态失败",
+    "renameSuccess": "指令已重命名",
+    "renameFailed": "重命名失败",
+    "loadFailed": "加载指令列表失败"
+  },
+  "search": {
+    "placeholder": "搜索指令..."
+  },
+  "empty": {
+    "noCommands": "暂无指令",
+    "noCommandsDesc": "当前筛选条件下没有找到任何指令"
+  },
+  "filters": {
+    "all": "全部",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "conflict": "有冲突",
+    "byPlugin": "按插件筛选",
+    "byType": "按类型筛选",
+    "byPermission": "按权限筛选",
+    "byStatus": "按状态筛选",
+    "showSystemPlugins": "显示系统插件指令",
+    "systemPluginConflictHint": "存在涉及系统插件的冲突，需解决冲突后才能隐藏"
+  }
+}

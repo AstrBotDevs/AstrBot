@@ -3,6 +3,7 @@
   "cancel": "取消",
   "close": "关闭",
   "copy": "复制",
+  "copied": "已复制",
   "delete": "删除",
   "edit": "编辑",
   "add": "添加",
@@ -27,6 +28,7 @@
   "uninstall": "卸载",
   "update": "更新",
   "language": "语言",
+  "settings": "设置",
   "locale": "zh-CN",
   "type": "输入",
   "press": "按",
@@ -34,6 +36,7 @@
   "yes": "是",
   "no": "否",
   "imagePreview": "图片预览",
+  "autoDetect": "自动检测",
   "dialog": {
     "confirmTitle": "确认操作",
     "confirmMessage": "你确定要执行此操作吗？",
@@ -60,13 +63,39 @@
       "subtitle": "请查看插件市场或联系插件作者获取更多信息。"
     }
   },
+  "changelog": {
+    "title": "更新日志",
+    "loading": "正在加载更新日志...",
+    "empty": {
+      "title": "该插件未提供更新日志",
+      "subtitle": "开发者可在插件目录下添加 CHANGELOG.md 文件来提供更新日志"
+    }
+  },
   "editor": {
     "fullscreen": "全屏编辑",
     "editingTitle": "编辑内容"
   },
+  "templateList": {
+    "addEntry": "添加条目",
+    "empty": "暂无条目，请选择模板添加",
+    "missingTemplate": "找不到对应模板，请删除后重新添加。",
+    "unknownTemplate": "未指定模板"
+  },
   "list": {
     "addItemPlaceholder": "添加新项，按回车确认添加",
-    "addButton": "添加"
+    "addButton": "添加",
+    "addMore": "添加更多",
+    "batchImport": "批量导入",
+    "batchImportTitle": "批量导入",
+    "batchImportLabel": "每行一个项目",
+    "batchImportPlaceholder": "例如：\n项目1\n项目2\n项目3\n项目4",
+    "batchImportHint": "每行将作为一个单独的项目，空行会被自动忽略",
+    "batchImportButton": "导入 {count} 项",
+    "noItems": "暂无项目",
+    "noItemsHint": "暂无项目，在上方输入框输入后按回车添加",
+    "inputPlaceholder": "输入后按回车添加",
+    "editTitle": "修改列表项",
+    "modifyButton": "修改"
   },
   "itemCard": {
     "enabled": "已启用",

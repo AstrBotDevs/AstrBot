@@ -16,30 +16,19 @@ export const useCommonStore = defineStore({
   }),
   actions: {
     async createEventSource() {
-
-      const fetchLogHistory = async () => {
-        try {
-          const res = await axios.get('/api/log-history');
-          if (res.data.data.logs) {
-            this.log_cache.push(...res.data.data.logs);
-          } else {
-            this.log_cache = [];
-          }
-        } catch (err) {
-          console.error('Failed to fetch log history:', err);
-        }
-      };
-      await fetchLogHistory();
-
       if (this.eventSource) {
         return
       }
       const controller = new AbortController();
       const { signal } = controller;
+      
+      // 注意：这里如果之前改过 Polyfill 的话，可能需要保持原样
+      // 如果是用 fetch 的话，这里是支持 Authorization Header 的
       const headers = {
         'Content-Type': 'multipart/form-data',
         'Authorization': 'Bearer ' + localStorage.getItem('token')
       };
+      
       fetch('/api/live-log', {
         method: 'GET',
         headers,
@@ -54,25 +43,9 @@ export const useCommonStore = defineStore({
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-
-        let incompleteLine = ""; // 用于存储不完整的行
-
-        const handleIncompleteLine = (line) => {
-          incompleteLine += line;
-          // if can parse as JSON, return it
-          try {
-            const data_json = JSON.parse(incompleteLine);
-            incompleteLine = ""; // 清空不完整行
-            return data_json;
-          } catch (e) {
-            return null;
-          }
-        }
+        let bufferedText = '';
 
         const processStream = ({ done, value }) => {
-          // get bytes length
-          const bytesLength = value ? value.byteLength : 0;
-          console.log(`Received ${bytesLength} bytes from live log`);
           if (done) {
             console.log('SSE stream closed');
             setTimeout(() => {
@@ -82,44 +55,51 @@ export const useCommonStore = defineStore({
             return;
           }
 
-          const text = decoder.decode(value);
-          const lines = text.split('\n\n');
-          lines.forEach(line => {
-            if (!line.trim()) {
+          // Accumulate partial chunks; SSE data may split JSON across reads.
+          const text = decoder.decode(value, { stream: true });
+          bufferedText += text;
+
+          // Split completed events; keep the trailing partial in buffer.
+          const segments = bufferedText.split('\n\n');
+          bufferedText = segments.pop() || '';
+
+          segments.forEach(segment => {
+            const line = segment.trim();
+            if (!line.startsWith('data: ')) {
               return;
             }
-            if (line.startsWith('data:')) {
-              const data = line.substring(5).trim();
-              // {"type":"log","data":"[2021-08-01 00:00:00] INFO: Hello, world!"}
-              let data_json = {}
-              try {
-                data_json = JSON.parse(data);
-              } catch (e) {
-                console.warn('Invalid JSON:', data);
-                // 尝试处理不完整的行
-                const parsedData = handleIncompleteLine(data);
-                if (parsedData) {
-                  data_json = parsedData;
-                } else {
-                  return; // 如果无法解析，跳过当前行
-                }
+
+            const logLine = line.replace('data: ', '').trim();
+            if (!logLine) {
+              return;
+            }
+
+            try {
+              const logObject = JSON.parse(logLine);
+              
+              // 修复：兼容 HTTP 环境的 UUID 生成 
+              if (!logObject.uuid) {
+                 if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                    logObject.uuid = crypto.randomUUID();
+                 } else {
+                    // 手动生成 UUID v4
+                    logObject.uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                 }
               }
-              if (data_json.type === 'log') {
-                this.log_cache.push(data_json);
-                if (this.log_cache.length > this.log_cache_max_len) {
-                  this.log_cache.shift();
-                }
+
+              this.log_cache.push(logObject);
+              // Limit log cache size
+              if (this.log_cache.length > this.log_cache_max_len) {
+                this.log_cache.splice(0, this.log_cache.length - this.log_cache_max_len);
               }
-            } else {
-              const parsedData = handleIncompleteLine(line);
-              if (parsedData && parsedData.type === 'log') {
-                this.log_cache.push(parsedData);
-                if (this.log_cache.length > this.log_cache_max_len) {
-                  this.log_cache.shift();
-                }
-              }
+            } catch (err) {
+              console.warn('Failed to parse SSE log line, skipping:', err, logLine);
             }
           });
+          
           return reader.read().then(processStream);
         };
 
@@ -127,7 +107,13 @@ export const useCommonStore = defineStore({
       }).catch(error => {
         console.error('SSE error:', error);
         // Attempt to reconnect after a delay
-        this.log_cache.push('SSE Connection failed, retrying in 5 seconds...');
+        this.log_cache.push({
+            type: 'log',
+            level: 'ERROR',
+            time: Date.now() / 1000,
+            data: 'SSE Connection failed, retrying in 5 seconds...',
+            uuid: 'error-' + Date.now() 
+        });
         setTimeout(() => {
           this.eventSource = null;
           this.createEventSource();
@@ -154,35 +140,43 @@ export const useCommonStore = defineStore({
         this.startTime = res.data.data.start_time
       })
     },
-    async getPluginCollections(force = false) {
+    async getPluginCollections(force = false, customSource = null) {
       // 获取插件市场数据
-      if (!force && this.pluginMarketData.length > 0) {
+      if (!force && this.pluginMarketData.length > 0 && !customSource) {
         return Promise.resolve(this.pluginMarketData);
       }
 
-      // 如果是强制刷新，添加 force_refresh 参数
-      const url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      // 构建URL
+      let url = force ? '/api/plugin/market_list?force_refresh=true' : '/api/plugin/market_list';
+      if (customSource) {
+        url += (url.includes('?') ? '&' : '?') + `custom_registry=${encodeURIComponent(customSource)}`;
+      }
 
       return axios.get(url)
         .then((res) => {
           let data = []
-          for (let key in res.data.data) {
-            data.push({
-              "name": key,
-              "desc": res.data.data[key].desc,
-              "author": res.data.data[key].author,
-              "repo": res.data.data[key].repo,
-              "installed": false,
-              "version": res.data.data[key]?.version ? res.data.data[key].version : "未知",
-              "social_link": res.data.data[key]?.social_link,
-              "tags": res.data.data[key]?.tags ? res.data.data[key].tags : [],
-              "logo": res.data.data[key]?.logo ? res.data.data[key].logo : "",
-              "pinned": res.data.data[key]?.pinned ? res.data.data[key].pinned : false,
-              "stars": res.data.data[key]?.stars ? res.data.data[key].stars : 0,
-              "updated_at": res.data.data[key]?.updated_at ? res.data.data[key].updated_at : "",
-              "display_name": res.data.data[key]?.display_name ? res.data.data[key].display_name : "",
-            })
+          if (res.data.data && typeof res.data.data === 'object') {
+            for (let key in res.data.data) {
+              const pluginData = res.data.data[key];
+              
+              data.push({
+                "name": pluginData.name || key, // 优先使用插件数据中的name字段，否则使用键名
+                "desc": pluginData.desc,
+                "author": pluginData.author,
+                "repo": pluginData.repo,
+                "installed": false,
+                "version": pluginData?.version ? pluginData.version : "未知",
+                "social_link": pluginData?.social_link,
+                "tags": pluginData?.tags ? pluginData.tags : [],
+                "logo": pluginData?.logo ? pluginData.logo : "",
+                "pinned": pluginData?.pinned ? pluginData.pinned : false,
+                "stars": pluginData?.stars ? pluginData.stars : 0,
+                "updated_at": pluginData?.updated_at ? pluginData.updated_at : "",
+                "display_name": pluginData?.display_name ? pluginData.display_name : "",
+              })
+            }
           }
+          
           this.pluginMarketData = data;
           return data;
         })

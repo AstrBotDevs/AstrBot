@@ -1,6 +1,7 @@
-from .network_strategy import NetworkRenderStrategy
-from .local_strategy import LocalRenderStrategy
 from astrbot.core.log import LogManager
+
+from .local_strategy import LocalRenderStrategy
+from .network_strategy import NetworkRenderStrategy
 
 logger = LogManager.GetLogger(log_name="astrbot")
 
@@ -30,7 +31,10 @@ class HtmlRenderer:
         @example: 参见 https://astrbot.app 插件开发部分。
         """
         return await self.network_strategy.render_custom_template(
-            tmpl_str, tmpl_data, return_url, options
+            tmpl_str,
+            tmpl_data,
+            return_url,
+            options,
         )
 
     async def render_t2i(
@@ -44,11 +48,13 @@ class HtmlRenderer:
         if use_network:
             try:
                 return await self.network_strategy.render(
-                    text, return_url=return_url, template_name=template_name
+                    text,
+                    return_url=return_url,
+                    template_name=template_name,
                 )
             except BaseException as e:
                 logger.error(
-                    f"Failed to render image via AstrBot API: {e}. Falling back to local rendering."
+                    f"Failed to render image via AstrBot API: {e}. Falling back to local rendering.",
                 )
                 return await self.local_strategy.render(text)
         else:

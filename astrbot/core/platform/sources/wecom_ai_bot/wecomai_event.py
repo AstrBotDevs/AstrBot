@@ -1,16 +1,14 @@
-"""
-企业微信智能机器人事件处理模块，处理消息事件的发送和接收
-"""
+"""企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     Image,
     Plain,
 )
-from astrbot.api import logger
 
 from .wecomai_api import WecomAIBotAPIClient
-from .wecomai_queue_mgr import wecomai_queue_mgr
+from .wecomai_queue_mgr import WecomAIQueueMgr
 
 
 class WecomAIBotMessageEvent(AstrMessageEvent):
@@ -23,6 +21,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id: str,
         api_client: WecomAIBotAPIClient,
+        queue_mgr: WecomAIQueueMgr,
     ):
         """初始化消息事件
 
@@ -32,17 +31,20 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             platform_meta: 平台元数据
             session_id: 会话 ID
             api_client: API 客户端
+
         """
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.api_client = api_client
+        self.queue_mgr = queue_mgr
 
     @staticmethod
     async def _send(
-        message_chain: MessageChain,
+        message_chain: MessageChain | None,
         stream_id: str,
+        queue_mgr: WecomAIQueueMgr,
         streaming: bool = False,
     ):
-        back_queue = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+        back_queue = queue_mgr.get_or_create_back_queue(stream_id)
 
         if not message_chain:
             await back_queue.put(
@@ -50,7 +52,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     "type": "end",
                     "data": "",
                     "streaming": False,
-                }
+                },
             )
             return ""
 
@@ -64,7 +66,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "session_id": stream_id,
-                    }
+                    },
                 )
             elif isinstance(comp, Image):
                 # 处理图片消息
@@ -77,7 +79,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                                 "image_data": image_base64,
                                 "streaming": streaming,
                                 "session_id": stream_id,
-                            }
+                            },
                         )
                     else:
                         logger.warning("图片数据为空，跳过")
@@ -88,15 +90,15 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain | None):
         """发送消息"""
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
         )
         stream_id = raw.get("stream_id", self.session_id)
-        await WecomAIBotMessageEvent._send(message, stream_id)
-        await super().send(message)
+        await WecomAIBotMessageEvent._send(message, stream_id, self.queue_mgr)
+        await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback=False):
         """流式发送消息，参考webchat的send_streaming设计"""
@@ -106,7 +108,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             "wecom_ai_bot platform event raw_message should be a dict"
         )
         stream_id = raw.get("stream_id", self.session_id)
-        back_queue = wecomai_queue_mgr.get_or_create_back_queue(stream_id)
+        back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
 
         # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，积累发送
         increment_plain = ""
@@ -127,7 +129,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "data": final_data,
                         "streaming": True,
                         "session_id": self.session_id,
-                    }
+                    },
                 )
                 final_data = ""
                 continue
@@ -135,6 +137,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             final_data += await WecomAIBotMessageEvent._send(
                 chain,
                 stream_id=stream_id,
+                queue_mgr=self.queue_mgr,
                 streaming=True,
             )
 
@@ -144,6 +147,6 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "streaming": True,
                 "session_id": self.session_id,
-            }
+            },
         )
         await super().send_streaming(generator, use_fallback)

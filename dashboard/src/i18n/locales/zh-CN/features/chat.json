@@ -40,14 +40,22 @@
     "deleteChat": "删除此对话",
     "editTitle": "编辑标题",
     "fullscreen": "全屏模式",
-    "exitFullscreen": "退出全屏"
+    "exitFullscreen": "退出全屏",
+    "reply": "引用回复",
+    "providerConfig": "AI 配置",
+    "toolsUsed": "已使用工具"
   },
   "conversation": {
-    "newConversation": "新对话",
+    "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
     "systemStatus": "系统状态",
     "llmService": "LLM 服务",
-    "speechToText": "语音转文本"
+    "speechToText": "语音转文本",
+    "editDisplayName": "编辑会话名称",
+    "displayName": "会话名称",
+    "displayNameUpdated": "会话名称已更新",
+    "displayNameUpdateFailed": "更新会话名称失败",
+    "confirmDelete": "确定要删除“{name}”吗？此操作无法撤销。"
   },
   "modes": {
     "darkMode": "切换到夜间模式",
@@ -56,6 +64,31 @@
     "help": "获取帮助",
     "voiceRecord": "录制语音",
     "pasteImage": "粘贴图片"
+  },
+  "streaming": {
+    "enabled": "流式响应已开启",
+    "disabled": "流式响应已关闭",
+    "on": "流式",
+    "off": "普通"
+  },
+  "reasoning": {
+    "thinking": "思考过程"
+  },
+  "reply": {
+    "replyTo": "引用",
+    "notFound": "无法定位消息"
+  },
+  "time": {
+    "today": "今天",
+    "yesterday": "昨天"
+  },
+  "stats": {
+    "tokens": "Token",
+    "inputTokens": "输入 Token",
+    "outputTokens": "输出 Token",
+    "cachedTokens": "缓存 Token",
+    "duration": "耗时",
+    "ttft": "首字时间"
   },
   "connection": {
     "title": "连接状态提醒",
@@ -71,5 +104,9 @@
       "reconnected": "聊天连接已重新建立",
       "failed": "连接失败，请刷新页面重试"
     }
+  },
+  "errors": {
+    "sendMessageFailed": "发送消息失败，请重试",
+    "createSessionFailed": "创建会话失败，请刷新页面重试"
   }
 } 

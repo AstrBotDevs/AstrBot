@@ -62,5 +62,32 @@
     "allowedHosts": "允许的主机",
     "rateLimit": "频率限制",
     "encryption": "加密设置"
+  },
+  "configSelection": {
+    "selectConfig": "选择配置文件",
+    "normalConfig": "普通",
+    "systemConfig": "系统"
+  },
+  "configManagement": {
+    "title": "配置文件管理",
+    "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
+    "newConfig": "新建配置文件",
+    "editConfig": "编辑配置文件",
+    "manageConfigs": "管理配置文件...",
+    "configName": "名称",
+    "fillConfigName": "填写配置文件名称",
+    "confirmDelete": "确定要删除配置文件 \"{name}\" 吗?此操作不可恢复。",
+    "pleaseEnterName": "请填写配置名称",
+    "createFailed": "新配置文件创建失败",
+    "deleteFailed": "删除配置文件失败",
+    "updateFailed": "更新配置文件失败"
+  },
+  "buttons": {
+    "cancel": "取消",
+    "create": "创建",
+    "update": "更新"
+  },
+  "codeEditor": {
+    "title": "编辑配置文件"
   }
 } 

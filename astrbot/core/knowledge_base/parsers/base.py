@@ -47,4 +47,5 @@ class BaseParser(ABC):
 
         Returns:
             ParseResult: 解析结果
+
         """

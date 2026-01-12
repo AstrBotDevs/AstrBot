@@ -37,6 +37,7 @@ class RankFusion:
         Args:
             kb_db: 知识库数据库实例
             k: RRF 参数,用于平滑排名
+
         """
         self.kb_db = kb_db
         self.k = k
@@ -59,6 +60,7 @@ class RankFusion:
 
         Returns:
             List[FusedResult]: 融合后的结果列表
+
         """
         # 1. 构建排名映射
         dense_ranks = {
@@ -101,7 +103,9 @@ class RankFusion:
 
         # 4. 排序
         sorted_ids = sorted(
-            rrf_scores.keys(), key=lambda cid: rrf_scores[cid], reverse=True
+            rrf_scores.keys(),
+            key=lambda cid: rrf_scores[cid],
+            reverse=True,
         )[:top_k]
 
         # 5. 构建融合结果
@@ -118,7 +122,7 @@ class RankFusion:
                         kb_id=sr.kb_id,
                         content=sr.content,
                         score=rrf_scores[identifier],
-                    )
+                    ),
                 )
             elif identifier in vec_doc_id_to_dense:
                 # 从向量检索获取信息,需要从数据库获取块的详细信息
@@ -132,7 +136,7 @@ class RankFusion:
                         kb_id=chunk_md["kb_id"],
                         content=vec_result.data["text"],
                         score=rrf_scores[identifier],
-                    )
+                    ),
                 )
 
         return fused_results

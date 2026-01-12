@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, inject } from 'vue';
+import { ref, computed, inject } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from "@/i18n/composables";
+import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 
 const props = defineProps({
   extension: {
@@ -20,87 +21,114 @@ const props = defineProps({
 
 // 定义要发送到父组件的事件
 const emit = defineEmits([
-  'configure',
-  'update',
-  'reload',
-  'install',
-  'uninstall',
-  'toggle-activation',
-  'view-handlers',
-  'view-readme'
+  "configure",
+  "update",
+  "reload",
+  "install",
+  "uninstall",
+  "toggle-activation",
+  "view-handlers",
+  "view-readme",
+  "view-changelog",
 ]);
 
 const reveal = ref(false);
+const showUninstallDialog = ref(false);
 
 // 国际化
-const { tm } = useModuleI18n('features/extension');
+const { tm } = useModuleI18n("features/extension");
 
 // 操作函数
 const configure = () => {
-  emit('configure', props.extension);
+  emit("configure", props.extension);
 };
 
 const updateExtension = () => {
-  emit('update', props.extension);
+  emit("update", props.extension);
 };
 
 const reloadExtension = () => {
-  emit('reload', props.extension);
+  emit("reload", props.extension);
 };
 
 const $confirm = inject("$confirm");
 
 const installExtension = async () => {
-  emit('install', props.extension);
+  emit("install", props.extension);
 };
 
 const uninstallExtension = async () => {
-  if (typeof $confirm !== "function") {
-    console.error(tm("card.errors.confirmNotRegistered"));
-    return;
-  }
+  showUninstallDialog.value = true;
+};
 
-  const confirmed = await $confirm({
-    title: tm("dialogs.uninstall.title"),
-    message: tm("dialogs.uninstall.message"),
-  });
-
-  if (confirmed) {
-    emit("uninstall", props.extension);
-  }
+const handleUninstallConfirm = (options: {
+  deleteConfig: boolean;
+  deleteData: boolean;
+}) => {
+  emit("uninstall", props.extension, options);
 };
 
 const toggleActivation = () => {
-  emit('toggle-activation', props.extension);
+  emit("toggle-activation", props.extension);
 };
 
 const viewHandlers = () => {
-  emit('view-handlers', props.extension);
+  emit("view-handlers", props.extension);
 };
 
 const viewReadme = () => {
-  emit('view-readme', props.extension);
+  emit("view-readme", props.extension);
+};
+
+const viewChangelog = () => {
+  emit("view-changelog", props.extension);
 };
 </script>
 
 <template>
-  <v-card class="mx-auto d-flex flex-column" elevation="0" :style="{
-    position: 'relative',
-    backgroundColor: useCustomizerStore().uiTheme === 'PurpleTheme' ? marketMode ? '#f8f0dd' : '#ffffff' : '#282833',
-    color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000dd' : '#ffffff'
-  }">
-    <v-card-text style="padding: 16px; padding-bottom: 0px; display: flex; gap: 16px; width: 100%;">
+  <v-card
+    class="mx-auto d-flex flex-column"
+    elevation="0"
+    :style="{
+      position: 'relative',
+      backgroundColor:
+        useCustomizerStore().uiTheme === 'PurpleTheme'
+          ? marketMode
+            ? '#f8f0dd'
+            : '#ffffff'
+          : '#282833',
+      color:
+        useCustomizerStore().uiTheme === 'PurpleTheme'
+          ? '#000000dd'
+          : '#ffffff',
+    }"
+  >
+    <v-card-text
+      style="
+        padding: 16px;
+        padding-bottom: 0px;
+        display: flex;
+        gap: 16px;
+        width: 100%;
+      "
+    >
       <div v-if="extension?.logo">
-        <img :src="extension.logo" :alt="extension.name" cover width="100"/>
+        <img :src="extension.logo" :alt="extension.name" cover width="100" />
       </div>
 
-      <div style="overflow-x: auto;">
+      <div style="overflow-x: auto">
         <!-- Top-right three-dot menu -->
-        <div style="position: absolute; right: 8px; top: 8px; z-index: 5;">
+        <div style="position: absolute; right: 8px; top: 8px; z-index: 5">
           <v-menu offset-y>
             <template v-slot:activator="{ props: menuProps }">
-              <v-btn icon variant="text" aria-label="more" v-if="extension?.repo" :href="extension?.repo"
-                target="_blank">
+              <v-btn
+                icon
+                variant="text"
+                aria-label="more"
+                v-if="extension?.repo"
+                :href="extension?.repo"
+                target="_blank"
+              >
                 <v-icon icon="mdi-github"></v-icon>
               </v-btn>
               <v-btn v-bind="menuProps" icon variant="text" aria-label="more">
@@ -110,16 +138,30 @@ const viewReadme = () => {
 
             <v-list>
               <v-list-item @click="viewReadme">
-                <v-list-item-title>📄 {{ tm('buttons.viewDocs') }}</v-list-item-title>
+                <v-list-item-title
+                  >📄 {{ tm("buttons.viewDocs") }}</v-list-item-title
+                >
               </v-list-item>
 
-              <v-list-item v-if="marketMode && !extension?.installed" @click="installExtension">
+              <v-list-item v-if="!marketMode" @click="viewChangelog">
+                <v-list-item-title
+                  >📝 {{ tm("pluginChangelog.menuTitle") }}</v-list-item-title
+                >
+              </v-list-item>
+
+              <v-list-item
+                v-if="marketMode && !extension?.installed"
+                @click="installExtension"
+              >
                 <v-list-item-title>
-                  {{ tm('buttons.install') }}</v-list-item-title>
+                  {{ tm("buttons.install") }}</v-list-item-title
+                >
               </v-list-item>
 
               <v-list-item v-if="marketMode && extension?.installed">
-                <v-list-item-title class="text--disabled">{{ tm('status.installed') }}</v-list-item-title>
+                <v-list-item-title class="text--disabled">{{
+                  tm("status.installed")
+                }}</v-list-item-title>
               </v-list-item>
 
               <!-- Divider between market actions and plugin actions -->
@@ -128,32 +170,49 @@ const viewReadme = () => {
               <template v-if="!marketMode">
                 <v-list-item @click="configure">
                   <v-list-item-title>
-                    {{ tm('card.actions.pluginConfig') }}</v-list-item-title>
+                    {{ tm("card.actions.pluginConfig") }}</v-list-item-title
+                  >
                 </v-list-item>
 
                 <v-list-item @click="uninstallExtension">
-                  <v-list-item-title class="text-error">{{ tm('card.actions.uninstallPlugin') }}</v-list-item-title>
+                  <v-list-item-title class="text-error">{{
+                    tm("card.actions.uninstallPlugin")
+                  }}</v-list-item-title>
                 </v-list-item>
 
                 <v-list-item @click="reloadExtension">
-                  <v-list-item-title>{{ tm('card.actions.reloadPlugin') }}</v-list-item-title>
+                  <v-list-item-title>{{
+                    tm("card.actions.reloadPlugin")
+                  }}</v-list-item-title>
                 </v-list-item>
 
                 <v-list-item @click="toggleActivation">
                   <v-list-item-title>
-                    {{ extension.activated ? tm('buttons.disable') : tm('buttons.enable') }}{{
-                      tm('card.actions.togglePlugin') }}
+                    {{
+                      extension.activated
+                        ? tm("buttons.disable")
+                        : tm("buttons.enable")
+                    }}{{ tm("card.actions.togglePlugin") }}
                   </v-list-item-title>
                 </v-list-item>
 
                 <v-list-item @click="viewHandlers">
-                  <v-list-item-title>{{ tm('card.actions.viewHandlers') }} ({{ extension.handlers.length
-                  }})</v-list-item-title>
+                  <v-list-item-title
+                    >{{ tm("card.actions.viewHandlers") }} ({{
+                      extension.handlers.length
+                    }})</v-list-item-title
+                  >
                 </v-list-item>
 
-                <v-list-item @click="updateExtension" :disabled="!extension?.has_update">
+                <v-list-item @click="updateExtension">
                   <v-list-item-title>
-                    {{ tm('card.actions.updateTo') }} {{ extension.online_version || extension.version }}
+                    {{
+                      extension.has_update
+                        ? tm("card.actions.updateTo") +
+                          " " +
+                          extension.online_version
+                        : tm("card.actions.reinstall")
+                    }}
                   </v-list-item-title>
                 </v-list-item>
               </template>
@@ -161,23 +220,59 @@ const viewReadme = () => {
           </v-menu>
         </div>
 
-        <div style="width: 100%; margin-bottom: 24px;">
+        <div style="width: 100%; margin-bottom: 24px">
           <!-- 最多一行 -->
-          <div class="text-caption"
-            style="color: gray; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 84px;">
+          <div
+            class="text-caption"
+            style="
+              color: gray;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              margin-right: 84px;
+            "
+          >
             {{ extension.author }} / {{ extension.name }}
           </div>
-          <p class="text-h3 font-weight-black extension-title" :class="{ 'text-h4': $vuetify.display.xs }">
-            <span class="extension-title__text">{{ extension.display_name?.length ? extension.display_name : extension.name }}</span>
-            <v-tooltip location="top" v-if="extension?.has_update && !marketMode">
+          <p
+            class="text-h3 font-weight-black extension-title"
+            :class="{ 'text-h4': $vuetify.display.xs }"
+          >
+            <span class="extension-title__text">{{
+              extension.display_name?.length
+                ? extension.display_name
+                : extension.name
+            }}</span>
+            <v-tooltip
+              location="top"
+              v-if="extension?.has_update && !marketMode"
+            >
               <template v-slot:activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" color="warning" class="ml-2" icon="mdi-update" size="small"></v-icon>
+                <v-icon
+                  v-bind="tooltipProps"
+                  color="warning"
+                  class="ml-2"
+                  icon="mdi-update"
+                  size="small"
+                ></v-icon>
               </template>
-              <span>{{ tm("card.status.hasUpdate") }}: {{ extension.online_version }}</span>
+              <span
+                >{{ tm("card.status.hasUpdate") }}:
+                {{ extension.online_version }}</span
+              >
             </v-tooltip>
-            <v-tooltip location="top" v-if="!extension.activated && !marketMode">
+            <v-tooltip
+              location="top"
+              v-if="!extension.activated && !marketMode"
+            >
               <template v-slot:activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" color="error" class="ml-2" icon="mdi-cancel" size="small"></v-icon>
+                <v-icon
+                  v-bind="tooltipProps"
+                  color="error"
+                  class="ml-2"
+                  icon="mdi-cancel"
+                  size="small"
+                ></v-icon>
               </template>
               <span>{{ tm("card.status.disabled") }}</span>
             </v-tooltip>
@@ -188,38 +283,67 @@ const viewReadme = () => {
               <v-icon icon="mdi-source-branch" start></v-icon>
               {{ extension.version }}
             </v-chip>
-            <v-chip v-if="extension?.has_update" color="warning" label size="small" class="ml-2">
+            <v-chip
+              v-if="extension?.has_update"
+              color="warning"
+              label
+              size="small"
+              class="ml-2"
+            >
               <v-icon icon="mdi-arrow-up-bold" start></v-icon>
               {{ extension.online_version }}
             </v-chip>
-            <v-chip color="primary" label size="small" class="ml-2" v-if="extension.handlers?.length" @click="viewHandlers" style="cursor: pointer;">
+            <v-chip
+              color="primary"
+              label
+              size="small"
+              class="ml-2"
+              v-if="extension.handlers?.length"
+              @click="viewHandlers"
+              style="cursor: pointer"
+            >
               <v-icon icon="mdi-cogs" start></v-icon>
-              {{ extension.handlers?.length }}{{ tm("card.status.handlersCount") }}
+              {{ extension.handlers?.length
+              }}{{ tm("card.status.handlersCount") }}
             </v-chip>
-            <v-chip v-for="tag in extension.tags" :key="tag" :color="tag === 'danger' ? 'error' : 'primary'" label
-              size="small" class="ml-2">
-              {{ tag === 'danger' ? tm('tags.danger') : tag }}
+            <v-chip
+              v-for="tag in extension.tags"
+              :key="tag"
+              :color="tag === 'danger' ? 'error' : 'primary'"
+              label
+              size="small"
+              class="ml-2"
+            >
+              {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
           </div>
 
-          <div class="mt-2" :class="{ 'text-caption': $vuetify.display.xs }" style="overflow-y: auto; height: 70px; font-size: 90%;">
+          <div
+            class="mt-2"
+            :class="{ 'text-caption': $vuetify.display.xs }"
+            style="overflow-y: auto; height: 70px; font-size: 90%"
+          >
             {{ extension.desc }}
           </div>
         </div>
       </div>
-
     </v-card-text>
 
     <v-card-actions class="extension-actions">
       <v-btn color="primary" size="small" @click="viewReadme">
-        {{ tm('buttons.viewDocs') }}
+        {{ tm("buttons.viewDocs") }}
       </v-btn>
-      <v-btn v-if="!marketMode" color="primary"  size="small" @click="configure">
-        {{ tm('card.actions.pluginConfig') }}
+      <v-btn v-if="!marketMode" color="primary" size="small" @click="configure">
+        {{ tm("card.actions.pluginConfig") }}
       </v-btn>
     </v-card-actions>
   </v-card>
 
+  <!-- 卸载确认对话框 -->
+  <UninstallConfirmDialog
+    v-model="showUninstallDialog"
+    @confirm="handleUninstallConfirm"
+  />
 </template>
 
 <style scoped>
@@ -239,7 +363,7 @@ const viewReadme = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-top: 6px
+  padding-top: 6px;
 }
 
 @media (max-width: 600px) {

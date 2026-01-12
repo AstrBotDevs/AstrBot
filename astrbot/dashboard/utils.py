@@ -2,14 +2,17 @@ import base64
 import os
 import traceback
 from io import BytesIO
+
 from astrbot.api import logger
+from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 async def generate_tsne_visualization(
-    query: str, kb_names: list[str], kb_manager: KnowledgeBaseManager
+    query: str,
+    kb_names: list[str],
+    kb_manager: KnowledgeBaseManager,
 ) -> str | None:
     """生成 t-SNE 可视化图片
 
@@ -20,18 +23,19 @@ async def generate_tsne_visualization(
 
     Returns:
         图片路径或 None
+
     """
     try:
         import faiss
-        import numpy as np
         import matplotlib
+        import numpy as np
 
         matplotlib.use("Agg")  # 使用非交互式后端
         import matplotlib.pyplot as plt
         from sklearn.manifold import TSNE
     except ImportError as e:
         raise Exception(
-            "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}"
+            "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}",
         ) from e
 
     try:

@@ -15,7 +15,6 @@ Always reference these instructions first and fallback to search or bash command
 ### Running the Application
 - Run main application: `uv run main.py` -- starts in ~3 seconds
 - Application creates WebUI on http://localhost:6185 (default credentials: `astrbot`/`astrbot`)
-- Application loads plugins automatically from `packages/` and `data/plugins/` directories
 
 ### Dashboard Build (Vue.js/Node.js)
 - **Prerequisites**: Node.js 20+ and npm 10+ required
@@ -35,7 +34,7 @@ Always reference these instructions first and fallback to search or bash command
 - **ALWAYS** run `uv run ruff check .` and `uv run ruff format .` before committing changes
 
 ### Plugin Development
-- Plugins load from `packages/` (built-in) and `data/plugins/` (user-installed)
+- Plugins load from `astrbot/builtin_stars/` (built-in) and `data/plugins/` (user-installed)
 - Plugin system supports function tools and message handlers
 - Key plugins: python_interpreter, web_searcher, astrbot, reminder, session_controller
 
