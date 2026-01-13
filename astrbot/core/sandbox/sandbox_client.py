@@ -15,6 +15,11 @@ class SandboxClient:
         session_id: str,
         booter_type: Literal["shipyard", "boxlite"] = "shipyard",
     ) -> SandboxBooter:
+        if session_id in session_booter:
+            booter = session_booter[session_id]
+            if not await booter.available():
+                # rebuild
+                session_booter.pop(session_id, None)
         if session_id not in session_booter:
             uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
             if booter_type == "shipyard":

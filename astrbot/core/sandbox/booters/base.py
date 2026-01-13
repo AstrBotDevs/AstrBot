@@ -21,3 +21,7 @@ class SandboxBooter:
         Should return a dict with `success` (bool) and `file_path` (str) keys.
         """
         ...
+
+    async def available(self) -> bool:
+        """Check if the sandbox is available."""
+        ...

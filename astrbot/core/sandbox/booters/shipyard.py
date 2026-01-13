@@ -61,3 +61,16 @@ class ShipyardBooter(SandboxBooter):
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
         return await self._ship.upload_file(path, file_name)
+
+    async def available(self) -> bool:
+        """Check if the sandbox is available."""
+        try:
+            ship_id = self._ship.id
+            data = await self._sandbox_client.client.get_ship(ship_id)
+            if not data:
+                return False
+            health = bool(data.get("status", 0) == 1)
+            return health
+        except Exception as e:
+            logger.error(f"Error checking Shipyard sandbox availability: {e}")
+            return False
