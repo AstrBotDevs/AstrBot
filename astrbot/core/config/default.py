@@ -187,6 +187,7 @@ DEFAULT_CONFIG = {
         "accepted": False,
         "accepted_at": "",
         "accepted_by": "",
+        "content_hash": "",
     },
 }
 
@@ -2307,6 +2308,7 @@ CONFIG_METADATA_2 = {
                     "accepted": {"type": "bool"},
                     "accepted_at": {"type": "string"},
                     "accepted_by": {"type": "string"},
+                    "content_hash": {"type": "string"},
                 },
             },
         },
