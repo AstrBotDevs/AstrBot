@@ -58,10 +58,18 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import axios from 'axios'
-import { marked } from 'marked'
+import MarkdownIt from 'markdown-it'
 import { useI18n } from '@/i18n/composables'
 
 const { t } = useI18n()
+
+// 创建 MarkdownIt 实例
+const md = new MarkdownIt({
+    html: true,
+    linkify: true,
+    typographer: true,
+    breaks: false,
+})
 
 const isOpen = ref(false)
 const loading = ref(false)
@@ -76,7 +84,7 @@ let resolvePromise = null
 const renderedContent = computed(() => {
     if (!eulaContent.value) return ''
     try {
-        return marked(eulaContent.value)
+        return md.render(eulaContent.value)
     } catch (e) {
         console.error('Failed to render markdown:', e)
         return eulaContent.value
