@@ -172,6 +172,14 @@
         "display_reasoning_text": {
           "description": "Display Reasoning Content"
         },
+        "llm_safety_mode": {
+          "description": "Healthy Mode",
+          "hint": "Add safety guardrails to model replies."
+        },
+        "safety_mode_strategy": {
+          "description": "Healthy Mode Strategy",
+          "hint": "How to apply healthy mode."
+        },
         "identifier": {
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."

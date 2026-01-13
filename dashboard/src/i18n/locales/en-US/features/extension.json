@@ -140,7 +140,7 @@
     "addSource": "Add Source",
     "sourceName": "Source Name",
     "sourceUrl": "Source URL",
-    "defaultSource": "Official Source",
+    "defaultSource": "Default Source",
     "removeSource": "Remove Source",
     "confirmRemoveSource": "Are you sure you want to remove this source?",
     "sourceAdded": "Source added successfully",
