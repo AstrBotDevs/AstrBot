@@ -1,0 +1,11 @@
+{
+  "dialog": {
+    "title": "最终用户许可协议 (EULA)",
+    "loading": "正在加载协议内容...",
+    "loadError": "加载协议内容失败，请重试",
+    "retry": "重试",
+    "acceptLabel": "我已阅读并同意上述协议内容",
+    "confirm": "确认并继续",
+    "acceptError": "签署协议失败，请重试"
+  }
+}

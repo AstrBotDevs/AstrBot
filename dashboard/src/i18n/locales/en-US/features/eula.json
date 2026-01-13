@@ -1,0 +1,11 @@
+{
+  "dialog": {
+    "title": "End User License Agreement (EULA)",
+    "loading": "Loading agreement content...",
+    "loadError": "Failed to load agreement content, please retry",
+    "retry": "Retry",
+    "acceptLabel": "I have read and agree to the above terms",
+    "confirm": "Confirm and Continue",
+    "acceptError": "Failed to accept the agreement, please retry"
+  }
+}

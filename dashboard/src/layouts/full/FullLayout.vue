@@ -5,6 +5,7 @@ import axios from 'axios';
 import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
 import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
+import EulaDialog from '@/components/shared/EulaDialog.vue';
 import Chat from '@/components/chat/Chat.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
@@ -29,6 +30,18 @@ const showChatPage = computed(() => {
 });
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
+const eulaDialog = ref<InstanceType<typeof EulaDialog> | null>(null);
+
+// 检查 EULA 签署状态
+const checkEula = async () => {
+  try {
+    if (eulaDialog.value && typeof eulaDialog.value.checkAndOpen === 'function') {
+      await eulaDialog.value.checkAndOpen();
+    }
+  } catch (error) {
+    console.error('Failed to check EULA status:', error);
+  }
+};
 
 // 检查是否需要迁移
 const checkMigration = async () => {
@@ -52,8 +65,11 @@ const checkMigration = async () => {
 };
 
 onMounted(() => {
-  // 页面加载时检查是否需要迁移
-  setTimeout(checkMigration, 1000); // 延迟1秒执行，确保页面完全加载
+  // 页面加载时先检查 EULA，再检查迁移
+  setTimeout(async () => {
+    await checkEula();
+    await checkMigration();
+  }, 1000); // 延迟1秒执行，确保页面完全加载
 });
 </script>
 
@@ -95,6 +111,9 @@ onMounted(() => {
           </div>
         </v-container>
       </v-main>
+      
+      <!-- EULA Dialog -->
+      <EulaDialog ref="eulaDialog" />
       
       <!-- Migration Dialog -->
       <MigrationDialog ref="migrationDialog" />

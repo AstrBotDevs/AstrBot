@@ -33,6 +33,7 @@ import zhCNKnowledgeBaseDocument from './locales/zh-CN/features/knowledge-base/d
 import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNMigration from './locales/zh-CN/features/migration.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
+import zhCNEula from './locales/zh-CN/features/eula.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -70,6 +71,7 @@ import enUSKnowledgeBaseDocument from './locales/en-US/features/knowledge-base/d
 import enUSPersona from './locales/en-US/features/persona.json';
 import enUSMigration from './locales/en-US/features/migration.json';
 import enUSCommand from './locales/en-US/features/command.json';
+import enUSEula from './locales/en-US/features/eula.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -114,7 +116,8 @@ export const translations = {
       },
       persona: zhCNPersona,
       migration: zhCNMigration,
-      command: zhCNCommand
+      command: zhCNCommand,
+      eula: zhCNEula
     },
     messages: {
       errors: zhCNErrors,
@@ -159,7 +162,8 @@ export const translations = {
       },
       persona: enUSPersona,
       migration: enUSMigration,
-      command: enUSCommand
+      command: enUSCommand,
+      eula: enUSEula
     },
     messages: {
       errors: enUSErrors,
