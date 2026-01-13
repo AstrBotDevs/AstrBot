@@ -148,9 +148,9 @@
             "description": "Shipyard API Endpoint",
             "hint": "Shipyard 服务的 API 访问地址。"
           },
-          "shipyard_api_key": {
-            "description": "Shipyard API Key",
-            "hint": "用于访问 Shipyard 服务的 API 密钥。"
+          "shipyard_access_token": {
+            "description": "Shipyard 访问令牌",
+            "hint": "用于访问 Shipyard 服务的访问令牌。"
           }
         }
       }

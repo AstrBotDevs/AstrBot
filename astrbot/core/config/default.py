@@ -117,7 +117,7 @@ DEFAULT_CONFIG = {
             "enable": False,
             "booter": "shipyard",
             "shipyard_endpoint": "",
-            "shipyard_access_token": {},
+            "shipyard_access_token": "",
         },
     },
     "provider_stt_settings": {
@@ -2572,10 +2572,10 @@ CONFIG_METADATA_3 = {
                         },
                         "_special": "check_shipyard_connection"
                     },
-                    "provider_settings.sandbox.shipyard_api_key": {
-                        "description": "Shipyard API Key",
+                    "provider_settings.sandbox.shipyard_access_token": {
+                        "description": "Shipyard Access Token",
                         "type": "string",
-                        "hint": "用于访问 Shipyard 服务的 API 密钥。",
+                        "hint": "用于访问 Shipyard 服务的访问令牌。",
                         "condition": {
                             "provider_settings.sandbox.enable": True,
                             "provider_settings.sandbox.booter": "shipyard",
