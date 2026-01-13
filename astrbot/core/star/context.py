@@ -98,31 +98,22 @@ class Context:
         contexts: list[Message] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        """调用 LLM 生成响应。
-
-        该方法不会自动执行工具调用。如果想使用工具调用，请使用 `tool_loop_agent()`。
+        """Call the LLM to generate a response. The method will not automatically execute tool calls. If you want to use tool calls, please use `tool_loop_agent()`.
 
         .. versionadded:: 4.5.7 (sdk)
 
         Args:
-            chat_provider_id: 要使用的聊天提供者 ID。
-            prompt: 发送给 LLM 的提示词，如果同时提供 `contexts` 和 `prompt`，
-                   `prompt` 会作为最后一条用户消息。
-            image_urls: 包含在提示词中的图片 URL 列表。
-            tools: LLM 可用的工具集。
-            system_prompt: 指导 LLM 行为的系统提示词。
-            contexts: LLM 的上下文消息。
-            **kwargs: LLM 生成的额外关键字参数，兼容 OpenAI 格式。
-
-        Returns:
-            LLM 生成的响应对象。
+            chat_provider_id: The chat provider ID to use.
+            prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
+            image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            tools: ToolSet of tools available to the LLM
+            system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
+            contexts: context messages for the LLM
+            **kwargs: Additional keyword arguments for LLM generation, OpenAI compatible
 
         Raises:
-            ChatProviderNotFoundError: 指定的聊天提供者 ID 未找到。
-            Exception: LLM 生成过程中的其他错误。
-
-        Note:
-            版本 4.5.7 新增。
+            ChatProviderNotFoundError: If the specified chat provider ID is not found
+            Exception: For other errors during LLM generation
         """
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
@@ -151,38 +142,34 @@ class Context:
         tool_call_timeout: int = 60,
         **kwargs: Any,
     ) -> LLMResponse:
-        """运行一个允许 LLM 迭代调用工具直到产生最终答案的代理循环。
+        """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
+        If you do not pass the agent_context parameter, the method will recreate a new agent context.
 
         .. versionadded:: 4.5.7 (sdk)
 
         Args:
-            event: 消息事件对象。
-            chat_provider_id: 要使用的聊天提供者 ID。
-            prompt: 发送给 LLM 的提示词。
-            image_urls: 图片 URL 列表。
-            tools: LLM 可用的工具集。
-            system_prompt: 系统提示词。
-            contexts: 上下文消息。
-            max_steps: 停止循环前的最大工具调用次数。
-            tool_call_timeout: 工具调用超时时间（秒）。
-            **kwargs: 额外关键字参数。支持以下参数：
-                - stream: bool - 是否流式传输 LLM 响应
-                - agent_hooks: BaseAgentRunHooks[AstrAgentContext] - 代理执行期间的钩子
-                - agent_context: AstrAgentContext - 要使用的代理上下文
+            chat_provider_id: The chat provider ID to use.
+            prompt: The prompt to send to the LLM, if `contexts` and `prompt` are both provided, `prompt` will be appended as the last user message
+            image_urls: List of image URLs to include in the prompt, if `contexts` and `prompt` are both provided, `image_urls` will be appended to the last user message
+            tools: ToolSet of tools available to the LLM
+            system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
+            contexts: context messages for the LLM
+            max_steps: Maximum number of tool calls before stopping the loop
+            **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
+                stream: bool - whether to stream the LLM response
+                agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution
+                agent_context: AstrAgentContext - context to use for the agent
+
+                other kwargs will be DIRECTLY passed to the runner.reset() method
 
         Returns:
-            工具调用完成后最终的 LLM 响应。
+            The final LLMResponse after tool calls are completed.
 
         Raises:
-            ChatProviderNotFoundError: 指定的聊天提供者 ID 未找到。
-            Exception: LLM 生成过程中的其他错误。
-
-        Note:
-            kwargs 参数不会被直接传递给LLM，而是由代理循环/运行器处理（例如 `stream`、`agent_hooks`、`agent_context` 等 `runner.reset()` 的参数）。
-            如果不传递 agent_context 参数，该方法会重新创建一个新的代理上下文。
-            版本 4.5.7 新增。
+            ChatProviderNotFoundError: If the specified chat provider ID is not found
+            Exception: For other errors during LLM generation
         """
-        # 延迟导入以避免循环导入
+        # Import here to avoid circular imports
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
             AstrAgentContext,
