@@ -134,11 +134,11 @@
       }
     },
     "sandbox": {
-      "description": "Agent Sandbox Environment",
+      "description": "Agent Sandbox Env(Beta)",
       "provider_settings": {
         "sandbox": {
           "enable": {
-            "description": "Enable Sandbox Environment",
+            "description": "Enable Sandbox Env",
             "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
           },
           "booter": {

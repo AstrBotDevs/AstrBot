@@ -134,7 +134,7 @@
       }
     },
     "sandbox": {
-      "description": "Agent 沙箱环境",
+      "description": "Agent 沙箱环境(Beta)",
       "provider_settings": {
         "sandbox": {
           "enable": {
