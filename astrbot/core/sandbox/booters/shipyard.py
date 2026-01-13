@@ -1,4 +1,3 @@
-import os
 import uuid
 
 from shipyard import ShipyardClient, Spec
@@ -9,35 +8,26 @@ from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import SandboxBooter
 
 
-class ShipyardSandboxClient:
-    _instance = None
-    _initialized = False
-
-    def __init__(self) -> None:
-        if not ShipyardSandboxClient._initialized:
-            self.endpoint = os.getenv("SHIPYARD_ENDPOINT", "http://localhost:8000")
-            self.access_token = os.getenv("SHIPYARD_ACCESS_TOKEN", "")
-            self.client = ShipyardClient(
-                endpoint_url=self.endpoint, access_token=self.access_token
-            )
-            ShipyardSandboxClient._initialized = True
-
-    def __new__(cls) -> "ShipyardSandboxClient":
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-
 class ShipyardBooter(SandboxBooter):
-    def __init__(self):
-        self._sandbox_client = ShipyardSandboxClient()
+    def __init__(
+        self,
+        endpoint_url: str,
+        access_token: str,
+        ttl: int = 3600,
+        session_num: int = 10,
+    ) -> None:
+        self._sandbox_client = ShipyardClient(
+            endpoint_url=endpoint_url, access_token=access_token
+        )
+        self._ttl = ttl
+        self._session_num = session_num
 
     async def boot(self, session_id: str) -> None:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
-        ship = await self._sandbox_client.client.create_ship(
-            ttl=3600,
+        ship = await self._sandbox_client.create_ship(
+            ttl=self._ttl,
             spec=Spec(cpus=1.0, memory="512m"),
-            max_session_num=3,
+            max_session_num=self._session_num,
             session_id=uuid_str,
         )
         logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
@@ -66,7 +56,7 @@ class ShipyardBooter(SandboxBooter):
         """Check if the sandbox is available."""
         try:
             ship_id = self._ship.id
-            data = await self._sandbox_client.client.get_ship(ship_id)
+            data = await self._sandbox_client.get_ship(ship_id)
             if not data:
                 return False
             health = bool(data.get("status", 0) == 1)

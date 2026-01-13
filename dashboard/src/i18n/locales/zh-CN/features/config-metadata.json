@@ -151,6 +151,14 @@
           "shipyard_access_token": {
             "description": "Shipyard 访问令牌",
             "hint": "用于访问 Shipyard 服务的访问令牌。"
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Ship 存活时间(秒)",
+            "hint": "Shipyard 会话的生存时间（秒）。"
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Ship 会话复用上限",
+            "hint": "决定了一个实例承载的最大会话数量。"
           }
         }
       }

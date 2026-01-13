@@ -118,6 +118,8 @@ DEFAULT_CONFIG = {
             "booter": "shipyard",
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
+            "shipyard_ttl": 3600,
+            "shipyard_max_sessions": 10,
         },
     },
     "provider_stt_settings": {
@@ -2576,6 +2578,24 @@ CONFIG_METADATA_3 = {
                         "description": "Shipyard Access Token",
                         "type": "string",
                         "hint": "用于访问 Shipyard 服务的访问令牌。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_ttl": {
+                        "description": "Shipyard Session TTL",
+                        "type": "int",
+                        "hint": "Shipyard 会话的生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_max_sessions": {
+                        "description": "Shipyard Max Sessions",
+                        "type": "int",
+                        "hint": "Shipyard 最大会话数量。",
                         "condition": {
                             "provider_settings.sandbox.enable": True,
                             "provider_settings.sandbox.booter": "shipyard",

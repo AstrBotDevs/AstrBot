@@ -151,6 +151,14 @@
           "shipyard_access_token": {
             "description": "Shipyard Access Token",
             "hint": "Access token for accessing Shipyard service."
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Session TTL",
+            "hint": "Session time-to-live in seconds."
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Max Sessions",
+            "hint": "Maximum number of Shipyard sessions an instance can handle."
           }
         }
       }

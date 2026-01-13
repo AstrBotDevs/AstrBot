@@ -3,9 +3,10 @@ from dataclasses import dataclass, field
 import mcp
 
 from astrbot.api import FunctionTool
-from astrbot.api.event import AstrMessageEvent
-
-from ..sandbox_client import SandboxClient
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.sandbox.sandbox_client import get_booter
 
 
 @dataclass
@@ -30,8 +31,13 @@ class PythonTool(FunctionTool):
         }
     )
 
-    async def run(self, event: AstrMessageEvent, code: str, silent: bool = False):
-        sb = await SandboxClient.get_booter(event.unified_msg_origin)
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
+    ) -> ToolExecResult:
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
             result = await sb.python.exec(code, silent=silent)
             output = result.get("output", {})

@@ -2,9 +2,11 @@ import json
 from dataclasses import dataclass, field
 
 from astrbot.api import FunctionTool
-from astrbot.api.event import AstrMessageEvent
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
 
-from ..sandbox_client import SandboxClient
+from ..sandbox_client import get_booter
 
 
 @dataclass
@@ -35,14 +37,17 @@ class ExecuteShellTool(FunctionTool):
         }
     )
 
-    async def run(
+    async def call(
         self,
-        event: AstrMessageEvent,
+        context: ContextWrapper[AstrAgentContext],
         command: str,
         background: bool = False,
         env: dict = {},
-    ):
-        sb = await SandboxClient.get_booter(event.unified_msg_origin)
+    ) -> ToolExecResult:
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
             result = await sb.shell.exec(command, background=background, env=env)
             return json.dumps(result)

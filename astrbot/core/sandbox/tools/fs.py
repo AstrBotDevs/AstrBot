@@ -3,9 +3,11 @@ import os
 from dataclasses import dataclass, field
 
 from astrbot.api import FunctionTool, logger
-from astrbot.api.event import AstrMessageEvent
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
 
-from ..sandbox_client import SandboxClient
+from ..sandbox_client import get_booter
 
 
 @dataclass
@@ -29,8 +31,13 @@ class CreateFileTool(FunctionTool):
         }
     )
 
-    async def run(self, event: AstrMessageEvent, path: str, content: str):
-        sb = await SandboxClient.get_booter(event.unified_msg_origin)
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], path: str, content: str
+    ) -> ToolExecResult:
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
             result = await sb.fs.create_file(path, content)
             return json.dumps(result)
@@ -55,8 +62,11 @@ class ReadFileTool(FunctionTool):
         }
     )
 
-    async def run(self, event: AstrMessageEvent, path: str):
-        sb = await SandboxClient.get_booter(event.unified_msg_origin)
+    async def call(self, context: ContextWrapper[AstrAgentContext], path: str):
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
             result = await sb.fs.read_file(path)
             return result
@@ -85,12 +95,15 @@ class FileUploadTool(FunctionTool):
         }
     )
 
-    async def run(
+    async def call(
         self,
-        event: AstrMessageEvent,
+        context: ContextWrapper[AstrAgentContext],
         local_path: str,
     ):
-        sb = await SandboxClient.get_booter(event.unified_msg_origin)
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
         try:
             # Check if file exists
             if not os.path.exists(local_path):
