@@ -56,10 +56,14 @@ onUnmounted(() => {
 // 解析 GitHub 仓库信息
 function parseGitHubRepoInfo(repoUrl) {
   if (!repoUrl) return null;
-  // 支持格式: https://github.com/user/repo 或 https://github.com/user/repo.git
-  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
+  // 支持格式: https://github.com/user/repo, /user/repo.git, /user/my.repo 等
+  const match = repoUrl.match(
+    /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/,
+  );
   if (!match) return null;
-  return { owner: match[1], repo: match[2] };
+  const owner = match[1];
+  const repo = match[2].replace(/\.git$/, "");
+  return { owner, repo };
 }
 
 // 获取用户配置的 GitHub 代理
