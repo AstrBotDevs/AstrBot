@@ -15,8 +15,7 @@ For English edition, please refer to the section below the Chinese version.
 
 AstrBot 是一个遵循 **GNU Affero General Public License v3（AGPLv3）** 协议发布的**免费开源软件项目**。
 
-* AstrBot 项目不构成任何形式的商业服务；
-* AstrBot 团队不通过本项目提供任何收费服务。
+* 截至目前，AstrBot 项目未开展任何形式的商业化服务，AstrBot 团队也未通过本项目向用户提供任何收费服务。若您因使用 AstrBot 被要求付费，请务必提高警惕，谨防诈骗行为。
 * AstrBot 的代码实现未对任何第三方系统进行逆向工程、破解、反编译或绕过安全机制等行为。AstrBot 仅使用并支持各即时通讯（IM）平台官方公开提供的机器人接入接口、开放平台能力或相关通信协议进行集成与通信。
 
 ## 2. 无担保声明
