@@ -35,10 +35,16 @@ class PythonTool(FunctionTool):
         try:
             result = await sb.python.exec(code, silent=silent)
             output = result.get("output", {})
+            error = result.get("error", "")
             images: list[dict] = output.get("images", [])
             text: str = output.get("text", "")
 
             resp = mcp.types.CallToolResult(content=[])
+
+            if error:
+                resp.content.append(
+                    mcp.types.TextContent(type="text", text=f"error: {error}")
+                )
 
             if images:
                 for img in images:

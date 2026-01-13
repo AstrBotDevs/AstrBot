@@ -3,8 +3,7 @@
         "description": "Select booter to initialize the sandbox environment.",
         "type": "string",
         "options": [
-            "shipyard-bay",
-            "boxlite"
+            "shipyard-bay"
         ],
         "default": "shipyard-bay"
     },
