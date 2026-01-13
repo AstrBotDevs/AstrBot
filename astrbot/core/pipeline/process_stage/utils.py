@@ -10,6 +10,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.sandbox.tools import (
     CreateFileTool,
     ExecuteShellTool,
+    FileDownloadTool,
     FileUploadTool,
     PythonTool,
     ReadFileTool,
@@ -150,6 +151,7 @@ READ_FILE_TOOL = ReadFileTool()
 EXECUTE_SHELL_TOOL = ExecuteShellTool()
 PYTHON_TOOL = PythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
+FILE_DOWNLOAD_TOOL = FileDownloadTool()
 
 # we prevent astrbot from connecting to known malicious hosts
 # these hosts are base64 encoded

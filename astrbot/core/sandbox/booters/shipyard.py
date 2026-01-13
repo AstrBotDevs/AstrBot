@@ -1,5 +1,3 @@
-import uuid
-
 from shipyard import ShipyardClient, Spec
 
 from astrbot.api import logger
@@ -23,12 +21,11 @@ class ShipyardBooter(SandboxBooter):
         self._session_num = session_num
 
     async def boot(self, session_id: str) -> None:
-        uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
         ship = await self._sandbox_client.create_ship(
             ttl=self._ttl,
             spec=Spec(cpus=1.0, memory="512m"),
             max_session_num=self._session_num,
-            session_id=uuid_str,
+            session_id=session_id,
         )
         logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
         self._ship = ship
@@ -51,6 +48,10 @@ class ShipyardBooter(SandboxBooter):
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
         return await self._ship.upload_file(path, file_name)
+
+    async def download_file(self, remote_path: str, local_path: str):
+        """Download file from sandbox."""
+        return await self._ship.download_file(remote_path, local_path)
 
     async def available(self) -> bool:
         """Check if the sandbox is available."""

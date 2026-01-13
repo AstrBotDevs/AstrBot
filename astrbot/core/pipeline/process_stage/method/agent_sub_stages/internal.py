@@ -38,6 +38,7 @@ from ...stage import Stage
 from ...utils import (
     CREATE_FILE_TOOL,
     EXECUTE_SHELL_TOOL,
+    FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
@@ -492,6 +493,7 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
         req.func_tool.add_tool(PYTHON_TOOL)
         req.func_tool.add_tool(FILE_UPLOAD_TOOL)
+        req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str

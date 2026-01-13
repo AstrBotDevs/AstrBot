@@ -94,7 +94,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 filename = f"{uuid.uuid4()!s}{ext}"
                 dest_path = os.path.join(imgs_dir, filename)
                 shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}|{original_name}"
+                data = f"[FILE]{filename}"
                 await web_chat_back_queue.put(
                     {
                         "type": "file",

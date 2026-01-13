@@ -22,6 +22,10 @@ class SandboxBooter:
         """
         ...
 
+    async def download_file(self, remote_path: str, local_path: str):
+        """Download file from sandbox."""
+        ...
+
     async def available(self) -> bool:
         """Check if the sandbox is available."""
         ...

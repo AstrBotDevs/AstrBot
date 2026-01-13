@@ -3,9 +3,12 @@ import os
 from dataclasses import dataclass, field
 
 from astrbot.api import FunctionTool, logger
+from astrbot.api.event import MessageChain
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.message.components import File
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..sandbox_client import get_booter
 
@@ -130,3 +133,58 @@ class FileUploadTool(FunctionTool):
         except Exception as e:
             logger.error(f"Error uploading file {local_path}: {e}")
             return f"Error uploading file: {str(e)}"
+
+
+@dataclass
+class FileDownloadTool(FunctionTool):
+    name: str = "astrbot_download_file"
+    description: str = "Download a file from the sandbox. Only call this when user explicitly need you to download a file."
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "remote_path": {
+                    "type": "string",
+                    "description": "The path of the file in the sandbox to download.",
+                }
+            },
+            "required": ["remote_path"],
+        }
+    )
+
+    async def call(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        remote_path: str,
+    ) -> ToolExecResult:
+        sb = await get_booter(
+            context.context.context,
+            context.context.event.unified_msg_origin,
+        )
+        try:
+            name = os.path.basename(remote_path)
+
+            local_path = os.path.join(get_astrbot_temp_path(), name)
+
+            # Download file from sandbox
+            await sb.download_file(remote_path, local_path)
+            logger.info(f"File {remote_path} downloaded from sandbox to {local_path}")
+
+            try:
+                name = os.path.basename(local_path)
+                await context.context.event.send(
+                    MessageChain(chain=[File(name=name, file=local_path)])
+                )
+            except Exception as e:
+                logger.error(f"Error sending file message: {e}")
+
+            # remove
+            try:
+                os.remove(local_path)
+            except Exception as e:
+                logger.error(f"Error removing temp file {local_path}: {e}")
+
+            return f"File downloaded successfully to {local_path}"
+        except Exception as e:
+            logger.error(f"Error downloading file {remote_path}: {e}")
+            return f"Error downloading file: {str(e)}"

@@ -1,4 +1,4 @@
-from .fs import CreateFileTool, FileUploadTool, ReadFileTool
+from .fs import CreateFileTool, FileDownloadTool, FileUploadTool, ReadFileTool
 from .python import PythonTool
 from .shell import ExecuteShellTool
 
@@ -8,4 +8,5 @@ __all__ = [
     "FileUploadTool",
     "PythonTool",
     "ExecuteShellTool",
+    "FileDownloadTool",
 ]
