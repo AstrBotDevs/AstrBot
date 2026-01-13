@@ -56,16 +56,18 @@ class SQLiteDatabase(BaseDatabase):
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
         """确保 personas 表有 folder_id 和 sort_order 列。
-        
+
         这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
         的 metadata.create_all 自动创建这些列。
         """
         result = await conn.execute(text("PRAGMA table_info(personas)"))
         columns = {row[1] for row in result.fetchall()}
-        
+
         if "folder_id" not in columns:
             await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN folder_id VARCHAR(36) DEFAULT NULL")
+                text(
+                    "ALTER TABLE personas ADD COLUMN folder_id VARCHAR(36) DEFAULT NULL"
+                )
             )
         if "sort_order" not in columns:
             await conn.execute(
@@ -664,9 +666,11 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
-    async def get_persona_folders(self, parent_id: str | None = None) -> list[PersonaFolder]:
+    async def get_persona_folders(
+        self, parent_id: str | None = None
+    ) -> list[PersonaFolder]:
         """Get all persona folders, optionally filtered by parent_id.
-        
+
         Args:
             parent_id: If None, returns root folders only. If specified, returns
                        children of that folder.
@@ -675,13 +679,17 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             if parent_id is None:
                 # Get root folders (parent_id is NULL)
-                query = select(PersonaFolder).where(
-                    col(PersonaFolder.parent_id).is_(None)
-                ).order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                query = (
+                    select(PersonaFolder)
+                    .where(col(PersonaFolder.parent_id).is_(None))
+                    .order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                )
             else:
-                query = select(PersonaFolder).where(
-                    PersonaFolder.parent_id == parent_id
-                ).order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                query = (
+                    select(PersonaFolder)
+                    .where(PersonaFolder.parent_id == parent_id)
+                    .order_by(col(PersonaFolder.sort_order), col(PersonaFolder.name))
+                )
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -727,7 +735,7 @@ class SQLiteDatabase(BaseDatabase):
 
     async def delete_persona_folder(self, folder_id: str) -> None:
         """Delete a persona folder by its folder_id.
-        
+
         Note: This will also set folder_id to NULL for all personas in this folder,
         moving them to the root directory.
         """
@@ -765,20 +773,24 @@ class SQLiteDatabase(BaseDatabase):
         self, folder_id: str | None = None
     ) -> list[Persona]:
         """Get all personas in a specific folder.
-        
+
         Args:
             folder_id: If None, returns personas in root directory.
         """
         async with self.get_db() as session:
             session: AsyncSession
             if folder_id is None:
-                query = select(Persona).where(
-                    col(Persona.folder_id).is_(None)
-                ).order_by(col(Persona.sort_order), col(Persona.persona_id))
+                query = (
+                    select(Persona)
+                    .where(col(Persona.folder_id).is_(None))
+                    .order_by(col(Persona.sort_order), col(Persona.persona_id))
+                )
             else:
-                query = select(Persona).where(
-                    Persona.folder_id == folder_id
-                ).order_by(col(Persona.sort_order), col(Persona.persona_id))
+                query = (
+                    select(Persona)
+                    .where(Persona.folder_id == folder_id)
+                    .order_by(col(Persona.sort_order), col(Persona.persona_id))
+                )
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -787,7 +799,7 @@ class SQLiteDatabase(BaseDatabase):
         items: list[dict],
     ) -> None:
         """Batch update sort_order for personas and/or folders.
-        
+
         Args:
             items: List of dicts with keys:
                 - id: The persona_id or folder_id
@@ -796,7 +808,7 @@ class SQLiteDatabase(BaseDatabase):
         """
         if not items:
             return
-        
+
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -804,10 +816,10 @@ class SQLiteDatabase(BaseDatabase):
                     item_id = item.get("id")
                     item_type = item.get("type")
                     sort_order = item.get("sort_order")
-                    
+
                     if item_id is None or item_type is None or sort_order is None:
                         continue
-                    
+
                     if item_type == "persona":
                         await session.execute(
                             update(Persona)

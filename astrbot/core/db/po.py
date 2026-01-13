@@ -70,7 +70,7 @@ class ConversationV2(SQLModel, table=True):
 
 class PersonaFolder(SQLModel, table=True):
     """Persona 文件夹，支持递归层级结构。
-    
+
     用于组织和管理多个 Persona，类似于文件系统的目录结构。
     """
 

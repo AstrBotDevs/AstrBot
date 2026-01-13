@@ -98,7 +98,7 @@ class PersonaManager:
         self, folder_id: str | None = None
     ) -> list[Persona]:
         """获取指定文件夹中的 personas
-        
+
         Args:
             folder_id: 文件夹 ID，None 表示根目录
         """
@@ -108,7 +108,7 @@ class PersonaManager:
         self, persona_id: str, folder_id: str | None
     ) -> Persona | None:
         """移动 persona 到指定文件夹
-        
+
         Args:
             persona_id: Persona ID
             folder_id: 目标文件夹 ID，None 表示移动到根目录
@@ -146,7 +146,7 @@ class PersonaManager:
 
     async def get_folders(self, parent_id: str | None = None) -> list[PersonaFolder]:
         """获取文件夹列表
-        
+
         Args:
             parent_id: 父文件夹 ID，None 表示获取根目录下的文件夹
         """
@@ -175,14 +175,14 @@ class PersonaManager:
 
     async def delete_folder(self, folder_id: str) -> None:
         """删除文件夹
-        
+
         Note: 文件夹内的 personas 会被移动到根目录
         """
         await self.db.delete_persona_folder(folder_id)
 
     async def batch_update_sort_order(self, items: list[dict]) -> None:
         """批量更新 personas 和/或 folders 的排序顺序
-        
+
         Args:
             items: 包含以下键的字典列表：
                 - id: persona_id 或 folder_id
@@ -196,13 +196,13 @@ class PersonaManager:
 
     async def get_folder_tree(self) -> list[dict]:
         """获取文件夹树形结构
-        
+
         Returns:
             树形结构的文件夹列表，每个文件夹包含 children 子列表
         """
         all_folders = await self.get_all_folders()
         folder_map: dict[str, dict] = {}
-        
+
         # 创建文件夹字典
         for folder in all_folders:
             folder_map[folder.folder_id] = {
@@ -213,7 +213,7 @@ class PersonaManager:
                 "sort_order": folder.sort_order,
                 "children": [],
             }
-        
+
         # 构建树形结构
         root_folders = []
         for folder_id, folder_data in folder_map.items():
@@ -222,7 +222,7 @@ class PersonaManager:
                 root_folders.append(folder_data)
             elif parent_id in folder_map:
                 folder_map[parent_id]["children"].append(folder_data)
-        
+
         # 递归排序
         def sort_folders(folders: list[dict]) -> list[dict]:
             folders.sort(key=lambda f: (f["sort_order"], f["name"]))
@@ -230,7 +230,7 @@ class PersonaManager:
                 if folder["children"]:
                     folder["children"] = sort_folders(folder["children"])
             return folders
-        
+
         return sort_folders(root_folders)
 
     async def create_persona(
@@ -243,7 +243,7 @@ class PersonaManager:
         sort_order: int = 0,
     ) -> Persona:
         """创建新的 persona。
-        
+
         Args:
             persona_id: Persona 唯一标识
             system_prompt: 系统提示词

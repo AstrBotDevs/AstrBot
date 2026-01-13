@@ -26,13 +26,13 @@ class PersonaCommands:
         for folder in folder_tree:
             # 输出文件夹
             lines.append(f"{prefix}├ 📁 {folder['name']}/")
-            
+
             # 获取该文件夹下的人格
             folder_personas = [
                 p for p in all_personas if p.folder_id == folder["folder_id"]
             ]
             child_prefix = "│ " * (depth + 1)
-            
+
             # 输出该文件夹下的人格
             for persona in folder_personas:
                 lines.append(f"{child_prefix}├ 👤 {persona.persona_id}")

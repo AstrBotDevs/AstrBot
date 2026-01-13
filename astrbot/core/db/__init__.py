@@ -256,7 +256,7 @@ class BaseDatabase(abc.ABC):
         sort_order: int = 0,
     ) -> Persona:
         """Insert a new persona record.
-        
+
         Args:
             persona_id: Unique identifier for the persona
             system_prompt: System prompt for the persona
@@ -362,7 +362,7 @@ class BaseDatabase(abc.ABC):
         items: list[dict],
     ) -> None:
         """Batch update sort_order for personas and/or folders.
-        
+
         Args:
             items: List of dicts with keys:
                 - id: The persona_id or folder_id
