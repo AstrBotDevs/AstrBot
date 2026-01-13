@@ -2570,7 +2570,7 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.enable": True,
                             "provider_settings.sandbox.booter": "shipyard",
                         },
-                        "_special": "check_shipyard_connection"
+                        "_special": "check_shipyard_connection",
                     },
                     "provider_settings.sandbox.shipyard_access_token": {
                         "description": "Shipyard Access Token",
