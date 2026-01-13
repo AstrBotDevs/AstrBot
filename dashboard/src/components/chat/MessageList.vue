@@ -28,7 +28,7 @@
                             <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
                                 <div class="image-attachment">
                                     <img :src="part.embedded_url" class="attached-image"
-                                        @click="$emit('openImagePreview', part.embedded_url)" />
+                                        @click="openImagePreview(part.embedded_url)" />
                                 </div>
                             </div>
 
@@ -178,7 +178,7 @@
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
                                         <div class="embedded-image">
                                             <img :src="part.embedded_url" class="bot-embedded-image"
-                                                @click="$emit('openImagePreview', part.embedded_url)" />
+                                                @click="openImagePreview(part.embedded_url)" />
                                         </div>
                                     </div>
 
@@ -289,6 +289,13 @@
             </v-btn>
         </div>
     </div>
+
+    <!-- 图片预览 Overlay -->
+    <v-overlay v-model="imagePreview.show" class="image-preview-overlay" @click="closeImagePreview">
+        <div class="image-preview-container" @click.stop>
+            <img :src="imagePreview.url" class="preview-image" @click="closeImagePreview" />
+        </div>
+    </v-overlay>
 </template>
 
 <script>
@@ -351,6 +358,11 @@ export default {
                 content: '',
                 messageIndex: null,
                 position: { top: 0, left: 0 }
+            },
+            // 图片预览
+            imagePreview: {
+                show: false,
+                url: ''
             }
         };
     },
@@ -676,7 +688,7 @@ export default {
                     if (!img.hasAttribute('data-click-enabled')) {
                         img.style.cursor = 'pointer';
                         img.setAttribute('data-click-enabled', 'true');
-                        img.onclick = () => this.$emit('openImagePreview', img.src);
+                        img.onclick = () => this.openImagePreview(img.src);
                     }
                 });
             });
@@ -877,6 +889,20 @@ export default {
         formatTTFT(ttft) {
             if (!ttft || ttft <= 0) return '';
             return this.formatDuration(ttft);
+        },
+
+        // 打开图片预览
+        openImagePreview(url) {
+            this.imagePreview.url = url;
+            this.imagePreview.show = true;
+        },
+
+        // 关闭图片预览
+        closeImagePreview() {
+            this.imagePreview.show = false;
+            setTimeout(() => {
+                this.imagePreview.url = '';
+            }, 300);
         }
     }
 }
@@ -1268,10 +1294,10 @@ export default {
 }
 
 .bot-embedded-image {
-    max-width: 40%;
+    max-width: 55%;
     width: auto;
     height: auto;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     transition: transform 0.2s ease;
 }
@@ -1423,12 +1449,14 @@ export default {
     overflow: hidden;
     background-color: #eff3f6;
     margin: 8px 0px;
-    max-width: 300px;
-    transition: max-width 0.1s ease;
+    width: fit-content;
+    min-width: 320px;
+    max-width: 100%;
+    transition: all 0.1s ease;
 }
 
 .tool-call-card.expanded {
-    max-width: 100%;
+    width: 100%;
 }
 
 .tool-call-header {
@@ -1634,5 +1662,37 @@ export default {
     font-weight: 600;
     font-family: 'Fira Code', 'Consolas', monospace;
     color: var(--v-theme-primaryText);
+}
+
+/* 图片预览样式 */
+.image-preview-overlay {
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-preview-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.preview-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.close-preview-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 }
 </style>

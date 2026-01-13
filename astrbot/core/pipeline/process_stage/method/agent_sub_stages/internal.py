@@ -5,7 +5,7 @@ import json
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import Message, TextPart
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -535,6 +535,10 @@ class InternalAgentSubStage(Stage):
                         if isinstance(comp, Image):
                             image_path = await comp.convert_to_file_path()
                             req.image_urls.append(image_path)
+
+                            req.extra_user_content_parts.append(
+                                TextPart(text=f"[Image Attachment: path {image_path}]")
+                            )
 
                     conversation = await self._get_session_conv(event)
                     req.conversation = conversation

@@ -22,6 +22,11 @@ class ShipyardSandboxClient:
             )
             ShipyardSandboxClient._initialized = True
 
+    def __new__(cls) -> "ShipyardSandboxClient":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
 
 class ShipyardBooter(SandboxBooter):
     def __init__(self):
