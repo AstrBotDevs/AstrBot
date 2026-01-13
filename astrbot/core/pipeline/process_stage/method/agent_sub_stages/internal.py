@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -35,8 +36,13 @@ from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
 from ...utils import (
+    CREATE_FILE_TOOL,
+    EXECUTE_SHELL_TOOL,
+    FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    PYTHON_TOOL,
+    READ_FILE_TOOL,
     retrieve_knowledge_base,
 )
 
@@ -92,6 +98,8 @@ class InternalAgentSubStage(Stage):
         self.safety_mode_strategy = settings.get(
             "safety_mode_strategy", "system_prompt"
         )
+
+        self.sandbox_cfg = settings.get("sandbox", {})
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -466,6 +474,24 @@ class InternalAgentSubStage(Stage):
                 f"Unsupported llm_safety_mode strategy: {self.safety_mode_strategy}.",
             )
 
+    def _apply_sandbox_tools(self, req: ProviderRequest, session_id: str) -> None:
+        """Add sandbox tools to the provider request."""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        if self.sandbox_cfg.get("booter") == "shipyard":
+            ep = self.sandbox_cfg.get("shipyard_endpoint", "")
+            at = self.sandbox_cfg.get("shipyard_access_token", "")
+            if not ep or not at:
+                logger.error("Shipyard sandbox configuration is incomplete.")
+                return
+            os.environ["SHIPYARD_ENDPOINT"] = ep
+            os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+        req.func_tool.add_tool(CREATE_FILE_TOOL)
+        req.func_tool.add_tool(READ_FILE_TOOL)
+        req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
+        req.func_tool.add_tool(PYTHON_TOOL)
+        req.func_tool.add_tool(FILE_UPLOAD_TOOL)
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -589,6 +615,10 @@ class InternalAgentSubStage(Stage):
                 # apply llm safety mode
                 if self.llm_safety_mode:
                     self._apply_llm_safety_mode(req)
+
+                # apply sandbox tools
+                if self.sandbox_cfg.get("enable", False):
+                    self._apply_sandbox_tools(req, req.session_id)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

@@ -16,5 +16,8 @@ class SandboxBooter:
     async def shutdown(self) -> None: ...
 
     async def upload_file(self, path: str, file_name: str) -> dict:
-        """Upload file to sandbox"""
+        """Upload file to sandbox.
+
+        Should return a dict with `success` (bool) and `file_path` (str) keys.
+        """
         ...

@@ -5,6 +5,13 @@ from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.sandbox.tools import (
+    CreateFileTool,
+    ExecuteShellTool,
+    FileUploadTool,
+    PythonTool,
+    ReadFileTool,
+)
 from astrbot.core.star.context import Context
 
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
@@ -135,3 +142,9 @@ async def retrieve_knowledge_base(
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
+
+CREATE_FILE_TOOL = CreateFileTool()
+READ_FILE_TOOL = ReadFileTool()
+EXECUTE_SHELL_TOOL = ExecuteShellTool()
+PYTHON_TOOL = PythonTool()
+FILE_UPLOAD_TOOL = FileUploadTool()

@@ -124,7 +124,7 @@ class MockShipyardSandboxClient:
                 loop -= 1
 
 
-class ShipyardBooter(SandboxBooter):
+class BoxliteBooter(SandboxBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(
             f"Booting(Boxlite) for session: {session_id}, this may take a while..."

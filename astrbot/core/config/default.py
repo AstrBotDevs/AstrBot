@@ -113,6 +113,12 @@ DEFAULT_CONFIG = {
             "provider": "moonshotai",
             "moonshotai_api_key": "",
         },
+        "sandbox": {
+            "enable": False,
+            "booter": "shipyard",
+            "shipyard_endpoint": "",
+            "shipyard_access_token": {},
+        },
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2539,6 +2545,44 @@ CONFIG_METADATA_3 = {
             #         "provider_settings.enable": True,
             #     },
             # },
+            "sandbox": {
+                "description": "Agent 沙箱环境",
+                "type": "object",
+                "items": {
+                    "provider_settings.sandbox.enable": {
+                        "description": "启用沙箱环境",
+                        "type": "bool",
+                        "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。",
+                    },
+                    "provider_settings.sandbox.booter": {
+                        "description": "沙箱环境驱动器",
+                        "type": "string",
+                        "options": ["shipyard"],
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_endpoint": {
+                        "description": "Shipyard API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                        "_special": "check_shipyard_connection"
+                    },
+                    "provider_settings.sandbox.shipyard_api_key": {
+                        "description": "Shipyard API Key",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard 服务的 API 密钥。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                },
+            },
             "truncate_and_compress": {
                 "description": "上下文管理策略",
                 "type": "object",

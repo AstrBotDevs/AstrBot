@@ -133,6 +133,28 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent 沙箱环境",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "启用沙箱环境",
+            "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。"
+          },
+          "booter": {
+            "description": "沙箱环境驱动器"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "Shipyard 服务的 API 访问地址。"
+          },
+          "shipyard_api_key": {
+            "description": "Shipyard API Key",
+            "hint": "用于访问 Shipyard 服务的 API 密钥。"
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "上下文管理策略",
       "provider_settings": {

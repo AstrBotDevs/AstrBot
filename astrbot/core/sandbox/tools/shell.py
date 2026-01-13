@@ -42,7 +42,7 @@ class ExecuteShellTool(FunctionTool):
         background: bool = False,
         env: dict = {},
     ):
-        sb = await SandboxClient().get_booter(event.unified_msg_origin)
+        sb = await SandboxClient.get_booter(event.unified_msg_origin)
         try:
             result = await sb.shell.exec(command, background=background, env=env)
             return json.dumps(result)

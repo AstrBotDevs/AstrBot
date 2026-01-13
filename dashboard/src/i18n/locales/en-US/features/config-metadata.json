@@ -133,6 +133,28 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent Sandbox Environment",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "Enable Sandbox Environment",
+            "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
+          },
+          "booter": {
+            "description": "Sandbox Environment Driver"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "API access address for Shipyard service."
+          },
+          "shipyard_api_key": {
+            "description": "Shipyard API Key",
+            "hint": "API key for accessing Shipyard service."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "Context Management Strategy",
       "provider_settings": {

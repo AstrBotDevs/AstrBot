@@ -30,7 +30,7 @@ class CreateFileTool(FunctionTool):
     )
 
     async def run(self, event: AstrMessageEvent, path: str, content: str):
-        sb = await SandboxClient().get_booter(event.unified_msg_origin)
+        sb = await SandboxClient.get_booter(event.unified_msg_origin)
         try:
             result = await sb.fs.create_file(path, content)
             return json.dumps(result)
@@ -56,7 +56,7 @@ class ReadFileTool(FunctionTool):
     )
 
     async def run(self, event: AstrMessageEvent, path: str):
-        sb = await SandboxClient().get_booter(event.unified_msg_origin)
+        sb = await SandboxClient.get_booter(event.unified_msg_origin)
         try:
             result = await sb.fs.read_file(path)
             return result
@@ -90,7 +90,7 @@ class FileUploadTool(FunctionTool):
         event: AstrMessageEvent,
         local_path: str,
     ):
-        sb = await SandboxClient().get_booter(event.unified_msg_origin)
+        sb = await SandboxClient.get_booter(event.unified_msg_origin)
         try:
             # Check if file exists
             if not os.path.exists(local_path):
