@@ -53,6 +53,74 @@ onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
 });
 
+// 解析 GitHub 仓库信息
+function parseGitHubRepoInfo(repoUrl) {
+  if (!repoUrl) return null;
+  // 支持格式: https://github.com/user/repo 或 https://github.com/user/repo.git
+  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2] };
+}
+
+// 获取用户配置的 GitHub 代理
+function getGitHubProxy() {
+  return localStorage.getItem("selectedGitHubProxy") || "";
+}
+
+// 将相对路径转换为 GitHub Raw URL
+function convertToRawUrl(relativePath, repoInfo, branch = "main") {
+  if (!repoInfo) return relativePath;
+  // 清理路径：移除开头的 ./ 或 /
+  const cleanPath = relativePath.replace(/^\.?\//, "");
+  const rawUrl = `https://raw.githubusercontent.com/${repoInfo.owner}/${repoInfo.repo}/${branch}/${cleanPath}`;
+  const proxy = getGitHubProxy();
+  // 如果有代理，添加代理前缀
+  return proxy ? `${proxy.replace(/\/+$/, "")}/${rawUrl}` : rawUrl;
+}
+
+// 检查是否为相对路径（用于图片）
+function isRelativePath(src) {
+  if (!src) return false;
+  // 绝对路径或 data URI 不需要转换
+  return (
+    !src.startsWith("http://") &&
+    !src.startsWith("https://") &&
+    !src.startsWith("//") &&
+    !src.startsWith("data:")
+  );
+}
+
+// 检查是否为仓库内的相对链接（用于文档链接）
+function isRepoRelativeLink(href) {
+  if (!href) return false;
+  // 排除绝对 URL
+  if (
+    href.startsWith("http://") ||
+    href.startsWith("https://") ||
+    href.startsWith("//")
+  )
+    return false;
+  // 排除纯锚点链接
+  if (href.startsWith("#")) return false;
+  // 排除协议链接（mailto:, tel:, javascript: 等）
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return false;
+  // 剩余的被视为相对链接（如 ./file.md, ../docs/readme.md, path/to/file）
+  return true;
+}
+
+// 将相对链接转换为 GitHub Blob URL（用于代码和文档查看）
+function convertToBlobUrl(relativePath, repoInfo, branch = "main") {
+  if (!repoInfo) return relativePath;
+  // 分离路径和锚点
+  const [pathPart, anchor] = relativePath.split("#");
+  // 清理路径：移除开头的 ./ 或 /
+  const cleanPath = pathPart.replace(/^\.?\//, "");
+  let blobUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${branch}/${cleanPath}`;
+  // 保留锚点
+  if (anchor) blobUrl += `#${anchor}`;
+  return blobUrl;
+}
+
 // 渲染后的 HTML
 const renderedHtml = computed(() => {
   // 强制依赖 locale，确保语言切换时重新渲染
@@ -153,14 +221,37 @@ const renderedHtml = computed(() => {
   // 3. 后处理方案：完全隔离，安全性最高
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
+
+  // 解析仓库信息（用于转换相对路径）
+  const repoInfo = parseGitHubRepoInfo(props.repoUrl);
+
+  // 4. 处理链接
   tempDiv.querySelectorAll("a").forEach((link) => {
     const href = link.getAttribute("href");
-    // 强制所有外部链接使用安全的 _blank 策略
-    if (href && (href.startsWith("http") || href.startsWith("//"))) {
+    if (!href) return;
+
+    // 外部链接：添加安全属性
+    if (href.startsWith("http") || href.startsWith("//")) {
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    }
+    // 仓库内相对链接：转换为 GitHub Blob URL
+    else if (repoInfo && isRepoRelativeLink(href)) {
+      link.setAttribute("href", convertToBlobUrl(href, repoInfo));
       link.setAttribute("target", "_blank");
       link.setAttribute("rel", "noopener noreferrer");
     }
   });
+
+  // 5. 转换图片相对路径为 GitHub Raw URL
+  if (repoInfo) {
+    tempDiv.querySelectorAll("img").forEach((img) => {
+      const src = img.getAttribute("src");
+      if (isRelativePath(src)) {
+        img.setAttribute("src", convertToRawUrl(src, repoInfo));
+      }
+    });
+  }
 
   return tempDiv.innerHTML;
 });
