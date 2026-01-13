@@ -88,7 +88,7 @@ class AstrBotDashboard:
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
-        self.eula_route = EulaRoute(self.context, db, core_lifecycle)
+        self.eula_route = EulaRoute(self.context)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",

@@ -59,6 +59,7 @@
 import { ref, watch, computed } from 'vue'
 import axios from 'axios'
 import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { useI18n } from '@/i18n/composables'
 
 const { t } = useI18n()
@@ -80,14 +81,26 @@ const accepted = ref(false)
 
 let resolvePromise = null
 
-// 渲染 Markdown 内容
+// 渲染 Markdown 内容（使用 DOMPurify 清理以避免 XSS 风险）
 const renderedContent = computed(() => {
     if (!eulaContent.value) return ''
     try {
-        return md.render(eulaContent.value)
+        const rawHtml = md.render(eulaContent.value)
+        return DOMPurify.sanitize(rawHtml, {
+            ALLOWED_TAGS: [
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'p', 'br', 'hr',
+                'ul', 'ol', 'li',
+                'blockquote', 'pre', 'code',
+                'a', 'strong', 'em', 'del', 's',
+                'table', 'thead', 'tbody', 'tr', 'th', 'td',
+                'div', 'span',
+            ],
+            ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'id'],
+        })
     } catch (e) {
         console.error('Failed to render markdown:', e)
-        return eulaContent.value
+        return DOMPurify.sanitize(eulaContent.value)
     }
 })
 
@@ -134,6 +147,7 @@ const handleAccept = async () => {
             isOpen.value = false
             if (resolvePromise) {
                 resolvePromise({ success: true })
+                resolvePromise = null  // 清空回调以避免内存泄漏和重复调用
             }
         } else {
             error.value = response.data.message || t('features.eula.dialog.acceptError')

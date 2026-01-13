@@ -183,6 +183,11 @@ DEFAULT_CONFIG = {
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
+    "eula": {
+        "accepted": False,
+        "accepted_at": "",
+        "accepted_by": "",
+    },
 }
 
 
@@ -2296,6 +2301,14 @@ CONFIG_METADATA_2 = {
             "kb_fusion_top_k": {"type": "int", "default": 20},
             "kb_final_top_k": {"type": "int", "default": 5},
             "kb_agentic_mode": {"type": "bool"},
+            "eula": {
+                "type": "object",
+                "items": {
+                    "accepted": {"type": "bool"},
+                    "accepted_at": {"type": "string"},
+                    "accepted_by": {"type": "string"},
+                },
+            },
         },
     },
 }

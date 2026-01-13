@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 
 from quart import g
 
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_path, get_astrbot_root
 
 from .route import Response, Route, RouteContext
@@ -22,12 +20,8 @@ class EulaRoute(Route):
     def __init__(
         self,
         context: RouteContext,
-        db: BaseDatabase,
-        core_lifecycle: AstrBotCoreLifecycle,
     ) -> None:
         super().__init__(context)
-        self.db = db
-        self.core_lifecycle = core_lifecycle
         self.routes = {
             "/eula/status": ("GET", self.get_eula_status),
             "/eula/content": ("GET", self.get_eula_content),
