@@ -9,7 +9,6 @@ export function useProjects() {
     async function getProjects() {
         try {
             const res = await axios.get('/api/chatui_project/list');
-            console.log('Fetched projects:', res);
             if (res.data.status === 'ok') {
                 projects.value = res.data.data || [];
                 
