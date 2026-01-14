@@ -155,12 +155,12 @@
             <v-card-title class="dialog-title">{{ tm('actions.editTitle') }}</v-card-title>
             <v-card-text>
                 <v-text-field v-model="editingTitle" :label="tm('conversation.newConversation')" variant="outlined"
-                    hide-details class="mt-2" @keyup.enter="saveTitle" autofocus />
+                    hide-details class="mt-2" @keyup.enter="handleSaveTitle" autofocus />
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
                 <v-btn variant="text" @click="editTitleDialog = false" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn variant="text" @click="saveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
+                <v-btn variant="text" @click="handleSaveTitle" color="primary">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
@@ -346,6 +346,16 @@ function openImagePreview(imageUrl: string) {
     imagePreviewDialog.value = true;
 }
 
+async function handleSaveTitle() {
+    await saveTitle();
+    
+    // 如果在项目视图中，刷新项目会话列表
+    if (selectedProjectId.value) {
+        const sessions = await getProjectSessions(selectedProjectId.value);
+        projectSessions.value = sessions;
+    }
+}
+
 function handleReplyMessage(msg: any, index: number) {
     // 从消息中获取 id (PlatformSessionHistoryMessage 的 id)
     const messageId = msg.id;
@@ -447,6 +457,12 @@ function handleNewChat() {
 async function handleDeleteConversation(sessionId: string) {
     await deleteSessionFn(sessionId);
     messages.value = [];
+    
+    // 如果在项目视图中，刷新项目会话列表
+    if (selectedProjectId.value) {
+        const sessions = await getProjectSessions(selectedProjectId.value);
+        projectSessions.value = sessions;
+    }
 }
 
 async function handleSelectProject(projectId: string) {
@@ -523,8 +539,16 @@ async function handleSendMessage() {
     }
 
     const isCreatingNewSession = !currSessionId.value;
+    const currentProjectId = selectedProjectId.value; // 保存当前项目ID
+    
     if (isCreatingNewSession) {
         await newSession();
+        
+        // 如果在项目视图中创建新会话，立即退出项目视图
+        if (currentProjectId) {
+            selectedProjectId.value = null;
+            projectSessions.value = [];
+        }
     }
 
     const promptToSend = prompt.value.trim();
@@ -556,12 +580,13 @@ async function handleSendMessage() {
         replyToSend
     );
 
-    // 如果在项目视图中创建了新会话，自动添加到当前项目
-    if (isCreatingNewSession && selectedProjectId.value && currSessionId.value) {
-        await addSessionToProject(currSessionId.value, selectedProjectId.value);
-        // 刷新项目会话列表
-        const sessions = await getProjectSessions(selectedProjectId.value);
-        projectSessions.value = sessions;
+    // 如果在项目中创建了新会话，将其添加到项目
+    if (isCreatingNewSession && currentProjectId && currSessionId.value) {
+        await addSessionToProject(currSessionId.value, currentProjectId);
+        // 刷新会话列表，移除已添加到项目的会话
+        await getSessions();
+        // 重新获取会话消息以更新项目信息（用于面包屑显示）
+        await getSessionMsg(currSessionId.value);
     }
 }
 
