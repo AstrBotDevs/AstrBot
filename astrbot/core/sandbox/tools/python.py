@@ -62,6 +62,11 @@ class PythonTool(FunctionTool):
             if text:
                 resp.content.append(mcp.types.TextContent(type="text", text=text))
 
+            if not resp.content:
+                resp.content.append(
+                    mcp.types.TextContent(type="text", text="No output.")
+                )
+
             return resp
 
         except Exception as e:
