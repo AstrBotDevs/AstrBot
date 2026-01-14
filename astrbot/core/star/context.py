@@ -233,20 +233,16 @@ class Context:
         return llm_resp
 
     async def get_current_chat_provider_id(self, umo: str) -> str:
-        """获取当前使用的聊天提供者 ID。
+        """获取当前使用的聊天模型 Provider ID。
 
         Args:
-            umo: unified_message_origin 值，如果提供并且用户启用了提供者会话隔离，
-                 将使用该会话偏好的提供者。
+            umo: unified_message_origin。消息会话来源 ID。
 
         Returns:
-            当前使用的聊天提供者 ID。
+            指定消息会话来源当前使用的聊天模型 Provider ID。
 
         Raises:
-            ProviderNotFoundError: 指定的聊天提供者未找到。
-
-        Note:
-            该方法会自动处理会话级别的提供者偏好设置。
+            ProviderNotFoundError: 未找到。
         """
         prov = self.get_using_provider(umo)
         if not prov:
