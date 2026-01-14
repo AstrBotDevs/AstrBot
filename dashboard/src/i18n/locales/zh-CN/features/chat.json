@@ -91,6 +91,12 @@
     "noSessions": "该项目暂无对话",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
+  "multiChat": {
+    "multiMode": "多对话模式",
+    "selectSessions": "选择对话",
+    "selectTip": "至少选择2个对话进入多对话模式",
+    "enterMultiMode": "进入多对话模式"
+  },
   "time": {
     "today": "今天",
     "yesterday": "昨天"

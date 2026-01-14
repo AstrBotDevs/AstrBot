@@ -89,6 +89,12 @@
     "noSessions": "No conversations in this project",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
+  "multiChat": {
+    "multiMode": "Multi-Chat Mode",
+    "selectSessions": "Select Conversations",
+    "selectTip": "Select at least 2 conversations to enter multi-chat mode",
+    "enterMultiMode": "Enter Multi-Chat Mode"
+  },
   "time": {
     "today": "Today",
     "yesterday": "Yesterday"

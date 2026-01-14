@@ -27,6 +27,14 @@
                 v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
         </div>
 
+        <!-- 多对话模式入口 -->
+        <div style="padding: 0 8px 8px 8px; opacity: 0.6;">
+            <v-btn block variant="text" class="new-chat-btn" @click="$emit('openMultiChatMode')"
+                v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-view-carousel">{{ tm('multiChat.multiMode') }}</v-btn>
+            <v-btn icon="mdi-view-carousel" rounded="xl" @click="$emit('openMultiChatMode')"
+                v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
+        </div>
+
         <!-- 项目列表组件 -->
         <ProjectList
             v-if="!sidebarCollapsed || isMobile"
@@ -178,6 +186,7 @@ const emit = defineEmits<{
     createProject: [];
     editProject: [project: Project];
     deleteProject: [projectId: string];
+    openMultiChatMode: [];
 }>();
 
 const { t } = useI18n();

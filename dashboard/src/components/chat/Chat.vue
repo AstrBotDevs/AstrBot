@@ -26,10 +26,11 @@
                     @createProject="showCreateProjectDialog"
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
+                    @openMultiChatMode="openMultiChatDialog"
                 />
 
                 <!-- 右侧聊天内容区域 -->
-                <div class="chat-content-panel">
+                <div class="chat-content-panel" v-if="!isMultiChatMode">
 
                     <div class="conversation-header fade-in" v-if="isMobile">
                         <!-- 手机端菜单按钮 -->
@@ -146,6 +147,27 @@
                     />
                 </div>
 
+                <!-- 多对话模式视图 -->
+                <MultiChatView
+                    v-if="isMultiChatMode"
+                    :sessionIds="multiChatSessionIds"
+                    :sessions="sessions"
+                    :isDark="isDark"
+                    :isStreaming="isStreaming"
+                    :isConvRunning="isConvRunning"
+                    :enableStreaming="enableStreaming"
+                    :isRecording="isRecording"
+                    :getSessionMessages="getMessagesForMultiChat"
+                    @exitMultiMode="exitMultiChatMode"
+                    @openImagePreview="openImagePreview"
+                    @sendMessage="handleMultiChatSendMessage"
+                    @toggleStreaming="toggleStreaming"
+                    @startRecording="handleStartRecording"
+                    @stopRecording="handleStopRecording"
+                    @pasteImage="(sessionId, event) => handlePaste(event)"
+                    @fileSelect="(sessionId, files) => handleFileSelect(files)"
+                />
+
             </div>
         </v-card-text>
     </v-card>
@@ -184,11 +206,19 @@
         :project="editingProject"
         @save="handleSaveProject"
     />
+
+    <!-- 多对话模式选择对话框 -->
+    <SessionSelectDialog
+        v-model="multiChatDialog"
+        :sessions="sessions"
+        @confirm="enterMultiChatMode"
+    />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import axios from 'axios';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
@@ -198,6 +228,8 @@ import ChatInput from '@/components/chat/ChatInput.vue';
 import ProjectDialog from '@/components/chat/ProjectDialog.vue';
 import ProjectView from '@/components/chat/ProjectView.vue';
 import WelcomeView from '@/components/chat/WelcomeView.vue';
+import SessionSelectDialog from '@/components/chat/SessionSelectDialog.vue';
+import MultiChatView from '@/components/chat/MultiChatView.vue';
 import type { ProjectFormData } from '@/components/chat/ProjectDialog.vue';
 import { useSessions } from '@/composables/useSessions';
 import { useMessages } from '@/composables/useMessages';
@@ -300,6 +332,11 @@ const projectSessions = ref<any[]>([]);
 const currentProject = computed(() => 
     projects.value.find(p => p.project_id === selectedProjectId.value)
 );
+
+// 多对话模式状态
+const multiChatDialog = ref(false);
+const isMultiChatMode = ref(false);
+const multiChatSessionIds = ref<string[]>([]);
 
 // 引用消息状态
 interface ReplyInfo {
@@ -494,6 +531,90 @@ async function handleSaveProject(formData: ProjectFormData, projectId?: string) 
 
 async function handleDeleteProject(projectId: string) {
     await deleteProject(projectId);
+}
+
+// 多对话模式相关函数
+function openMultiChatDialog() {
+    multiChatDialog.value = true;
+}
+
+function enterMultiChatMode(sessionIds: string[]) {
+    if (sessionIds.length < 2) return;
+    
+    multiChatSessionIds.value = sessionIds;
+    isMultiChatMode.value = true;
+    
+    // 手机端关闭侧边栏
+    if (isMobile.value) {
+        closeMobileSidebar();
+    }
+}
+
+function exitMultiChatMode() {
+    isMultiChatMode.value = false;
+    multiChatSessionIds.value = [];
+    
+    // 恢复到第一个会话
+    if (sessions.value.length > 0) {
+        handleSelectConversation([sessions.value[0].session_id]);
+    }
+}
+
+async function getMessagesForMultiChat(sessionId: string): Promise<any[]> {
+    try {
+        const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
+        let history = response.data.data.history || [];
+        
+        // 处理历史消息（解析附件等）
+        for (let i = 0; i < history.length; i++) {
+            let content = history[i].content;
+            // 这里可以调用 parseMessageContent 如果需要
+            // 但为了简化，我们直接返回原始数据
+        }
+        
+        return history;
+    } catch (error) {
+        console.error(`获取会话 ${sessionId} 消息失败:`, error);
+        return [];
+    }
+}
+
+async function handleMultiChatSendMessage(sessionId: string, data: any) {
+    // 保存原始状态
+    const previousSessionId = currSessionId.value;
+    const previousPrompt = prompt.value;
+    
+    try {
+        // 临时切换到目标会话
+        currSessionId.value = sessionId;
+        prompt.value = data.prompt;
+        
+        // 获取选择的提供商和模型
+        const selection = chatInputRef.value?.getCurrentSelection();
+        const selectedProviderId = selection?.providerId || '';
+        const selectedModelName = selection?.modelName || '';
+        
+        // 发送消息
+        await sendMsg(
+            data.prompt,
+            data.stagedFiles || [],
+            data.stagedAudios || '',
+            selectedProviderId,
+            selectedModelName,
+            data.replyTo || null
+        );
+        
+        // 发送成功后，触发该会话消息列表刷新
+        // MultiChatView 会监听 sessions 的变化或者我们可以手动触发重新加载
+        // 由于 useMessages 已经处理了消息的更新，我们只需要等待下一个 tick
+        await nextTick();
+    } catch (error) {
+        console.error('多对话模式发送消息失败:', error);
+    } finally {
+        // 恢复原始状态
+        currSessionId.value = previousSessionId;
+        prompt.value = previousPrompt;
+    }
 }
 
 async function handleStartRecording() {
