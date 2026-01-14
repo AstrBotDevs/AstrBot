@@ -70,13 +70,24 @@
     "disabled": "Streaming disabled",
     "on": "Stream",
     "off": "Normal"
-  },
-  "reasoning": {
+  },  "config": {
+    "title": "Config"
+  },  "reasoning": {
     "thinking": "Thinking Process"
   },
   "reply": {
     "replyTo": "Reply to",
     "notFound": "Message not found"
+  },
+  "project": {
+    "title": "Projects",
+    "create": "Create Project",
+    "edit": "Edit Project",
+    "name": "Project Name",
+    "emoji": "Icon (Emoji)",
+    "description": "Description (Optional)",
+    "noSessions": "No conversations in this project",
+    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
   "time": {
     "today": "Today",

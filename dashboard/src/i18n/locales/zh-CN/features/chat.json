@@ -71,12 +71,25 @@
     "on": "流式",
     "off": "普通"
   },
+  "config": {
+    "title": "配置文件"
+  },
   "reasoning": {
     "thinking": "思考过程"
   },
   "reply": {
     "replyTo": "引用",
     "notFound": "无法定位消息"
+  },
+  "project": {
+    "title": "项目",
+    "create": "创建项目",
+    "edit": "编辑项目",
+    "name": "项目名称",
+    "emoji": "图标 (Emoji)",
+    "description": "项目描述（可选）",
+    "noSessions": "该项目暂无对话",
+    "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
   "time": {
     "today": "今天",
