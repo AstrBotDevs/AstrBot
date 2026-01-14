@@ -40,8 +40,9 @@ class PythonTool(FunctionTool):
         )
         try:
             result = await sb.python.exec(code, silent=silent)
-            output = result.get("output", {})
-            error = result.get("error", "")
+            data = result.get("data", {})
+            output = data.get("output", {})
+            error = data.get("error", "")
             images: list[dict] = output.get("images", [])
             text: str = output.get("text", "")
 

@@ -36,14 +36,12 @@ from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
 from ...utils import (
-    CREATE_FILE_TOOL,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
-    READ_FILE_TOOL,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -488,12 +486,11 @@ class InternalAgentSubStage(Stage):
                 return
             os.environ["SHIPYARD_ENDPOINT"] = ep
             os.environ["SHIPYARD_ACCESS_TOKEN"] = at
-        req.func_tool.add_tool(CREATE_FILE_TOOL)
-        req.func_tool.add_tool(READ_FILE_TOOL)
         req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
         req.func_tool.add_tool(PYTHON_TOOL)
         req.func_tool.add_tool(FILE_UPLOAD_TOOL)
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+        req.system_prompt += "\nYou have access to a sandboxed environment and can execute shell commands and Python code securely.\n"
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -575,6 +572,16 @@ class InternalAgentSubStage(Stage):
 
                             req.extra_user_content_parts.append(
                                 TextPart(text=f"[Image Attachment: path {image_path}]")
+                            )
+                        elif isinstance(comp, File) and self.sandbox_cfg.get(
+                            "enable", False
+                        ):
+                            file_path = await comp.get_file()
+                            file_name = comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=f"[File Attachment: name {file_name}, path {file_path}]"
+                                )
                             )
 
                     conversation = await self._get_session_conv(event)
