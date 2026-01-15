@@ -27,6 +27,20 @@ Rules:
 - Output same language as the user's input.
 """
 
+SANDBOX_MODE_PROMPT = (
+    "You have access to a sandboxed environment and can execute shell commands and Python code securely."
+    "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
+    "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
+    "If the current task matches the description of a specific skill, prioritize following the workflow defined by that skill."
+    "Use `ls /app/skills/` to list all available skills. "
+    "Use `cat /app/skills/{skill_name}/SKILL.md` to read the documentation of a specific skill."
+    "SKILL.md might be large, you can read the description first, which is located in the YAML frontmatter of the file."
+    "Use shell commands such as grep, sed, awk to extract relevant information from the documentation as needed.\n"
+    "Note:\n"
+    "1. If you use shell, your command will always runs in the /home/<username>/workspace directory.\n"
+    "2. If you use IPython, you would better use absolute paths when dealing with files to avoid confusion.\n"
+)
+
 
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):

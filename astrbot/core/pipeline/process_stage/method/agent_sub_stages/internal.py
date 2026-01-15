@@ -42,6 +42,7 @@ from ...utils import (
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
+    SANDBOX_MODE_PROMPT,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -481,7 +482,7 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(PYTHON_TOOL)
         req.func_tool.add_tool(FILE_UPLOAD_TOOL)
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
-        req.system_prompt += "\nYou have access to a sandboxed environment and can execute shell commands and Python code securely.\n"
+        req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
