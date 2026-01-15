@@ -342,54 +342,45 @@ class InternalAgentSubStage(Stage):
         prov: Provider,
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
-        if not req.conversation:
+        from astrbot.core import db_helper
+
+        chatui_session_id = event.session_id.split("!")[-1]
+        user_prompt = req.prompt
+
+        session = await db_helper.get_platform_session_by_id(chatui_session_id)
+
+        if (
+            not user_prompt
+            or not chatui_session_id
+            or not session
+            or session.display_name
+        ):
             return
-        conversation = await self.conv_manager.get_conversation(
-            event.unified_msg_origin,
-            req.conversation.cid,
+
+        llm_resp = await prov.text_chat(
+            system_prompt=(
+                "You are a conversation title generator. "
+                "Generate a concise title in the same language as the user’s input, "
+                "no more than 10 words, capturing only the core topic."
+                "If the input is a greeting, small talk, or has no clear topic, "
+                "(e.g., “hi”, “hello”, “haha”), return <None>. "
+                "Output only the title itself or <None>, with no explanations."
+            ),
+            prompt=(
+                f"Generate a concise title for the following user query:\n{user_prompt}"
+            ),
         )
-        if conversation and not req.conversation.title:
-            messages = json.loads(conversation.history)
-            latest_pair = messages[-2:]
-            if not latest_pair:
+        if llm_resp and llm_resp.completion_text:
+            title = llm_resp.completion_text.strip()
+            if not title or "<None>" in title:
                 return
-            content = latest_pair[0].get("content", "")
-            if isinstance(content, list):
-                # 多模态
-                text_parts = []
-                for item in content:
-                    if isinstance(item, dict):
-                        if item.get("type") == "text":
-                            text_parts.append(item.get("text", ""))
-                        elif item.get("type") == "image":
-                            text_parts.append("[图片]")
-                    elif isinstance(item, str):
-                        text_parts.append(item)
-                cleaned_text = "User: " + " ".join(text_parts).strip()
-            elif isinstance(content, str):
-                cleaned_text = "User: " + content.strip()
-            else:
-                return
-            logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
-            llm_resp = await prov.text_chat(
-                system_prompt="You are expert in summarizing user's query.",
-                prompt=(
-                    f"Please summarize the following query of user:\n"
-                    f"{cleaned_text}\n"
-                    "Only output the summary within 10 words, DO NOT INCLUDE any other text."
-                    "You must use the same language as the user."
-                    "If you think the dialog is too short to summarize, only output a special mark: `<None>`"
-                ),
+            logger.info(
+                f"Generated chatui title for session {chatui_session_id}: {title}"
             )
-            if llm_resp and llm_resp.completion_text:
-                title = llm_resp.completion_text.strip()
-                if not title or "<None>" in title:
-                    return
-                await self.conv_manager.update_conversation_title(
-                    unified_msg_origin=event.unified_msg_origin,
-                    title=title,
-                    conversation_id=req.conversation.cid,
-                )
+            await db_helper.update_platform_session(
+                session_id=chatui_session_id,
+                display_name=title,
+            )
 
     async def _save_to_history(
         self,
@@ -618,6 +609,10 @@ class InternalAgentSubStage(Stage):
                             "limit"
                         ]["context"]
 
+                # ChatUI 对话的标题生成
+                if event.get_platform_name() == "webchat":
+                    asyncio.create_task(self._handle_webchat(event, req, provider))
+
                 await agent_runner.reset(
                     provider=provider,
                     request=req,
@@ -687,10 +682,6 @@ class InternalAgentSubStage(Stage):
                         agent_runner.run_context.messages,
                         agent_runner.stats,
                     )
-
-            # 异步处理 WebChat 特殊情况
-            if event.get_platform_name() == "webchat":
-                asyncio.create_task(self._handle_webchat(event, req, provider))
 
             asyncio.create_task(
                 Metric.upload(
