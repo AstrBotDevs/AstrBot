@@ -49,7 +49,7 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
-        self.session = MessageSesion(
+        self.session = MessageSession(
             platform_name=platform_meta.id,
             message_type=message_obj.type,
             session_id=session_id,
@@ -78,15 +78,8 @@ class AstrMessageEvent(abc.ABC):
     @unified_msg_origin.setter
     def unified_msg_origin(self, value: str):
         """设置统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
-        parts = value.split(":")
-        if len(parts) != 3:
-            raise ValueError(
-                "unified_msg_origin 格式错误，应该为 platform_name:message_type:session_id",
-            )
-        platform_name, message_type_str, session_id = parts
-        self.session.platform_name = platform_name
-        self.session.message_type = MessageType(message_type_str)
-        self.session.session_id = session_id
+        self.new_session = MessageSession.from_str(value)
+        self.session = self.new_session
 
     @property
     def session_id(self) -> str:
