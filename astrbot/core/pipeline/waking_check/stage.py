@@ -81,7 +81,7 @@ class WakingCheckStage(Stage):
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)
             if sid:
-                event.session.session_id = sid
+                event.session_id = sid
 
         # ignore bot self message
         if (
