@@ -370,6 +370,8 @@ class DiscordPlatformAdapter(Platform):
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
                 continue
+            if not handler_md.enabled:
+                continue
             for event_filter in handler_md.event_filters:
                 cmd_info = self._extract_command_info(event_filter, handler_md)
                 if not cmd_info:
