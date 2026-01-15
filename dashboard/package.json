@@ -34,7 +34,7 @@
     "pinyin-pro": "^3.26.0",
     "remixicon": "3.5.0",
     "shiki": "^3.20.0",
-    "stream-markdown": "^0.0.11",
+    "stream-markdown": "^0.0.13",
     "stream-monaco": "^0.0.8",
     "vee-validate": "4.11.3",
     "vite-plugin-vuetify": "1.0.2",
