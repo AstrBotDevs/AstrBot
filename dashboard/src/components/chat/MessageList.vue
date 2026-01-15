@@ -147,24 +147,44 @@
                                                     borderTopColor: 'rgba(100, 140, 200, 0.3)',
                                                     backgroundColor: 'rgba(30, 45, 70, 0.5)'
                                                 } : {}">
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">ID:</span>
-                                                    <code class="detail-value"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
-                                                        }}</code>
-                                                </div>
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">Args:</span>
-                                                    <pre class="detail-value detail-json"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-                                                            JSON.stringify(toolCall.args, null, 2) }}</pre>
-                                                </div>
-                                                <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                    <span class="detail-label">Result:</span>
-                                                    <pre class="detail-value detail-json detail-result"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
+                                                <!-- Special rendering for iPython tool -->
+                                                <template v-if="isIPythonTool(toolCall)">
+                                                    <div class="ipython-code-container">
+                                                        <!-- <div class="detail-label ipython-label">Code:</div> -->
+                                                        <div v-if="shikiReady && getIPythonCode(toolCall)" 
+                                                            class="ipython-code-highlighted"
+                                                            v-html="highlightIPythonCode(getIPythonCode(toolCall))"></div>
+                                                        <pre v-else class="detail-value detail-json"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ getIPythonCode(toolCall) || 'No code available' }}</pre>
+                                                    </div>
+                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                        <span class="detail-label">Result:</span>
+                                                        <pre class="detail-value detail-json detail-result"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}</pre>
+                                                    </div>
+                                                </template>
+                                                
+                                                <!-- Default rendering for other tools -->
+                                                <template v-else>
+                                                    <div class="tool-call-detail-row">
+                                                        <span class="detail-label">ID:</span>
+                                                        <code class="detail-value"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
+                                                            }}</code>
+                                                    </div>
+                                                    <div class="tool-call-detail-row">
+                                                        <span class="detail-label">Args:</span>
+                                                        <pre class="detail-value detail-json"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
+                                                                JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                    </div>
+                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                        <span class="detail-label">Result:</span>
+                                                        <pre class="detail-value detail-json detail-result"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
                 </pre>
-                                                </div>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </div>
                                     </div>
@@ -305,6 +325,7 @@ import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
+import { createHighlighter } from 'shiki';
 
 enableKatex();
 enableMermaid();
@@ -363,15 +384,19 @@ export default {
             imagePreview: {
                 show: false,
                 url: ''
-            }
+            },
+            // Shiki highlighter
+            shikiHighlighter: null,
+            shikiReady: false
         };
     },
-    mounted() {
+    async mounted() {
         this.initCodeCopyButtons();
         this.initImageClickEvents();
         this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
+        await this.initShiki();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -903,6 +928,52 @@ export default {
             setTimeout(() => {
                 this.imagePreview.url = '';
             }, 300);
+        },
+
+        // Initialize Shiki highlighter
+        async initShiki() {
+            try {
+                this.shikiHighlighter = await createHighlighter({
+                    themes: ['nord', 'github-light'],
+                    langs: ['python']
+                });
+                this.shikiReady = true;
+            } catch (err) {
+                console.error('Failed to initialize Shiki:', err);
+            }
+        },
+
+        // Check if tool is iPython executor
+        isIPythonTool(toolCall) {
+            return toolCall.name === 'astrbot_execute_ipython';
+        },
+
+        // Get iPython code from tool args
+        getIPythonCode(toolCall) {
+            try {
+                if (toolCall.args && toolCall.args.code) {
+                    return toolCall.args.code;
+                }
+            } catch (err) {
+                console.error('Failed to get iPython code:', err);
+            }
+            return null;
+        },
+
+        // Highlight iPython code with Shiki
+        highlightIPythonCode(code) {
+            if (!this.shikiReady || !this.shikiHighlighter || !code) {
+                return '';
+            }
+            try {
+                return this.shikiHighlighter.codeToHtml(code, {
+                    lang: 'python',
+                    theme: this.isDark ? 'nord' : 'github-light'
+                });
+            } catch (err) {
+                console.error('Failed to highlight code:', err);
+                return `<pre><code>${code}</code></pre>`;
+            }
         }
     }
 }
@@ -1622,6 +1693,34 @@ export default {
 .detail-result {
     max-height: 300px;
     background-color: transparent;
+}
+
+/* iPython Tool Special Styles */
+.ipython-code-container {
+    margin-bottom: 12px;
+}
+
+.ipython-label {
+    margin-bottom: 8px;
+}
+
+.ipython-code-highlighted {
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ipython-code-highlighted :deep(pre) {
+    margin: 0;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.ipython-code-highlighted :deep(code) {
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
 }
 </style>
 
