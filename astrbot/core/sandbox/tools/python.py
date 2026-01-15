@@ -21,7 +21,7 @@ class PythonTool(FunctionTool):
                     "type": "string",
                     "description": "The Python code to execute.",
                 },
-                "slient": {
+                "silent": {
                     "type": "boolean",
                     "description": "Whether to suppress the output of the code execution.",
                     "default": False,
