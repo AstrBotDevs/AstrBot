@@ -28,7 +28,7 @@
     "katex": "^0.16.27",
     "lodash": "4.17.21",
     "markdown-it": "^14.1.0",
-    "markstream-vue": "0.0.3-beta.7",
+    "markstream-vue": "^0.0.6-beta.1",
     "mermaid": "^11.12.2",
     "pinia": "2.1.6",
     "pinyin-pro": "^3.26.0",

@@ -2,10 +2,11 @@
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import Message, TextPart
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -35,8 +36,13 @@ from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
 from ...utils import (
+    EXECUTE_SHELL_TOOL,
+    FILE_DOWNLOAD_TOOL,
+    FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    PYTHON_TOOL,
+    SANDBOX_MODE_PROMPT,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -93,6 +99,8 @@ class InternalAgentSubStage(Stage):
         self.safety_mode_strategy = settings.get(
             "safety_mode_strategy", "system_prompt"
         )
+
+        self.sandbox_cfg = settings.get("sandbox", {})
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -458,6 +466,24 @@ class InternalAgentSubStage(Stage):
                 f"Unsupported llm_safety_mode strategy: {self.safety_mode_strategy}.",
             )
 
+    def _apply_sandbox_tools(self, req: ProviderRequest, session_id: str) -> None:
+        """Add sandbox tools to the provider request."""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        if self.sandbox_cfg.get("booter") == "shipyard":
+            ep = self.sandbox_cfg.get("shipyard_endpoint", "")
+            at = self.sandbox_cfg.get("shipyard_access_token", "")
+            if not ep or not at:
+                logger.error("Shipyard sandbox configuration is incomplete.")
+                return
+            os.environ["SHIPYARD_ENDPOINT"] = ep
+            os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+        req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
+        req.func_tool.add_tool(PYTHON_TOOL)
+        req.func_tool.add_tool(FILE_UPLOAD_TOOL)
+        req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+        req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -536,6 +562,20 @@ class InternalAgentSubStage(Stage):
                             image_path = await comp.convert_to_file_path()
                             req.image_urls.append(image_path)
 
+                            req.extra_user_content_parts.append(
+                                TextPart(text=f"[Image Attachment: path {image_path}]")
+                            )
+                        elif isinstance(comp, File) and self.sandbox_cfg.get(
+                            "enable", False
+                        ):
+                            file_path = await comp.get_file()
+                            file_name = comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=f"[File Attachment: name {file_name}, path {file_path}]"
+                                )
+                            )
+
                     conversation = await self._get_session_conv(event)
                     req.conversation = conversation
                     req.contexts = json.loads(conversation.history)
@@ -585,6 +625,10 @@ class InternalAgentSubStage(Stage):
                 # apply llm safety mode
                 if self.llm_safety_mode:
                     self._apply_llm_safety_mode(req)
+
+                # apply sandbox tools
+                if self.sandbox_cfg.get("enable", False):
+                    self._apply_sandbox_tools(req, req.session_id)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

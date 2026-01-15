@@ -14,6 +14,12 @@
         <v-expand-transition>
             <div v-show="expanded" style="padding: 0 8px;">
                 <v-list density="compact" nav class="project-list" style="background-color: transparent;">
+                    <v-list-item @click="$emit('createProject')" class="create-project-item" rounded="lg">
+                        <template v-slot:prepend>
+                            <span class="project-emoji"><v-icon size="small">mdi-plus</v-icon></span>
+                        </template>
+                        <v-list-item-title style="font-size: 13px;">{{ tm('project.create') }}</v-list-item-title>
+                    </v-list-item>
                     <v-list-item v-for="project in projects" :key="project.project_id"
                         @click="$emit('selectProject', project.project_id)" rounded="lg" class="project-item">
                         <template v-slot:prepend>
@@ -28,12 +34,6 @@
                                     color="error" @click.stop="handleDeleteProject(project)" />
                             </div>
                         </template>
-                    </v-list-item>
-                    <v-list-item @click="$emit('createProject')" class="create-project-item" rounded="lg">
-                        <template v-slot:prepend>
-                            <v-icon size="small">mdi-plus</v-icon>
-                        </template>
-                        <v-list-item-title style="font-size: 13px;">{{ tm('project.create') }}</v-list-item-title>
                     </v-list-item>
                 </v-list>
             </div>

@@ -28,7 +28,7 @@
                             <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
                                 <div class="image-attachment">
                                     <img :src="part.embedded_url" class="attached-image"
-                                        @click="$emit('openImagePreview', part.embedded_url)" />
+                                        @click="openImagePreview(part.embedded_url)" />
                                 </div>
                             </div>
 
@@ -147,24 +147,44 @@
                                                     borderTopColor: 'rgba(100, 140, 200, 0.3)',
                                                     backgroundColor: 'rgba(30, 45, 70, 0.5)'
                                                 } : {}">
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">ID:</span>
-                                                    <code class="detail-value"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
-                                                        }}</code>
-                                                </div>
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">Args:</span>
-                                                    <pre class="detail-value detail-json"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-                                                            JSON.stringify(toolCall.args, null, 2) }}</pre>
-                                                </div>
-                                                <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                    <span class="detail-label">Result:</span>
-                                                    <pre class="detail-value detail-json detail-result"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
+                                                <!-- Special rendering for iPython tool -->
+                                                <template v-if="isIPythonTool(toolCall)">
+                                                    <div class="ipython-code-container">
+                                                        <!-- <div class="detail-label ipython-label">Code:</div> -->
+                                                        <div v-if="shikiReady && getIPythonCode(toolCall)" 
+                                                            class="ipython-code-highlighted"
+                                                            v-html="highlightIPythonCode(getIPythonCode(toolCall))"></div>
+                                                        <pre v-else class="detail-value detail-json"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ getIPythonCode(toolCall) || 'No code available' }}</pre>
+                                                    </div>
+                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                        <span class="detail-label">Result:</span>
+                                                        <pre class="detail-value detail-json detail-result"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}</pre>
+                                                    </div>
+                                                </template>
+                                                
+                                                <!-- Default rendering for other tools -->
+                                                <template v-else>
+                                                    <div class="tool-call-detail-row">
+                                                        <span class="detail-label">ID:</span>
+                                                        <code class="detail-value"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
+                                                            }}</code>
+                                                    </div>
+                                                    <div class="tool-call-detail-row">
+                                                        <span class="detail-label">Args:</span>
+                                                        <pre class="detail-value detail-json"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
+                                                                JSON.stringify(toolCall.args, null, 2) }}</pre>
+                                                    </div>
+                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
+                                                        <span class="detail-label">Result:</span>
+                                                        <pre class="detail-value detail-json detail-result"
+                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
                 </pre>
-                                                </div>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </div>
                                     </div>
@@ -178,7 +198,7 @@
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
                                         <div class="embedded-image">
                                             <img :src="part.embedded_url" class="bot-embedded-image"
-                                                @click="$emit('openImagePreview', part.embedded_url)" />
+                                                @click="openImagePreview(part.embedded_url)" />
                                         </div>
                                     </div>
 
@@ -289,6 +309,13 @@
             </v-btn>
         </div>
     </div>
+
+    <!-- 图片预览 Overlay -->
+    <v-overlay v-model="imagePreview.show" class="image-preview-overlay" @click="closeImagePreview">
+        <div class="image-preview-container" @click.stop>
+            <img :src="imagePreview.url" class="preview-image" @click="closeImagePreview" />
+        </div>
+    </v-overlay>
 </template>
 
 <script>
@@ -298,6 +325,7 @@ import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
+import { createHighlighter } from 'shiki';
 
 enableKatex();
 enableMermaid();
@@ -351,15 +379,24 @@ export default {
                 content: '',
                 messageIndex: null,
                 position: { top: 0, left: 0 }
-            }
+            },
+            // 图片预览
+            imagePreview: {
+                show: false,
+                url: ''
+            },
+            // Shiki highlighter
+            shikiHighlighter: null,
+            shikiReady: false
         };
     },
-    mounted() {
+    async mounted() {
         this.initCodeCopyButtons();
         this.initImageClickEvents();
         this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
+        await this.initShiki();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -676,7 +713,7 @@ export default {
                     if (!img.hasAttribute('data-click-enabled')) {
                         img.style.cursor = 'pointer';
                         img.setAttribute('data-click-enabled', 'true');
-                        img.onclick = () => this.$emit('openImagePreview', img.src);
+                        img.onclick = () => this.openImagePreview(img.src);
                     }
                 });
             });
@@ -877,6 +914,66 @@ export default {
         formatTTFT(ttft) {
             if (!ttft || ttft <= 0) return '';
             return this.formatDuration(ttft);
+        },
+
+        // 打开图片预览
+        openImagePreview(url) {
+            this.imagePreview.url = url;
+            this.imagePreview.show = true;
+        },
+
+        // 关闭图片预览
+        closeImagePreview() {
+            this.imagePreview.show = false;
+            setTimeout(() => {
+                this.imagePreview.url = '';
+            }, 300);
+        },
+
+        // Initialize Shiki highlighter
+        async initShiki() {
+            try {
+                this.shikiHighlighter = await createHighlighter({
+                    themes: ['nord', 'github-light'],
+                    langs: ['python']
+                });
+                this.shikiReady = true;
+            } catch (err) {
+                console.error('Failed to initialize Shiki:', err);
+            }
+        },
+
+        // Check if tool is iPython executor
+        isIPythonTool(toolCall) {
+            return toolCall.name === 'astrbot_execute_ipython';
+        },
+
+        // Get iPython code from tool args
+        getIPythonCode(toolCall) {
+            try {
+                if (toolCall.args && toolCall.args.code) {
+                    return toolCall.args.code;
+                }
+            } catch (err) {
+                console.error('Failed to get iPython code:', err);
+            }
+            return null;
+        },
+
+        // Highlight iPython code with Shiki
+        highlightIPythonCode(code) {
+            if (!this.shikiReady || !this.shikiHighlighter || !code) {
+                return '';
+            }
+            try {
+                return this.shikiHighlighter.codeToHtml(code, {
+                    lang: 'python',
+                    theme: this.isDark ? 'nord' : 'github-light'
+                });
+            } catch (err) {
+                console.error('Failed to highlight code:', err);
+                return `<pre><code>${code}</code></pre>`;
+            }
         }
     }
 }
@@ -1268,10 +1365,10 @@ export default {
 }
 
 .bot-embedded-image {
-    max-width: 40%;
+    max-width: 55%;
     width: auto;
     height: auto;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     transition: transform 0.2s ease;
 }
@@ -1423,12 +1520,14 @@ export default {
     overflow: hidden;
     background-color: #eff3f6;
     margin: 8px 0px;
-    max-width: 300px;
-    transition: max-width 0.1s ease;
+    width: fit-content;
+    min-width: 320px;
+    max-width: 100%;
+    transition: all 0.1s ease;
 }
 
 .tool-call-card.expanded {
-    max-width: 100%;
+    width: 100%;
 }
 
 .tool-call-header {
@@ -1595,6 +1694,34 @@ export default {
     max-height: 300px;
     background-color: transparent;
 }
+
+/* iPython Tool Special Styles */
+.ipython-code-container {
+    margin-bottom: 12px;
+}
+
+.ipython-label {
+    margin-bottom: 8px;
+}
+
+.ipython-code-highlighted {
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ipython-code-highlighted :deep(pre) {
+    margin: 0;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.ipython-code-highlighted :deep(code) {
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+}
 </style>
 
 <style>
@@ -1634,5 +1761,37 @@ export default {
     font-weight: 600;
     font-family: 'Fira Code', 'Consolas', monospace;
     color: var(--v-theme-primaryText);
+}
+
+/* 图片预览样式 */
+.image-preview-overlay {
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-preview-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.preview-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.close-preview-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 }
 </style>
