@@ -1,4 +1,4 @@
-﻿{
+{
   "title": "自定义规则",
   "subtitle": "为特定会话设置自定义规则，优先级高于全局配置",
   "buttons": {
@@ -93,24 +93,6 @@
   "batchDeleteConfirm": {
     "title": "确认批量删除",
     "message": "确定要删除选中的 {count} 条规则吗？删除后将恢复使用全局配置。"
-  },
-  "batchOperations": {
-    "title": "批量操作",
-    "hint": "快速批量修改会话配置",
-    "scope": "应用范围",
-    "scopeSelected": "选中的会话",
-    "scopeAll": "所有会话",
-    "scopeGroup": "所有群聊",
-    "scopePrivate": "所有私聊",
-    "llmStatus": "LLM 状态",
-    "ttsStatus": "TTS 状态",
-    "chatProvider": "聊天模型",
-    "ttsProvider": "TTS 模型",
-    "apply": "应用更改"
-  },
-  "status": {
-    "enabled": "启用",
-    "disabled": "禁用"
   },
   "messages": {
     "refreshSuccess": "数据已刷新",
