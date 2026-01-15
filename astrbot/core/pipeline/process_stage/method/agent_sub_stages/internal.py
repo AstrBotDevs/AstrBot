@@ -36,6 +36,7 @@ from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
 from ...utils import (
+    CHATUI_EXTRA_PROMPT,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
@@ -43,6 +44,7 @@ from ...utils import (
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
+    TOOL_CALL_PROMPT,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -656,6 +658,14 @@ class InternalAgentSubStage(Stage):
                 # ChatUI 对话的标题生成
                 if event.get_platform_name() == "webchat":
                     asyncio.create_task(self._handle_webchat(event, req, provider))
+
+                    # 注入 ChatUI 额外 prompt
+                    # 比如 follow-up questions 提示等
+                    req.system_prompt += f"\n{CHATUI_EXTRA_PROMPT}\n"
+
+                # 注入基本 prompt
+                if req.func_tool and req.func_tool.tools:
+                    req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
 
                 await agent_runner.reset(
                     provider=provider,

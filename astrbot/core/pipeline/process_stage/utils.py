@@ -36,9 +36,17 @@ SANDBOX_MODE_PROMPT = (
     # "Use `cat /app/skills/{skill_name}/SKILL.md` to read the documentation of a specific skill."
     # "SKILL.md might be large, you can read the description first, which is located in the YAML frontmatter of the file."
     # "Use shell commands such as grep, sed, awk to extract relevant information from the documentation as needed.\n"
-    "Note:\n"
-    "1. If you use shell, your command will always runs in the /home/<username>/workspace directory.\n"
-    "2. If you use IPython, you would better use absolute paths when dealing with files to avoid confusion.\n"
+)
+
+TOOL_CALL_PROMPT = (
+    "You MUST NOT return an empty response, especially after invoking a tool."
+    "Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    "After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+)
+
+CHATUI_EXTRA_PROMPT = (
+    'When you answered, you need to add a follow up question / summarization but do not add "Follow up" words. '
+    "Such as, user asked you to generate codes, you can add: Do you need me to run these codes for you?"
 )
 
 
