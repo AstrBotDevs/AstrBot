@@ -296,6 +296,8 @@ class ChatRoute(Route):
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
 
+        message_id = str(uuid.uuid4())
+
         async def stream():
             client_disconnected = False
             accumulated_parts = []
@@ -317,6 +319,13 @@ class ChatRoute(Route):
                             logger.error(f"WebChat stream error: {e}")
 
                         if not result:
+                            continue
+
+                        if (
+                            "message_id" in result
+                            and result["message_id"] != message_id
+                        ):
+                            logger.warning("webchat stream message_id mismatch")
                             continue
 
                         result_text = result["data"]
@@ -456,6 +465,7 @@ class ChatRoute(Route):
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
+                    "message_id": message_id,
                 },
             ),
         )
