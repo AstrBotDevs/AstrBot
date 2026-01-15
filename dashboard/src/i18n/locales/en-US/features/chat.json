@@ -43,7 +43,11 @@
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
     "providerConfig": "AI Configuration",
-    "toolsUsed": "Tool Used"
+    "toolsUsed": "Tool Used",
+    "pythonCodeAnalysis": "Python Code Analysis Used"
+  },
+  "ipython": {
+    "output": "Output"
   },
   "conversation": {
     "newConversation": "New Conversation",

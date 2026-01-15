@@ -90,103 +90,28 @@
 
                             <template v-else>
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
-                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
-                                    class="reasoning-container" :class="{ 'is-dark': isDark }"
-                                    :style="isDark ? { backgroundColor: 'rgba(103, 58, 183, 0.08)' } : {}">
-                                    <div class="reasoning-header" :class="{ 'is-dark': isDark }"
-                                        @click="toggleReasoning(index)">
-                                        <v-icon size="small" class="reasoning-icon">
-                                            {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                        </v-icon>
-                                        <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
-                                    </div>
-                                    <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                        <MarkdownRender :content="msg.content.reasoning"
-                                            class="reasoning-text markdown-content" :typewriter="false"
-                                            :style="isDark ? { opacity: '0.85' } : {}" :is-dark="isDark" />
-                                    </div>
-                                </div>
+                                <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                                    :reasoning="msg.content.reasoning" :is-dark="isDark"
+                                    :initial-expanded="isReasoningExpanded(index)" />
 
                                 <!-- 遍历 message parts (保持顺序) -->
                                 <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
-                                    <!-- Tool Calls Block -->
-                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
-                                        class="tool-calls-container">
-                                        <div class="tool-calls-label">{{ tm('actions.toolsUsed') }}</div>
-                                        <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
-                                            class="tool-call-card" :class="{ 'is-dark': isDark, 'expanded': isToolCallExpanded(index, partIndex, tcIndex) }" :style="isDark ? {
-                                                backgroundColor: 'rgba(40, 60, 100, 0.4)',
-                                                borderColor: 'rgba(100, 140, 200, 0.4)'
-                                            } : {}">
-                                            <div class="tool-call-header" :class="{ 'is-dark': isDark }"
-                                                @click="toggleToolCall(index, partIndex, tcIndex)">
-                                                <v-icon size="small" class="tool-call-expand-icon">
-                                                    {{ isToolCallExpanded(index, partIndex, tcIndex) ?
-                                                        'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                                </v-icon>
-                                                <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
-                                                <div class="tool-call-info">
-                                                    <span class="tool-call-name">{{ toolCall.name }}</span>
-                                                </div>
-                                                <span class="tool-call-status"
-                                                    :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
-                                                    <template v-if="toolCall.finished_ts">
-                                                        <v-icon size="x-small"
-                                                            class="status-icon">mdi-check-circle</v-icon>
-                                                        {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
-                                                    </template>
-                                                    <template v-else>
-                                                        <v-icon size="x-small"
-                                                            class="status-icon spinning">mdi-loading</v-icon>
-                                                        {{ getElapsedTime(toolCall.ts) }}
-                                                    </template>
-                                                </span>
-                                            </div>
-                                            <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
-                                                class="tool-call-details" :style="isDark ? {
-                                                    borderTopColor: 'rgba(100, 140, 200, 0.3)',
-                                                    backgroundColor: 'rgba(30, 45, 70, 0.5)'
-                                                } : {}">
-                                                <!-- Special rendering for iPython tool -->
-                                                <template v-if="isIPythonTool(toolCall)">
-                                                    <div class="ipython-code-container">
-                                                        <!-- <div class="detail-label ipython-label">Code:</div> -->
-                                                        <div v-if="shikiReady && getIPythonCode(toolCall)" 
-                                                            class="ipython-code-highlighted"
-                                                            v-html="highlightIPythonCode(getIPythonCode(toolCall))"></div>
-                                                        <pre v-else class="detail-value detail-json"
-                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ getIPythonCode(toolCall) || 'No code available' }}</pre>
-                                                    </div>
-                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                        <span class="detail-label">Result:</span>
-                                                        <pre class="detail-value detail-json detail-result"
-                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}</pre>
-                                                    </div>
-                                                </template>
-                                                
-                                                <!-- Default rendering for other tools -->
-                                                <template v-else>
-                                                    <div class="tool-call-detail-row">
-                                                        <span class="detail-label">ID:</span>
-                                                        <code class="detail-value"
-                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
-                                                            }}</code>
-                                                    </div>
-                                                    <div class="tool-call-detail-row">
-                                                        <span class="detail-label">Args:</span>
-                                                        <pre class="detail-value detail-json"
-                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-                                                                JSON.stringify(toolCall.args, null, 2) }}</pre>
-                                                    </div>
-                                                    <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                        <span class="detail-label">Result:</span>
-                                                        <pre class="detail-value detail-json detail-result"
-                                                            :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
-                </pre>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </div>
+                                    <!-- iPython Tool Special Block -->
+                                    <template v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0">
+                                        <template v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id">
+                                            <IPythonToolBlock v-if="isIPythonTool(toolCall)" :tool-call="toolCall" style="margin: 8px 0;"
+                                                :is-dark="isDark"
+                                                :initial-expanded="isIPythonToolExpanded(index, partIndex, tcIndex)" />
+                                        </template>
+                                    </template>
+
+                                    <!-- Regular Tool Calls Block (for non-iPython tools) -->
+                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.some(tc => !isIPythonTool(tc))"
+                                        class="flex flex-col gap-2">
+                                        <div class="font-medium opacity-70" style="font-size: 13px; margin-bottom: 16px;">{{ tm('actions.toolsUsed') }}</div>
+                                        <ToolCallCard v-for="(toolCall, tcIndex) in part.tool_calls.filter(tc => !isIPythonTool(tc))"
+                                            :key="toolCall.id" :tool-call="toolCall" :is-dark="isDark"
+                                            :initial-expanded="isToolCallExpanded(index, partIndex, tcIndex)" />
                                     </div>
 
                                     <!-- Text (Markdown) -->
@@ -325,7 +250,9 @@ import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
-import { createHighlighter } from 'shiki';
+import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
+import IPythonToolBlock from './message_list_comps/IPythonToolBlock.vue';
+import ToolCallCard from './message_list_comps/ToolCallCard.vue';
 
 enableKatex();
 enableMermaid();
@@ -333,7 +260,10 @@ enableMermaid();
 export default {
     name: 'MessageList',
     components: {
-        MarkdownRender
+        MarkdownRender,
+        ReasoningBlock,
+        IPythonToolBlock,
+        ToolCallCard
     },
     props: {
         messages: {
@@ -372,6 +302,7 @@ export default {
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
             downloadingFiles: new Set(), // Track which files are being downloaded
             expandedToolCalls: new Set(), // Track which tool call cards are expanded
+            expandedIPythonTools: new Set(), // Track which iPython tools are expanded
             elapsedTimeTimer: null, // Timer for updating elapsed time
             currentTime: Date.now() / 1000, // Current time for elapsed time calculation
             // 选中文本相关状态
@@ -384,10 +315,7 @@ export default {
             imagePreview: {
                 show: false,
                 url: ''
-            },
-            // Shiki highlighter
-            shikiHighlighter: null,
-            shikiReady: false
+            }
         };
     },
     async mounted() {
@@ -396,7 +324,6 @@ export default {
         this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
-        await this.initShiki();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -543,6 +470,23 @@ export default {
         // Check if reasoning is expanded
         isReasoningExpanded(messageIndex) {
             return this.expandedReasoning.has(messageIndex);
+        },
+
+        // Toggle iPython tool expansion state
+        toggleIPythonTool(messageIndex, partIndex, toolCallIndex) {
+            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
+            if (this.expandedIPythonTools.has(key)) {
+                this.expandedIPythonTools.delete(key);
+            } else {
+                this.expandedIPythonTools.add(key);
+            }
+            // Force reactivity
+            this.expandedIPythonTools = new Set(this.expandedIPythonTools);
+        },
+
+        // Check if iPython tool is expanded
+        isIPythonToolExpanded(messageIndex, partIndex, toolCallIndex) {
+            return this.expandedIPythonTools.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
         },
 
         // 下载文件
@@ -930,50 +874,9 @@ export default {
             }, 300);
         },
 
-        // Initialize Shiki highlighter
-        async initShiki() {
-            try {
-                this.shikiHighlighter = await createHighlighter({
-                    themes: ['nord', 'github-light'],
-                    langs: ['python']
-                });
-                this.shikiReady = true;
-            } catch (err) {
-                console.error('Failed to initialize Shiki:', err);
-            }
-        },
-
         // Check if tool is iPython executor
         isIPythonTool(toolCall) {
             return toolCall.name === 'astrbot_execute_ipython';
-        },
-
-        // Get iPython code from tool args
-        getIPythonCode(toolCall) {
-            try {
-                if (toolCall.args && toolCall.args.code) {
-                    return toolCall.args.code;
-                }
-            } catch (err) {
-                console.error('Failed to get iPython code:', err);
-            }
-            return null;
-        },
-
-        // Highlight iPython code with Shiki
-        highlightIPythonCode(code) {
-            if (!this.shikiReady || !this.shikiHighlighter || !code) {
-                return '';
-            }
-            try {
-                return this.shikiHighlighter.codeToHtml(code, {
-                    lang: 'python',
-                    theme: this.isDark ? 'nord' : 'github-light'
-                });
-            } catch (err) {
-                console.error('Failed to highlight code:', err);
-                return `<pre><code>${code}</code></pre>`;
-            }
         }
     }
 }
@@ -1443,167 +1346,6 @@ export default {
     animation: fadeIn 0.3s ease-in-out;
 }
 
-/* Reasoning 区块样式 */
-.reasoning-container {
-    margin-bottom: 12px;
-    margin-top: 6px;
-    border: 1px solid var(--v-theme-border);
-    border-radius: 20px;
-    overflow: hidden;
-    width: fit-content;
-}
-
-.reasoning-header {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 8px;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s ease;
-    border-radius: 20px;
-}
-
-.reasoning-header:hover {
-    background-color: rgba(103, 58, 183, 0.08);
-}
-
-.reasoning-header.is-dark:hover {
-    background-color: rgba(103, 58, 183, 0.15);
-}
-
-.reasoning-icon {
-    margin-right: 6px;
-    color: var(--v-theme-secondary);
-    transition: transform 0.2s ease;
-}
-
-.reasoning-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--v-theme-secondary);
-    letter-spacing: 0.3px;
-}
-
-.reasoning-content {
-    padding: 0px 12px;
-    border-top: 1px solid var(--v-theme-border);
-    color: gray;
-    animation: fadeIn 0.2s ease-in-out;
-    font-style: italic;
-}
-
-.reasoning-text {
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--v-theme-secondaryText);
-}
-
-/* Tool Call Card Styles */
-.tool-calls-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 12px;
-    margin-top: 6px;
-}
-
-.tool-calls-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--v-theme-secondaryText);
-    opacity: 0.7;
-    margin-bottom: 4px;
-}
-
-.tool-call-card {
-    border-radius: 8px;
-    overflow: hidden;
-    background-color: #eff3f6;
-    margin: 8px 0px;
-    width: fit-content;
-    min-width: 320px;
-    max-width: 100%;
-    transition: all 0.1s ease;
-}
-
-.tool-call-card.expanded {
-    width: 100%;
-}
-
-.tool-call-header {
-    display: flex;
-    align-items: center;
-    padding: 10px 12px;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s ease;
-    gap: 8px;
-}
-
-.tool-call-header:hover {
-    background-color: rgba(169, 194, 219, 0.15);
-}
-
-.tool-call-header.is-dark:hover {
-    background-color: rgba(100, 150, 200, 0.2);
-}
-
-.tool-call-expand-icon {
-    color: var(--v-theme-secondary);
-    transition: transform 0.2s ease;
-    flex-shrink: 0;
-}
-
-.tool-call-icon {
-    color: var(--v-theme-secondary);
-    flex-shrink: 0;
-}
-
-.tool-call-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1;
-    min-width: 0;
-}
-
-.tool-call-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--v-theme-secondary);
-}
-
-.tool-call-id {
-    font-size: 11px;
-    color: var(--v-theme-secondaryText);
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.tool-call-status {
-    margin-left: 8px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    flex-shrink: 0;
-}
-
-.tool-call-status.status-running {
-    color: #ff9800;
-}
-
-.tool-call-status.status-finished {
-    color: #4caf50;
-}
-
-.tool-call-status .status-icon {
-    font-size: 14px;
-}
-
 /* 浮动引用按钮样式 */
 .selection-quote-button {
     position: fixed;
@@ -1613,7 +1355,6 @@ export default {
     gap: 8px;
     pointer-events: all;
 }
-
 
 .quote-btn {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -1634,94 +1375,8 @@ export default {
     color: #ffffff !important;
 }
 
-.tool-call-status .status-icon.spinning {
-    animation: spin 1s linear infinite;
-}
 
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
 
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-.tool-call-details {
-    padding: 12px;
-    background-color: rgba(255, 255, 255, 0.5);
-    animation: fadeIn 0.2s ease-in-out;
-}
-
-.tool-call-detail-row {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 8px;
-}
-
-.tool-call-detail-row:last-child {
-    margin-bottom: 0;
-}
-
-.detail-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--v-theme-secondaryText);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-}
-
-.detail-value {
-    font-size: 12px;
-    color: var(--v-theme-primaryText);
-    background-color: transparent;
-    padding: 4px 8px;
-    border-radius: 4px;
-    word-break: break-all;
-}
-
-.detail-json {
-    font-family: 'Fira Code', 'Consolas', monospace;
-    white-space: pre-wrap;
-    max-height: 200px;
-    overflow-y: auto;
-    margin: 0;
-}
-
-.detail-result {
-    max-height: 300px;
-    background-color: transparent;
-}
-
-/* iPython Tool Special Styles */
-.ipython-code-container {
-    margin-bottom: 12px;
-}
-
-.ipython-label {
-    margin-bottom: 8px;
-}
-
-.ipython-code-highlighted {
-    border-radius: 6px;
-    overflow-x: auto;
-    font-size: 13px;
-    line-height: 1.5;
-}
-
-.ipython-code-highlighted :deep(pre) {
-    margin: 0;
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-}
-
-.ipython-code-highlighted :deep(code) {
-    font-family: 'Fira Code', 'Consolas', monospace;
-    font-size: 13px;
-}
 </style>
 
 <style>
