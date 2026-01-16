@@ -377,7 +377,6 @@ export default {
                         
                         try {
                             // 解析工具调用结果
-                            console.log('Parsing web search result:', toolCall.result);
                             const resultData = typeof toolCall.result === 'string' 
                                 ? JSON.parse(toolCall.result) 
                                 : toolCall.result;
