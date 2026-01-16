@@ -1,12 +1,13 @@
 import asyncio
 import os
 import threading
+from collections import defaultdict
 from typing import Any, TypeVar, overload
+
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
-from collections import defaultdict
-from apscheduler.schedulers.background import BackgroundScheduler
 
 from .astrbot_path import get_astrbot_data_path
 
