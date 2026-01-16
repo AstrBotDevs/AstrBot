@@ -371,12 +371,21 @@ class ProviderOpenAIOfficial(Provider):
             ):
                 reasoning_content = ""
                 new_content = []  # not including think part
+                text_parts = []
+                has_non_text = False
                 for part in message["content"]:
                     if part.get("type") == "think":
                         reasoning_content += str(part.get("think"))
                     else:
                         new_content.append(part)
-                message["content"] = new_content
+                        if part.get("type") == "text":
+                            text_parts.append(str(part.get("text", "")))
+                        else:
+                            has_non_text = True
+                if not has_non_text:
+                    message["content"] = "".join(text_parts)
+                else:
+                    message["content"] = new_content
                 # reasoning key is "reasoning_content"
                 if reasoning_content:
                     message["reasoning_content"] = reasoning_content
