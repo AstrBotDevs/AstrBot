@@ -116,6 +116,8 @@
 
                                     <!-- Text (Markdown) -->
                                     <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
+                                        custom-id="message-list"
+                                        :custom-html-tags="['ref']"
                                         :content="part.text" :typewriter="false" class="markdown-content"
                                         :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
@@ -215,6 +217,9 @@
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
                             <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
                                 @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
+                            
+                            <!-- Refs Visualization -->
+                            <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
                         </div>
                     </div>
                 </div>
@@ -245,7 +250,7 @@
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue'
+import { MarkdownRender, enableKatex, enableMermaid, setCustomComponents } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
@@ -253,9 +258,14 @@ import axios from 'axios';
 import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
 import IPythonToolBlock from './message_list_comps/IPythonToolBlock.vue';
 import ToolCallCard from './message_list_comps/ToolCallCard.vue';
+import RefNode from './message_list_comps/RefNode.vue';
+import ActionRef from './message_list_comps/ActionRef.vue';
 
 enableKatex();
 enableMermaid();
+
+// 注册自定义 ref 组件
+setCustomComponents('message-list', { ref: RefNode });
 
 export default {
     name: 'MessageList',
@@ -263,7 +273,9 @@ export default {
         MarkdownRender,
         ReasoningBlock,
         IPythonToolBlock,
-        ToolCallCard
+        ToolCallCard,
+        RefNode,
+        ActionRef
     },
     props: {
         messages: {
@@ -283,7 +295,7 @@ export default {
             default: false
         }
     },
-    emits: ['openImagePreview', 'replyMessage', 'replyWithText'],
+    emits: ['openImagePreview', 'replyMessage', 'replyWithText', 'openRefs'],
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
@@ -291,6 +303,12 @@ export default {
         return {
             t,
             tm
+        };
+    },
+    provide() {
+        return {
+            isDark: this.isDark,
+            webSearchResults: () => this.webSearchResults
         };
     },
     data() {
@@ -315,7 +333,9 @@ export default {
             imagePreview: {
                 show: false,
                 url: ''
-            }
+            },
+            // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
+            webSearchResults: {}
         };
     },
     async mounted() {
@@ -324,6 +344,7 @@ export default {
         this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
+        this.extractWebSearchResults();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -331,8 +352,57 @@ export default {
         if (this.isUserNearBottom) {
             this.scrollToBottom();
         }
+        this.extractWebSearchResults();
     },
     methods: {
+        // 从消息中提取 web_search_tavily 的搜索结果
+        extractWebSearchResults() {
+            const results = {};
+            
+            this.messages.forEach(msg => {
+                if (msg.content.type !== 'bot' || !Array.isArray(msg.content.message)) {
+                    return;
+                }
+                
+                msg.content.message.forEach(part => {
+                    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
+                        return;
+                    }
+                    
+                    part.tool_calls.forEach(toolCall => {
+                        // 检查是否是 web_search_tavily 工具调用
+                        if (toolCall.name !== 'web_search_tavily' || !toolCall.result) {
+                            return;
+                        }
+                        
+                        try {
+                            // 解析工具调用结果
+                            console.log('Parsing web search result:', toolCall.result);
+                            const resultData = typeof toolCall.result === 'string' 
+                                ? JSON.parse(toolCall.result) 
+                                : toolCall.result;
+                            
+                            if (resultData.results && Array.isArray(resultData.results)) {
+                                resultData.results.forEach(item => {
+                                    if (item.index) {
+                                        results[item.index] = {
+                                            url: item.url,
+                                            title: item.title,
+                                            snippet: item.snippet
+                                        };
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse web search result:', e);
+                        }
+                    });
+                });
+            });
+            
+            this.webSearchResults = results;
+        },
+        
         // 处理文本选择
         handleTextSelection() {
             const selection = window.getSelection();
@@ -877,6 +947,11 @@ export default {
         // Check if tool is iPython executor
         isIPythonTool(toolCall) {
             return toolCall.name === 'astrbot_execute_ipython';
+        },
+
+        // Open refs sidebar
+        openRefsSidebar(refs) {
+            this.$emit('openRefs', refs);
         }
     }
 }

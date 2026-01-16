@@ -150,7 +150,7 @@ onUnmounted(() => {
     padding: 10px 12px;
     cursor: pointer;
     user-select: none;
-    transition: background-color 0.2s ease;
+    transition: background-color;
     gap: 8px;
 }
 
