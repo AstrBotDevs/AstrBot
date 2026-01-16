@@ -215,7 +215,6 @@ function handleDeleteConversation(session: Session) {
     display: flex;
     flex-direction: column;
     padding: 0;
-    border-right: 1px solid rgba(0, 0, 0, 0.04);
     height: 100%;
     max-height: 100%;
     position: relative;

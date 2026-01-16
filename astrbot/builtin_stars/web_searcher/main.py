@@ -1,11 +1,13 @@
 import asyncio
+import json
 import random
+import uuid
 
 import aiohttp
 from bs4 import BeautifulSoup
 from readability import Document
 
-from astrbot.api import AstrBotConfig, llm_tool, logger, star
+from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
@@ -151,6 +153,7 @@ class Main(star.Star):
                         title=item.get("title"),
                         url=item.get("url"),
                         snippet=item.get("content"),
+                        favicon=item.get("favicon"),
                     )
                     results.append(result)
                 return results
@@ -272,7 +275,7 @@ class Main(star.Star):
         self,
         event: AstrMessageEvent,
         query: str,
-        max_results: int = 5,
+        max_results: int = 7,
         search_depth: str = "basic",
         topic: str = "general",
         days: int = 3,
@@ -285,7 +288,7 @@ class Main(star.Star):
 
         Args:
             query(string): Required. Search query.
-            max_results(number): Optional. The maximum number of results to return. Default is 5. Range is 5-20.
+            max_results(number): Optional. The maximum number of results to return. Default is 7. Range is 5-20.
             search_depth(string): Optional. The depth of the search, must be one of 'basic', 'advanced'. Default is "basic".
             topic(string): Optional. The topic of the search, must be one of 'general', 'news'. Default is "general".
             days(number): Optional. The number of days back from the current date to include in the search results. Please note that this feature is only available when using the 'news' search topic.
@@ -296,15 +299,12 @@ class Main(star.Star):
         """
         logger.info(f"web_searcher - search_from_tavily: {query}")
         cfg = self.context.get_config(umo=event.unified_msg_origin)
-        websearch_link = cfg["provider_settings"].get("web_search_link", False)
+        # websearch_link = cfg["provider_settings"].get("web_search_link", False)
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
         # build payload
-        payload = {
-            "query": query,
-            "max_results": max_results,
-        }
+        payload = {"query": query, "max_results": max_results, "include_favicon": True}
         if search_depth not in ["basic", "advanced"]:
             search_depth = "basic"
         payload["search_depth"] = search_depth
@@ -328,14 +328,22 @@ class Main(star.Star):
             return "Error: Tavily web searcher does not return any results."
 
         ret_ls = []
-        for result in results:
-            ret_ls.append(f"\nTitle: {result.title}")
-            ret_ls.append(f"URL: {result.url}")
-            ret_ls.append(f"Content: {result.snippet}")
-        ret = "\n".join(ret_ls)
-
-        if websearch_link:
-            ret += "\n\n针对问题，请根据上面的结果分点总结，并且在结尾处附上对应内容的参考链接（如有）。"
+        ref_uuid = str(uuid.uuid4())[:4]
+        for idx, result in enumerate(results, 1):
+            index = f"{ref_uuid}.{idx}"
+            ret_ls.append(
+                {
+                    "title": f"{result.title}",
+                    "url": f"{result.url}",
+                    "snippet": f"{result.snippet}",
+                    # TODO: do not need ref for non-webchat platform adapter
+                    "index": index,
+                }
+            )
+            if result.favicon:
+                sp.temorary_cache["_ws_favicon"][result.url] = result.favicon
+        # ret = "\n".join(ret_ls)
+        ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
         return ret
 
     @llm_tool("tavily_extract_web_page")

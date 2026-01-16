@@ -107,6 +107,10 @@
     "duration": "耗时",
     "ttft": "首字时间"
   },
+  "refs": {
+    "title": "引用",
+    "sources": "来源"
+  },
   "connection": {
     "title": "连接状态提醒",
     "message": "系统检测到聊天连接需要重新建立。",

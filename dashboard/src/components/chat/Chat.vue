@@ -55,6 +55,7 @@
                             @openImagePreview="openImagePreview"
                             @replyMessage="handleReplyMessage"
                             @replyWithText="handleReplyWithText"
+                            @openRefs="handleOpenRefs"
                             ref="messageList" />
                         <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
                     </div>
@@ -146,6 +147,8 @@
                     />
                 </div>
 
+                <!-- Refs Sidebar -->
+                <RefsSidebar v-model="refsSidebarOpen" :refs="refsSidebarRefs" />
             </div>
         </v-card-text>
     </v-card>
@@ -198,6 +201,7 @@ import ChatInput from '@/components/chat/ChatInput.vue';
 import ProjectDialog from '@/components/chat/ProjectDialog.vue';
 import ProjectView from '@/components/chat/ProjectView.vue';
 import WelcomeView from '@/components/chat/WelcomeView.vue';
+import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
 import type { ProjectFormData } from '@/components/chat/ProjectDialog.vue';
 import { useSessions } from '@/composables/useSessions';
 import { useMessages } from '@/composables/useMessages';
@@ -404,6 +408,21 @@ function handleReplyWithText(replyData: any) {
         messageId,
         selectedText: selectedText  // 保存原始的选中文本
     };
+}
+
+// Refs Sidebar 状态
+const refsSidebarOpen = ref(false);
+const refsSidebarRefs = ref<any>(null);
+
+function handleOpenRefs(refs: any) {
+    // 如果sidebar已打开且点击的是同一个refs，则关闭
+    if (refsSidebarOpen.value && refsSidebarRefs.value === refs) {
+        refsSidebarOpen.value = false;
+    } else {
+        // 否则打开sidebar并更新refs
+        refsSidebarRefs.value = refs;
+        refsSidebarOpen.value = true;
+    }
 }
 
 async function handleSelectConversation(sessionIds: string[]) {
