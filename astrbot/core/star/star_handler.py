@@ -189,6 +189,7 @@ class EventType(enum.Enum):
     OnLLMResponseEvent = enum.auto()  # LLM 响应后
     OnDecoratingResultEvent = enum.auto()  # 发送消息前
     OnCallingFuncToolEvent = enum.auto()  # 调用函数工具
+    OnAfterCallingFuncToolEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
 
 

@@ -409,6 +409,57 @@ def register_on_llm_response(**kwargs):
     return decorator
 
 
+def register_on_using_llm_tool(**kwargs):
+    """当调用函数工具前的事件。
+    会传入 tool 和 tool_args 参数。
+
+    Examples:
+    ```py
+    from astrbot.core.agent.tool import FunctionTool
+
+    @on_using_llm_tool()
+    async def test(self, event: AstrMessageEvent, tool: FunctionTool, tool_args: dict | None) -> None:
+        ...
+    ```
+
+    请务必接收三个参数：event, tool, tool_args
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_llm_tool_respond(**kwargs):
+    """当调用函数工具后的事件。
+    会传入 tool、tool_args 和 tool 的调用结果 tool_result 参数。
+
+    Examples:
+    ```py
+    from astrbot.core.agent.tool import FunctionTool
+    from mcp.types import CallToolResult
+
+    @on_using_llm_tool()
+    async def test(self, event: AstrMessageEvent, tool: FunctionTool, tool_args: dict | None, tool_result: CallToolResult | None) -> None:
+        ...
+    ```
+
+    请务必接收四个参数：event, tool, tool_args, tool_result
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(
+            awaitable, EventType.OnAfterCallingFuncToolEvent, **kwargs
+        )
+        return awaitable
+
+    return decorator
+
+
 def register_llm_tool(name: str | None = None, **kwargs):
     """为函数调用（function-calling / tools-use）添加工具。
 
