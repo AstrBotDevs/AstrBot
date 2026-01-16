@@ -8,6 +8,9 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
+from astrbot.core.pipeline.process_stage.utils import (
+    CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+)
 from astrbot.core.provider.func_tool_manager import ToolSet
 
 
@@ -22,7 +25,9 @@ class ProcessLLMRequest:
         else:
             logger.info(f"Timezone set to: {self.timezone}")
 
-    async def _ensure_persona(self, req: ProviderRequest, cfg: dict, umo: str):
+    async def _ensure_persona(
+        self, req: ProviderRequest, cfg: dict, umo: str, platform_type: str
+    ):
         """确保用户人格已加载"""
         if not req.conversation:
             return
@@ -41,6 +46,12 @@ class ProcessLLMRequest:
                 default_persona = self.ctx.persona_manager.selected_default_persona_v3
                 if default_persona:
                     persona_id = default_persona["name"]
+
+                    # ChatUI special default persona
+                    if platform_type == "webchat":
+                        # non-existent persona_id to let following codes not working
+                        persona_id = "_chatui_default_"
+                        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
         persona = next(
             builtins.filter(
@@ -171,7 +182,10 @@ class ProcessLLMRequest:
         img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if req.conversation:
             # inject persona for this request
-            await self._ensure_persona(req, cfg, event.unified_msg_origin)
+            platform_type = event.get_platform_name()
+            await self._ensure_persona(
+                req, cfg, event.unified_msg_origin, platform_type
+            )
 
             # image caption
             if img_cap_prov_id and req.image_urls:
