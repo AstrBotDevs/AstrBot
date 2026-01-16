@@ -26,6 +26,19 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
             llm_response,
         )
 
+    async def on_tool_start(
+        self,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool: FunctionTool[Any],
+        tool_args: dict | None,
+    ):
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnCallingFuncToolEvent,
+            tool,
+            tool_args,
+        )
+
     async def on_tool_end(
         self,
         run_context: ContextWrapper[AstrAgentContext],
@@ -34,6 +47,13 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         tool_result: CallToolResult | None,
     ):
         run_context.context.event.clear_result()
+        await call_event_hook(
+            run_context.context.event,
+            EventType.OnAfterCallingFuncToolEvent,
+            tool,
+            tool_args,
+            tool_result,
+        )
 
         # special handle web_search_tavily
         if (
