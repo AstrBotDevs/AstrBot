@@ -442,7 +442,7 @@ def register_on_llm_tool_respond(**kwargs):
     from astrbot.core.agent.tool import FunctionTool
     from mcp.types import CallToolResult
 
-    @on_using_llm_tool()
+    @on_llm_tool_respond()
     async def test(self, event: AstrMessageEvent, tool: FunctionTool, tool_args: dict | None, tool_result: CallToolResult | None) -> None:
         ...
     ```
