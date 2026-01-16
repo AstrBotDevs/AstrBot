@@ -41,12 +41,14 @@ AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主�
 ## 主要功能
 
 1. 💯 免费 & 开源。
-1. ✨ AI 大模型对话，多模态，Agent，MCP，知识库，人格设定。
+1. ✨ AI 大模型对话，多模态，Agent，MCP，知识库，人格设定，自动压缩对话。
 2. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
 2. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
 3. 📦 插件扩展，已有近 800 个插件可一键安装。
-5. 💻 WebUI 支持。
-6. 🌐 国际化（i18n）支持。
+5. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) 隔离化环境，安全地执行任何代码、调用 Shell、会话级资源复用。
+6. 💻 WebUI 支持。
+7. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
+8. 🌐 国际化（i18n）支持。
 
 ## 快速开始
 
