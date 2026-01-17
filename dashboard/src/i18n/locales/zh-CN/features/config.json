@@ -89,5 +89,18 @@
   },
   "codeEditor": {
     "title": "编辑配置文件"
+  },
+  "fileUpload": {
+    "button": "Manage Files",
+    "dialogTitle": "Uploaded Files",
+    "dropzone": "上传新文件",
+    "allowedTypes": "Allowed types: {types}",
+    "empty": "No files uploaded",
+    "uploadSuccess": "Uploaded {count} files",
+    "uploadFailed": "Upload failed",
+    "deleteSuccess": "Deleted file",
+    "deleteFailed": "Delete failed",
+    "fileCount": "Files: {count}",
+    "done": "完成"
   }
-} 
+}

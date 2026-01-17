@@ -2138,6 +2138,7 @@ watch(isListView, (newVal) => {
           :metadata="extension_config.metadata"
           :iterable="extension_config.config"
           :metadataKey="curr_namespace"
+          :pluginName="curr_namespace"
         />
         <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
       </v-card-text>

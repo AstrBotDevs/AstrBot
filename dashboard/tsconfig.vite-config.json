@@ -1,5 +1,5 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "include": ["vite.config.*"],
   "compilerOptions": {
     "composite": true,

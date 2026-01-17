@@ -89,6 +89,18 @@
   },
   "codeEditor": {
     "title": "Edit Configuration File"
+  },
+  "fileUpload": {
+    "button": "Manage Files",
+    "dialogTitle": "Uploaded Files",
+    "dropzone": "Upload new file",
+    "allowedTypes": "Allowed types: {types}",
+    "empty": "No files uploaded",
+    "uploadSuccess": "Uploaded {count} files",
+    "uploadFailed": "Upload failed",
+    "deleteSuccess": "Deleted file",
+    "deleteFailed": "Delete failed",
+    "fileCount": "Files: {count}",
+    "done": "Done"
   }
 }
-
