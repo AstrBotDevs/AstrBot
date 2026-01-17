@@ -414,10 +414,11 @@ class InternalAgentSubStage(Stage):
 
         # using agent context messages to save to history
         message_to_save = []
+        got_first_system = False
         for message in all_messages:
-            if message.role == "system":
-                # we do not save system messages to history
-                continue
+            if message.role == "system" and not got_first_system:
+                got_first_system = True
+                continue  # skip the first system message, and keep others
             if message.role in ["assistant", "user"] and getattr(
                 message, "_no_save", None
             ):
