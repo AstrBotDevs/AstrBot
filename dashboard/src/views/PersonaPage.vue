@@ -11,11 +11,16 @@
                         {{ tm('page.description') }}
                     </p>
                 </div>
-                <div>
+                <div class="d-flex ga-2">
+                    <v-btn color="secondary" variant="tonal" prepend-icon="mdi-import" @click="triggerImport"
+                        rounded="xl" size="x-large">
+                        {{ tm('buttons.import') || '导入' }}
+                    </v-btn>
                     <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreateDialog"
                         rounded="xl" size="x-large">
                         {{ tm('buttons.create') }}
                     </v-btn>
+                    <input type="file" ref="importInput" style="display: none" accept=".json" @change="handleImport">
                 </div>
             </v-row>
 
@@ -300,6 +305,55 @@ export default {
                 // 显示错误消息
                 this.showError(error.message || this.tm('messages.copyError') || 'Failed to copy JSON');
             }
+        },
+
+        triggerImport() {
+            this.$refs.importInput.click();
+        },
+
+        async handleImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const parsedData = JSON.parse(text);
+
+                // 验证必需字段
+                if (!parsedData.persona_id || !parsedData.system_prompt) {
+                    this.showError('人格 JSON 缺少必需字段喵！');
+                    event.target.value = '';
+                    return;
+                }
+
+                // 检查重复 ID
+                const id = parsedData.persona_id;
+                const exists = this.personas.some(persona => persona.persona_id === id);
+                if (exists) {
+                    this.showError('人格 ID [' + id + '] 已存在喵！');
+                    event.target.value = '';
+                    return;
+                }
+
+                // 调用 API 保存
+                const response = await axios.post('/api/persona/save', parsedData);
+
+                if (response.data.status === 'ok') {
+                    this.showSuccess(response.data.message || '导入成功喵！');
+                    await this.loadPersonas();
+                } else {
+                    this.showError(response.data.message || '导入失败喵！');
+                }
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    this.showError('JSON 格式错误喵！');
+                } else {
+                    this.showError(error.response?.data?.message || '导入失败喵！');
+                }
+            }
+
+            // 清理文件输入
+            event.target.value = '';
         }
     }
 }

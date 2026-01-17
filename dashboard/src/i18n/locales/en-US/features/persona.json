@@ -8,6 +8,7 @@
     "edit": "Edit",
     "delete": "Delete",
     "copy": "Copy JSON",
+    "import": "Import",
     "cancel": "Cancel",
     "save": "Save",
     "addDialogPair": "Add Dialog Pair"
