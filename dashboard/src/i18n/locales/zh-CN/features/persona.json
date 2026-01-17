@@ -7,7 +7,6 @@
     "createFirst": "创建第一个人格",
     "edit": "编辑",
     "delete": "删除",
-    "copy": "复制 JSON",
     "export": "导出 JSON",
     "import": "导入",
     "cancel": "取消",
@@ -65,7 +64,6 @@
     "saveError": "保存失败",
     "deleteConfirm": "确定要删除人格 \"{id}\" 吗？此操作不可撤销。",
     "deleteSuccess": "删除成功",
-    "deleteError": "删除失败",
-    "copySuccess": "已复制到剪贴板"
+    "deleteError": "删除失败"
   }
 }

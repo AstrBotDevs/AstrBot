@@ -7,7 +7,6 @@
     "createFirst": "Create First Persona",
     "edit": "Edit",
     "delete": "Delete",
-    "copy": "Copy JSON",
     "export": "Export JSON",
     "import": "Import",
     "cancel": "Cancel",
@@ -65,7 +64,6 @@
     "saveError": "Save failed",
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "deleteError": "Delete failed",
-    "copySuccess": "Copied to clipboard"
+    "deleteError": "Delete failed"
   }
 }
