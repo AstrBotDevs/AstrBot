@@ -417,8 +417,8 @@ class InternalAgentSubStage(Stage):
         skipped_initial_system = False
         for message in all_messages:
             if message.role == "system" and not skipped_initial_system:
-                skipped_initial_system = True
-                continue  # skip the first system message, and keep others
+                continue  # skip all system messages until the first non-system message
+            skipped_initial_system = True
             if message.role in ["assistant", "user"] and getattr(
                 message, "_no_save", None
             ):
