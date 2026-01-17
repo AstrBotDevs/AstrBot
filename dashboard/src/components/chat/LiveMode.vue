@@ -21,13 +21,20 @@
             </div>
 
             <div class="metrics-container" v-if="Object.keys(metrics).length > 0">
-                <span v-if="metrics.wav_assemble_time">WAV Assemble: {{ (metrics.wav_assemble_time * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.llm_ttft">LLM First Token Latency: {{ (metrics.llm_ttft * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.llm_total_time">LLM Total Latency: {{ (metrics.llm_total_time * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.tts_first_frame_time">TTS First Frame Latency: {{ (metrics.tts_first_frame_time * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.tts_total_time">TTS Total Larency: {{ (metrics.tts_total_time * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.speak_to_first_frame">Speak -> First TTS Frame: {{ (metrics.speak_to_first_frame * 1000).toFixed(0) }}ms</span>
-                <span v-if="metrics.wav_to_tts_total_time">Speak -> End: {{ (metrics.wav_to_tts_total_time * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.wav_assemble_time">WAV Assemble: {{ (metrics.wav_assemble_time * 1000).toFixed(0)
+                }}ms</span>
+                <span v-if="metrics.llm_ttft">LLM First Token Latency: {{ (metrics.llm_ttft * 1000).toFixed(0)
+                }}ms</span>
+                <span v-if="metrics.llm_total_time">LLM Total Latency: {{ (metrics.llm_total_time * 1000).toFixed(0)
+                }}ms</span>
+                <span v-if="metrics.tts_first_frame_time">TTS First Frame Latency: {{ (metrics.tts_first_frame_time *
+                    1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.tts_total_time">TTS Total Larency: {{ (metrics.tts_total_time * 1000).toFixed(0)
+                }}ms</span>
+                <span v-if="metrics.speak_to_first_frame">Speak -> First TTS Frame: {{ (metrics.speak_to_first_frame *
+                    1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.wav_to_tts_total_time">Speak -> End: {{ (metrics.wav_to_tts_total_time *
+                    1000).toFixed(0) }}ms</span>
             </div>
         </div>
     </div>
@@ -65,7 +72,15 @@ let audioContext: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 const botEnergy = ref(0);
 let energyLoopId: number;
-let isPlaying = ref(false);
+let isPlaying = ref(false); // UI 状态：是否正在播放
+
+// 音频播放队列管理
+const rawAudioQueue: Uint8Array[] = []; // 待解码队列
+const audioBufferQueue: AudioBuffer[] = []; // 待播放队列
+let isDecoding = false;
+let isPlayingAudio = false; // 内部状态：是否正在播放音频
+let currentSource: AudioBufferSourceNode | null = null;
+
 
 // 消息历史
 const messages = ref<Array<{ type: 'user' | 'bot', text: string }>>([]);
@@ -324,7 +339,7 @@ function handleWebSocketMessage(event: MessageEvent) {
                 isProcessing.value = false;
                 isListening.value = true;
                 break;
-            
+
             case 'metrics':
                 metrics.value = { ...metrics.value, ...message.data };
                 break;
@@ -345,35 +360,112 @@ function playAudioChunk(base64Data: string) {
             bytes[i] = binaryString.charCodeAt(i);
         }
 
-        // 解码 WAV 音频
-        audioContext.decodeAudioData(bytes.buffer).then(audioBuffer => {
-            const source = audioContext!.createBufferSource();
-            source.buffer = audioBuffer;
-            // 连接到分析器
-            if (analyser) {
-                source.connect(analyser);
-                analyser.connect(audioContext!.destination);
-            } else {
-                source.connect(audioContext!.destination);
-            }
-            source.start();
-            isPlaying.value = true;
+        // 放入待解码队列
+        rawAudioQueue.push(bytes);
 
-            source.onended = () => {
-                isPlaying.value = false;
-            };
-        }).catch(error => {
-            console.error('[Live Mode] 解码音频失败:', error);
-        });
+        // 触发解码处理
+        processRawAudioQueue();
+
+    } catch (error) {
+        console.error('[Live Mode] 接收音频数据失败:', error);
+    }
+}
+
+async function processRawAudioQueue() {
+    if (isDecoding || rawAudioQueue.length === 0) return;
+
+    isDecoding = true;
+
+    try {
+        while (rawAudioQueue.length > 0) {
+            const bytes = rawAudioQueue.shift();
+            if (!bytes || !audioContext) continue;
+
+            try {
+                // 解码
+                const audioBuffer = await audioContext.decodeAudioData(bytes.buffer as ArrayBuffer);
+                audioBufferQueue.push(audioBuffer);
+
+                // 如果当前没有播放，立即开始播放
+                if (!isPlayingAudio) {
+                    playNextAudio();
+                }
+            } catch (err) {
+                console.error('[Live Mode] 解码音频失败:', err);
+            }
+        }
+    } finally {
+        isDecoding = false;
+        // 如果在解码过程中又有新数据进来，继续处理
+        if (rawAudioQueue.length > 0) {
+            processRawAudioQueue();
+        }
+    }
+}
+
+function playNextAudio() {
+    if (audioBufferQueue.length === 0) {
+        isPlayingAudio = false;
+        isPlaying.value = false;
+        return;
+    }
+
+    if (!audioContext) return;
+
+    isPlayingAudio = true;
+    isPlaying.value = true;
+
+    try {
+        const audioBuffer = audioBufferQueue.shift();
+        if (!audioBuffer) return;
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+
+        // 连接到分析器
+        if (analyser) {
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+        } else {
+            source.connect(audioContext.destination);
+        }
+
+        currentSource = source;
+        source.start();
+
+        source.onended = () => {
+            currentSource = null;
+            playNextAudio();
+        };
 
     } catch (error) {
         console.error('[Live Mode] 播放音频失败:', error);
+        isPlayingAudio = false;
+        isPlaying.value = false;
+        playNextAudio(); // 尝试播放下一个
     }
 }
 
 function stopAudioPlayback() {
-    // TODO: 实现停止当前播放的音频
+    // 停止当前播放源
+    if (currentSource) {
+        try {
+            currentSource.stop();
+            currentSource.disconnect();
+        } catch (e) {
+            // ignore
+        }
+        currentSource = null;
+    }
+
+    // 清空队列
+    rawAudioQueue.length = 0;
+    audioBufferQueue.length = 0;
+
+    // 重置状态
+    isPlayingAudio = false;
     isPlaying.value = false;
+    isDecoding = false;
 }
 
 function generateStamp(): string {
@@ -415,6 +507,8 @@ watch(isSpeaking, (newVal) => {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ t: 'interrupt' }));
         }
+        // 本地立即停止播放
+        stopAudioPlayback();
     }
 });
 
