@@ -1179,6 +1179,15 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                     },
+                    "Genie TTS": {
+                        "id": "genie_tts",
+                        "provider": "genie_tts",
+                        "type": "genie_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "character_name": "mika",
+                        "timeout": 20,
+                    },
                     "Edge TTS": {
                         "id": "edge_tts",
                         "provider": "microsoft",
