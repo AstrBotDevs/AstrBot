@@ -34,7 +34,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
     ):
         await call_event_hook(
             run_context.context.event,
-            EventType.OnCallingFuncToolEvent,
+            EventType.OnUsingLLMToolEvent,
             tool,
             tool_args,
         )
@@ -49,7 +49,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         run_context.context.event.clear_result()
         await call_event_hook(
             run_context.context.event,
-            EventType.OnAfterCallingFuncToolEvent,
+            EventType.OnLLMToolRespondEvent,
             tool,
             tool_args,
             tool_result,
