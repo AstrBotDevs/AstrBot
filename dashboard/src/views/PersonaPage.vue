@@ -331,28 +331,37 @@ export default {
 
             try {
                 const text = await file.text();
-                const parsedData = JSON.parse(text);
-                
-                console.log("Parsed Data:", parsedData);
+    const parsedData = JSON.parse(text);
+    
+    console.log("Parsed Data:", parsedData);
 
-                // 验证必需字段
-                if (!parsedData.persona_id || !parsedData.system_prompt) {
-                    this.showError('人格 JSON 缺少必需字段喵！');
-                    event.target.value = '';
-                    return;
-                }
+    // 验证必需字段
+    if (!parsedData.persona_id || !parsedData.system_prompt) {
+        this.showError('人格 JSON 缺少必需字段喵！');
+        event.target.value = '';
+        return;
+    }
 
-                // 检查重复 ID
-                const id = parsedData.persona_id;
-                const exists = this.personas.some(persona => persona.persona_id === id);
-                if (exists) {
-                    this.showError('人格 ID [' + id + '] 已存在喵！');
-                    event.target.value = '';
-                    return;
-                }
+    // 检查重复 ID
+    const id = parsedData.persona_id;
+    const exists = this.personas.some(persona => persona.persona_id === id);
+    if (exists) {
+        this.showError('人格 ID [' + id + '] 已存在喵！');
+        event.target.value = '';
+        return;
+    }
 
-                // 调用 API 保存（使用正确的端点）
-                const response = await axios.post('/api/persona/create', parsedData);
+    // 白名单过滤字段
+    const allowedFields = ['persona_id', 'system_prompt', 'begin_dialogs', 'tools'];
+    const filteredData = {};
+    allowedFields.forEach(field => {
+        if (parsedData.hasOwnProperty(field)) {
+            filteredData[field] = parsedData[field];
+        }
+    });
+
+    // 调用 API 保存（使用正确的端点）
+    const response = await axios.post('/api/persona/create', filteredData);
 
                 if (response.data.status === 'ok') {
                     this.showSuccess(response.data.message || '导入成功喵！');
