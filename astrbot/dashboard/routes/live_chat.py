@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 import uuid
@@ -42,19 +43,20 @@ class LiveChatSession:
         if self.is_speaking:
             self.audio_frames.append(data)
 
-    async def end_speaking(self, stamp: str) -> str | None:
-        """结束说话，返回组装的 WAV 文件路径"""
+    async def end_speaking(self, stamp: str) -> tuple[str | None, float]:
+        """结束说话，返回组装的 WAV 文件路径和耗时"""
+        start_time = time.time()
         if not self.is_speaking or stamp != self.current_stamp:
             logger.warning(
                 f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}"
             )
-            return None
+            return None, 0.0
 
         self.is_speaking = False
 
         if not self.audio_frames:
             logger.warning("[Live Chat] 没有音频帧数据")
-            return None
+            return None, 0.0
 
         # 组装 WAV 文件
         try:
@@ -74,11 +76,11 @@ class LiveChatSession:
             logger.info(
                 f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
             )
-            return audio_path
+            return audio_path, time.time() - start_time
 
         except Exception as e:
             logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
-            return None
+            return None, 0.0
 
     def cleanup(self):
         """清理临时文件"""
@@ -184,22 +186,30 @@ class LiveChatRoute(Route):
                 logger.warning("[Live Chat] end_speaking 缺少 stamp")
                 return
 
-            audio_path = await session.end_speaking(stamp)
+            audio_path, assemble_duration = await session.end_speaking(stamp)
             if not audio_path:
                 await websocket.send_json({"t": "error", "data": "音频组装失败"})
                 return
 
             # 处理音频：STT -> LLM -> TTS
-            await self._process_audio(session, audio_path)
+            await self._process_audio(session, audio_path, assemble_duration)
 
         elif msg_type == "interrupt":
             # 用户打断
             session.should_interrupt = True
             logger.info(f"[Live Chat] 用户打断: {session.username}")
 
-    async def _process_audio(self, session: LiveChatSession, audio_path: str):
+    async def _process_audio(
+        self, session: LiveChatSession, audio_path: str, assemble_duration: float
+    ):
         """处理音频：STT -> LLM -> 流式 TTS"""
         try:
+            # 发送 WAV 组装耗时
+            await websocket.send_json(
+                {"t": "metrics", "data": {"wav_assemble_time": assemble_duration}}
+            )
+            wav_assembly_finish_time = time.time()
+
             session.is_processing = True
             session.should_interrupt = False
 
@@ -218,9 +228,6 @@ class LiveChatRoute(Route):
                 return
 
             logger.info(f"[Live Chat] STT 结果: {user_text}")
-
-            # 发送用户消息
-            import time
 
             await websocket.send_json(
                 {
@@ -281,7 +288,43 @@ class LiveChatRoute(Route):
                     continue
 
                 result_type = result.get("type")
+                result_chain_type = result.get("chain_type")
                 data = result.get("data", "")
+
+                if result_chain_type == "agent_stats":
+                    try:
+                        stats = json.loads(data)
+                        await websocket.send_json(
+                            {
+                                "t": "metrics",
+                                "data": {
+                                    "llm_ttft": stats.get("time_to_first_token", 0),
+                                    "llm_total_time": stats.get("end_time", 0)
+                                    - stats.get("start_time", 0),
+                                },
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
+                    continue
+
+                if result_chain_type == "tts_stats":
+                    try:
+                        stats = json.loads(data)
+                        await websocket.send_json(
+                            {
+                                "t": "metrics",
+                                "data": {
+                                    "tts_total_time": stats.get("duration", 0),
+                                    "tts_first_frame_time": stats.get(
+                                        "first_frame_time", 0
+                                    ),
+                                },
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
+                    continue
 
                 if result_type == "plain":
                     # 普通文本消息
@@ -292,6 +335,19 @@ class LiveChatRoute(Route):
                     if not audio_playing:
                         audio_playing = True
                         logger.debug("[Live Chat] 开始播放音频流")
+
+                        # Calculate latency from wav assembly finish to first audio chunk
+                        speak_to_first_frame_latency = (
+                            time.time() - wav_assembly_finish_time
+                        )
+                        await websocket.send_json(
+                            {
+                                "t": "metrics",
+                                "data": {
+                                    "speak_to_first_frame": speak_to_first_frame_latency
+                                },
+                            }
+                        )
 
                     # 发送音频数据给前端
                     await websocket.send_json(
@@ -319,6 +375,15 @@ class LiveChatRoute(Route):
 
                     # 发送结束标记
                     await websocket.send_json({"t": "end"})
+
+                    # 发送总耗时
+                    wav_to_tts_duration = time.time() - wav_assembly_finish_time
+                    await websocket.send_json(
+                        {
+                            "t": "metrics",
+                            "data": {"wav_to_tts_total_time": wav_to_tts_duration},
+                        }
+                    )
                     break
 
         except Exception as e:

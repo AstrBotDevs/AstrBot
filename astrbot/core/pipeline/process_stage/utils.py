@@ -64,6 +64,11 @@ CHATUI_EXTRA_PROMPT = (
     "Such as, user asked you to generate codes, you can add: Do you need me to run these codes for you?"
 )
 
+LIVE_MODE_SYSTEM_PROMPT = (
+    "You are talking to the user in real-time. "
+    "Behavior like a real friend, do not use template responses. "
+    "Use natural and native language to answer the user's questions. "
+)
 
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):

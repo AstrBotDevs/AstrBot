@@ -19,6 +19,16 @@
                     </div>
                 </div>
             </div>
+
+            <div class="metrics-container" v-if="Object.keys(metrics).length > 0">
+                <span v-if="metrics.wav_assemble_time">WAV Assemble: {{ (metrics.wav_assemble_time * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.llm_ttft">LLM First Token Latency: {{ (metrics.llm_ttft * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.llm_total_time">LLM Total Latency: {{ (metrics.llm_total_time * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.tts_first_frame_time">TTS First Frame Latency: {{ (metrics.tts_first_frame_time * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.tts_total_time">TTS Total Larency: {{ (metrics.tts_total_time * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.speak_to_first_frame">Speak -> First TTS Frame: {{ (metrics.speak_to_first_frame * 1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.wav_to_tts_total_time">Speak -> End: {{ (metrics.wav_to_tts_total_time * 1000).toFixed(0) }}ms</span>
+            </div>
         </div>
     </div>
 </template>
@@ -59,6 +69,17 @@ let isPlaying = ref(false);
 
 // 消息历史
 const messages = ref<Array<{ type: 'user' | 'bot', text: string }>>([]);
+
+interface LiveMetrics {
+    wav_assemble_time?: number;
+    speak_to_first_frame?: number;
+    llm_ttft?: number;
+    llm_total_time?: number;
+    tts_first_frame_time?: number;
+    tts_total_time?: number;
+    wav_to_tts_total_time?: number;
+}
+const metrics = ref<LiveMetrics>({});
 
 // 当前语音片段标记
 let currentStamp = '';
@@ -136,6 +157,7 @@ async function startLiveMode() {
 
                 // 发送开始说话消息
                 if (ws && ws.readyState === WebSocket.OPEN) {
+                    metrics.value = {}; // Reset metrics
                     ws.send(JSON.stringify({
                         t: 'start_speaking',
                         stamp: currentStamp
@@ -301,6 +323,10 @@ function handleWebSocketMessage(event: MessageEvent) {
                 alert('处理出错: ' + message.data);
                 isProcessing.value = false;
                 isListening.value = true;
+                break;
+            
+            case 'metrics':
+                metrics.value = { ...metrics.value, ...message.data };
                 break;
         }
     } catch (error) {
@@ -514,5 +540,17 @@ onBeforeUnmount(() => {
 .message-content {
     flex: 1;
     word-wrap: break-word;
+}
+
+.metrics-container {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: rgba(var(--v-theme-on-surface), 0.6);
+    z-index: 100;
 }
 </style>

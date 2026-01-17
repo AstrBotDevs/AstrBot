@@ -1,4 +1,5 @@
 import asyncio
+import time
 import traceback
 from collections.abc import AsyncGenerator
 
@@ -13,6 +14,7 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
 )
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.provider import TTSProvider
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -136,7 +138,7 @@ async def run_agent(
 
 async def run_live_agent(
     agent_runner: AgentRunner,
-    tts_provider,
+    tts_provider: TTSProvider | None = None,
     max_step: int = 30,
     show_tool_use: bool = True,
     show_reasoning: bool = False,
@@ -184,14 +186,46 @@ async def run_live_agent(
         return
 
     # 处理 TTS
+    tts_start_time = time.time()
+    tts_first_frame_time = 0.0
+    first_chunk_received = False
+
     if support_stream:
         # 使用流式 TTS
         async for audio_chunk in _process_stream_tts(llm_stream_chunks, tts_provider):
+            if not first_chunk_received:
+                tts_first_frame_time = time.time() - tts_start_time
+                first_chunk_received = True
             yield audio_chunk
     else:
         # 使用完整音频 TTS
         async for audio_chunk in _process_full_tts(llm_stream_chunks, tts_provider):
+            if not first_chunk_received:
+                tts_first_frame_time = time.time() - tts_start_time
+                first_chunk_received = True
             yield audio_chunk
+    tts_end_time = time.time()
+
+    # 发送 TTS 统计信息
+    try:
+        astr_event = agent_runner.run_context.context.event
+        if astr_event.get_platform_name() == "webchat":
+            tts_duration = tts_end_time - tts_start_time
+            await astr_event.send(
+                MessageChain(
+                    type="tts_stats",
+                    chain=[
+                        Json(
+                            data={
+                                "duration": tts_duration,
+                                "first_frame_time": tts_first_frame_time,
+                            }
+                        )
+                    ],
+                )
+            )
+    except Exception as e:
+        logger.error(f"发送 TTS 统计信息失败: {e}")
 
 
 async def _process_stream_tts(chunks: list[MessageChain], tts_provider):

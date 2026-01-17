@@ -41,6 +41,7 @@ from ...utils import (
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
+    LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
@@ -687,6 +688,7 @@ class InternalAgentSubStage(Stage):
                 # 检测 Live Mode
                 action_type = event.get_extra("action_type")
                 if action_type == "live":
+                    req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
                     # Live Mode: 使用 run_live_agent
                     logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
 
