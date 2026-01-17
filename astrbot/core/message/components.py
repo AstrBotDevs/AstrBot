@@ -537,6 +537,13 @@ class Reply(BaseMessageComponent):
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
+    async def to_dict(self) -> dict:
+        chain = self.chain if self.chain is not None else []
+        return {
+            "type": "reply",
+            "data": {"id": self.id, "chain": [await comp.to_dict() for comp in chain]},
+        }
+
 
 class Poke(BaseMessageComponent):
     type: str = ComponentType.Poke
@@ -639,11 +646,22 @@ class Nodes(BaseMessageComponent):
 class Json(BaseMessageComponent):
     type: ComponentType = ComponentType.Json
     data: dict
+    raw_data: str | None = None
 
     def __init__(self, data: str | dict, **_) -> None:
         if isinstance(data, str):
-            data = json.loads(data)
+            try:
+                self.raw_data = data
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                data = {"raw": data}
         super().__init__(data=data, **_)
+
+    async def to_dict(self) -> dict:
+        return {
+            "type": "json",
+            "data": {"content": getattr(self, "raw_data", json.dumps(self.data))},
+        }
 
 
 class Unknown(BaseMessageComponent):
