@@ -91,16 +91,16 @@
     "title": "编辑配置文件"
   },
   "fileUpload": {
-    "button": "Manage Files",
-    "dialogTitle": "Uploaded Files",
+    "button": "管理文件",
+    "dialogTitle": "已上传文件",
     "dropzone": "上传新文件",
-    "allowedTypes": "Allowed types: {types}",
-    "empty": "No files uploaded",
-    "uploadSuccess": "Uploaded {count} files",
-    "uploadFailed": "Upload failed",
-    "deleteSuccess": "Deleted file",
-    "deleteFailed": "Delete failed",
-    "fileCount": "Files: {count}",
+    "allowedTypes": "允许类型：{types}",
+    "empty": "暂无已上传文件",
+    "uploadSuccess": "已上传 {count} 个文件",
+    "uploadFailed": "上传失败",
+    "deleteSuccess": "已删除文件",
+    "deleteFailed": "删除失败",
+    "fileCount": "文件：{count}",
     "done": "完成"
   }
 }
