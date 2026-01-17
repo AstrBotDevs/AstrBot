@@ -133,6 +133,36 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent Sandbox Env(Beta)",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "Enable Sandbox Env",
+            "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
+          },
+          "booter": {
+            "description": "Sandbox Environment Driver"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "API access address for Shipyard service."
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard Access Token",
+            "hint": "Access token for accessing Shipyard service."
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Session TTL",
+            "hint": "Session time-to-live in seconds."
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Max Sessions",
+            "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "Context Management Strategy",
       "provider_settings": {
@@ -172,6 +202,14 @@
         "display_reasoning_text": {
           "description": "Display Reasoning Content"
         },
+        "llm_safety_mode": {
+          "description": "Healthy Mode",
+          "hint": "Add safety guardrails to model replies."
+        },
+        "safety_mode_strategy": {
+          "description": "Healthy Mode Strategy",
+          "hint": "How to apply healthy mode."
+        },
         "identifier": {
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."
@@ -186,6 +224,10 @@
         },
         "show_tool_use_status": {
           "description": "Output Function Call Status"
+        },
+        "sanitize_context_by_modalities": {
+          "description": "Sanitize History by Modalities",
+          "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
         },
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
@@ -523,5 +565,13 @@
         "description": "Direct Connection Address List"
       }
     }
+  },
+  "help": {
+    "documentation": "Official Documentation",
+    "support": "Join Support Group",
+    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
+    "helpPrefix": "Don't understand the configuration? See",
+    "helpMiddle": "or",
+    "helpSuffix": "."
   }
 }

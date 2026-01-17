@@ -50,7 +50,16 @@ const extension_data = reactive({
   data: [],
   message: "",
 });
-const showReserved = ref(false);
+
+// 从 localStorage 恢复显示系统插件的状态，默认为 false（隐藏）
+const getInitialShowReserved = () => {
+  if (typeof window !== "undefined" && window.localStorage) {
+    const saved = localStorage.getItem("showReservedPlugins");
+    return saved === "true";
+  }
+  return false;
+};
+const showReserved = ref(getInitialShowReserved());
 const snack_message = ref("");
 const snack_show = ref(false);
 const snack_success = ref("success");
@@ -290,6 +299,10 @@ const updatableExtensions = computed(() => {
 // 方法
 const toggleShowReserved = () => {
   showReserved.value = !showReserved.value;
+  // 保存到 localStorage
+  if (typeof window !== "undefined" && window.localStorage) {
+    localStorage.setItem("showReservedPlugins", showReserved.value.toString());
+  }
 };
 
 const toast = (message, success) => {

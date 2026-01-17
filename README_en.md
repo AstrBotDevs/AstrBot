@@ -137,8 +137,6 @@ Or refer to the official documentation: [Deploy AstrBot from Source](https://ast
 - [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
 - [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
 - [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
-- [Bilibili Direct Messages](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
-- [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)
 
 ## Supported Model Services
 

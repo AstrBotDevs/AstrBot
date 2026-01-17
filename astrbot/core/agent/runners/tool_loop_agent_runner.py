@@ -227,7 +227,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
-            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
@@ -277,7 +278,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
-            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_to_calls_model(),
@@ -361,7 +363,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         ToolCallMessageSegment(
                             role="tool",
                             tool_call_id=func_tool_id,
-                            content=f"error: 未找到工具 {func_tool_name}",
+                            content=f"error: Tool {func_tool_name} not found.",
                         ),
                     )
                     continue
@@ -427,7 +429,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content="返回了图片(已直接发送给用户)",
+                                    content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
                                 ),
                             )
                             yield MessageChain(type="tool_direct_result").base64_image(
@@ -452,7 +454,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     ToolCallMessageSegment(
                                         role="tool",
                                         tool_call_id=func_tool_id,
-                                        content="返回了图片(已直接发送给用户)",
+                                        content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
                                     ),
                                 )
                                 yield MessageChain(
@@ -463,16 +465,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     ToolCallMessageSegment(
                                         role="tool",
                                         tool_call_id=func_tool_id,
-                                        content="返回的数据类型不受支持",
+                                        content="The tool has returned a data type that is not supported.",
                                     ),
                                 )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
-                        # 这里我们将直接结束 Agent Loop。
-                        # 发送消息逻辑在 ToolExecutor 中处理了。
+                        # 这里我们将直接结束 Agent Loop
+                        # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
@@ -480,7 +482,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ToolCallMessageSegment(
                                 role="tool",
                                 tool_call_id=func_tool_id,
-                                content="*工具没有返回值或者将结果直接发送给了用户*",
+                                content="The tool has no return value, or has sent the result directly to the user.",
                             ),
                         )
                     else:
@@ -492,7 +494,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ToolCallMessageSegment(
                                 role="tool",
                                 tool_call_id=func_tool_id,
-                                content="*工具返回了不支持的类型，请告诉用户检查这个工具的定义和实现。*",
+                                content="*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
                             ),
                         )
 

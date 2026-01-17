@@ -45,6 +45,8 @@ class Metric:
 
         Powered by TickStats.
         """
+        if os.environ.get("ASTRBOT_DISABLE_METRICS", "0") == "1":
+            return
         base_url = "https://tickstats.soulter.top/api/metric/90a6c2a1"
         kwargs["v"] = VERSION
         kwargs["os"] = sys.platform

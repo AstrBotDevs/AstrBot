@@ -30,6 +30,8 @@ from collections import deque
 
 import colorlog
 
+from astrbot.core.config.default import VERSION
+
 # 日志缓存大小
 CACHED_SIZE = 200
 # 日志颜色配置
@@ -186,7 +188,7 @@ class LogManager:
 
         # 创建彩色日志格式化器, 输出日志格式为: [时间] [插件标签] [日志级别] [文件名:行号]: 日志消息
         console_formatter = colorlog.ColoredFormatter(
-            fmt="%(log_color)s [%(asctime)s] %(plugin_tag)s [%(short_levelname)-4s] [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
+            fmt="%(log_color)s [%(asctime)s] %(plugin_tag)s [%(short_levelname)-4s]%(astrbot_version_tag)s [%(filename)s:%(lineno)d]: %(message)s %(reset)s",
             datefmt="%H:%M:%S",
             log_colors=log_color_config,
         )
@@ -223,10 +225,21 @@ class LogManager:
                 record.short_levelname = get_short_level_name(record.levelname)
                 return True
 
+        class AstrBotVersionTagFilter(logging.Filter):
+            """在 WARNING 及以上级别日志后追加当前 AstrBot 版本号。"""
+
+            def filter(self, record):
+                if record.levelno >= logging.WARNING:
+                    record.astrbot_version_tag = f" [v{VERSION}]"
+                else:
+                    record.astrbot_version_tag = ""
+                return True
+
         console_handler.setFormatter(console_formatter)  # 设置处理器的格式化器
         logger.addFilter(PluginFilter())  # 添加插件过滤器
         logger.addFilter(FileNameFilter())  # 添加文件名过滤器
         logger.addFilter(LevelNameFilter())  # 添加级别名称过滤器
+        logger.addFilter(AstrBotVersionTagFilter())  # 追加版本号（WARNING 及以上）
         logger.setLevel(logging.DEBUG)  # 设置日志级别为DEBUG
         logger.addHandler(console_handler)  # 添加处理器到logger
 

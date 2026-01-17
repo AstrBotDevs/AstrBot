@@ -42,7 +42,8 @@
       "title": "安全提醒",
       "aiocqhttpTokenMissing": "为了增强连接安全性，强烈建议您设置 ws_reverse_token。未设置 Token 可能导致安全风险。",
       "learnMore": "了解更多"
-    }
+    },
+    "invalidPlatformId": "平台 ID 不能包含 ':' 或 '!'。"
   },
   "messages": {
     "updateSuccess": "更新成功!",

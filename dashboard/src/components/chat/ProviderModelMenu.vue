@@ -1,7 +1,7 @@
 <template>
     <v-menu v-model="menuOpen" :close-on-content-click="false" location="top" @update:model-value="handleMenuToggle">
         <template v-slot:activator="{ props: menuProps }">
-            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" size="x-small">
+            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" :size="chipSize">
                 <v-icon start size="14">mdi-creation</v-icon>
                 <span v-if="selectedProviderId">
                     {{ selectedProviderId }}
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useDisplay } from 'vuetify';
 import axios from 'axios';
 
 interface ModelMetadata {
@@ -75,10 +76,14 @@ interface ProviderConfig {
     enable?: boolean;
 }
 
+const { mobile } = useDisplay();
+
 const providerConfigs = ref<ProviderConfig[]>([]);
 const selectedProviderId = ref('');
 const searchQuery = ref('');
 const menuOpen = ref(false);
+
+const chipSize = computed(() => mobile.value ? 'x-small' : 'small');
 
 const filteredProviders = computed(() => {
     if (!searchQuery.value) {

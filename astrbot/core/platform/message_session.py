@@ -23,7 +23,7 @@ class MessageSession:
 
     @staticmethod
     def from_str(session_str: str):
-        platform_id, message_type, session_id = session_str.split(":")
+        platform_id, message_type, session_id = session_str.split(":", 2)
         return MessageSession(platform_id, MessageType(message_type), session_id)
 
 

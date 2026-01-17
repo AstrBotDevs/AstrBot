@@ -11,7 +11,9 @@ from .star_handler import (
     register_on_decorating_result,
     register_on_llm_request,
     register_on_llm_response,
+    register_on_llm_tool_respond,
     register_on_platform_loaded,
+    register_on_using_llm_tool,
     register_on_waiting_llm_request,
     register_permission_type,
     register_platform_adapter_type,
@@ -36,4 +38,6 @@ __all__ = [
     "register_platform_adapter_type",
     "register_regex",
     "register_star",
+    "register_on_using_llm_tool",
+    "register_on_llm_tool_respond",
 ]
