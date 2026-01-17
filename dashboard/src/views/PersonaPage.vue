@@ -318,6 +318,8 @@ export default {
             try {
                 const text = await file.text();
                 const parsedData = JSON.parse(text);
+                
+                console.log("Parsed Data:", parsedData);
 
                 // 验证必需字段
                 if (!parsedData.persona_id || !parsedData.system_prompt) {
@@ -335,8 +337,8 @@ export default {
                     return;
                 }
 
-                // 调用 API 保存
-                const response = await axios.post('/api/persona/save', parsedData);
+                // 调用 API 保存（使用正确的端点）
+                const response = await axios.post('/api/persona/create', parsedData);
 
                 if (response.data.status === 'ok') {
                     this.showSuccess(response.data.message || '导入成功喵！');
@@ -345,10 +347,11 @@ export default {
                     this.showError(response.data.message || '导入失败喵！');
                 }
             } catch (error) {
+                console.error("Import Error:", error);
                 if (error instanceof SyntaxError) {
-                    this.showError('JSON 格式错误喵！');
+                    this.showError('JSON 格式错误喵！' + error.message);
                 } else {
-                    this.showError(error.response?.data?.message || '导入失败喵！');
+                    this.showError('导入失败喵！' + (error.response?.data?.message || error.message));
                 }
             }
 
