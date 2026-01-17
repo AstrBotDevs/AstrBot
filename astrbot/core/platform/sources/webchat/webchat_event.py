@@ -131,15 +131,25 @@ class WebChatMessageEvent(AstrMessageEvent):
             # 处理音频流（Live Mode）
             if chain.type == "audio_chunk":
                 # 音频流数据，直接发送
-                audio_b64 = chain.get_plain_text()
-                await web_chat_back_queue.put(
-                    {
-                        "type": "audio_chunk",
-                        "data": audio_b64,
-                        "streaming": True,
-                        "message_id": message_id,
-                    },
-                )
+                audio_b64 = ""
+                text = None
+
+                if chain.chain and isinstance(chain.chain[0], Plain):
+                    audio_b64 = chain.chain[0].text
+
+                if len(chain.chain) > 1 and isinstance(chain.chain[1], Json):
+                    text = chain.chain[1].data.get("text")
+
+                payload = {
+                    "type": "audio_chunk",
+                    "data": audio_b64,
+                    "streaming": True,
+                    "message_id": message_id,
+                }
+                if text:
+                    payload["text"] = text
+
+                await web_chat_back_queue.put(payload)
                 continue
 
             # if chain.type == "break" and final_data:

@@ -349,6 +349,15 @@ class LiveChatRoute(Route):
                             }
                         )
 
+                    text = result.get("text")
+                    if text:
+                        await websocket.send_json(
+                            {
+                                "t": "bot_text_chunk",
+                                "data": {"text": text},
+                            }
+                        )
+
                     # 发送音频数据给前端
                     await websocket.send_json(
                         {

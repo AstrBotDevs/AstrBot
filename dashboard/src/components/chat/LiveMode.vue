@@ -308,6 +308,13 @@ function handleWebSocketMessage(event: MessageEvent) {
                 });
                 break;
 
+            case 'bot_text_chunk':
+                messages.value.push({
+                    type: 'bot',
+                    text: message.data.text
+                });
+                break;
+
             case 'bot_msg':
                 messages.value.push({
                     type: 'bot',
@@ -618,17 +625,11 @@ onBeforeUnmount(() => {
 }
 
 .message-item {
+    color: rgb(var(--v-theme-on-surface));
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
-}
-
-.message-item.user {
+    align-items: flex-end;
     align-self: flex-end;
-}
-
-.message-item.bot {
-    align-self: flex-start;
+    gap: 12px;
 }
 
 .message-content {

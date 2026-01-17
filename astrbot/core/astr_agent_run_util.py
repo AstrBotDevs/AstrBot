@@ -8,7 +8,7 @@ from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.message.components import Json, Plain
+from astrbot.core.message.components import BaseMessageComponent, Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -184,7 +184,8 @@ async def run_live_agent(
 
     # 创建队列
     text_queue: asyncio.Queue[str | None] = asyncio.Queue()
-    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    # audio_queue stored bytes or (text, bytes)
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
 
     # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
     feeder_task = asyncio.create_task(
@@ -206,10 +207,16 @@ async def run_live_agent(
     # 3. 主循环：从 audio_queue 读取音频并 yield
     try:
         while True:
-            audio_data = await audio_queue.get()
+            queue_item = await audio_queue.get()
 
-            if audio_data is None:
+            if queue_item is None:
                 break
+
+            text = None
+            if isinstance(queue_item, tuple):
+                text, audio_data = queue_item
+            else:
+                audio_data = queue_item
 
             if not first_chunk_received:
                 # 记录首帧延迟（从开始处理到收到第一个音频块）
@@ -220,7 +227,10 @@ async def run_live_agent(
             import base64
 
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-            chain = MessageChain(chain=[Plain(audio_b64)], type="audio_chunk")
+            comps: list[BaseMessageComponent] = [Plain(audio_b64)]
+            if text:
+                comps.append(Json(data={"text": text}))
+            chain = MessageChain(chain=comps, type="audio_chunk")
             yield chain
 
     except Exception as e:
@@ -321,7 +331,7 @@ async def _run_agent_feeder(
 async def _safe_tts_stream_wrapper(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
-    audio_queue: asyncio.Queue[bytes | None],
+    audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
 ):
     """包装原生流式 TTS 确保异常处理和队列关闭"""
     try:
@@ -335,7 +345,7 @@ async def _safe_tts_stream_wrapper(
 async def _simulated_stream_tts(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
-    audio_queue: asyncio.Queue[bytes | None],
+    audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
 ):
     """模拟流式 TTS 分句生成音频"""
     try:
@@ -350,7 +360,7 @@ async def _simulated_stream_tts(
                 if audio_path:
                     with open(audio_path, "rb") as f:
                         audio_data = f.read()
-                    await audio_queue.put(audio_data)
+                    await audio_queue.put((text, audio_data))
             except Exception as e:
                 logger.error(
                     f"[Live TTS Simulated] Error processing text '{text[:20]}...': {e}"

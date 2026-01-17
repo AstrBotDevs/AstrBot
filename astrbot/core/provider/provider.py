@@ -240,7 +240,7 @@ class TTSProvider(AbstractProvider):
     async def get_audio_stream(
         self,
         text_queue: asyncio.Queue[str | None],
-        audio_queue: asyncio.Queue[bytes | None],
+        audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
     ) -> None:
         """流式 TTS 处理方法。
 
@@ -249,7 +249,7 @@ class TTSProvider(AbstractProvider):
 
         Args:
             text_queue: 输入文本队列，None 表示输入结束
-            audio_queue: 输出音频队列（bytes），None 表示输出结束
+            audio_queue: 输出音频队列（bytes 或 (text, bytes)），None 表示输出结束
 
         Notes:
             - 默认实现会将文本累积后一次性调用 get_audio 生成完整音频
@@ -270,7 +270,7 @@ class TTSProvider(AbstractProvider):
                         # 读取音频文件内容
                         with open(audio_path, "rb") as f:
                             audio_data = f.read()
-                        await audio_queue.put(audio_data)
+                        await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记
                         pass

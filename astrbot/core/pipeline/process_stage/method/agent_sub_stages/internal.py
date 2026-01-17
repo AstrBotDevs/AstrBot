@@ -668,6 +668,10 @@ class InternalAgentSubStage(Stage):
                 if req.func_tool and req.func_tool.tools:
                     req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
 
+                action_type = event.get_extra("action_type")
+                if action_type == "live":
+                    req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+
                 await agent_runner.reset(
                     provider=provider,
                     request=req,
@@ -686,9 +690,7 @@ class InternalAgentSubStage(Stage):
                 )
 
                 # 检测 Live Mode
-                action_type = event.get_extra("action_type")
                 if action_type == "live":
-                    req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
                     # Live Mode: 使用 run_live_agent
                     logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
 
