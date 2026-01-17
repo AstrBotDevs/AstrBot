@@ -40,6 +40,12 @@
                                             {{ tm('buttons.edit') }}
                                         </v-list-item-title>
                                     </v-list-item>
+                                    <v-list-item @click.stop="copyPersonaJson(persona)">
+                                        <v-list-item-title>
+                                            <v-icon class="mr-2" size="small">mdi-content-copy</v-icon>
+                                            {{ tm('buttons.copy') || '复制 JSON' }}
+                                        </v-list-item-title>
+                                    </v-list-item>
                                     <v-list-item @click="deletePersona(persona)" class="text-error">
                                         <v-list-item-title>
                                             <v-icon class="mr-2" size="small">mdi-delete</v-icon>
@@ -270,6 +276,30 @@ export default {
             this.message = message;
             this.messageType = 'error';
             this.showMessage = true;
+        },
+
+        async copyPersonaJson(persona) {
+            try {
+                // 创建清洁副本，排除系统字段
+                const cleanPersona = {
+                    persona_id: persona.persona_id,
+                    system_prompt: persona.system_prompt,
+                    begin_dialogs: persona.begin_dialogs,
+                    tools: persona.tools
+                };
+                
+                // 格式化 JSON
+                const jsonString = JSON.stringify(cleanPersona, null, 4);
+                
+                // 复制到剪贴板
+                await navigator.clipboard.writeText(jsonString);
+                
+                // 显示成功消息
+                this.showSuccess(this.tm('messages.copySuccess') || 'Copied to clipboard');
+            } catch (error) {
+                // 显示错误消息
+                this.showError(error.message || this.tm('messages.copyError') || 'Failed to copy JSON');
+            }
         }
     }
 }
