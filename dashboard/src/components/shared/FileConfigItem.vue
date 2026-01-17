@@ -107,6 +107,8 @@ const dialog = ref(false)
 const isDragging = ref(false)
 const fileInput = ref(null)
 const uploading = ref(false)
+const MAX_FILE_BYTES = 500 * 1024 * 1024
+const MAX_FILE_MB = 500
 
 const fileList = computed({
   get: () => (Array.isArray(props.modelValue) ? props.modelValue : []),
@@ -165,10 +167,23 @@ const uploadFiles = async (files) => {
     return
   }
 
+  const oversized = files.filter((file) => file.size > MAX_FILE_BYTES)
+  if (oversized.length > 0) {
+    oversized.forEach((file) => {
+      toast.warning(
+        tm('fileUpload.fileTooLarge', { name: file.name, max: MAX_FILE_MB })
+      )
+    })
+  }
+  const validFiles = files.filter((file) => file.size <= MAX_FILE_BYTES)
+  if (validFiles.length === 0) {
+    return
+  }
+
   uploading.value = true
   try {
     const formData = new FormData()
-    files.forEach((file, index) => {
+    validFiles.forEach((file, index) => {
       formData.append(`file${index}`, file)
     })
 

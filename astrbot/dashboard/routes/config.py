@@ -31,6 +31,8 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
 
+MAX_FILE_BYTES = 500 * 1024 * 1024
+
 
 def try_cast(value: Any, type_: str):
     if type_ == "int":
@@ -1146,6 +1148,11 @@ class ConfigRoute(Route):
                 errors.append("Invalid filename")
                 continue
 
+            file_size = getattr(file, "content_length", None)
+            if isinstance(file_size, int) and file_size > MAX_FILE_BYTES:
+                errors.append(f"File too large: {filename}")
+                continue
+
             ext = os.path.splitext(filename)[1].lstrip(".").lower()
             if allowed_exts and ext not in allowed_exts:
                 errors.append(f"Unsupported file type: {filename}")
@@ -1155,6 +1162,10 @@ class ConfigRoute(Route):
             save_path = os.path.join(staging_root, rel_path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             await file.save(save_path)
+            if os.path.isfile(save_path) and os.path.getsize(save_path) > MAX_FILE_BYTES:
+                os.remove(save_path)
+                errors.append(f"File too large: {filename}")
+                continue
             uploaded.append(rel_path)
 
         if not uploaded:

@@ -98,6 +98,7 @@
     "empty": "No files uploaded",
     "uploadSuccess": "Uploaded {count} files",
     "uploadFailed": "Upload failed",
+    "fileTooLarge": "File too large (max {max} MB): {name}",
     "deleteSuccess": "Deleted file",
     "deleteFailed": "Delete failed",
     "fileCount": "Files: {count}",
