@@ -221,10 +221,64 @@ class TTSProvider(AbstractProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
 
+    def support_stream(self) -> bool:
+        """是否支持流式 TTS
+
+        Returns:
+            bool: True 表示支持流式处理，False 表示不支持（默认）
+
+        Notes:
+            子类可以重写此方法返回 True 来启用流式 TTS 支持
+        """
+        return False
+
     @abc.abstractmethod
     async def get_audio(self, text: str) -> str:
         """获取文本的音频，返回音频文件路径"""
         raise NotImplementedError
+
+    async def get_audio_stream(
+        self,
+        text_queue: asyncio.Queue[str | None],
+        audio_queue: asyncio.Queue[bytes | None],
+    ) -> None:
+        """流式 TTS 处理方法。
+
+        从 text_queue 中读取文本片段，将生成的音频数据（WAV 格式的 in-memory bytes）放入 audio_queue。
+        当 text_queue 收到 None 时，表示文本输入结束，此时应该处理完所有剩余文本并向 audio_queue 发送 None 表示结束。
+
+        Args:
+            text_queue: 输入文本队列，None 表示输入结束
+            audio_queue: 输出音频队列（bytes），None 表示输出结束
+
+        Notes:
+            - 默认实现会将文本累积后一次性调用 get_audio 生成完整音频
+            - 子类可以重写此方法实现真正的流式 TTS
+            - 音频数据应该是 WAV 格式的 bytes
+        """
+        accumulated_text = ""
+
+        while True:
+            text_part = await text_queue.get()
+
+            if text_part is None:
+                # 输入结束，处理累积的文本
+                if accumulated_text:
+                    try:
+                        # 调用原有的 get_audio 方法获取音频文件路径
+                        audio_path = await self.get_audio(accumulated_text)
+                        # 读取音频文件内容
+                        with open(audio_path, "rb") as f:
+                            audio_data = f.read()
+                        await audio_queue.put(audio_data)
+                    except Exception:
+                        # 出错时也要发送 None 结束标记
+                        pass
+                # 发送结束标记
+                await audio_queue.put(None)
+                break
+
+            accumulated_text += text_part
 
     async def test(self):
         await self.get_audio("hi")

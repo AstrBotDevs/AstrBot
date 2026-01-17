@@ -22,7 +22,11 @@
     "stop": "停止录音",
     "recording": "新录音",
     "processing": "处理中...",
-    "error": "录音失败"
+    "error": "录音失败",
+    "listening": "等待语音...",
+    "speaking": "正在说话",
+    "startRecording": "开始语音输入",
+    "liveMode": "实时对话"
   },
   "welcome": {
     "title": "欢迎使用 AstrBot",

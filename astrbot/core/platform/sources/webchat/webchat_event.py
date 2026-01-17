@@ -128,6 +128,20 @@ class WebChatMessageEvent(AstrMessageEvent):
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         message_id = self.message_obj.message_id
         async for chain in generator:
+            # 处理音频流（Live Mode）
+            if chain.type == "audio_chunk":
+                # 音频流数据，直接发送
+                audio_b64 = chain.get_plain_text()
+                await web_chat_back_queue.put(
+                    {
+                        "type": "audio_chunk",
+                        "data": audio_b64,
+                        "streaming": True,
+                        "message_id": message_id,
+                    },
+                )
+                continue
+
             # if chain.type == "break" and final_data:
             #     # 分割符
             #     await web_chat_back_queue.put(

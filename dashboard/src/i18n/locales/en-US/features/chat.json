@@ -22,7 +22,11 @@
     "stop": "Stop Recording",
     "recording": "New Recording",
     "processing": "Processing...",
-    "error": "Recording Failed"
+    "error": "Recording Failed",
+    "listening": "Listening...",
+    "speaking": "Speaking",
+    "startRecording": "Start Voice Input",
+    "liveMode": "Live Mode"
   },
   "welcome": {
     "title": "Welcome to AstrBot",

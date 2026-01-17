@@ -85,9 +85,29 @@
                     <input type="file" ref="imageInputRef" @change="handleFileSelect"
                         style="display: none" multiple />
                     <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
+                    <v-btn @click="$emit('openLiveMode')"
+                        icon
+                        variant="text"
+                        color="purple" 
+                        size="small"
+                    >
+                        <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
+                        <v-tooltip activator="parent" location="top">
+                            {{ tm('voice.liveMode') }}
+                        </v-tooltip>
+                    </v-btn>
                     <v-btn @click="handleRecordClick"
-                        :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
-                        :color="isRecording ? 'error' : 'deep-purple'" class="record-btn" size="small" />
+                        icon
+                        variant="text"
+                        :color="isRecording ? 'error' : 'deep-purple'" 
+                        class="record-btn" 
+                        size="small" 
+                    >
+                        <v-icon :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text" plain></v-icon>
+                        <v-tooltip activator="parent" location="top">
+                            {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
+                        </v-tooltip>
+                    </v-btn>
                     <v-btn @click="$emit('send')" icon="mdi-send" variant="text" color="deep-purple"
                         :disabled="!canSend" class="send-btn" size="small" />
                 </div>
@@ -179,6 +199,7 @@ const emit = defineEmits<{
     pasteImage: [event: ClipboardEvent];
     fileSelect: [files: FileList];
     clearReply: [];
+    openLiveMode: [];
 }>();
 
 const { tm } = useModuleI18n('features/chat');

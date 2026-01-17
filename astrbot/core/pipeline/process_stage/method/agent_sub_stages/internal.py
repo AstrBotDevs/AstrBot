@@ -31,7 +31,7 @@ from astrbot.core.utils.session_lock import session_lock_manager
 
 from .....astr_agent_context import AgentContextWrapper
 from .....astr_agent_hooks import MAIN_AGENT_HOOKS
-from .....astr_agent_run_util import AgentRunner, run_agent
+from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
@@ -684,7 +684,51 @@ class InternalAgentSubStage(Stage):
                     enforce_max_turns=self.max_context_length,
                 )
 
-                if streaming_response and not stream_to_general:
+                # 检测 Live Mode
+                action_type = event.get_extra("action_type")
+                if action_type == "live":
+                    # Live Mode: 使用 run_live_agent
+                    logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+
+                    # 获取 TTS Provider
+                    tts_provider = (
+                        self.ctx.plugin_manager.context.get_using_tts_provider(
+                            event.unified_msg_origin
+                        )
+                    )
+
+                    if not tts_provider:
+                        logger.warning(
+                            "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                        )
+
+                    # 使用 run_live_agent，总是使用流式响应
+                    event.set_result(
+                        MessageEventResult()
+                        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                        .set_async_stream(
+                            run_live_agent(
+                                agent_runner,
+                                tts_provider,
+                                self.max_step,
+                                self.show_tool_use,
+                                show_reasoning=self.show_reasoning,
+                            ),
+                        ),
+                    )
+                    yield
+
+                    # 保存历史记录
+                    if not event.is_stopped() and agent_runner.done():
+                        await self._save_to_history(
+                            event,
+                            req,
+                            agent_runner.get_final_llm_resp(),
+                            agent_runner.run_context.messages,
+                            agent_runner.stats,
+                        )
+
+                elif streaming_response and not stream_to_general:
                     # 流式响应
                     event.set_result(
                         MessageEventResult()
