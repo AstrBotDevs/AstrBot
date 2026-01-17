@@ -222,6 +222,10 @@ class LiveChatRoute(Route):
                 await websocket.send_json({"t": "error", "data": "语音识别服务未配置"})
                 return
 
+            await websocket.send_json(
+                {"t": "metrics", "data": {"stt": stt_provider.meta().type}}
+            )
+
             user_text = await stt_provider.get_text(audio_path)
             if not user_text:
                 logger.warning("[Live Chat] STT 识别结果为空")
@@ -314,12 +318,7 @@ class LiveChatRoute(Route):
                         await websocket.send_json(
                             {
                                 "t": "metrics",
-                                "data": {
-                                    "tts_total_time": stats.get("duration", 0),
-                                    "tts_first_frame_time": stats.get(
-                                        "first_frame_time", 0
-                                    ),
-                                },
+                                "data": stats,
                             }
                         )
                     except Exception as e:

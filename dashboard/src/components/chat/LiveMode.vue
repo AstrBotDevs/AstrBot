@@ -22,19 +22,22 @@
 
             <div class="metrics-container" v-if="Object.keys(metrics).length > 0">
                 <span v-if="metrics.wav_assemble_time">WAV Assemble: {{ (metrics.wav_assemble_time * 1000).toFixed(0)
-                }}ms</span>
+                    }}ms</span>
                 <span v-if="metrics.llm_ttft">LLM First Token Latency: {{ (metrics.llm_ttft * 1000).toFixed(0)
-                }}ms</span>
+                    }}ms</span>
                 <span v-if="metrics.llm_total_time">LLM Total Latency: {{ (metrics.llm_total_time * 1000).toFixed(0)
-                }}ms</span>
+                    }}ms</span>
                 <span v-if="metrics.tts_first_frame_time">TTS First Frame Latency: {{ (metrics.tts_first_frame_time *
                     1000).toFixed(0) }}ms</span>
                 <span v-if="metrics.tts_total_time">TTS Total Larency: {{ (metrics.tts_total_time * 1000).toFixed(0)
-                }}ms</span>
+                    }}ms</span>
                 <span v-if="metrics.speak_to_first_frame">Speak -> First TTS Frame: {{ (metrics.speak_to_first_frame *
                     1000).toFixed(0) }}ms</span>
                 <span v-if="metrics.wav_to_tts_total_time">Speak -> End: {{ (metrics.wav_to_tts_total_time *
                     1000).toFixed(0) }}ms</span>
+                <span v-if="metrics.stt">STT Provider: {{ metrics.stt }}</span>
+                <span v-if="metrics.tts">TTS Provider: {{ metrics.tts }}</span>
+                <span v-if="metrics.chat_model">Chat Model: {{ metrics.chat_model }}</span>
             </div>
         </div>
     </div>
@@ -93,6 +96,9 @@ interface LiveMetrics {
     tts_first_frame_time?: number;
     tts_total_time?: number;
     wav_to_tts_total_time?: number;
+    stt?: string;
+    tts?: string;
+    chat_model?: string;
 }
 const metrics = ref<LiveMetrics>({});
 

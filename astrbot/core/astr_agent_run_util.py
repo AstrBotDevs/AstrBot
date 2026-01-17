@@ -258,8 +258,10 @@ async def run_live_agent(
                     chain=[
                         Json(
                             data={
-                                "duration": tts_duration,
-                                "first_frame_time": tts_first_frame_time,
+                                "tts_total_time": tts_duration,
+                                "tts_first_frame_time": tts_first_frame_time,
+                                "tts": tts_provider.meta().type,
+                                "chat_model": agent_runner.provider.get_model(),
                             }
                         )
                     ],
