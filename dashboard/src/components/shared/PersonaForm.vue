@@ -378,16 +378,26 @@ export default {
             }
 
             this.saving = true;
-            try {
-                const url = this.editingPersona ? '/api/persona/update' : '/api/persona/create';
-                const response = await axios.post(url, this.personaForm);
-
-                if (response.data.status === 'ok') {
-                    this.$emit('saved', response.data.message || this.tm('messages.saveSuccess'));
-                    this.closeDialog();
-                } else {
-                    this.$emit('error', response.data.message || this.tm('messages.saveError'));
+        try {
+            const url = this.editingPersona ? '/api/persona/update' : '/api/persona/create';
+            
+            // 白名单过滤字段
+            const allowedFields = ['persona_id', 'system_prompt', 'begin_dialogs', 'tools'];
+            const filteredData = {};
+            allowedFields.forEach(field => {
+                if (this.personaForm.hasOwnProperty(field)) {
+                    filteredData[field] = this.personaForm[field];
                 }
+            });
+
+            const response = await axios.post(url, filteredData);
+
+            if (response.data.status === 'ok') {
+                this.$emit('saved', response.data.message || this.tm('messages.saveSuccess'));
+                this.closeDialog();
+            } else {
+                this.$emit('error', response.data.message || this.tm('messages.saveError'));
+            }
             } catch (error) {
                 this.$emit('error', error.response?.data?.message || this.tm('messages.saveError'));
             }
