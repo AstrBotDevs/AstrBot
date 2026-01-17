@@ -45,10 +45,10 @@
                                             {{ tm('buttons.edit') }}
                                         </v-list-item-title>
                                     </v-list-item>
-                                    <v-list-item @click.stop="copyPersonaJson(persona)">
+                                    <v-list-item @click.stop="downloadPersonaJson(persona)">
                                         <v-list-item-title>
                                             <v-icon class="mr-2" size="small">mdi-content-copy</v-icon>
-                                            {{ tm('buttons.copy') || '复制 JSON' }}
+                                            {{ tm('buttons.export') || '导出 JSON' }}
                                         </v-list-item-title>
                                     </v-list-item>
                                     <v-list-item @click="deletePersona(persona)" class="text-error">
@@ -283,7 +283,7 @@ export default {
             this.showMessage = true;
         },
 
-        async copyPersonaJson(persona) {
+        async downloadPersonaJson(persona) {
             try {
                 // 创建清洁副本，排除系统字段
                 const cleanPersona = {
@@ -296,14 +296,28 @@ export default {
                 // 格式化 JSON
                 const jsonString = JSON.stringify(cleanPersona, null, 4);
                 
-                // 复制到剪贴板
-                await navigator.clipboard.writeText(jsonString);
+                // 创建 Blob 对象
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${persona.persona_id}.json`;
+                
+                // 触发下载
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // 清理 URL 对象
+                URL.revokeObjectURL(url);
                 
                 // 显示成功消息
-                this.showSuccess(this.tm('messages.copySuccess') || 'Copied to clipboard');
+                this.showSuccess(this.tm('messages.downloadSuccess') || 'JSON 文件已下载');
             } catch (error) {
                 // 显示错误消息
-                this.showError(error.message || this.tm('messages.copyError') || 'Failed to copy JSON');
+                this.showError(error.message || this.tm('messages.downloadError') || '下载 JSON 文件失败');
             }
         },
 
