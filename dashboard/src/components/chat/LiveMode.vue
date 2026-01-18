@@ -1,13 +1,18 @@
 <template>
     <div class="live-mode-container">
-        <v-btn icon="mdi-close" @click="handleClose" flat variant="text" />
+        <div class="header-controls">
+            <v-btn icon="mdi-close" @click="handleClose" flat variant="text" />
+            <v-btn :icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'" @click="toggleCodeMode" flat
+                variant="text" :color="isCodeMode ? 'primary' : ''" />
+        </div>
 
         <div class="live-mode-content">
             <div class="center-circle-container" @click="handleCircleClick">
                 <!-- 爆炸效果层 -->
                 <div v-if="isExploding" class="explosion-wave"></div>
 
-                <SiriOrb :energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark" class="siri-orb" />
+                <SiriOrb :energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark" :code-mode="isCodeMode"
+                    class="siri-orb" />
             </div>
             <div class="status-text">
                 {{ statusText }}
@@ -62,6 +67,7 @@ const vadRecording = useVADRecording();
 // 状态
 const isActive = ref(false);  // Live Mode 是否激活
 const isExploding = ref(false); // 是否正在展示爆炸动画
+const isCodeMode = ref(false); // 是否开启代码模式
 // 使用 VAD 提供的 isSpeaking 状态
 const isSpeaking = computed(() => vadRecording.isSpeaking.value);
 const isListening = ref(false);  // 是否在监听
@@ -513,6 +519,10 @@ function handleClose() {
     emit('close');
 }
 
+function toggleCodeMode() {
+    isCodeMode.value = !isCodeMode.value;
+}
+
 // 监听用户打断
 watch(isSpeaking, (newVal) => {
     if (newVal && isPlaying.value) {
@@ -537,6 +547,12 @@ onBeforeUnmount(() => {
     height: 100%;
     width: 100%;
     background: linear-gradient(135deg, rgba(103, 58, 183, 0.05) 0%, rgba(63, 81, 181, 0.05) 100%);
+}
+
+.header-controls {
+    display: flex;
+    padding: 8px;
+    gap: 8px;
 }
 
 .live-mode-content {
