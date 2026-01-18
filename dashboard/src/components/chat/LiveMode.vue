@@ -4,6 +4,8 @@
             <v-btn icon="mdi-close" @click="handleClose" flat variant="text" />
             <v-btn :icon="isCodeMode ? 'mdi-code-tags-check' : 'mdi-code-tags'" @click="toggleCodeMode" flat
                 variant="text" :color="isCodeMode ? 'primary' : ''" />
+            <v-btn :icon="isNervousMode ? 'mdi-emoticon-confused' : 'mdi-emoticon-confused-outline'"
+                @click="toggleNervousMode" flat variant="text" :color="isNervousMode ? 'primary' : ''" />
         </div>
 
         <div class="live-mode-content">
@@ -11,8 +13,8 @@
                 <!-- 爆炸效果层 -->
                 <div v-if="isExploding" class="explosion-wave"></div>
 
-                <SiriOrb :energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark" :code-mode="isCodeMode"
-                    class="siri-orb" />
+                <SiriOrb :energy="orbEnergy" :mode="isActive ? orbMode : 'idle'" :is-dark="isDark"
+                    :code-mode="isCodeMode" :nervous-mode="isNervousMode" class="siri-orb" />
             </div>
             <div class="status-text">
                 {{ statusText }}
@@ -68,6 +70,7 @@ const vadRecording = useVADRecording();
 const isActive = ref(false);  // Live Mode 是否激活
 const isExploding = ref(false); // 是否正在展示爆炸动画
 const isCodeMode = ref(false); // 是否开启代码模式
+const isNervousMode = ref(false); // 是否开启紧张模式
 // 使用 VAD 提供的 isSpeaking 状态
 const isSpeaking = computed(() => vadRecording.isSpeaking.value);
 const isListening = ref(false);  // 是否在监听
@@ -521,6 +524,10 @@ function handleClose() {
 
 function toggleCodeMode() {
     isCodeMode.value = !isCodeMode.value;
+}
+
+function toggleNervousMode() {
+    isNervousMode.value = !isNervousMode.value;
 }
 
 // 监听用户打断

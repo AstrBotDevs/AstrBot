@@ -3,26 +3,49 @@
         <div class="live-orb">
         </div>
         <div class="eyes-container">
-            <div class="eye" :class="{ 'blink': isBlinking }">
+            <div class="eye" :class="{ 'blink': isBlinking, 'nervous': nervousMode }">
+                <!-- Nervous Mode > -->
+                <div v-if="nervousMode" class="nervous-eye-content">
+                    <svg viewBox="0 0 30 60" width="100%" height="100%">
+                        <path d="M 0 10 L 30 30 L 0 50" fill="none" stroke="#7d80e4" stroke-width="8" />
+                    </svg>
+                </div>
+
                 <!-- Code Mode Layer -->
                 <transition name="fade">
-                    <div v-if="codeMode" class="code-rain-container">
+                    <div v-if="codeMode && !nervousMode" class="code-rain-container">
                         <div v-for="(col, i) in codeColumns" :key="i" class="code-column" :style="col.style">
                             {{ col.content }}
                         </div>
                     </div>
                 </transition>
             </div>
-            <div class="eye" :class="{ 'blink': isBlinking }">
+            <div class="eye" :class="{ 'blink': isBlinking, 'nervous': nervousMode }">
+                <!-- Nervous Mode < -->
+                <div v-if="nervousMode" class="nervous-eye-content">
+                    <svg viewBox="0 0 30 60" width="100%" height="100%">
+                        <path d="M 30 10 L 0 30 L 30 50" fill="none" stroke="#7d80e4" stroke-width="8" />
+                    </svg>
+                </div>
+
                 <!-- Code Mode Layer -->
                 <transition name="fade">
-                    <div v-if="codeMode" class="code-rain-container">
+                    <div v-if="codeMode && !nervousMode" class="code-rain-container">
                         <div v-for="(col, i) in codeColumns" :key="i" class="code-column" :style="col.style">
                             {{ col.content }}
                         </div>
                     </div>
                 </transition>
             </div>
+        </div>
+
+        <!-- Hair Accessory Star -->
+        <div class="accessory-star">
+            <svg viewBox="0 0 24 24" width="100%" height="100%">
+                <path d="M12 2l2.4 7.2h7.6l-6 4.8 2.4 7.2-6-4.8-6 4.8 2.4-7.2-6-4.8h7.6z"
+                    fill="rgba(125, 128, 228, 0.4)" stroke="rgba(180, 182, 255, 0.6)" stroke-width="3"
+                    stroke-linejoin="round" />
+            </svg>
         </div>
     </div>
 </template>
@@ -35,6 +58,7 @@ const props = defineProps<{
     mode: 'idle' | 'listening' | 'speaking' | 'processing';
     isDark?: boolean;
     codeMode?: boolean;
+    nervousMode?: boolean;
 }>();
 
 // 内部状态
@@ -197,6 +221,7 @@ const scheduleBlink = () => {
 };
 
 const triggerBlink = () => {
+    if (props.nervousMode) return;
     isBlinking.value = true;
     setTimeout(() => {
         isBlinking.value = false;
@@ -353,7 +378,7 @@ const styleVars = computed(() => {
 .eyes-container {
     position: absolute;
     display: flex;
-    gap: 55px;
+    gap: 60px;
     z-index: 5;
     /* Center it */
     top: 42%;
@@ -376,6 +401,22 @@ const styleVars = computed(() => {
 
 .eye.blink {
     transform: scaleY(0.1);
+}
+
+.eye.nervous {
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+}
+
+.nervous-eye-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .code-rain-container {
@@ -420,5 +461,34 @@ const styleVars = computed(() => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+.accessory-star {
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    top: 20%;
+    right: 20%;
+    transform: rotate(5deg);
+    z-index: -100;
+    opacity: 0.8;
+    filter: drop-shadow(0 0 5px rgba(180, 182, 255, 0.4));
+    animation: starFloat 4s ease-in-out infinite;
+    pointer-events: none;
+    mix-blend-mode: screen;
+}
+
+@keyframes starFloat {
+
+    0%,
+    100% {
+        transform: rotate(5deg) translateY(0) scale(1);
+        opacity: 0.3;
+    }
+
+    50% {
+        transform: rotate(10deg) translateY(-3px) scale(1.05);
+        opacity: 0.5;
+    }
 }
 </style>
