@@ -452,9 +452,7 @@ def register_on_llm_tool_respond(**kwargs):
     """
 
     def decorator(awaitable):
-        _ = get_handler_or_create(
-            awaitable, EventType.OnLLMToolRespondEvent, **kwargs
-        )
+        _ = get_handler_or_create(awaitable, EventType.OnLLMToolRespondEvent, **kwargs)
         return awaitable
 
     return decorator
