@@ -1,5 +1,5 @@
 {
-  "extends": "./tsconfig.dom.json",
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue", "src/types/.d.ts"],
   "compilerOptions": {
     "ignoreDeprecations": "5.0",
@@ -7,8 +7,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "allowJs": true,
-    "noEmit": true
+    "allowJs": true
   },
 
   "references": [
