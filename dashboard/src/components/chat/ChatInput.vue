@@ -3,15 +3,6 @@
         @dragover.prevent="handleDragOver"
         @dragleave.prevent="handleDragLeave"
         @drop.prevent="handleDrop">
-        <!-- 拖拽上传遮罩 -->
-        <transition name="fade">
-            <div v-if="isDragging" class="drop-overlay">
-                <div class="drop-overlay-content">
-                    <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
-                    <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
-                </div>
-            </div>
-        </transition>
         <div class="input-container"
             :style="{
                 width: '85%',
@@ -20,8 +11,18 @@
                 border: isDark ? 'none' : '1px solid #e0e0e0',
                 borderRadius: '24px',
                 boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-                backgroundColor: isDark ? '#2d2d2d' : 'transparent'
+                backgroundColor: isDark ? '#2d2d2d' : 'transparent',
+                position: 'relative'
             }">
+            <!-- 拖拽上传遮罩 -->
+            <transition name="fade">
+                <div v-if="isDragging" class="drop-overlay">
+                    <div class="drop-overlay-content">
+                        <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
+                        <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
+                    </div>
+                </div>
+            </transition>
             <!-- 引用预览区 -->
             <transition name="slideReply" @after-leave="handleReplyAfterLeave">
                 <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
@@ -368,13 +369,13 @@ defineExpose({
 /* 拖拽上传遮罩 */
 .drop-overlay {
     position: absolute;
-    top: 8px;
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background-color: rgba(103, 58, 183, 0.15);
     border: 2px dashed rgba(103, 58, 183, 0.5);
-    border-radius: 12px;
+    border-radius: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
