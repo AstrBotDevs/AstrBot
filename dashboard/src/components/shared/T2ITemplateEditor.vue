@@ -283,15 +283,29 @@ const editorOptions = {
 }
 
 // --- 预览逻辑 ---
-const previewData = {
-  text: '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: 'v4.0.0'
+const previewVersion = ref('v4.0.0')
+const syncPreviewVersion = async () => {
+  try {
+    const res = await axios.get('/api/stat/version')
+    const rawVersion = res?.data?.data?.version || res?.data?.version
+    if (rawVersion) {
+      previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
+    }
+  } catch (error) {
+    console.warn('Failed to fetch version:', error)
+  }
 }
+
+const previewData = computed(() => ({
+  text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
+  version: previewVersion.value 
+}))
+
 const previewContent = computed(() => {
   try {
     let content = templateContent.value
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.version)
+    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text)
+    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
     return content
   } catch (error) {
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
@@ -299,7 +313,6 @@ const previewContent = computed(() => {
 })
 
 // --- API 调用方法 ---
-
 const loadInitialData = async () => {
   loading.value = true
   try {
@@ -396,7 +409,7 @@ const confirmDelete = async () => {
     const nameToDelete = selectedTemplate.value
     await axios.delete(`/api/t2i/templates/${nameToDelete}`)
     deleteDialog.value = false
-    
+
     // 如果删除的是当前活动模板，则将活动模板重置为base
     if (activeTemplate.value === nameToDelete) {
         await setActiveTemplate('base')
@@ -475,6 +488,7 @@ const confirmApplyAndClose = async () => {
 
 const refreshPreview = () => {
   previewLoading.value = true
+  syncPreviewVersion()
   nextTick(() => {
     if (previewFrame.value) {
       previewFrame.value.contentWindow.location.reload()
@@ -491,6 +505,7 @@ const closeDialog = () => {
 
 watch(dialog, (newVal) => {
   if (newVal) {
+    syncPreviewVersion()
     loadInitialData()
   } else {
     // 关闭时重置状态
