@@ -8,7 +8,8 @@
     "upload": "Upload File",
     "voice": "Voice Input",
     "recordingPrompt": "Recording, please speak...",
-    "chatPrompt": "Let's chat!"
+    "chatPrompt": "Let's chat!",
+    "dropToUpload": "Drop files to upload"
   },
   "message": {
     "user": "User",

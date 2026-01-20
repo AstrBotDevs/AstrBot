@@ -1,5 +1,17 @@
 <template>
-    <div class="input-area fade-in">
+    <div class="input-area fade-in"
+        @dragover.prevent="handleDragOver"
+        @dragleave.prevent="handleDragLeave"
+        @drop.prevent="handleDrop">
+        <!-- 拖拽上传遮罩 -->
+        <transition name="fade">
+            <div v-if="isDragging" class="drop-overlay">
+                <div class="drop-overlay-content">
+                    <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
+                    <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
+                </div>
+            </div>
+        </transition>
         <div class="input-container"
             :style="{
                 width: '85%',
@@ -189,6 +201,8 @@ const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
+const isDragging = ref(false);
+let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
     get: () => props.prompt,
@@ -260,6 +274,35 @@ function handlePaste(e: ClipboardEvent) {
     emit('pasteImage', e);
 }
 
+function handleDragOver(e: DragEvent) {
+    // 清除之前的 leave timeout
+    if (dragLeaveTimeout) {
+        clearTimeout(dragLeaveTimeout);
+        dragLeaveTimeout = null;
+    }
+
+    // 检查是否有文件
+    if (e.dataTransfer?.types.includes('Files')) {
+        isDragging.value = true;
+    }
+}
+
+function handleDragLeave(e: DragEvent) {
+    // 使用 timeout 避免在子元素间移动时闪烁
+    dragLeaveTimeout = window.setTimeout(() => {
+        isDragging.value = false;
+    }, 50);
+}
+
+function handleDrop(e: DragEvent) {
+    isDragging.value = false;
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+        emit('fileSelect', files);
+    }
+}
+
 function triggerImageInput() {
     imageInputRef.value?.click();
 }
@@ -320,6 +363,47 @@ defineExpose({
     position: relative;
     border-top: 1px solid var(--v-theme-border);
     flex-shrink: 0;
+}
+
+/* 拖拽上传遮罩 */
+.drop-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    background-color: rgba(103, 58, 183, 0.15);
+    border: 2px dashed rgba(103, 58, 183, 0.5);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.drop-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.drop-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: #673ab7;
+}
+
+/* Fade transition for drop overlay */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 
 .reply-preview {
