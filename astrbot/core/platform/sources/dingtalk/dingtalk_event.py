@@ -86,7 +86,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         if not self.adapter or not self.adapter.card_template_id:
-            logger.warning(f"DingTalk streaming is enabled, but 'card_template_id' is not configured for platform '{self.platform_meta.id}'. Falling back to text streaming.")
+            logger.warning(
+                f"DingTalk streaming is enabled, but 'card_template_id' is not configured for platform '{self.platform_meta.id}'. Falling back to text streaming."
+            )
             # Fallback to default behavior (buffer and send)
             buffer = None
             async for chain in generator:
@@ -104,7 +106,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         msg_id = self.message_obj.message_id
         incoming_msg = self.message_obj.raw_message
         created = await self.adapter.create_message_card(msg_id, incoming_msg)
-        
+
         if not created:
             # Fallback to default behavior (buffer and send)
             buffer = None
@@ -118,7 +120,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
             buffer.squash_plain()
             await self.send(buffer)
             return await super().send_streaming(generator, use_fallback)
-        
+
         full_content = ""
         seq = 0
         try:
@@ -126,14 +128,15 @@ class DingtalkMessageEvent(AstrMessageEvent):
                 for segment in chain.chain:
                     if isinstance(segment, Comp.Plain):
                         full_content += segment.text
-                
+
                 seq += 1
-                if seq % 2 == 0: # Update every 2 chunks to be more responsive than 8
-                    await self.adapter.send_card_message(msg_id, full_content, is_final=False)
-            
+                if seq % 2 == 0:  # Update every 2 chunks to be more responsive than 8
+                    await self.adapter.send_card_message(
+                        msg_id, full_content, is_final=False
+                    )
+
             await self.adapter.send_card_message(msg_id, full_content, is_final=True)
         except Exception as e:
             logger.error(f"DingTalk streaming error: {e}")
             # Try to ensure final state is sent or cleaned up?
             await self.adapter.send_card_message(msg_id, full_content, is_final=True)
-
