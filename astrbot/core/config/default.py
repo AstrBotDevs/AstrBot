@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.11.4"
+VERSION = "4.12.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -112,6 +112,14 @@ DEFAULT_CONFIG = {
             "enable": False,
             "provider": "moonshotai",
             "moonshotai_api_key": "",
+        },
+        "sandbox": {
+            "enable": False,
+            "booter": "shipyard",
+            "shipyard_endpoint": "",
+            "shipyard_access_token": "",
+            "shipyard_ttl": 3600,
+            "shipyard_max_sessions": 10,
         },
     },
     "provider_stt_settings": {
@@ -313,6 +321,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
+                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -573,6 +582,11 @@ CONFIG_METADATA_2 = {
                         "description": "上传到网盘的目标文件夹 ID",
                         "type": "string",
                         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
+                    },
+                    "card_template_id": {
+                        "description": "卡片模板 ID",
+                        "type": "string",
+                        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
@@ -2539,6 +2553,62 @@ CONFIG_METADATA_3 = {
             #         "provider_settings.enable": True,
             #     },
             # },
+            "sandbox": {
+                "description": "Agent 沙箱环境",
+                "type": "object",
+                "items": {
+                    "provider_settings.sandbox.enable": {
+                        "description": "启用沙箱环境",
+                        "type": "bool",
+                        "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。",
+                    },
+                    "provider_settings.sandbox.booter": {
+                        "description": "沙箱环境驱动器",
+                        "type": "string",
+                        "options": ["shipyard"],
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_endpoint": {
+                        "description": "Shipyard API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                        "_special": "check_shipyard_connection",
+                    },
+                    "provider_settings.sandbox.shipyard_access_token": {
+                        "description": "Shipyard Access Token",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard 服务的访问令牌。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_ttl": {
+                        "description": "Shipyard Session TTL",
+                        "type": "int",
+                        "hint": "Shipyard 会话的生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_max_sessions": {
+                        "description": "Shipyard Max Sessions",
+                        "type": "int",
+                        "hint": "Shipyard 最大会话数量。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                },
+            },
             "truncate_and_compress": {
                 "description": "上下文管理策略",
                 "type": "object",

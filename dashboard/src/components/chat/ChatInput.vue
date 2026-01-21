@@ -1,5 +1,8 @@
 <template>
-    <div class="input-area fade-in">
+    <div class="input-area fade-in"
+        @dragover.prevent="handleDragOver"
+        @dragleave.prevent="handleDragLeave"
+        @drop.prevent="handleDrop">
         <div class="input-container"
             :style="{
                 width: '85%',
@@ -8,8 +11,18 @@
                 border: isDark ? 'none' : '1px solid #e0e0e0',
                 borderRadius: '24px',
                 boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-                backgroundColor: isDark ? '#2d2d2d' : 'transparent'
+                backgroundColor: isDark ? '#2d2d2d' : 'transparent',
+                position: 'relative'
             }">
+            <!-- 拖拽上传遮罩 -->
+            <transition name="fade">
+                <div v-if="isDragging" class="drop-overlay">
+                    <div class="drop-overlay-content">
+                        <v-icon size="48" color="deep-purple">mdi-cloud-upload</v-icon>
+                        <span class="drop-text">{{ tm('input.dropToUpload') }}</span>
+                    </div>
+                </div>
+            </transition>
             <!-- 引用预览区 -->
             <transition name="slideReply" @after-leave="handleReplyAfterLeave">
                 <div class="reply-preview" v-if="props.replyTo && !isReplyClosing">
@@ -29,32 +42,62 @@
                 style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
                 <div style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px;">
-                    <ConfigSelector
-                        :session-id="sessionId || null"
-                        :platform-id="sessionPlatformId"
-                        :is-group="sessionIsGroup"
-                        :initial-config-id="props.configId"
-                        @config-changed="handleConfigChange"
-                    />
+                    <!-- Settings Menu -->
+                    <StyledMenu offset="8" location="top start" :close-on-content-click="false">
+                        <template v-slot:activator="{ props: activatorProps }">
+                            <v-btn
+                                v-bind="activatorProps"
+                                icon="mdi-plus"
+                                variant="text"
+                                color="deep-purple"
+                            />
+                        </template>
+                        
+                        <!-- Upload Files -->
+                        <v-list-item 
+                            class="styled-menu-item" 
+                            rounded="md"
+                            @click="triggerImageInput"
+                        >
+                            <template v-slot:prepend>
+                                <v-icon icon="mdi-file-upload-outline" size="small"></v-icon>
+                            </template>
+                            <v-list-item-title>
+                                {{ tm('input.upload') }}
+                            </v-list-item-title>
+                        </v-list-item>
+                        
+                        <!-- Config Selector in Menu -->
+                        <ConfigSelector
+                            :session-id="sessionId || null"
+                            :platform-id="sessionPlatformId"
+                            :is-group="sessionIsGroup"
+                            :initial-config-id="props.configId"
+                            @config-changed="handleConfigChange"
+                        />
+                        
+                        <!-- Streaming Toggle in Menu -->
+                        <v-list-item 
+                            class="styled-menu-item" 
+                            rounded="md"
+                            @click="$emit('toggleStreaming')"
+                        >
+                            <template v-slot:prepend>
+                                <v-icon :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'" size="small"></v-icon>
+                            </template>
+                            <v-list-item-title>
+                                {{ enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled') }}
+                            </v-list-item-title>
+                        </v-list-item>
+                    </StyledMenu>
                     
                     <!-- Provider/Model Selector Menu -->
                     <ProviderModelMenu v-if="showProviderSelector" ref="providerModelMenuRef" />
-                    
-                    <v-tooltip :text="enableStreaming ? tm('streaming.enabled') : tm('streaming.disabled')" location="top">
-                        <template v-slot:activator="{ props }">
-                            <v-chip v-bind="props" @click="$emit('toggleStreaming')" size="x-small" class="streaming-toggle-chip">
-                                <v-icon start :icon="enableStreaming ? 'mdi-flash' : 'mdi-flash-off'" size="small"></v-icon>
-                                {{ enableStreaming ? tm('streaming.on') : tm('streaming.off') }}
-                            </v-chip>
-                        </template>
-                    </v-tooltip>
                 </div>
                 <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
                     <input type="file" ref="imageInputRef" @change="handleFileSelect"
                         style="display: none" multiple />
                     <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
-                    <v-btn @click="triggerImageInput" icon="mdi-plus" variant="text" color="deep-purple"
-                        class="add-btn" size="small" />
                     <v-btn @click="handleRecordClick"
                         :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
                         :color="isRecording ? 'error' : 'deep-purple'" class="record-btn" size="small" />
@@ -99,6 +142,7 @@ import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import ConfigSelector from './ConfigSelector.vue';
 import ProviderModelMenu from './ProviderModelMenu.vue';
+import StyledMenu from '@/components/shared/StyledMenu.vue';
 import type { Session } from '@/composables/useSessions';
 
 interface StagedFileInfo {
@@ -158,6 +202,8 @@ const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
+const isDragging = ref(false);
+let dragLeaveTimeout: number | null = null;
 
 const localPrompt = computed({
     get: () => props.prompt,
@@ -229,6 +275,35 @@ function handlePaste(e: ClipboardEvent) {
     emit('pasteImage', e);
 }
 
+function handleDragOver(e: DragEvent) {
+    // 清除之前的 leave timeout
+    if (dragLeaveTimeout) {
+        clearTimeout(dragLeaveTimeout);
+        dragLeaveTimeout = null;
+    }
+
+    // 检查是否有文件
+    if (e.dataTransfer?.types.includes('Files')) {
+        isDragging.value = true;
+    }
+}
+
+function handleDragLeave(e: DragEvent) {
+    // 使用 timeout 避免在子元素间移动时闪烁
+    dragLeaveTimeout = window.setTimeout(() => {
+        isDragging.value = false;
+    }, 50);
+}
+
+function handleDrop(e: DragEvent) {
+    isDragging.value = false;
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+        emit('fileSelect', files);
+    }
+}
+
 function triggerImageInput() {
     imageInputRef.value?.click();
 }
@@ -289,6 +364,47 @@ defineExpose({
     position: relative;
     border-top: 1px solid var(--v-theme-border);
     flex-shrink: 0;
+}
+
+/* 拖拽上传遮罩 */
+.drop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(103, 58, 183, 0.15);
+    border: 2px dashed rgba(103, 58, 183, 0.5);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.drop-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.drop-text {
+    font-size: 16px;
+    font-weight: 500;
+    color: #673ab7;
+}
+
+/* Fade transition for drop overlay */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 
 .reply-preview {
@@ -425,16 +541,6 @@ defineExpose({
     opacity: 1;
 }
 
-.streaming-toggle-chip {
-    cursor: pointer;
-    transition: all 0.2s ease;
-    user-select: none;
-}
-
-.streaming-toggle-chip:hover {
-    opacity: 0.8;
-}
-
 .fade-in {
     animation: fadeIn 0.3s ease-in-out;
 }
@@ -458,11 +564,6 @@ defineExpose({
     .input-container {
         width: 100% !important;
         max-width: 100% !important;
-        margin: 0 !important;
-        border-radius: 0 !important;
-        border-left: none !important;
-        border-right: none !important;
-        border-bottom: none !important;
     }
 }
 </style>

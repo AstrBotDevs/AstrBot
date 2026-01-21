@@ -133,6 +133,36 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent 沙箱环境(Beta)",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "启用沙箱环境",
+            "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。"
+          },
+          "booter": {
+            "description": "沙箱环境驱动器"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "Shipyard 服务的 API 访问地址。"
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard 访问令牌",
+            "hint": "用于访问 Shipyard 服务的访问令牌。"
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Ship 存活时间(秒)",
+            "hint": "Shipyard 会话的生存时间（秒）。"
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Ship 会话复用上限",
+            "hint": "决定了一个实例承载的最大会话数量。"
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "上下文管理策略",
       "provider_settings": {

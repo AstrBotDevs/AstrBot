@@ -2,10 +2,11 @@
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
-from astrbot.core.agent.message import Message
+from astrbot.core.agent.message import Message, TextPart
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -35,8 +36,15 @@ from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
 from ...utils import (
+    CHATUI_EXTRA_PROMPT,
+    EXECUTE_SHELL_TOOL,
+    FILE_DOWNLOAD_TOOL,
+    FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    PYTHON_TOOL,
+    SANDBOX_MODE_PROMPT,
+    TOOL_CALL_PROMPT,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -93,6 +101,8 @@ class InternalAgentSubStage(Stage):
         self.safety_mode_strategy = settings.get(
             "safety_mode_strategy", "system_prompt"
         )
+
+        self.sandbox_cfg = settings.get("sandbox", {})
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -342,54 +352,45 @@ class InternalAgentSubStage(Stage):
         prov: Provider,
     ):
         """处理 WebChat 平台的特殊情况，包括第一次 LLM 对话时总结对话内容生成 title"""
-        if not req.conversation:
+        from astrbot.core import db_helper
+
+        chatui_session_id = event.session_id.split("!")[-1]
+        user_prompt = req.prompt
+
+        session = await db_helper.get_platform_session_by_id(chatui_session_id)
+
+        if (
+            not user_prompt
+            or not chatui_session_id
+            or not session
+            or session.display_name
+        ):
             return
-        conversation = await self.conv_manager.get_conversation(
-            event.unified_msg_origin,
-            req.conversation.cid,
+
+        llm_resp = await prov.text_chat(
+            system_prompt=(
+                "You are a conversation title generator. "
+                "Generate a concise title in the same language as the user’s input, "
+                "no more than 10 words, capturing only the core topic."
+                "If the input is a greeting, small talk, or has no clear topic, "
+                "(e.g., “hi”, “hello”, “haha”), return <None>. "
+                "Output only the title itself or <None>, with no explanations."
+            ),
+            prompt=(
+                f"Generate a concise title for the following user query:\n{user_prompt}"
+            ),
         )
-        if conversation and not req.conversation.title:
-            messages = json.loads(conversation.history)
-            latest_pair = messages[-2:]
-            if not latest_pair:
+        if llm_resp and llm_resp.completion_text:
+            title = llm_resp.completion_text.strip()
+            if not title or "<None>" in title:
                 return
-            content = latest_pair[0].get("content", "")
-            if isinstance(content, list):
-                # 多模态
-                text_parts = []
-                for item in content:
-                    if isinstance(item, dict):
-                        if item.get("type") == "text":
-                            text_parts.append(item.get("text", ""))
-                        elif item.get("type") == "image":
-                            text_parts.append("[图片]")
-                    elif isinstance(item, str):
-                        text_parts.append(item)
-                cleaned_text = "User: " + " ".join(text_parts).strip()
-            elif isinstance(content, str):
-                cleaned_text = "User: " + content.strip()
-            else:
-                return
-            logger.debug(f"WebChat 对话标题生成请求，清理后的文本: {cleaned_text}")
-            llm_resp = await prov.text_chat(
-                system_prompt="You are expert in summarizing user's query.",
-                prompt=(
-                    f"Please summarize the following query of user:\n"
-                    f"{cleaned_text}\n"
-                    "Only output the summary within 10 words, DO NOT INCLUDE any other text."
-                    "You must use the same language as the user."
-                    "If you think the dialog is too short to summarize, only output a special mark: `<None>`"
-                ),
+            logger.info(
+                f"Generated chatui title for session {chatui_session_id}: {title}"
             )
-            if llm_resp and llm_resp.completion_text:
-                title = llm_resp.completion_text.strip()
-                if not title or "<None>" in title:
-                    return
-                await self.conv_manager.update_conversation_title(
-                    unified_msg_origin=event.unified_msg_origin,
-                    title=title,
-                    conversation_id=req.conversation.cid,
-                )
+            await db_helper.update_platform_session(
+                session_id=chatui_session_id,
+                display_name=title,
+            )
 
     async def _save_to_history(
         self,
@@ -413,10 +414,11 @@ class InternalAgentSubStage(Stage):
 
         # using agent context messages to save to history
         message_to_save = []
+        skipped_initial_system = False
         for message in all_messages:
-            if message.role == "system":
-                # we do not save system messages to history
-                continue
+            if message.role == "system" and not skipped_initial_system:
+                skipped_initial_system = True
+                continue  # skip first system message
             if message.role in ["assistant", "user"] and getattr(
                 message, "_no_save", None
             ):
@@ -466,6 +468,24 @@ class InternalAgentSubStage(Stage):
             logger.warning(
                 f"Unsupported llm_safety_mode strategy: {self.safety_mode_strategy}.",
             )
+
+    def _apply_sandbox_tools(self, req: ProviderRequest, session_id: str) -> None:
+        """Add sandbox tools to the provider request."""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        if self.sandbox_cfg.get("booter") == "shipyard":
+            ep = self.sandbox_cfg.get("shipyard_endpoint", "")
+            at = self.sandbox_cfg.get("shipyard_access_token", "")
+            if not ep or not at:
+                logger.error("Shipyard sandbox configuration is incomplete.")
+                return
+            os.environ["SHIPYARD_ENDPOINT"] = ep
+            os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+        req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
+        req.func_tool.add_tool(PYTHON_TOOL)
+        req.func_tool.add_tool(FILE_UPLOAD_TOOL)
+        req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+        req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -545,6 +565,20 @@ class InternalAgentSubStage(Stage):
                             image_path = await comp.convert_to_file_path()
                             req.image_urls.append(image_path)
 
+                            req.extra_user_content_parts.append(
+                                TextPart(text=f"[Image Attachment: path {image_path}]")
+                            )
+                        elif isinstance(comp, File) and self.sandbox_cfg.get(
+                            "enable", False
+                        ):
+                            file_path = await comp.get_file()
+                            file_name = comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=f"[File Attachment: name {file_name}, path {file_path}]"
+                                )
+                            )
+
                     conversation = await self._get_session_conv(event)
                     req.conversation = conversation
                     req.contexts = json.loads(conversation.history)
@@ -595,6 +629,10 @@ class InternalAgentSubStage(Stage):
                 if self.llm_safety_mode:
                     self._apply_llm_safety_mode(req)
 
+                # apply sandbox tools
+                if self.sandbox_cfg.get("enable", False):
+                    self._apply_sandbox_tools(req, req.session_id)
+
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"
                     and not event.platform_meta.support_streaming_message
@@ -617,6 +655,18 @@ class InternalAgentSubStage(Stage):
                         provider.provider_config["max_context_tokens"] = model_info[
                             "limit"
                         ]["context"]
+
+                # ChatUI 对话的标题生成
+                if event.get_platform_name() == "webchat":
+                    asyncio.create_task(self._handle_webchat(event, req, provider))
+
+                    # 注入 ChatUI 额外 prompt
+                    # 比如 follow-up questions 提示等
+                    req.system_prompt += f"\n{CHATUI_EXTRA_PROMPT}\n"
+
+                # 注入基本 prompt
+                if req.func_tool and req.func_tool.tools:
+                    req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
 
                 await agent_runner.reset(
                     provider=provider,
@@ -687,10 +737,6 @@ class InternalAgentSubStage(Stage):
                         agent_runner.run_context.messages,
                         agent_runner.stats,
                     )
-
-            # 异步处理 WebChat 特殊情况
-            if event.get_platform_name() == "webchat":
-                asyncio.create_task(self._handle_webchat(event, req, provider))
 
             asyncio.create_task(
                 Metric.upload(

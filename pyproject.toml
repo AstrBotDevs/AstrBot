@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.11.4"
+version = "4.12.3"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -60,6 +60,7 @@ dependencies = [
   "markitdown-no-magika[docx,xls,xlsx]>=0.1.2",
   "xinference-client",
   "tenacity>=9.1.2",
+  "shipyard-python-sdk>=0.2.4",
 ]
 
 [dependency-groups]

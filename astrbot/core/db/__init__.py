@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from astrbot.core.db.po import (
     Attachment,
+    ChatUIProject,
     CommandConfig,
     CommandConflict,
     ConversationV2,
@@ -18,6 +19,7 @@ from astrbot.core.db.po import (
     PlatformSession,
     PlatformStat,
     Preference,
+    SessionProjectRelation,
     Stats,
 )
 
@@ -536,8 +538,11 @@ class BaseDatabase(abc.ABC):
         platform_id: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> list[PlatformSession]:
-        """Get all Platform sessions for a specific creator (username) and optionally platform."""
+    ) -> list[dict]:
+        """Get all Platform sessions for a specific creator (username) and optionally platform.
+
+        Returns a list of dicts containing session info and project info (if session belongs to a project).
+        """
         ...
 
     @abc.abstractmethod
@@ -552,4 +557,81 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def delete_platform_session(self, session_id: str) -> None:
         """Delete a Platform session by its ID."""
+        ...
+
+    # ====
+    # ChatUI Project Management
+    # ====
+
+    @abc.abstractmethod
+    async def create_chatui_project(
+        self,
+        creator: str,
+        title: str,
+        emoji: str | None = "📁",
+        description: str | None = None,
+    ) -> ChatUIProject:
+        """Create a new ChatUI project."""
+        ...
+
+    @abc.abstractmethod
+    async def get_chatui_project_by_id(self, project_id: str) -> ChatUIProject | None:
+        """Get a ChatUI project by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def get_chatui_projects_by_creator(
+        self,
+        creator: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> list[ChatUIProject]:
+        """Get all ChatUI projects for a specific creator."""
+        ...
+
+    @abc.abstractmethod
+    async def update_chatui_project(
+        self,
+        project_id: str,
+        title: str | None = None,
+        emoji: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """Update a ChatUI project."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_chatui_project(self, project_id: str) -> None:
+        """Delete a ChatUI project by its ID."""
+        ...
+
+    @abc.abstractmethod
+    async def add_session_to_project(
+        self,
+        session_id: str,
+        project_id: str,
+    ) -> SessionProjectRelation:
+        """Add a session to a project."""
+        ...
+
+    @abc.abstractmethod
+    async def remove_session_from_project(self, session_id: str) -> None:
+        """Remove a session from its project."""
+        ...
+
+    @abc.abstractmethod
+    async def get_project_sessions(
+        self,
+        project_id: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> list[PlatformSession]:
+        """Get all sessions in a project."""
+        ...
+
+    @abc.abstractmethod
+    async def get_project_by_session(
+        self, session_id: str, creator: str
+    ) -> ChatUIProject | None:
+        """Get the project that a session belongs to."""
         ...
