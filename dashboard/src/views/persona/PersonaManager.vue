@@ -170,7 +170,7 @@
             @created="showSuccess" @error="showError" />
 
         <!-- 重命名文件夹对话框 -->
-        <v-dialog v-model="showRenameFolderDialog" max-width="400px" persistent>
+        <v-dialog v-model="showRenameFolderDialog" max-width="400px">
             <v-card>
                 <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
                 <v-card-text>

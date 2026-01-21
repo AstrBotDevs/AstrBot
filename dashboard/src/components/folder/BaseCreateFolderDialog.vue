@@ -1,5 +1,5 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="450px" persistent>
+    <v-dialog v-model="showDialog" max-width="450px">
         <v-card>
             <v-card-title>
                 <v-icon class="mr-2">mdi-folder-plus</v-icon>
