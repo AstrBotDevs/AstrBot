@@ -73,7 +73,6 @@ LIVE_MODE_SYSTEM_PROMPT = (
     "Respond to tone and emotion. "
     "Simple questions get simple answers. "
     "Sound like a real conversation, not a Q&A system."
-    "OUTPUT JAPANESE LANGUAGE."
 )
 
 
