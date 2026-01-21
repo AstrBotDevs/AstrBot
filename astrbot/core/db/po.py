@@ -68,6 +68,44 @@ class ConversationV2(SQLModel, table=True):
     )
 
 
+class PersonaFolder(SQLModel, table=True):
+    """Persona 文件夹，支持递归层级结构。
+
+    用于组织和管理多个 Persona，类似于文件系统的目录结构。
+    """
+
+    __tablename__: str = "persona_folders"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    folder_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+    )
+    name: str = Field(max_length=255, nullable=False)
+    parent_id: str | None = Field(default=None, max_length=36)
+    """父文件夹ID，NULL表示根目录"""
+    description: str | None = Field(default=None, sa_type=Text)
+    sort_order: int = Field(default=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "folder_id",
+            name="uix_persona_folder_id",
+        ),
+    )
+
+
 class Persona(SQLModel, table=True):
     """Persona is a set of instructions for LLMs to follow.
 
@@ -87,6 +125,10 @@ class Persona(SQLModel, table=True):
     """a list of strings, each representing a dialog to start with"""
     tools: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
+    folder_id: str | None = Field(default=None, max_length=36)
+    """所属文件夹ID，NULL 表示在根目录"""
+    sort_order: int = Field(default=0)
+    """排序顺序"""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

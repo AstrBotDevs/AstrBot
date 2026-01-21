@@ -57,7 +57,9 @@
     "createPersona": "Create New Persona",
     "cancelSelection": "Cancel",
     "confirmSelection": "Confirm Selection",
-    "selectPersonaPool": "Select Persona Pool..."
+    "selectPersonaPool": "Select Persona Pool...",
+    "rootFolder": "All Personas",
+    "emptyFolder": "This folder is empty"
   },
   "t2iTemplateEditor": {
     "buttonText": "Customize T2I Template",

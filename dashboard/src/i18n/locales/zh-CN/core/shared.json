@@ -57,7 +57,9 @@
     "createPersona": "创建新人格",
     "cancelSelection": "取消",
     "confirmSelection": "确认选择",
-    "selectPersonaPool": "选择人格池..."
+    "selectPersonaPool": "选择人格池...",
+    "rootFolder": "全部人格",
+    "emptyFolder": "此文件夹为空"
   },
   "t2iTemplateEditor": {
     "buttonText": "自定义 T2I 模板",

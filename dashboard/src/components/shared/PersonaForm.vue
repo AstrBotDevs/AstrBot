@@ -1,11 +1,23 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="500px" persistent>
+    <v-dialog v-model="showDialog" max-width="500px">
         <v-card>
             <v-card-title class="text-h2">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
             <v-card-text>
+                <!-- 创建位置提示 -->
+                <v-alert
+                    v-if="!editingPersona"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                    icon="mdi-folder-outline"
+                >
+                    {{ tm('form.createInFolder', { folder: folderDisplayName }) }}
+                </v-alert>
+
                 <v-form ref="personaForm" v-model="formValid">
                     <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
                         :rules="personaIdRules" :disabled="editingPersona" variant="outlined" density="comfortable"
@@ -209,6 +221,14 @@ export default {
         editingPersona: {
             type: Object,
             default: null
+        },
+        currentFolderId: {
+            type: String,
+            default: null
+        },
+        currentFolderName: {
+            type: String,
+            default: null
         }
     },
     emits: ['update:modelValue', 'saved', 'error'],
@@ -225,15 +245,18 @@ export default {
             mcpServers: [],
             availableTools: [],
             loadingTools: false,
+            existingPersonaIds: [], // 已存在的人格ID列表
             personaForm: {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                folder_id: null
             },
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
-                v => (v && v.length >= 0) || this.tm('validation.minLength', { min: 2 }),
+                v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
+                v => !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
@@ -262,6 +285,18 @@ export default {
                 (tool.description && tool.description.toLowerCase().includes(search)) ||
                 (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
             );
+        },
+        folderDisplayName() {
+            // 优先使用传入的文件夹名称
+            if (this.currentFolderName) {
+                return this.currentFolderName;
+            }
+            // 如果没有文件夹 ID，显示根目录
+            if (!this.currentFolderId) {
+                return this.tm('form.rootFolder');
+            }
+            // 否则显示文件夹 ID（作为备用）
+            return this.currentFolderId;
         }
     },
 
@@ -273,6 +308,8 @@ export default {
                     this.initFormWithPersona(this.editingPersona);
                 } else {
                     this.initForm();
+                    // 只在创建新人格时加载已存在的人格列表
+                    this.loadExistingPersonaIds();
                 }
                 this.loadMcpServers();
                 this.loadTools();
@@ -310,7 +347,8 @@ export default {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                folder_id: this.currentFolderId
             };
             this.toolSelectValue = '0';
             this.expandedPanels = [];
@@ -321,7 +359,8 @@ export default {
                 persona_id: persona.persona_id,
                 system_prompt: persona.system_prompt,
                 begin_dialogs: [...(persona.begin_dialogs || [])],
-                tools: persona.tools === null ? null : [...(persona.tools || [])]
+                tools: persona.tools === null ? null : [...(persona.tools || [])],
+                folder_id: persona.folder_id
             };
             // 根据 tools 的值设置 toolSelectValue
             this.toolSelectValue = persona.tools === null ? '0' : '1';
@@ -360,6 +399,18 @@ export default {
                 this.availableTools = [];
             } finally {
                 this.loadingTools = false;
+            }
+        },
+
+        async loadExistingPersonaIds() {
+            try {
+                const response = await axios.get('/api/persona/list');
+                if (response.data.status === 'ok') {
+                    this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
+                }
+            } catch (error) {
+                // 加载失败不影响表单使用，只是无法进行前端重名校验
+                this.existingPersonaIds = [];
             }
         },
 
