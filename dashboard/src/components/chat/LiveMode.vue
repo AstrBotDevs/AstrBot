@@ -8,6 +8,8 @@
                 @click="toggleNervousMode" flat variant="text" :color="isNervousMode ? 'primary' : ''" />
         </div>
 
+        <span style="color: gray; padding-left: 16px;">We're developing Astr Live Mode on ChatUI & Desktop right now. Stay tuned!</span>
+
         <div class="live-mode-content">
             <div class="center-circle-container" @click="handleCircleClick">
                 <!-- 爆炸效果层 -->
