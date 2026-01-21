@@ -1176,6 +1176,7 @@ class ConfigRoute(Route):
         return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
 
     async def delete_plugin_file(self):
+        """Delete a staged upload under temp; final deletion happens on config save."""
         plugin_name = request.args.get("plugin_name")
         if not plugin_name:
             return Response().error("Missing plugin_name parameter").__dict__

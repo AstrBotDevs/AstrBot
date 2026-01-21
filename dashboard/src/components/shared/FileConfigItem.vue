@@ -226,6 +226,21 @@ const uploadFiles = async (files) => {
 
 const deleteFile = (filePath) => {
   fileList.value = fileList.value.filter((item) => item !== filePath)
+
+  if (props.pluginName) {
+    axios
+      .post(
+        `/api/config/plugin/file/delete?plugin_name=${encodeURIComponent(
+          props.pluginName
+        )}`,
+        { path: filePath }
+      )
+      .catch((error) => {
+        console.warn('Staged file delete failed:', error)
+        toast.warning(tm('fileUpload.deleteFailed'))
+      })
+  }
+
   toast.success(tm('fileUpload.deleteSuccess'))
 }
 
