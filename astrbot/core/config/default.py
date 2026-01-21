@@ -321,6 +321,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
+                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -581,6 +582,11 @@ CONFIG_METADATA_2 = {
                         "description": "上传到网盘的目标文件夹 ID",
                         "type": "string",
                         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
+                    },
+                    "card_template_id": {
+                        "description": "卡片模板 ID",
+                        "type": "string",
+                        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
