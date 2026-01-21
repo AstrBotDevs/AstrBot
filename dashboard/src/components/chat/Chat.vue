@@ -3,7 +3,7 @@
         <v-card-text class="chat-page-container">
             <!-- 遮罩层 (手机端) -->
             <div class="mobile-overlay" v-if="isMobile && mobileMenuOpen" @click="closeMobileSidebar"></div>
-            
+
             <div class="chat-layout">
                 <ConversationSidebar
                     :sessions="sessions"
@@ -50,7 +50,7 @@
 
                     <div class="message-list-wrapper" v-if="currSessionId && !selectedProjectId">
                         <MessageList :messages="messages" :isDark="isDark"
-                            :isStreaming="isStreaming || isConvRunning" 
+                            :isStreaming="isStreaming || isConvRunning"
                             :isLoadingMessages="isLoadingMessages"
                             @openImagePreview="openImagePreview"
                             @replyMessage="handleReplyMessage"
@@ -59,7 +59,7 @@
                             ref="messageList" />
                         <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
                     </div>
-                    <ProjectView 
+                    <ProjectView
                         v-else-if="selectedProjectId"
                         :project="currentProject"
                         :sessions="projectSessions"
@@ -91,7 +91,7 @@
                             ref="chatInputRef"
                         />
                     </ProjectView>
-                    <WelcomeView 
+                    <WelcomeView
                         v-else
                         :isLoading="isLoadingMessages"
                     >
@@ -301,7 +301,7 @@ const prompt = ref('');
 const projectDialog = ref(false);
 const editingProject = ref<Project | null>(null);
 const projectSessions = ref<any[]>([]);
-const currentProject = computed(() => 
+const currentProject = computed(() =>
     projects.value.find(p => p.project_id === selectedProjectId.value)
 );
 
@@ -352,7 +352,7 @@ function openImagePreview(imageUrl: string) {
 
 async function handleSaveTitle() {
     await saveTitle();
-    
+
     // 如果在项目视图中，刷新项目会话列表
     if (selectedProjectId.value) {
         const sessions = await getProjectSessions(selectedProjectId.value);
@@ -367,7 +367,7 @@ function handleReplyMessage(msg: any, index: number) {
         console.warn('Message does not have an id');
         return;
     }
-    
+
     // 获取消息内容用于显示
     let messageContent = '';
     if (typeof msg.content.message === 'string') {
@@ -379,12 +379,12 @@ function handleReplyMessage(msg: any, index: number) {
             .map((part: any) => part.text);
         messageContent = textParts.join('');
     }
-    
+
     // 截断过长的内容
     if (messageContent.length > 100) {
         messageContent = messageContent.substring(0, 100) + '...';
     }
-    
+
     replyTo.value = {
         messageId,
         selectedText: messageContent || '[媒体内容]'
@@ -398,12 +398,12 @@ function clearReply() {
 function handleReplyWithText(replyData: any) {
     // 处理选中文本的引用
     const { messageId, selectedText, messageIndex } = replyData;
-    
+
     if (!messageId) {
         console.warn('Message does not have an id');
         return;
     }
-    
+
     replyTo.value = {
         messageId,
         selectedText: selectedText  // 保存原始的选中文本
@@ -449,16 +449,16 @@ async function handleSelectConversation(sessionIds: string[]) {
 
     // 清除引用状态
     clearReply();
-    
+
     // 开始加载消息
     isLoadingMessages.value = true;
-    
+
     try {
         await getSessionMsg(sessionIds[0]);
     } finally {
         isLoadingMessages.value = false;
     }
-    
+
     nextTick(() => {
         messageList.value?.scrollToBottom();
     });
@@ -476,7 +476,7 @@ function handleNewChat() {
 async function handleDeleteConversation(sessionId: string) {
     await deleteSessionFn(sessionId);
     messages.value = [];
-    
+
     // 如果在项目视图中，刷新项目会话列表
     if (selectedProjectId.value) {
         const sessions = await getProjectSessions(selectedProjectId.value);
@@ -489,11 +489,11 @@ async function handleSelectProject(projectId: string) {
     const sessions = await getProjectSessions(projectId);
     projectSessions.value = sessions;
     messages.value = [];
-    
+
     // 清空当前会话ID，准备在项目中创建新对话
     currSessionId.value = '';
     selectedSessions.value = [];
-    
+
     // 手机端关闭侧边栏
     if (isMobile.value) {
         closeMobileSidebar();
@@ -542,7 +542,10 @@ async function handleStopRecording() {
 
 async function handleFileSelect(files: FileList) {
     const imageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    for (const file of files) {
+    // 将 FileList 转换为数组，避免异步处理时 FileList 被清空
+    const fileArray = Array.from(files);
+    for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
         if (imageTypes.includes(file.type)) {
             await processAndUploadImage(file);
         } else {
@@ -559,10 +562,10 @@ async function handleSendMessage() {
 
     const isCreatingNewSession = !currSessionId.value;
     const currentProjectId = selectedProjectId.value; // 保存当前项目ID
-    
+
     if (isCreatingNewSession) {
         await newSession();
-        
+
         // 如果在项目视图中创建新会话，立即退出项目视图
         if (currentProjectId) {
             selectedProjectId.value = null;
@@ -821,7 +824,7 @@ onBeforeUnmount(() => {
     .chat-content-panel {
         width: 100%;
     }
-    
+
     .chat-page-container {
         padding: 0 !important;
     }
