@@ -7,6 +7,8 @@ from typing import cast
 import jwt
 import psutil
 from flask.json.provider import DefaultJSONProvider
+from hypercorn.asyncio import serve
+from hypercorn.config import Config as HyperConfig
 from psutil._common import addr as psutil_addr
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
@@ -242,11 +244,22 @@ class AstrBotDashboard:
 
         logger.info(display)
 
-        return self.app.run_task(
-            host=host,
-            port=port,
-            shutdown_trigger=self.shutdown_trigger,
-        )
+        # 配置 Hypercorn
+        config = HyperConfig()
+        config.bind = [f"{host}:{port}"]
+
+        # 根据配置决定是否禁用访问日志
+        disable_access_log = self.core_lifecycle.astrbot_config.get(
+            "dashboard", {}
+        ).get("disable_access_log", True)
+        if disable_access_log:
+            config.accesslog = None
+        else:
+            # 启用访问日志，使用简洁格式
+            config.accesslog = "-"
+            config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
+
+        return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
 
     async def shutdown_trigger(self):
         await self.shutdown_event.wait()

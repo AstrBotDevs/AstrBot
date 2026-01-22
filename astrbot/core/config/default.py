@@ -166,6 +166,7 @@ DEFAULT_CONFIG = {
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
+        "disable_access_log": True,
     },
     "platform": [],
     "platform_specific": {
@@ -3208,6 +3209,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "直连地址列表",
                         "type": "list",
                         "items": {"type": "string"},
+                    },
+                    "dashboard.disable_access_log": {
+                        "description": "禁用 Dashboard API 访问日志",
+                        "type": "bool",
+                        "hint": "启用后，WebUI 的 API 访问日志将不会在控制台中显示",
                     },
                 },
             },
