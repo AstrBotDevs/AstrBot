@@ -322,6 +322,10 @@ class ProviderManager:
                 from .sources.openai_tts_api_source import (
                     ProviderOpenAITTSAPI as ProviderOpenAITTSAPI,
                 )
+            case "genie_tts":
+                from .sources.genie_tts import (
+                    GenieTTSProvider as GenieTTSProvider,
+                )
             case "edge_tts":
                 from .sources.edge_tts_source import (
                     ProviderEdgeTTS as ProviderEdgeTTS,
@@ -422,17 +426,20 @@ class ProviderManager:
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
+                exc_info=True,
             )
             return
         except Exception as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
+                exc_info=True,
             )
             return
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
                 f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
+                exc_info=True,
             )
             return
 

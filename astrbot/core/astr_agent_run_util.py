@@ -1,3 +1,6 @@
+import asyncio
+import re
+import time
 import traceback
 from collections.abc import AsyncGenerator
 
@@ -5,13 +8,14 @@ from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.message.components import Json
+from astrbot.core.message.components import BaseMessageComponent, Json, Plain
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
     ResultContentType,
 )
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.provider import TTSProvider
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -131,3 +135,241 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
+
+
+async def run_live_agent(
+    agent_runner: AgentRunner,
+    tts_provider: TTSProvider | None = None,
+    max_step: int = 30,
+    show_tool_use: bool = True,
+    show_reasoning: bool = False,
+) -> AsyncGenerator[MessageChain | None, None]:
+    """Live Mode 的 Agent 运行器，支持流式 TTS
+
+    Args:
+        agent_runner: Agent 运行器
+        tts_provider: TTS Provider 实例
+        max_step: 最大步数
+        show_tool_use: 是否显示工具使用
+        show_reasoning: 是否显示推理过程
+
+    Yields:
+        MessageChain: 包含文本或音频数据的消息链
+    """
+    # 如果没有 TTS Provider，直接发送文本
+    if not tts_provider:
+        async for chain in run_agent(
+            agent_runner,
+            max_step=max_step,
+            show_tool_use=show_tool_use,
+            stream_to_general=False,
+            show_reasoning=show_reasoning,
+        ):
+            yield chain
+        return
+
+    support_stream = tts_provider.support_stream()
+    if support_stream:
+        logger.info("[Live Agent] 使用流式 TTS（原生支持 get_audio_stream）")
+    else:
+        logger.info(
+            f"[Live Agent] 使用 TTS（{tts_provider.meta().type} "
+            "使用 get_audio，将按句子分块生成音频）"
+        )
+
+    # 统计数据初始化
+    tts_start_time = time.time()
+    tts_first_frame_time = 0.0
+    first_chunk_received = False
+
+    # 创建队列
+    text_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    # audio_queue stored bytes or (text, bytes)
+    audio_queue: asyncio.Queue[bytes | tuple[str, bytes] | None] = asyncio.Queue()
+
+    # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
+    feeder_task = asyncio.create_task(
+        _run_agent_feeder(
+            agent_runner, text_queue, max_step, show_tool_use, show_reasoning
+        )
+    )
+
+    # 2. 启动 TTS 任务：负责从 text_queue 读取文本并生成音频到 audio_queue
+    if support_stream:
+        tts_task = asyncio.create_task(
+            _safe_tts_stream_wrapper(tts_provider, text_queue, audio_queue)
+        )
+    else:
+        tts_task = asyncio.create_task(
+            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
+        )
+
+    # 3. 主循环：从 audio_queue 读取音频并 yield
+    try:
+        while True:
+            queue_item = await audio_queue.get()
+
+            if queue_item is None:
+                break
+
+            text = None
+            if isinstance(queue_item, tuple):
+                text, audio_data = queue_item
+            else:
+                audio_data = queue_item
+
+            if not first_chunk_received:
+                # 记录首帧延迟（从开始处理到收到第一个音频块）
+                tts_first_frame_time = time.time() - tts_start_time
+                first_chunk_received = True
+
+            # 将音频数据封装为 MessageChain
+            import base64
+
+            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+            comps: list[BaseMessageComponent] = [Plain(audio_b64)]
+            if text:
+                comps.append(Json(data={"text": text}))
+            chain = MessageChain(chain=comps, type="audio_chunk")
+            yield chain
+
+    except Exception as e:
+        logger.error(f"[Live Agent] 运行时发生错误: {e}", exc_info=True)
+    finally:
+        # 清理任务
+        if not feeder_task.done():
+            feeder_task.cancel()
+        if not tts_task.done():
+            tts_task.cancel()
+
+        # 确保队列被消费
+        pass
+
+    tts_end_time = time.time()
+
+    # 发送 TTS 统计信息
+    try:
+        astr_event = agent_runner.run_context.context.event
+        if astr_event.get_platform_name() == "webchat":
+            tts_duration = tts_end_time - tts_start_time
+            await astr_event.send(
+                MessageChain(
+                    type="tts_stats",
+                    chain=[
+                        Json(
+                            data={
+                                "tts_total_time": tts_duration,
+                                "tts_first_frame_time": tts_first_frame_time,
+                                "tts": tts_provider.meta().type,
+                                "chat_model": agent_runner.provider.get_model(),
+                            }
+                        )
+                    ],
+                )
+            )
+    except Exception as e:
+        logger.error(f"发送 TTS 统计信息失败: {e}")
+
+
+async def _run_agent_feeder(
+    agent_runner: AgentRunner,
+    text_queue: asyncio.Queue,
+    max_step: int,
+    show_tool_use: bool,
+    show_reasoning: bool,
+):
+    """运行 Agent 并将文本输出分句放入队列"""
+    buffer = ""
+    try:
+        async for chain in run_agent(
+            agent_runner,
+            max_step=max_step,
+            show_tool_use=show_tool_use,
+            stream_to_general=False,
+            show_reasoning=show_reasoning,
+        ):
+            if chain is None:
+                continue
+
+            # 提取文本
+            text = chain.get_plain_text()
+            if text:
+                buffer += text
+
+                # 分句逻辑：匹配标点符号
+                # r"([.。!！?？\n]+)" 会保留分隔符
+                parts = re.split(r"([.。!！?？\n]+)", buffer)
+
+                if len(parts) > 1:
+                    # 处理完整的句子
+                    # range step 2 因为 split 后是 [text, delim, text, delim, ...]
+                    temp_buffer = ""
+                    for i in range(0, len(parts) - 1, 2):
+                        sentence = parts[i]
+                        delim = parts[i + 1]
+                        full_sentence = sentence + delim
+                        temp_buffer += full_sentence
+
+                        if len(temp_buffer) >= 10:
+                            if temp_buffer.strip():
+                                logger.info(f"[Live Agent Feeder] 分句: {temp_buffer}")
+                                await text_queue.put(temp_buffer)
+                            temp_buffer = ""
+
+                    # 更新 buffer 为剩余部分
+                    buffer = temp_buffer + parts[-1]
+
+        # 处理剩余 buffer
+        if buffer.strip():
+            await text_queue.put(buffer)
+
+    except Exception as e:
+        logger.error(f"[Live Agent Feeder] Error: {e}", exc_info=True)
+    finally:
+        # 发送结束信号
+        await text_queue.put(None)
+
+
+async def _safe_tts_stream_wrapper(
+    tts_provider: TTSProvider,
+    text_queue: asyncio.Queue[str | None],
+    audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
+):
+    """包装原生流式 TTS 确保异常处理和队列关闭"""
+    try:
+        await tts_provider.get_audio_stream(text_queue, audio_queue)
+    except Exception as e:
+        logger.error(f"[Live TTS Stream] Error: {e}", exc_info=True)
+    finally:
+        await audio_queue.put(None)
+
+
+async def _simulated_stream_tts(
+    tts_provider: TTSProvider,
+    text_queue: asyncio.Queue[str | None],
+    audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
+):
+    """模拟流式 TTS 分句生成音频"""
+    try:
+        while True:
+            text = await text_queue.get()
+            if text is None:
+                break
+
+            try:
+                audio_path = await tts_provider.get_audio(text)
+
+                if audio_path:
+                    with open(audio_path, "rb") as f:
+                        audio_data = f.read()
+                    await audio_queue.put((text, audio_data))
+            except Exception as e:
+                logger.error(
+                    f"[Live TTS Simulated] Error processing text '{text[:20]}...': {e}"
+                )
+                # 继续处理下一句
+
+    except Exception as e:
+        logger.error(f"[Live TTS Simulated] Critical Error: {e}", exc_info=True)
+    finally:
+        await audio_queue.put(None)
