@@ -11,7 +11,6 @@ from .provider import ProviderCommands
 from .setunset import SetUnsetCommands
 from .sid import SIDCommand
 from .t2i import T2ICommand
-from .tool import ToolCommands
 from .tts import TTSCommand
 
 __all__ = [
@@ -27,5 +26,4 @@ __all__ = [
     "SetUnsetCommands",
     "T2ICommand",
     "TTSCommand",
-    "ToolCommands",
 ]
