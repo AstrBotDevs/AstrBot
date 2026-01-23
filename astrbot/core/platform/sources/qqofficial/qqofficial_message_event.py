@@ -90,12 +90,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(
             source,
-            (
-                botpy.message.Message,
-                botpy.message.GroupMessage,
-                botpy.message.DirectMessage,
-                botpy.message.C2CMessage,
-            ),
+            botpy.message.Message | botpy.message.GroupMessage | botpy.message.DirectMessage | botpy.message.C2CMessage,
         ):
             logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
@@ -120,7 +115,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "msg_id": self.message_obj.message_id,
         }
 
-        if not isinstance(source, (botpy.message.Message, botpy.message.DirectMessage)):
+        if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
 
         ret = None

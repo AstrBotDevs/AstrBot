@@ -510,7 +510,7 @@ class InternalAgentSubStage(Stage):
             has_valid_message = bool(event.message_str and event.message_str.strip())
             # 检查是否有图片或其他媒体内容
             has_media_content = any(
-                isinstance(comp, (Image, File)) for comp in event.message_obj.message
+                isinstance(comp, Image | File) for comp in event.message_obj.message
             )
 
             if (

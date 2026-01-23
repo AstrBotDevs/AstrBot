@@ -25,8 +25,8 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_data_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.io import remove_dir
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
@@ -895,7 +895,6 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
 
-
     def _get_plugin_metadata_by_name(self, plugin_name: str):
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
@@ -936,10 +935,16 @@ class ConfigRoute(Route):
     def _sanitize_path_segment(segment: str) -> str:
         cleaned = []
         for ch in segment:
-            if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ch.isdigit() or ch in {
-                "-",
-                "_",
-            }:
+            if (
+                ("a" <= ch <= "z")
+                or ("A" <= ch <= "Z")
+                or ch.isdigit()
+                or ch
+                in {
+                    "-",
+                    "_",
+                }
+            ):
                 cleaned.append(ch)
             else:
                 cleaned.append("_")
@@ -1115,9 +1120,13 @@ class ConfigRoute(Route):
 
         md = self._get_plugin_metadata_by_name(plugin_name)
         if not md or not md.config:
-            return Response().error(
-                f"Plugin {plugin_name} not found or has no config",
-            ).__dict__
+            return (
+                Response()
+                .error(
+                    f"Plugin {plugin_name} not found or has no config",
+                )
+                .__dict__
+            )
 
         meta = self._get_schema_item(md.config.schema, key_path)
         if not meta or meta.get("type") != "file":
@@ -1126,7 +1135,9 @@ class ConfigRoute(Route):
         file_types = meta.get("file_types")
         allowed_exts = []
         if isinstance(file_types, list):
-            allowed_exts = [str(ext).lstrip(".").lower() for ext in file_types if str(ext).strip()]
+            allowed_exts = [
+                str(ext).lstrip(".").lower() for ext in file_types if str(ext).strip()
+            ]
 
         files = await request.files
         if not files:
@@ -1162,16 +1173,25 @@ class ConfigRoute(Route):
             save_path = os.path.join(staging_root, rel_path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             await file.save(save_path)
-            if os.path.isfile(save_path) and os.path.getsize(save_path) > MAX_FILE_BYTES:
+            if (
+                os.path.isfile(save_path)
+                and os.path.getsize(save_path) > MAX_FILE_BYTES
+            ):
                 os.remove(save_path)
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)
 
         if not uploaded:
-            return Response().error(
-                "Upload failed: " + ", ".join(errors) if errors else "Upload failed",
-            ).__dict__
+            return (
+                Response()
+                .error(
+                    "Upload failed: " + ", ".join(errors)
+                    if errors
+                    else "Upload failed",
+                )
+                .__dict__
+            )
 
         return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
 
@@ -1197,7 +1217,9 @@ class ConfigRoute(Route):
         staged_path = os.path.abspath(
             os.path.normpath(os.path.join(staging_root, rel_path)),
         )
-        if staged_path.startswith(staging_root + os.sep) and os.path.isfile(staged_path):
+        if staged_path.startswith(staging_root + os.sep) and os.path.isfile(
+            staged_path
+        ):
             os.remove(staged_path)
 
         return Response().ok(None, "Deletion staged").__dict__
