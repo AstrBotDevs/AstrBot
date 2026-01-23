@@ -1191,7 +1191,11 @@ CONFIG_METADATA_2 = {
                         "type": "genie_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
-                        "character_name": "mika",
+                        "genie_character_name": "mika",
+                        "genie_onnx_model_dir": "CharacterModels/v2ProPlus/mika/tts_models",
+                        "genie_language": "Japanese",
+                        "genie_refer_audio_path": "",
+                        "genie_refer_text": "",
                         "timeout": 20,
                     },
                     "Edge TTS": {
@@ -1410,6 +1414,16 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "genie_onnx_model_dir": {
+                        "description": "ONNX Model Directory",
+                        "type": "string",
+                        "hint": "The directory path containing the ONNX model files",
+                    },
+                    "genie_language": {
+                        "description": "Language",
+                        "type": "string",
+                        "options": ["Japanese", "English", "Chinese"],
+                    },
                     "provider_source_id": {
                         "invisible": True,
                         "type": "string",

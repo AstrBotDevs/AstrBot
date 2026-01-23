@@ -29,10 +29,24 @@ class GenieTTSProvider(TTSProvider):
         if not genie:
             raise ImportError("Please install genie_tts first.")
 
-        self.character_name = provider_config.get("character_name", "mika")
+        self.character_name = provider_config.get("genie_character_name", "mika")
+        language = provider_config.get("genie_language", "Japanese")
+        model_dir = provider_config.get("genie_onnx_model_dir", "")
+        refer_audio_path = provider_config.get("genie_refer_audio_path", "")
+        refer_text = provider_config.get("genie_refer_text", "")
 
         try:
-            genie.load_predefined_character(self.character_name)
+            genie.load_character(
+                character_name=self.character_name,
+                language=language,
+                onnx_model_dir=model_dir,
+            )
+            genie.set_reference_audio(
+                character_name=self.character_name,
+                audio_path=refer_audio_path,
+                audio_text=refer_text,
+                language=language,
+            )
         except Exception as e:
             raise RuntimeError(f"Failed to load character {self.character_name}: {e}")
 
