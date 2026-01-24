@@ -1,5 +1,9 @@
 /**
  * Color manipulation utilities
+ *
+ * Configuration type constants are defined here to match the backend schema.
+ * The authoritative source is: astrbot/core/config/config_schema.json
+ * When adding new palette types, update both the schema and this file.
  */
 
 export const ColorFormat = {
@@ -97,6 +101,11 @@ export function rgbToHsv(r: number, g: number, b: number): HsvColor {
 }
 
 export function hsvToRgb(h: number, s: number, v: number): RgbColor {
+  // Clamp input values to valid ranges to prevent unexpected output
+  h = Math.max(0, Math.min(360, h))
+  s = Math.max(0, Math.min(100, s))
+  v = Math.max(0, Math.min(100, v))
+
   h /= 360; s /= 100; v /= 100
   let r = 0, g = 0, b = 0
   const i = Math.floor(h * 6)

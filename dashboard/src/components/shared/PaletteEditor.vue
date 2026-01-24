@@ -159,24 +159,32 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
-import { hexToRgb, rgbToHex, rgbToHsv, parseAnyColor, ColorFormat } from '@/utils/color'
+import {
+  hexToRgb,
+  rgbToHex,
+  rgbToHsv,
+  parseAnyColor,
+  ColorFormat,
+  type ColorFormatType,
+  type RgbColor
+} from '@/utils/color'
 
-const props = defineProps({
-  modelValue: {
-    type: String,
-    default: ''
-  },
-  format: {
-    type: String,
-    default: ColorFormat.HEX,
-    validator: (v) => Object.values(ColorFormat).includes(v)
-  }
+interface Props {
+  modelValue?: string
+  format?: ColorFormatType
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  modelValue: '',
+  format: ColorFormat.HEX
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+}>()
 const { t } = useI18n()
 
 const menuOpen = ref(false)
@@ -215,7 +223,7 @@ const validationError = computed(() => {
   return ''
 })
 
-function parsePickerColor(color) {
+function parsePickerColor(color: string | RgbColor | null | undefined): RgbColor {
   if (!color) return { r: 255, g: 255, b: 255 }
   if (typeof color === 'string') {
     return hexToRgb(color) || { r: 255, g: 255, b: 255 }
@@ -226,7 +234,7 @@ function parsePickerColor(color) {
   return { r: 255, g: 255, b: 255 }
 }
 
-function formatOutput(r, g, b) {
+function formatOutput(r: number, g: number, b: number): string {
   switch (props.format) {
     case ColorFormat.RGB:
       return `rgb(${r}, ${g}, ${b})`
@@ -239,7 +247,7 @@ function formatOutput(r, g, b) {
   }
 }
 
-function syncInputsFromColor(r, g, b) {
+function syncInputsFromColor(r: number, g: number, b: number): void {
   hexInput.value = rgbToHex(r, g, b)
   rgbInput.value = `rgb(${r}, ${g}, ${b})`
   const hsv = rgbToHsv(r, g, b)
@@ -282,7 +290,7 @@ watch(() => props.modelValue, (newVal) => {
   }
 })
 
-function onHexInput(value) {
+function onHexInput(value: string): void {
   const parsed = parseAnyColor(value)
   if (parsed) {
     pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
@@ -292,7 +300,7 @@ function onHexInput(value) {
   }
 }
 
-function onRgbInput(value) {
+function onRgbInput(value: string): void {
   const parsed = parseAnyColor(value)
   if (parsed) {
     pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
@@ -302,7 +310,7 @@ function onRgbInput(value) {
   }
 }
 
-function onHsvInput(value) {
+function onHsvInput(value: string): void {
   const parsed = parseAnyColor(value)
   if (parsed) {
     pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
@@ -322,7 +330,7 @@ function clearColor() {
   menuOpen.value = false
 }
 
-function onInputValueChange(value) {
+function onInputValueChange(value: string): void {
   localValue.value = value
   const parsed = parseAnyColor(value)
   if (parsed) {
@@ -333,7 +341,7 @@ function onInputValueChange(value) {
   }
 }
 
-async function copyToClipboard(text) {
+async function copyToClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) {
     snackbarText.value = t('core.common.palette.copyFailed')
     snackbar.value = true
@@ -373,7 +381,7 @@ async function pasteFromClipboard() {
   }
 }
 
-function onPaste(event) {
+function onPaste(event: ClipboardEvent): void {
   const text = event.clipboardData?.getData('text')
   if (text) {
     const parsed = parseAnyColor(text.trim())

@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AstrBot Configuration Types Schema",
+  "description": "Shared schema for configuration types between backend and frontend. This is the single source of truth.",
+  "definitions": {
+    "configTypes": {
+      "description": "All supported configuration item types",
+      "enum": [
+        "int",
+        "float",
+        "bool",
+        "string",
+        "text",
+        "list",
+        "object",
+        "template_list",
+        "palette",
+        "palette_rgb",
+        "palette_hsv"
+      ]
+    },
+    "paletteTypes": {
+      "description": "Palette-related configuration types",
+      "enum": ["palette", "palette_rgb", "palette_hsv"]
+    },
+    "colorFormats": {
+      "description": "Supported color format outputs",
+      "enum": ["hex", "rgb", "hsv"]
+    },
+    "paletteTypeToFormat": {
+      "description": "Mapping from palette config type to color format",
+      "type": "object",
+      "properties": {
+        "palette": { "const": "hex" },
+        "palette_rgb": { "const": "rgb" },
+        "palette_hsv": { "const": "hsv" }
+      }
+    },
+    "stringLikeTypes": {
+      "description": "Configuration types that expect string values",
+      "enum": ["string", "text", "palette", "palette_rgb", "palette_hsv"]
+    },
+    "defaultValues": {
+      "description": "Default values for each configuration type",
+      "type": "object",
+      "properties": {
+        "int": { "const": 0 },
+        "float": { "const": 0.0 },
+        "bool": { "const": false },
+        "string": { "const": "" },
+        "text": { "const": "" },
+        "list": { "const": [] },
+        "object": { "const": {} },
+        "template_list": { "const": [] },
+        "palette": { "const": "" },
+        "palette_rgb": { "const": "" },
+        "palette_hsv": { "const": "" }
+      }
+    }
+  }
+}
