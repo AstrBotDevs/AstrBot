@@ -328,28 +328,29 @@ class Context:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
 
-    def get_using_provider(self, umo: str | None = None) -> Provider:
+    def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
 
         Args:
             umo: unified_message_origin 值，如果传入并且用户启用了提供商会话隔离，
-                 则使用该会话偏好的提供商。
+                 则使用该会话偏好的对话模型（提供商）。
 
         Returns:
-            当前使用的文本生成提供者。
+            当前使用的对话模型（提供商），如果未设置则返回 None。
 
         Raises:
-            ValueError: 返回的提供者不是 Provider 类型。
-
-        Note:
-            通过 /provider 指令可以切换提供者。
+            ValueError: 该会话来源配置的的对话模型（提供商）的类型不正确。
         """
         prov = self.provider_manager.get_using_provider(
             provider_type=ProviderType.CHAT_COMPLETION,
             umo=umo,
         )
+        if prov is None:
+            return None
         if not isinstance(prov, Provider):
-            raise ValueError("返回的 Provider 不是 Provider 类型")
+            raise ValueError(
+                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+            )
         return prov
 
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
