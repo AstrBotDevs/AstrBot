@@ -186,10 +186,10 @@
     />
 
     <PaletteEditor
-      v-else-if="itemMeta?.type === 'palette' || itemMeta?.type === 'palette_rgb' || itemMeta?.type === 'palette_hsv'"
+      v-else-if="isPaletteType(itemMeta?.type)"
       :model-value="modelValue"
       @update:model-value="emitUpdate"
-      :format="getPaletteFormat(itemMeta?.type)"
+      :format="getPaletteFormatFromType(itemMeta?.type)"
       class="config-field"
     />
 
@@ -223,6 +223,7 @@ import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
 import PaletteEditor from './PaletteEditor.vue'
+import { isPaletteType, getPaletteFormatFromType } from '@/utils/color'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -304,12 +305,6 @@ function getSpecialName(value) {
 
 function getSpecialSubtype(value) {
   return parseSpecialValue(value).subtype
-}
-
-function getPaletteFormat(type) {
-  if (type === 'palette_rgb') return 'rgb'
-  if (type === 'palette_hsv') return 'hsv'
-  return 'hex'
 }
 </script>
 

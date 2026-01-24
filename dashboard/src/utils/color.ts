@@ -10,6 +10,43 @@ export const ColorFormat = {
 
 export type ColorFormatType = typeof ColorFormat[keyof typeof ColorFormat];
 
+/**
+ * Configuration type constants for palette-related types.
+ * These should be kept in sync with backend config_types.py
+ */
+export const ConfigType = {
+  PALETTE: 'palette',
+  PALETTE_RGB: 'palette_rgb',
+  PALETTE_HSV: 'palette_hsv'
+} as const;
+
+export type PaletteConfigType = typeof ConfigType[keyof typeof ConfigType];
+
+/**
+ * Set of all palette-related configuration types
+ */
+export const PALETTE_TYPES = new Set<string>([
+  ConfigType.PALETTE,
+  ConfigType.PALETTE_RGB,
+  ConfigType.PALETTE_HSV
+]);
+
+/**
+ * Check if a configuration type is a palette type
+ */
+export function isPaletteType(type: string | undefined): boolean {
+  return type !== undefined && PALETTE_TYPES.has(type);
+}
+
+/**
+ * Get the color format for a given palette config type
+ */
+export function getPaletteFormatFromType(type: string | undefined): ColorFormatType {
+  if (type === ConfigType.PALETTE_RGB) return ColorFormat.RGB;
+  if (type === ConfigType.PALETTE_HSV) return ColorFormat.HSV;
+  return ColorFormat.HEX;
+}
+
 export interface RgbColor {
   r: number;
   g: number;
