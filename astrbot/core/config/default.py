@@ -3210,11 +3210,6 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
-                    "dashboard.disable_access_log": {
-                        "description": "禁用 Dashboard API 访问日志",
-                        "type": "bool",
-                        "hint": "启用后，WebUI 的 API 访问日志将不会在控制台中显示",
-                    },
                 },
             },
         },

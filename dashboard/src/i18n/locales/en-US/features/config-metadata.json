@@ -563,12 +563,6 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
-      },
-      "dashboard": {
-        "disable_access_log": {
-          "description": "Disable Dashboard API Access Log",
-          "hint": "When enabled, WebUI API access logs will not be displayed in the console"
-        }
       }
     }
   },

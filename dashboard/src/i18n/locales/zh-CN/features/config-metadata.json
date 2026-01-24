@@ -561,12 +561,6 @@
       },
       "no_proxy": {
         "description": "直连地址列表"
-      },
-      "dashboard": {
-        "disable_access_log": {
-          "description": "禁用 Dashboard API 访问日志",
-          "hint": "启用后,WebUI 的 API 访问日志将不会在控制台中显示"
-        }
       }
     }
   },
