@@ -182,7 +182,10 @@ const defaultValueMap = {
   text: '',
   list: [],
   object: {},
-  template_list: []
+  template_list: [],
+  palette: '',
+  palette_rgb: '',
+  palette_hsv: ''
 }
 
 const templateOptions = computed(() => {

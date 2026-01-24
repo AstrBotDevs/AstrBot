@@ -1,0 +1,507 @@
+<template>
+  <div class="palette-editor">
+    <div class="d-flex align-center gap-2">
+      <v-menu
+        v-model="menuOpen"
+        :close-on-content-click="false"
+        location="bottom start"
+        transition="fade-transition"
+      >
+        <template #activator="{ props: menuProps }">
+          <div
+            v-bind="menuProps"
+            class="color-preview-btn"
+            :style="{ backgroundColor: previewColor }"
+            :title="t('core.common.palette.clickToSelect')"
+          >
+            <v-icon v-if="!hasColor" size="small" color="grey">mdi-palette</v-icon>
+          </div>
+        </template>
+
+        <v-card class="palette-popup" width="300">
+          <v-color-picker
+            v-model="pickerColor"
+            :modes="['hex', 'rgb', 'hsl']"
+            hide-inputs
+            elevation="0"
+            width="300"
+          />
+
+          <v-divider />
+
+          <v-card-text class="pa-3">
+            <div class="format-row mb-2">
+              <span class="format-label">HEX</span>
+              <v-text-field
+                v-model="hexInput"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="format-input"
+                @update:model-value="onHexInput"
+                @blur="syncFromPicker"
+              />
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                @click="copyToClipboard(hexInput)"
+                :title="t('core.common.copy')"
+              >
+                <v-icon size="small">mdi-content-copy</v-icon>
+              </v-btn>
+            </div>
+
+            <div class="format-row mb-2">
+              <span class="format-label">RGB</span>
+              <v-text-field
+                v-model="rgbInput"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="format-input"
+                @update:model-value="onRgbInput"
+                @blur="syncFromPicker"
+              />
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                @click="copyToClipboard(rgbInput)"
+                :title="t('core.common.copy')"
+              >
+                <v-icon size="small">mdi-content-copy</v-icon>
+              </v-btn>
+            </div>
+
+            <div class="format-row">
+              <span class="format-label">HSV</span>
+              <v-text-field
+                v-model="hsvInput"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="format-input"
+                @update:model-value="onHsvInput"
+                @blur="syncFromPicker"
+              />
+              <v-btn
+                icon
+                size="x-small"
+                variant="text"
+                @click="copyToClipboard(hsvInput)"
+                :title="t('core.common.copy')"
+              >
+                <v-icon size="small">mdi-content-copy</v-icon>
+              </v-btn>
+            </div>
+          </v-card-text>
+
+          <v-divider />
+
+          <v-card-actions class="justify-space-between pa-2">
+            <div class="d-flex gap-1">
+              <v-btn
+                size="small"
+                variant="text"
+                prepend-icon="mdi-content-paste"
+                @click="pasteFromClipboard"
+              >
+                {{ t('core.common.palette.paste') }}
+              </v-btn>
+            </div>
+            <div class="d-flex gap-1">
+              <v-btn
+                size="small"
+                variant="text"
+                @click="clearColor"
+              >
+                {{ t('core.common.clear') }}
+              </v-btn>
+              <v-btn
+                size="small"
+                color="primary"
+                variant="tonal"
+                @click="confirmColor"
+              >
+                {{ t('core.common.confirm') }}
+              </v-btn>
+            </div>
+          </v-card-actions>
+        </v-card>
+      </v-menu>
+
+      <v-text-field
+        :model-value="modelValue"
+        @update:model-value="onDirectInput"
+        @paste="onPaste"
+        density="compact"
+        variant="outlined"
+        class="config-field flex-grow-1"
+        hide-details
+        :placeholder="formatPlaceholder"
+        :error="!!validationError"
+        :title="validationError"
+      />
+      <v-icon
+        v-if="validationError"
+        size="small"
+        color="warning"
+        :title="validationError"
+      >
+        mdi-alert-circle-outline
+      </v-icon>
+    </div>
+
+    <v-snackbar v-model="snackbar" :timeout="1500" location="top">
+      {{ snackbarText }}
+    </v-snackbar>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue'
+import { useI18n } from '@/i18n/composables'
+
+const props = defineProps({
+  modelValue: {
+    type: String,
+    default: ''
+  },
+  format: {
+    type: String,
+    default: 'hex',
+    validator: (v) => ['hex', 'rgb', 'hsv'].includes(v)
+  }
+})
+
+const emit = defineEmits(['update:modelValue'])
+const { t } = useI18n()
+
+const menuOpen = ref(false)
+const pickerColor = ref('#FFFFFF')
+const hexInput = ref('#FFFFFF')
+const rgbInput = ref('rgb(255, 255, 255)')
+const hsvInput = ref('hsv(0, 0%, 100%)')
+const snackbar = ref(false)
+const snackbarText = ref('')
+
+const formatPlaceholder = computed(() => {
+  switch (props.format) {
+    case 'rgb': return 'rgb(255, 255, 255)'
+    case 'hsv': return 'hsv(0, 0%, 100%)'
+    default: return '#RRGGBB'
+  }
+})
+
+const hasColor = computed(() => {
+  return props.modelValue && props.modelValue.trim() !== ''
+})
+
+const previewColor = computed(() => {
+  if (!hasColor.value) return '#FFFFFF'
+  const parsed = parseAnyColor(props.modelValue)
+  return parsed ? rgbToHex(parsed.r, parsed.g, parsed.b) : '#FFFFFF'
+})
+
+const validationError = computed(() => {
+  if (!hasColor.value) return ''
+  const parsed = parseAnyColor(props.modelValue)
+  if (!parsed) {
+    return t('core.common.palette.invalidFormat')
+  }
+  return ''
+})
+
+function parsePickerColor(color) {
+  if (!color) return { r: 255, g: 255, b: 255 }
+  if (typeof color === 'string') {
+    return hexToRgb(color) || { r: 255, g: 255, b: 255 }
+  }
+  if (typeof color === 'object') {
+    return { r: color.r || 0, g: color.g || 0, b: color.b || 0 }
+  }
+  return { r: 255, g: 255, b: 255 }
+}
+
+function hexToRgb(hex) {
+  if (!hex || typeof hex !== 'string') return null
+  hex = hex.replace('#', '')
+  if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(hex)) return null
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
+  }
+  const num = parseInt(hex, 16)
+  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
+}
+
+function rgbToHex(r, g, b) {
+  const toHex = (v) => Math.max(0, Math.min(255, Math.round(v) || 0))
+    .toString(16).padStart(2, '0').toUpperCase()
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  const d = max - min
+  let h = 0, s = max === 0 ? 0 : d / max, v = max
+  if (max !== min) {
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break
+      case g: h = (b - r) / d + 2; break
+      case b: h = (r - g) / d + 4; break
+    }
+    h /= 6
+  }
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    v: Math.round(v * 100)
+  }
+}
+
+function hsvToRgb(h, s, v) {
+  h /= 360; s /= 100; v /= 100
+  let r, g, b
+  const i = Math.floor(h * 6)
+  const f = h * 6 - i
+  const p = v * (1 - s)
+  const q = v * (1 - f * s)
+  const tt = v * (1 - (1 - f) * s)
+  switch (i % 6) {
+    case 0: r = v; g = tt; b = p; break
+    case 1: r = q; g = v; b = p; break
+    case 2: r = p; g = v; b = tt; break
+    case 3: r = p; g = q; b = v; break
+    case 4: r = tt; g = p; b = v; break
+    case 5: r = v; g = p; b = q; break
+  }
+  return {
+    r: Math.round(r * 255),
+    g: Math.round(g * 255),
+    b: Math.round(b * 255)
+  }
+}
+
+function parseAnyColor(value) {
+  if (!value || typeof value !== 'string') return null
+  value = value.trim()
+
+  const hexMatch = value.match(/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)
+  if (hexMatch) {
+    return hexToRgb(hexMatch[0].startsWith('#') ? hexMatch[0] : '#' + hexMatch[0])
+  }
+
+  const rgbMatch = value.match(/^rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i)
+  if (rgbMatch) {
+    return {
+      r: Math.min(255, parseInt(rgbMatch[1])),
+      g: Math.min(255, parseInt(rgbMatch[2])),
+      b: Math.min(255, parseInt(rgbMatch[3]))
+    }
+  }
+
+  const hsvMatch = value.match(/^hsv\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*\)$/i)
+  if (hsvMatch) {
+    return hsvToRgb(
+      Math.min(360, parseInt(hsvMatch[1])),
+      Math.min(100, parseInt(hsvMatch[2])),
+      Math.min(100, parseInt(hsvMatch[3]))
+    )
+  }
+
+  return null
+}
+
+function formatOutput(r, g, b) {
+  switch (props.format) {
+    case 'rgb':
+      return `rgb(${r}, ${g}, ${b})`
+    case 'hsv': {
+      const hsv = rgbToHsv(r, g, b)
+      return `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+    }
+    default:
+      return rgbToHex(r, g, b)
+  }
+}
+
+function syncInputsFromColor(r, g, b) {
+  hexInput.value = rgbToHex(r, g, b)
+  rgbInput.value = `rgb(${r}, ${g}, ${b})`
+  const hsv = rgbToHsv(r, g, b)
+  hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+}
+
+function syncFromPicker() {
+  const color = parsePickerColor(pickerColor.value)
+  syncInputsFromColor(color.r, color.g, color.b)
+}
+
+watch(pickerColor, () => {
+  syncFromPicker()
+})
+
+watch(menuOpen, (open) => {
+  if (open) {
+    if (hasColor.value) {
+      const parsed = parseAnyColor(props.modelValue)
+      if (parsed) {
+        pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+        syncInputsFromColor(parsed.r, parsed.g, parsed.b)
+      }
+    } else {
+      pickerColor.value = '#FFFFFF'
+      syncInputsFromColor(255, 255, 255)
+    }
+  }
+})
+
+function onHexInput(value) {
+  const parsed = parseAnyColor(value)
+  if (parsed) {
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`
+    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b)
+    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+  }
+}
+
+function onRgbInput(value) {
+  const parsed = parseAnyColor(value)
+  if (parsed) {
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    const hsv = rgbToHsv(parsed.r, parsed.g, parsed.b)
+    hsvInput.value = `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
+  }
+}
+
+function onHsvInput(value) {
+  const parsed = parseAnyColor(value)
+  if (parsed) {
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    hexInput.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+    rgbInput.value = `rgb(${parsed.r}, ${parsed.g}, ${parsed.b})`
+  }
+}
+
+function confirmColor() {
+  const color = parsePickerColor(pickerColor.value)
+  emit('update:modelValue', formatOutput(color.r, color.g, color.b))
+  menuOpen.value = false
+}
+
+function clearColor() {
+  emit('update:modelValue', '')
+  menuOpen.value = false
+}
+
+function onDirectInput(value) {
+  emit('update:modelValue', value)
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    snackbarText.value = t('core.common.copied')
+    snackbar.value = true
+  } catch {
+    snackbarText.value = 'Copy failed'
+    snackbar.value = true
+  }
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText()
+    const parsed = parseAnyColor(text.trim())
+    if (parsed) {
+      pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+      syncInputsFromColor(parsed.r, parsed.g, parsed.b)
+      snackbarText.value = t('core.common.palette.pasteSuccess')
+      snackbar.value = true
+    } else {
+      snackbarText.value = t('core.common.palette.pasteInvalid')
+      snackbar.value = true
+    }
+  } catch {
+    snackbarText.value = t('core.common.palette.pasteFailed')
+    snackbar.value = true
+  }
+}
+
+function onPaste(event) {
+  const text = event.clipboardData?.getData('text')
+  if (text) {
+    const parsed = parseAnyColor(text.trim())
+    if (parsed) {
+      event.preventDefault()
+      emit('update:modelValue', formatOutput(parsed.r, parsed.g, parsed.b))
+    }
+  }
+}
+</script>
+
+<style scoped>
+.palette-editor {
+  width: 100%;
+}
+
+.color-preview-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.2s;
+}
+
+.color-preview-btn:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.palette-popup {
+  overflow: hidden;
+}
+
+.format-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-label {
+  width: 36px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.format-input {
+  flex: 1;
+}
+
+.format-input :deep(.v-field__input) {
+  font-size: 12px;
+  font-family: monospace;
+  padding: 4px 8px;
+}
+
+.config-field {
+  margin-bottom: 0;
+}
+
+:deep(.v-color-picker) {
+  border-radius: 0;
+}
+
+:deep(.v-field__input) {
+  font-size: 14px;
+}
+</style>

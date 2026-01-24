@@ -141,7 +141,9 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
                 )
-            elif meta["type"] in ["string", "text"] and not isinstance(value, str):
+            elif meta["type"] in ["string", "text", "palette", "palette_rgb", "palette_hsv"] and not isinstance(
+                value, str
+            ):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}",
                 )

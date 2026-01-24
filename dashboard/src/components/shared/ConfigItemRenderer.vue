@@ -185,6 +185,14 @@
       class="config-field"
     />
 
+    <PaletteEditor
+      v-else-if="itemMeta?.type === 'palette' || itemMeta?.type === 'palette_rgb' || itemMeta?.type === 'palette_hsv'"
+      :model-value="modelValue"
+      @update:model-value="emitUpdate"
+      :format="getPaletteFormat(itemMeta?.type)"
+      class="config-field"
+    />
+
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
@@ -214,6 +222,7 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import PaletteEditor from './PaletteEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -295,6 +304,12 @@ function getSpecialName(value) {
 
 function getSpecialSubtype(value) {
   return parseSpecialValue(value).subtype
+}
+
+function getPaletteFormat(type) {
+  if (type === 'palette_rgb') return 'rgb'
+  if (type === 'palette_hsv') return 'hsv'
+  return 'hex'
 }
 </script>
 

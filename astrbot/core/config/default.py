@@ -3248,4 +3248,7 @@ DEFAULT_VALUE_MAP = {
     "list": [],
     "object": {},
     "template_list": [],
+    "palette": "",
+    "palette_rgb": "",
+    "palette_hsv": "",
 }
