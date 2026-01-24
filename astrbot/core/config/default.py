@@ -166,6 +166,7 @@ DEFAULT_CONFIG = {
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
+        "disable_access_log": True,
     },
     "platform": [],
     "platform_specific": {
