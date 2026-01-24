@@ -961,9 +961,7 @@ class ConfigRoute(Route):
         allowed_exts: list[str] = []
         if isinstance(file_types, list):
             allowed_exts = [
-                str(ext).lstrip(".").lower()
-                for ext in file_types
-                if str(ext).strip()
+                str(ext).lstrip(".").lower() for ext in file_types if str(ext).strip()
             ]
 
         files = await request.files
@@ -996,16 +994,25 @@ class ConfigRoute(Route):
             save_path = os.path.join(staging_root, rel_path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             await file.save(save_path)
-            if os.path.isfile(save_path) and os.path.getsize(save_path) > MAX_FILE_BYTES:
+            if (
+                os.path.isfile(save_path)
+                and os.path.getsize(save_path) > MAX_FILE_BYTES
+            ):
                 os.remove(save_path)
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)
 
         if not uploaded:
-            return Response().error(
-                "Upload failed: " + ", ".join(errors) if errors else "Upload failed",
-            ).__dict__
+            return (
+                Response()
+                .error(
+                    "Upload failed: " + ", ".join(errors)
+                    if errors
+                    else "Upload failed",
+                )
+                .__dict__
+            )
 
         return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
 
@@ -1316,7 +1323,9 @@ class ConfigRoute(Route):
             )
             staging_root = (
                 legacy_staging
-                if (not os.path.isdir(primary_staging) and os.path.isdir(legacy_staging))
+                if (
+                    not os.path.isdir(primary_staging) and os.path.isdir(legacy_staging)
+                )
                 else primary_staging
             )
             apply_config_file_ops(

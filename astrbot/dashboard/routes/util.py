@@ -68,10 +68,16 @@ def sanitize_path_segment(segment: str) -> str:
 
     cleaned = []
     for ch in segment:
-        if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ch.isdigit() or ch in {
-            "-",
-            "_",
-        }:
+        if (
+            ("a" <= ch <= "z")
+            or ("A" <= ch <= "Z")
+            or ch.isdigit()
+            or ch
+            in {
+                "-",
+                "_",
+            }
+        ):
             cleaned.append(ch)
         else:
             cleaned.append("_")
