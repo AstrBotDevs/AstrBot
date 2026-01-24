@@ -151,6 +151,11 @@
       "title": "未检测到新版本",
       "message": "当前插件未检测到新版本，是否强制重新安装？这将从远程仓库拉取最新代码。",
       "confirm": "强制更新"
+    },
+    "updateAllConfirm": {
+      "title": "确认更新全部插件",
+      "message": "确定要更新全部 {count} 个插件吗？此操作可能需要一些时间。",
+      "confirm": "确认更新"
     }
   },
   "messages": {

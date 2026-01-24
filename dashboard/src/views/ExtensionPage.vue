@@ -92,6 +92,11 @@ const forceUpdateDialog = reactive({
   extensionName: "",
 });
 
+// 更新全部插件确认对话框
+const updateAllConfirmDialog = reactive({
+  show: false,
+});
+
 // 插件更新日志对话框（复用 ReadmeDialog）
 const changelogDialog = reactive({
   show: false,
@@ -471,6 +476,23 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
 };
 
 // 确认强制更新
+// 显示更新全部插件确认对话框
+const showUpdateAllConfirm = () => {
+  if (updatableExtensions.value.length === 0) return;
+  updateAllConfirmDialog.show = true;
+};
+
+// 确认更新全部插件
+const confirmUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+  updateAllExtensions();
+};
+
+// 取消更新全部插件
+const cancelUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+};
+
 const confirmForceUpdate = () => {
   const name = forceUpdateDialog.extensionName;
   forceUpdateDialog.show = false;
@@ -1128,7 +1150,7 @@ watch(isListView, (newVal) => {
                   variant="tonal"
                   :disabled="updatableExtensions.length === 0"
                   :loading="updatingAll"
-                  @click="updateAllExtensions"
+                  @click="showUpdateAllConfirm"
                 >
                   <v-icon>mdi-update</v-icon>
                   {{ tm("buttons.updateAll") }}
@@ -2278,6 +2300,34 @@ watch(isListView, (newVal) => {
     v-model="showUninstallDialog"
     @confirm="handleUninstallConfirm"
   />
+
+  <!-- 更新全部插件确认对话框 -->
+  <v-dialog v-model="updateAllConfirmDialog.show" max-width="420">
+    <v-card class="rounded-lg">
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon color="warning" class="mr-2">mdi-update</v-icon>
+        {{ tm("dialogs.updateAllConfirm.title") }}
+      </v-card-title>
+      <v-card-text>
+        <p class="text-body-1">
+          {{ tm("dialogs.updateAllConfirm.message", { count: updatableExtensions.length }) }}
+        </p>
+      </v-card-text>
+      <v-card-actions class="pa-4">
+        <v-spacer></v-spacer>
+        <v-btn
+          variant="text"
+          @click="cancelUpdateAll"
+        >{{ tm("buttons.cancel") }}</v-btn>
+        <v-btn
+          color="warning"
+          variant="flat"
+          @click="confirmUpdateAll"
+        >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">
