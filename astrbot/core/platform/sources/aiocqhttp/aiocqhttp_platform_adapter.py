@@ -67,8 +67,8 @@ class AiocqhttpAdapter(Platform):
                 if not abm:
                     return
                 await self.handle_msg(abm)
-            except BaseException as e:
-                logger.error(f"Handle request message failed: {e}")
+            except Exception as e:
+                logger.exception(f"Handle request message failed: {e}")
                 return
 
         @self.bot.on_notice()
@@ -77,8 +77,8 @@ class AiocqhttpAdapter(Platform):
                 abm = await self.convert_message(event)
                 if abm:
                     await self.handle_msg(abm)
-            except BaseException as e:
-                logger.error(f"Handle notice message failed: {e}")
+            except Exception as e:
+                logger.exception(f"Handle notice message failed: {e}")
                 return
 
         @self.bot.on_message("group")
@@ -87,8 +87,8 @@ class AiocqhttpAdapter(Platform):
                 abm = await self.convert_message(event)
                 if abm:
                     await self.handle_msg(abm)
-            except BaseException as e:
-                logger.error(f"Handle group message failed: {e}")
+            except Exception as e:
+                logger.exception(f"Handle group message failed: {e}")
                 return
 
         @self.bot.on_message("private")
@@ -97,8 +97,8 @@ class AiocqhttpAdapter(Platform):
                 abm = await self.convert_message(event)
                 if abm:
                     await self.handle_msg(abm)
-            except BaseException as e:
-                logger.error(f"Handle private message failed: {e}")
+            except Exception as e:
+                logger.exception(f"Handle private message failed: {e}")
                 return
 
         @self.bot.on_websocket_connection
