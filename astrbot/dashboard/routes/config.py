@@ -20,16 +20,22 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
-from astrbot.core.star.star import star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_data_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
+from .util import (
+    apply_config_file_ops,
+    config_key_to_folder,
+    get_schema_item,
+    normalize_rel_path,
+    sanitize_filename,
+)
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
 
@@ -235,8 +241,8 @@ class ConfigRoute(Route):
             "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
-            "/config/plugin/file/upload": ("POST", self.upload_plugin_file),
-            "/config/plugin/file/delete": ("POST", self.delete_plugin_file),
+            "/config/file/upload": ("POST", self.upload_config_file),
+            "/config/file/delete": ("POST", self.delete_config_file),
             "/config/platform/new": ("POST", self.post_new_platform),
             "/config/platform/update": ("POST", self.post_update_platform),
             "/config/platform/delete": ("POST", self.post_delete_platform),
@@ -895,266 +901,83 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
 
-    def _get_plugin_metadata_by_name(self, plugin_name: str):
+    def _get_plugin_metadata_by_name(self, plugin_name: str) -> StarMetadata | None:
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:
                 return plugin_md
         return None
 
-    @staticmethod
-    def _get_schema_item(schema: dict | None, key_path: str) -> dict | None:
-        if not isinstance(schema, dict) or not key_path:
-            return None
-        if key_path in schema:
-            return schema.get(key_path)
+    def _resolve_config_file_scope(
+        self,
+    ) -> tuple[str, str, str, StarMetadata, AstrBotConfig]:
+        """将请求参数解析为一个明确的配置作用域。
 
-        current = schema
-        parts = key_path.split(".")
-        for idx, part in enumerate(parts):
-            if part not in current:
-                return None
-            meta = current.get(part)
-            if idx == len(parts) - 1:
-                return meta
-            if not isinstance(meta, dict) or meta.get("type") != "object":
-                return None
-            current = meta.get("items", {})
-        return None
+        当前支持的 scope：
+        - scope=plugin：name=<plugin_name>，key=<config_key_path>
+        """
 
-    @staticmethod
-    def _sanitize_filename(name: str) -> str:
-        cleaned = os.path.basename(name).strip()
-        if not cleaned or cleaned in {".", ".."}:
-            return ""
-        for sep in (os.sep, os.altsep):
-            if sep:
-                cleaned = cleaned.replace(sep, "_")
-        return cleaned
-
-    @staticmethod
-    def _sanitize_path_segment(segment: str) -> str:
-        cleaned = []
-        for ch in segment:
-            if (
-                ("a" <= ch <= "z")
-                or ("A" <= ch <= "Z")
-                or ch.isdigit()
-                or ch
-                in {
-                    "-",
-                    "_",
-                }
-            ):
-                cleaned.append(ch)
-            else:
-                cleaned.append("_")
-        result = "".join(cleaned).strip("_")
-        return result or "_"
-
-    @classmethod
-    def _config_key_to_folder(cls, key_path: str) -> str:
-        parts = [cls._sanitize_path_segment(p) for p in key_path.split(".") if p]
-        return "/".join(parts) if parts else "_"
-
-    @staticmethod
-    def _normalize_rel_path(rel_path: str | None) -> str | None:
-        if not isinstance(rel_path, str):
-            return None
-        rel = rel_path.replace("\\", "/").lstrip("/")
-        if not rel:
-            return None
-        parts = [p for p in rel.split("/") if p]
-        if any(part in {".", ".."} for part in parts):
-            return None
-        if rel.startswith("../") or "/../" in rel:
-            return None
-        return "/".join(parts)
-
-    @staticmethod
-    def _get_value_by_path(data: dict, key_path: str):
-        if key_path in data:
-            return data.get(key_path)
-        current = data
-        for part in key_path.split("."):
-            if not isinstance(current, dict) or part not in current:
-                return None
-            current = current.get(part)
-        return current
-
-    @staticmethod
-    def _set_value_by_path(data: dict, key_path: str, value) -> None:
-        if key_path in data:
-            data[key_path] = value
-            return
-        current = data
-        parts = key_path.split(".")
-        for part in parts[:-1]:
-            if part not in current or not isinstance(current[part], dict):
-                current[part] = {}
-            current = current[part]
-        current[parts[-1]] = value
-
-    @classmethod
-    def _collect_file_keys(cls, schema: dict, prefix: str = "") -> list[str]:
-        keys = []
-        for key, meta in schema.items():
-            if not isinstance(meta, dict):
-                continue
-            meta_type = meta.get("type")
-            if meta_type == "file":
-                keys.append(f"{prefix}{key}" if prefix else key)
-            elif meta_type == "object":
-                child_prefix = f"{prefix}{key}." if prefix else f"{key}."
-                keys.extend(cls._collect_file_keys(meta.get("items", {}), child_prefix))
-        return keys
-
-    def _normalize_file_list(self, value, key_path: str) -> tuple[list[str], bool]:
-        if value is None:
-            return [], False
-        if not isinstance(value, list):
-            raise ValueError(f"Invalid file list for {key_path}")
-        folder = self._config_key_to_folder(key_path)
-        expected_prefix = f"files/{folder}/"
-        results = []
-        changed = False
-        for item in value:
-            if not isinstance(item, str):
-                raise ValueError(f"Invalid file entry for {key_path}")
-            rel = self._normalize_rel_path(item)
-            if not rel or not rel.startswith("files/"):
-                raise ValueError(f"Invalid file path: {item}")
-            if rel.startswith(expected_prefix):
-                results.append(rel)
-                continue
-            if rel.count("/") == 1:
-                filename = rel.split("/", 1)[1]
-                if not filename:
-                    raise ValueError(f"Invalid file path: {item}")
-                results.append(f"{expected_prefix}{filename}")
-                changed = True
-                continue
-            raise ValueError(f"Invalid file path: {item}")
-        return results, changed
-
-    def _apply_plugin_file_ops(self, plugin_name: str, md, post_configs: dict) -> None:
-        schema = getattr(md.config, "schema", None) if md and md.config else None
-        if not isinstance(schema, dict):
-            return
-
-        file_keys = self._collect_file_keys(schema)
-        if not file_keys:
-            return
-
-        old_config = dict(md.config)
-        new_file_set = set()
-        old_file_set = set()
-
-        for key_path in file_keys:
-            new_list, new_changed = self._normalize_file_list(
-                self._get_value_by_path(post_configs, key_path),
-                key_path,
-            )
-            if new_changed:
-                self._set_value_by_path(post_configs, key_path, new_list)
-            old_list, _ = self._normalize_file_list(
-                self._get_value_by_path(old_config, key_path),
-                key_path,
-            )
-            new_file_set.update(new_list)
-            old_file_set.update(old_list)
-
-        plugin_data_dir = os.path.abspath(
-            os.path.join(get_astrbot_plugin_data_path(), plugin_name),
-        )
-        staging_root = os.path.abspath(
-            os.path.join(get_astrbot_temp_path(), "plugin_file_uploads", plugin_name),
-        )
-
-        for rel_path in sorted(new_file_set):
-            final_path = os.path.abspath(os.path.join(plugin_data_dir, rel_path))
-            if not final_path.startswith(plugin_data_dir + os.sep):
-                raise ValueError(f"Invalid file path: {rel_path}")
-            staged_path = os.path.abspath(os.path.join(staging_root, rel_path))
-            if not staged_path.startswith(staging_root + os.sep):
-                raise ValueError(f"Invalid staged path: {rel_path}")
-            if os.path.exists(staged_path):
-                os.makedirs(os.path.dirname(final_path), exist_ok=True)
-                os.replace(staged_path, final_path)
-                continue
-            legacy_path = os.path.join(
-                plugin_data_dir,
-                "files",
-                os.path.basename(rel_path),
-            )
-            if os.path.isfile(legacy_path):
-                os.makedirs(os.path.dirname(final_path), exist_ok=True)
-                os.replace(legacy_path, final_path)
-                continue
-            if not os.path.exists(final_path):
-                raise ValueError(f"Missing staged file: {rel_path}")
-
-        retained = new_file_set
-        for rel_path in sorted(old_file_set - retained):
-            final_path = os.path.abspath(os.path.join(plugin_data_dir, rel_path))
-            if not final_path.startswith(plugin_data_dir + os.sep):
-                continue
-            if os.path.isfile(final_path):
-                os.remove(final_path)
-                continue
-            legacy_path = os.path.join(
-                plugin_data_dir,
-                "files",
-                os.path.basename(rel_path),
-            )
-            if os.path.isfile(legacy_path):
-                os.remove(legacy_path)
-
-        if os.path.isdir(staging_root):
-            remove_dir(staging_root)
-
-    async def upload_plugin_file(self):
-        plugin_name = request.args.get("plugin_name")
+        scope = request.args.get("scope") or "plugin"
+        name = request.args.get("name")
         key_path = request.args.get("key")
-        if not plugin_name or not key_path:
-            return Response().error("Missing plugin_name or key parameter").__dict__
 
-        md = self._get_plugin_metadata_by_name(plugin_name)
+        if scope != "plugin":
+            raise ValueError(f"Unsupported scope: {scope}")
+        if not name or not key_path:
+            raise ValueError("Missing name or key parameter")
+
+        md = self._get_plugin_metadata_by_name(name)
         if not md or not md.config:
-            return (
-                Response()
-                .error(
-                    f"Plugin {plugin_name} not found or has no config",
-                )
-                .__dict__
-            )
+            raise ValueError(f"Plugin {name} not found or has no config")
 
-        meta = self._get_schema_item(md.config.schema, key_path)
+        return scope, name, key_path, md, md.config
+
+    def _get_config_file_staging_roots(self, scope: str, name: str) -> tuple[str, str]:
+        """获取某个 scope 的（主、旧）暂存目录。"""
+
+        primary = os.path.abspath(
+            os.path.join(get_astrbot_temp_path(), "config_file_uploads", scope, name),
+        )
+        legacy = os.path.abspath(
+            os.path.join(get_astrbot_temp_path(), "plugin_file_uploads", name),
+        )
+        return primary, legacy
+
+    async def upload_config_file(self):
+        """上传文件到暂存区（用于某个 file 类型配置项）。
+
+        文件会先保存到临时目录，只有在“保存配置”时才会被移动到最终目录。
+        """
+
+        try:
+            scope, name, key_path, md, config = self._resolve_config_file_scope()
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+
+        meta = get_schema_item(getattr(config, "schema", None), key_path)
         if not meta or meta.get("type") != "file":
             return Response().error("Config item not found or not file type").__dict__
 
         file_types = meta.get("file_types")
-        allowed_exts = []
+        allowed_exts: list[str] = []
         if isinstance(file_types, list):
             allowed_exts = [
-                str(ext).lstrip(".").lower() for ext in file_types if str(ext).strip()
+                str(ext).lstrip(".").lower()
+                for ext in file_types
+                if str(ext).strip()
             ]
 
         files = await request.files
         if not files:
             return Response().error("No files uploaded").__dict__
 
-        staging_root = os.path.join(
-            get_astrbot_temp_path(),
-            "plugin_file_uploads",
-            plugin_name,
-        )
+        staging_root, _legacy_root = self._get_config_file_staging_roots(scope, name)
         os.makedirs(staging_root, exist_ok=True)
 
-        uploaded = []
-        folder = self._config_key_to_folder(key_path)
-        errors = []
+        uploaded: list[str] = []
+        folder = config_key_to_folder(key_path)
+        errors: list[str] = []
         for file in files.values():
-            filename = self._sanitize_filename(file.filename or "")
+            filename = sanitize_filename(file.filename or "")
             if not filename:
                 errors.append("Invalid filename")
                 continue
@@ -1173,54 +996,51 @@ class ConfigRoute(Route):
             save_path = os.path.join(staging_root, rel_path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             await file.save(save_path)
-            if (
-                os.path.isfile(save_path)
-                and os.path.getsize(save_path) > MAX_FILE_BYTES
-            ):
+            if os.path.isfile(save_path) and os.path.getsize(save_path) > MAX_FILE_BYTES:
                 os.remove(save_path)
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)
 
         if not uploaded:
-            return (
-                Response()
-                .error(
-                    "Upload failed: " + ", ".join(errors)
-                    if errors
-                    else "Upload failed",
-                )
-                .__dict__
-            )
+            return Response().error(
+                "Upload failed: " + ", ".join(errors) if errors else "Upload failed",
+            ).__dict__
 
         return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
 
-    async def delete_plugin_file(self):
-        """Delete a staged upload under temp; final deletion happens on config save."""
-        plugin_name = request.args.get("plugin_name")
-        if not plugin_name:
-            return Response().error("Missing plugin_name parameter").__dict__
+    async def delete_config_file(self):
+        """删除暂存区中的文件。
+
+        最终的数据目录删除是在保存配置时，根据更新后的配置值统一应用。
+        """
+
+        scope = request.args.get("scope") or "plugin"
+        name = request.args.get("name")
+        if not name:
+            return Response().error("Missing name parameter").__dict__
+        if scope != "plugin":
+            return Response().error(f"Unsupported scope: {scope}").__dict__
 
         data = await request.get_json()
         rel_path = data.get("path") if isinstance(data, dict) else None
-        rel_path = self._normalize_rel_path(rel_path)
+        rel_path = normalize_rel_path(rel_path)
         if not rel_path or not rel_path.startswith("files/"):
             return Response().error("Invalid path parameter").__dict__
 
-        md = self._get_plugin_metadata_by_name(plugin_name)
+        md = self._get_plugin_metadata_by_name(name)
         if not md:
-            return Response().error(f"Plugin {plugin_name} not found").__dict__
+            return Response().error(f"Plugin {name} not found").__dict__
 
-        staging_root = os.path.abspath(
-            os.path.join(get_astrbot_temp_path(), "plugin_file_uploads", plugin_name),
-        )
-        staged_path = os.path.abspath(
-            os.path.normpath(os.path.join(staging_root, rel_path)),
-        )
-        if staged_path.startswith(staging_root + os.sep) and os.path.isfile(
-            staged_path
-        ):
-            os.remove(staged_path)
+        primary_root, legacy_root = self._get_config_file_staging_roots(scope, name)
+        for staging_root in (primary_root, legacy_root):
+            staged_path = os.path.abspath(
+                os.path.normpath(os.path.join(staging_root, rel_path)),
+            )
+            if staged_path.startswith(staging_root + os.sep) and os.path.isfile(
+                staged_path
+            ):
+                os.remove(staged_path)
 
         return Response().ok(None, "Deletion staged").__dict__
 
@@ -1478,6 +1298,7 @@ class ConfigRoute(Route):
             raise ValueError(f"插件 {plugin_name} 不存在")
         if not md.config:
             raise ValueError(f"插件 {plugin_name} 没有注册配置")
+        assert md.config is not None
 
         try:
             errors, post_configs = validate_config(
@@ -1486,7 +1307,25 @@ class ConfigRoute(Route):
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")
 
-            self._apply_plugin_file_ops(plugin_name, md, post_configs)
+            storage_root = os.path.abspath(
+                os.path.join(get_astrbot_plugin_data_path(), plugin_name),
+            )
+            primary_staging, legacy_staging = self._get_config_file_staging_roots(
+                "plugin",
+                plugin_name,
+            )
+            staging_root = (
+                legacy_staging
+                if (not os.path.isdir(primary_staging) and os.path.isdir(legacy_staging))
+                else primary_staging
+            )
+            apply_config_file_ops(
+                schema=getattr(md.config, "schema", None),
+                old_config=dict(md.config),
+                post_configs=post_configs,
+                storage_root=storage_root,
+                staging_root=staging_root,
+            )
             md.config.save_config(post_configs)
         except Exception as e:
             raise e
