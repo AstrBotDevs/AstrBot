@@ -162,6 +162,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
+import { hexToRgb, rgbToHex, rgbToHsv, parseAnyColor } from '@/utils/color'
 
 const props = defineProps({
   modelValue: {
@@ -224,96 +225,6 @@ function parsePickerColor(color) {
   return { r: 255, g: 255, b: 255 }
 }
 
-function hexToRgb(hex) {
-  if (!hex || typeof hex !== 'string') return null
-  hex = hex.replace('#', '')
-  if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(hex)) return null
-  if (hex.length === 3) {
-    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
-  }
-  const num = parseInt(hex, 16)
-  return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
-}
-
-function rgbToHex(r, g, b) {
-  const toHex = (v) => Math.max(0, Math.min(255, Math.round(v) || 0))
-    .toString(16).padStart(2, '0').toUpperCase()
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
-}
-
-function rgbToHsv(r, g, b) {
-  r /= 255; g /= 255; b /= 255
-  const max = Math.max(r, g, b), min = Math.min(r, g, b)
-  const d = max - min
-  let h = 0, s = max === 0 ? 0 : d / max, v = max
-  if (max !== min) {
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break
-      case g: h = (b - r) / d + 2; break
-      case b: h = (r - g) / d + 4; break
-    }
-    h /= 6
-  }
-  return {
-    h: Math.round(h * 360),
-    s: Math.round(s * 100),
-    v: Math.round(v * 100)
-  }
-}
-
-function hsvToRgb(h, s, v) {
-  h /= 360; s /= 100; v /= 100
-  let r, g, b
-  const i = Math.floor(h * 6)
-  const f = h * 6 - i
-  const p = v * (1 - s)
-  const q = v * (1 - f * s)
-  const tt = v * (1 - (1 - f) * s)
-  switch (i % 6) {
-    case 0: r = v; g = tt; b = p; break
-    case 1: r = q; g = v; b = p; break
-    case 2: r = p; g = v; b = tt; break
-    case 3: r = p; g = q; b = v; break
-    case 4: r = tt; g = p; b = v; break
-    case 5: r = v; g = p; b = q; break
-  }
-  return {
-    r: Math.round(r * 255),
-    g: Math.round(g * 255),
-    b: Math.round(b * 255)
-  }
-}
-
-function parseAnyColor(value) {
-  if (!value || typeof value !== 'string') return null
-  value = value.trim()
-
-  const hexMatch = value.match(/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)
-  if (hexMatch) {
-    return hexToRgb(hexMatch[0].startsWith('#') ? hexMatch[0] : '#' + hexMatch[0])
-  }
-
-  const rgbMatch = value.match(/^rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i)
-  if (rgbMatch) {
-    return {
-      r: Math.min(255, parseInt(rgbMatch[1])),
-      g: Math.min(255, parseInt(rgbMatch[2])),
-      b: Math.min(255, parseInt(rgbMatch[3]))
-    }
-  }
-
-  const hsvMatch = value.match(/^hsv\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*\)$/i)
-  if (hsvMatch) {
-    return hsvToRgb(
-      Math.min(360, parseInt(hsvMatch[1])),
-      Math.min(100, parseInt(hsvMatch[2])),
-      Math.min(100, parseInt(hsvMatch[3]))
-    )
-  }
-
-  return null
-}
-
 function formatOutput(r, g, b) {
   switch (props.format) {
     case 'rgb':
@@ -343,20 +254,27 @@ watch(pickerColor, () => {
   syncFromPicker()
 })
 
-watch(menuOpen, (open) => {
-  if (open) {
-    if (hasColor.value) {
-      const parsed = parseAnyColor(props.modelValue)
-      if (parsed) {
-        pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+function syncInternalState() {
+  if (hasColor.value) {
+    const parsed = parseAnyColor(props.modelValue)
+    if (parsed) {
+      const newHex = rgbToHex(parsed.r, parsed.g, parsed.b)
+      if (pickerColor.value !== newHex) {
+        pickerColor.value = newHex
         syncInputsFromColor(parsed.r, parsed.g, parsed.b)
       }
-    } else {
-      pickerColor.value = '#FFFFFF'
-      syncInputsFromColor(255, 255, 255)
     }
+  } else {
+    pickerColor.value = '#FFFFFF'
+    syncInputsFromColor(255, 255, 255)
   }
+}
+
+watch(menuOpen, (open) => {
+  if (open) syncInternalState()
 })
+
+watch(() => props.modelValue, syncInternalState)
 
 function onHexInput(value) {
   const parsed = parseAnyColor(value)
@@ -403,17 +321,27 @@ function onDirectInput(value) {
 }
 
 async function copyToClipboard(text) {
+  if (!navigator.clipboard) {
+    snackbarText.value = t('core.common.palette.copyFailed')
+    snackbar.value = true
+    return
+  }
   try {
     await navigator.clipboard.writeText(text)
     snackbarText.value = t('core.common.copied')
     snackbar.value = true
   } catch {
-    snackbarText.value = 'Copy failed'
+    snackbarText.value = t('core.common.palette.copyFailed')
     snackbar.value = true
   }
 }
 
 async function pasteFromClipboard() {
+  if (!navigator.clipboard) {
+    snackbarText.value = t('core.common.palette.pasteFailed')
+    snackbar.value = true
+    return
+  }
   try {
     const text = await navigator.clipboard.readText()
     const parsed = parseAnyColor(text.trim())
