@@ -1,9 +1,5 @@
 /**
- * Color manipulation utilities
- *
- * Configuration type constants are defined here to match the backend schema.
- * The authoritative source is: astrbot/core/config/config_schema.json
- * When adding new palette types, update both the schema and this file.
+ * 颜色处理工具模块
  */
 
 export const ColorFormat = {
@@ -14,10 +10,7 @@ export const ColorFormat = {
 
 export type ColorFormatType = typeof ColorFormat[keyof typeof ColorFormat];
 
-/**
- * Configuration type constants for palette-related types.
- * These should be kept in sync with backend config_types.py
- */
+/** 调色板相关的配置类型 */
 export const ConfigType = {
   PALETTE: 'palette',
   PALETTE_RGB: 'palette_rgb',
@@ -26,25 +19,19 @@ export const ConfigType = {
 
 export type PaletteConfigType = typeof ConfigType[keyof typeof ConfigType];
 
-/**
- * Set of all palette-related configuration types
- */
+/** 所有调色板配置类型的集合 */
 export const PALETTE_TYPES = new Set<string>([
   ConfigType.PALETTE,
   ConfigType.PALETTE_RGB,
   ConfigType.PALETTE_HSV
 ]);
 
-/**
- * Check if a configuration type is a palette type
- */
+/** 检查配置类型是否为调色板类型 */
 export function isPaletteType(type: string | undefined): boolean {
   return type !== undefined && PALETTE_TYPES.has(type);
 }
 
-/**
- * Get the color format for a given palette config type
- */
+/** 根据调色板配置类型获取对应的颜色格式 */
 export function getPaletteFormatFromType(type: string | undefined): ColorFormatType {
   if (type === ConfigType.PALETTE_RGB) return ColorFormat.RGB;
   if (type === ConfigType.PALETTE_HSV) return ColorFormat.HSV;
@@ -101,7 +88,7 @@ export function rgbToHsv(r: number, g: number, b: number): HsvColor {
 }
 
 export function hsvToRgb(h: number, s: number, v: number): RgbColor {
-  // Clamp input values to valid ranges to prevent unexpected output
+  // 限制输入值范围
   h = Math.max(0, Math.min(360, h))
   s = Math.max(0, Math.min(100, s))
   v = Math.max(0, Math.min(100, v))
