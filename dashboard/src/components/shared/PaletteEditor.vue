@@ -132,8 +132,8 @@
       </v-menu>
 
       <v-text-field
-        :model-value="modelValue"
-        @update:model-value="onDirectInput"
+        v-model="localValue"
+        @update:model-value="onInputValueChange"
         @paste="onPaste"
         density="compact"
         variant="outlined"
@@ -162,7 +162,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n } from '@/i18n/composables'
-import { hexToRgb, rgbToHex, rgbToHsv, parseAnyColor } from '@/utils/color'
+import { hexToRgb, rgbToHex, rgbToHsv, parseAnyColor, ColorFormat } from '@/utils/color'
 
 const props = defineProps({
   modelValue: {
@@ -171,8 +171,8 @@ const props = defineProps({
   },
   format: {
     type: String,
-    default: 'hex',
-    validator: (v) => ['hex', 'rgb', 'hsv'].includes(v)
+    default: ColorFormat.HEX,
+    validator: (v) => Object.values(ColorFormat).includes(v)
   }
 })
 
@@ -180,6 +180,7 @@ const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
 
 const menuOpen = ref(false)
+const localValue = ref(props.modelValue)
 const pickerColor = ref('#FFFFFF')
 const hexInput = ref('#FFFFFF')
 const rgbInput = ref('rgb(255, 255, 255)')
@@ -189,25 +190,25 @@ const snackbarText = ref('')
 
 const formatPlaceholder = computed(() => {
   switch (props.format) {
-    case 'rgb': return 'rgb(255, 255, 255)'
-    case 'hsv': return 'hsv(0, 0%, 100%)'
+    case ColorFormat.RGB: return 'rgb(255, 255, 255)'
+    case ColorFormat.HSV: return 'hsv(0, 0%, 100%)'
     default: return '#RRGGBB'
   }
 })
 
 const hasColor = computed(() => {
-  return props.modelValue && props.modelValue.trim() !== ''
+  return localValue.value && localValue.value.trim() !== ''
 })
 
 const previewColor = computed(() => {
   if (!hasColor.value) return '#FFFFFF'
-  const parsed = parseAnyColor(props.modelValue)
+  const parsed = parseAnyColor(localValue.value)
   return parsed ? rgbToHex(parsed.r, parsed.g, parsed.b) : '#FFFFFF'
 })
 
 const validationError = computed(() => {
   if (!hasColor.value) return ''
-  const parsed = parseAnyColor(props.modelValue)
+  const parsed = parseAnyColor(localValue.value)
   if (!parsed) {
     return t('core.common.palette.invalidFormat')
   }
@@ -227,9 +228,9 @@ function parsePickerColor(color) {
 
 function formatOutput(r, g, b) {
   switch (props.format) {
-    case 'rgb':
+    case ColorFormat.RGB:
       return `rgb(${r}, ${g}, ${b})`
-    case 'hsv': {
+    case ColorFormat.HSV: {
       const hsv = rgbToHsv(r, g, b)
       return `hsv(${hsv.h}, ${hsv.s}%, ${hsv.v}%)`
     }
@@ -256,7 +257,7 @@ watch(pickerColor, () => {
 
 function syncInternalState() {
   if (hasColor.value) {
-    const parsed = parseAnyColor(props.modelValue)
+    const parsed = parseAnyColor(localValue.value)
     if (parsed) {
       const newHex = rgbToHex(parsed.r, parsed.g, parsed.b)
       if (pickerColor.value !== newHex) {
@@ -274,7 +275,12 @@ watch(menuOpen, (open) => {
   if (open) syncInternalState()
 })
 
-watch(() => props.modelValue, syncInternalState)
+watch(() => props.modelValue, (newVal) => {
+  if (newVal !== localValue.value) {
+    localValue.value = newVal
+    syncInternalState()
+  }
+})
 
 function onHexInput(value) {
   const parsed = parseAnyColor(value)
@@ -316,8 +322,15 @@ function clearColor() {
   menuOpen.value = false
 }
 
-function onDirectInput(value) {
-  emit('update:modelValue', value)
+function onInputValueChange(value) {
+  localValue.value = value
+  const parsed = parseAnyColor(value)
+  if (parsed) {
+    // 只有当输入有效时，才向父组件发送规范化后的值
+    emit('update:modelValue', formatOutput(parsed.r, parsed.g, parsed.b))
+    // 同时更新内部拾色器状态，以便预览正确
+    pickerColor.value = rgbToHex(parsed.r, parsed.g, parsed.b)
+  }
 }
 
 async function copyToClipboard(text) {

@@ -2,6 +2,14 @@
  * Color manipulation utilities
  */
 
+export const ColorFormat = {
+  HEX: 'hex',
+  RGB: 'rgb',
+  HSV: 'hsv'
+} as const;
+
+export type ColorFormatType = typeof ColorFormat[keyof typeof ColorFormat];
+
 export interface RgbColor {
   r: number;
   g: number;
