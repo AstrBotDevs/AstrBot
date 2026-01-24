@@ -116,8 +116,12 @@ class InternalAgentSubStage(Stage):
             if not provider:
                 logger.error(f"未找到指定的提供商: {sel_provider}。")
             return provider
-
-        return _ctx.get_using_provider(umo=event.unified_msg_origin)
+        try:
+            prov = _ctx.get_using_provider(umo=event.unified_msg_origin)
+        except ValueError as e:
+            logger.error(f"Error occurred while selecting provider: {e}")
+            return None
+        return prov
 
     async def _get_session_conv(self, event: AstrMessageEvent) -> Conversation:
         umo = event.unified_msg_origin
@@ -496,6 +500,7 @@ class InternalAgentSubStage(Stage):
         try:
             provider = self._select_provider(event)
             if provider is None:
+                logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
                 return
             if not isinstance(provider, Provider):
                 logger.error(
