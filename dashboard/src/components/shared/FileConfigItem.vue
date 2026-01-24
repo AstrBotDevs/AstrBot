@@ -23,43 +23,54 @@
               {{ tm('fileUpload.empty') }}
             </div>
 
-            <div class="file-grid">
-              <div v-for="filePath in fileList" :key="filePath" class="file-pill">
-                <span class="file-pill-name">{{ getDisplayName(filePath) }}</span>
-                <v-btn
-                  icon="mdi-close"
-                  size="x-small"
-                  variant="text"
-                  class="file-pill-delete"
-                  @click="deleteFile(filePath)"
-                />
-              </div>
+            <v-list class="file-list" density="compact" lines="one">
+              <v-list-item v-for="filePath in fileList" :key="filePath">
+                <template #prepend>
+                  <v-icon size="18">mdi-file</v-icon>
+                </template>
+                <v-list-item-title class="file-name">
+                  {{ getDisplayName(filePath) }}
+                </v-list-item-title>
+                <template #append>
+                  <v-btn
+                    icon="mdi-close"
+                    size="x-small"
+                    variant="text"
+                    @click="deleteFile(filePath)"
+                  />
+                </template>
+              </v-list-item>
 
-              <div
-                class="upload-tile"
+              <v-divider v-if="fileList.length > 0" class="my-2" />
+
+              <v-list-item
+                class="upload-item"
                 :class="{ dragover: isDragging }"
                 @drop.prevent="handleDrop"
                 @dragover.prevent="isDragging = true"
                 @dragleave="isDragging = false"
                 @click="openFilePicker"
               >
-                <div class="upload-icon">
-                  <v-icon size="28" color="primary">mdi-plus</v-icon>
-                </div>
-                <div class="upload-text">{{ tm('fileUpload.dropzone') }}</div>
-                <div v-if="allowedTypesText" class="upload-hint">
+                <template #prepend>
+                  <div class="upload-icon">
+                    <v-icon size="18" color="primary">mdi-plus</v-icon>
+                  </div>
+                </template>
+                <v-list-item-title>{{ tm('fileUpload.dropzone') }}</v-list-item-title>
+                <v-list-item-subtitle v-if="allowedTypesText" class="upload-hint">
                   {{ tm('fileUpload.allowedTypes', { types: allowedTypesText }) }}
-                </div>
-                <input
-                  ref="fileInput"
-                  type="file"
-                  multiple
-                  hidden
-                  :accept="acceptAttr"
-                  @change="handleFileSelect"
-                />
-              </div>
-            </div>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+
+            <input
+              ref="fileInput"
+              type="file"
+              multiple
+              hidden
+              :accept="acceptAttr"
+              @change="handleFileSelect"
+            />
           </div>
         </v-card-text>
 
@@ -188,7 +199,7 @@ const uploadFiles = async (files) => {
     })
 
     const response = await axios.post(
-      `/api/config/plugin/file/upload?plugin_name=${encodeURIComponent(
+      `/api/config/file/upload?scope=plugin&name=${encodeURIComponent(
         props.pluginName
       )}&key=${encodeURIComponent(props.configKey)}`,
       formData,
@@ -230,7 +241,7 @@ const deleteFile = (filePath) => {
   if (props.pluginName) {
     axios
       .post(
-        `/api/config/plugin/file/delete?plugin_name=${encodeURIComponent(
+        `/api/config/file/delete?scope=plugin&name=${encodeURIComponent(
           props.pluginName
         )}`,
         { path: filePath }
@@ -275,43 +286,6 @@ const getDisplayName = (path) => {
   padding: 16px 24px 20px;
 }
 
-.upload-tile {
-  border: 2px dashed rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 18px;
-  width: 240px;
-  height: 200px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  cursor: pointer;
-  background: rgba(var(--v-theme-surface-variant), 0.35);
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.upload-tile:hover,
-.upload-tile.dragover {
-  border-color: rgba(var(--v-theme-primary), 0.6);
-  background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.upload-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-primary), 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.upload-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
 .upload-hint {
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.5);
@@ -322,45 +296,40 @@ const getDisplayName = (path) => {
   color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
-.file-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.file-pill {
-  position: relative;
-  min-height: 84px;
-  padding: 12px 32px 12px 12px;
+.file-list {
   border-radius: 16px;
   background: rgba(var(--v-theme-surface), 0.95);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
 
-.file-pill-name {
+.file-name {
   font-weight: 600;
-  text-align: center;
   word-break: break-word;
 }
 
-.file-pill-delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
+.upload-item {
+  border: 2px dashed rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 14px;
+  margin: 12px;
+  cursor: pointer;
+  background: rgba(var(--v-theme-surface-variant), 0.22);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-@media (max-width: 1400px) {
-  .file-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.upload-item:hover,
+.upload-item.dragover {
+  border-color: rgba(var(--v-theme-primary), 0.6);
+  background: rgba(var(--v-theme-primary), 0.06);
 }
 
-@media (max-width: 960px) {
-  .file-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.upload-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
