@@ -447,7 +447,8 @@
             "description": "Segment Only LLM Results"
           },
           "interval_method": {
-            "description": "Interval Method"
+            "description": "Interval Method",
+            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
           },
           "interval": {
             "description": "Random Interval Time",
@@ -455,13 +456,15 @@
           },
           "log_base": {
             "description": "Logarithm Base",
-            "hint": "Base for logarithmic intervals, defaults to 2.0. Value range: 1.0-10.0."
+            "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: 1.0-10.0."
           },
           "words_count_threshold": {
-            "description": "Segmented Reply Word Count Threshold"
+            "description": "Segmented Reply Word Count Threshold",
+            "hint": "Segmented reply word count threshold. Only messages with less than this number of words will be segmented, and messages with more than this number of words will be sent directly (not segmented)."
           },
           "split_mode": {
             "description": "Split Mode",
+            "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
             "labels": [
               "Regex",
               "Words List"
