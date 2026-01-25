@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 import traceback
@@ -112,6 +113,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+
+        # ========== DEBUG: dump final messages sent to LLM ==========
+        # 打印最终发给 LLM 的完整 messages 列表
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("===== [LLM Request Messages] =====")
+            for idx, msg in enumerate(messages):
+                role = msg.role if hasattr(msg, "role") else msg.get("role", "?")
+                content = (
+                    msg.content if hasattr(msg, "content") else msg.get("content", "")
+                )
+                logger.debug(f"  [{idx}] {role}: {content}")
+            logger.debug("===== [End LLM Request Messages] =====")
+        # =============================================================
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
