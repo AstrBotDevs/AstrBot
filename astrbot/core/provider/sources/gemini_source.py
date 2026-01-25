@@ -382,15 +382,26 @@ class ProviderGoogleGenAI(Provider):
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool" and not native_tool_enabled:
-                parts = [
-                    types.Part.from_function_response(
-                        name=message["tool_call_id"],
-                        response={
-                            "name": message["tool_call_id"],
-                            "content": message["content"],
-                        },
-                    ),
-                ]
+                # 1. 尝试获取真实的函数名称 (AstrBot/OpenAI 格式的消息通常包含 name)
+                # 如果 message 中没有 name，说明上游数据丢失，这里可能需要 fallback 逻辑，但通常都会有
+                func_name = message.get("name", "unknown_tool")
+
+                # 2. 创建 Part，注意 name 参数必须是函数名
+                part = types.Part.from_function_response(
+                    name=func_name,
+                    response={
+                        "name": func_name,  # 这里也需要是函数名
+                        "content": message["content"],
+                    },
+                )
+
+                # 3. 【核心修复】显式注入 id
+                # Gemini SDK 的 from_function_response 可能不接受 id 参数
+                # 我们需要手动赋值，确保 Gemini 知道这个结果属于哪个调用 ID
+                if part.function_response:
+                    part.function_response.id = message["tool_call_id"]
+
+                parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
         if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):
