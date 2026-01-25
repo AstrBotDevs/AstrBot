@@ -67,15 +67,43 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             contexts.insert(0, {"role": "system", "content": instruction})
         return contexts
 
-    def _build_tool_subset(
-        self, tool_set: ToolSet, tool_names: list[str]
-    ) -> ToolSet:
+    def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         subset = ToolSet()
         for name in tool_names:
             tool = tool_set.get_tool(name)
             if tool:
                 subset.add_tool(tool)
         return subset
+
+    async def _resolve_tool_exec(
+        self,
+        llm_resp: LLMResponse,
+    ) -> tuple[LLMResponse, ToolSet | None]:
+        tool_names = llm_resp.tools_call_name
+        if not tool_names:
+            return llm_resp, self.req.func_tool
+
+        event = getattr(self.run_context.context, "event", None)
+        if not event:
+            return llm_resp, self.req.func_tool
+
+        full_tool_set = event.get_extra("_tool_schema_full_set")
+        if not isinstance(full_tool_set, ToolSet):
+            return llm_resp, self.req.func_tool
+
+        subset = self._build_tool_subset(full_tool_set, tool_names)
+        if not subset.tools:
+            return llm_resp, full_tool_set
+
+        param_tool_set = event.get_extra("_tool_schema_param_set")
+        if isinstance(param_tool_set, ToolSet):
+            param_subset = self._build_tool_subset(param_tool_set, tool_names)
+            if param_subset.tools:
+                requery_resp = await self._requery_tool_calls(param_subset, tool_names)
+                if requery_resp:
+                    llm_resp = requery_resp
+
+        return llm_resp, subset
 
     async def _requery_tool_calls(
         self, tool_set: ToolSet, tool_names: list[str]
@@ -301,35 +329,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
-            exec_tool_set = self.req.func_tool
-            event = getattr(self.run_context.context, "event", None)
-            if event:
-                full_tool_set = event.get_extra("_tool_schema_full_set")
-                param_tool_set = event.get_extra("_tool_schema_param_set")
-                if isinstance(full_tool_set, ToolSet):
-                    subset = self._build_tool_subset(
-                        full_tool_set, llm_resp.tools_call_name
-                    )
-                    if subset.tools:
-                        if isinstance(param_tool_set, ToolSet):
-                            param_subset = self._build_tool_subset(
-                                param_tool_set, llm_resp.tools_call_name
-                            )
-                            if param_subset.tools:
-                                requery_resp = await self._requery_tool_calls(
-                                    param_subset, llm_resp.tools_call_name
-                                )
-                                if requery_resp:
-                                    llm_resp = requery_resp
-                        exec_tool_set = subset
-                    else:
-                        exec_tool_set = full_tool_set
+            llm_resp, exec_tool_set = await self._resolve_tool_exec(llm_resp)
 
             tool_call_result_blocks = []
-            original_tool_set = self.req.func_tool
-            if exec_tool_set is not None:
-                self.req.func_tool = exec_tool_set
-            async for result in self._handle_function_tools(self.req, llm_resp):
+            async for result in self._handle_function_tools(
+                self.req,
+                llm_resp,
+                tool_set=exec_tool_set,
+            ):
                 if isinstance(result, list):
                     tool_call_result_blocks = result
                 elif isinstance(result, MessageChain):
@@ -344,8 +351,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type=ar_type,
                         data=AgentResponseData(chain=result),
                     )
-            if exec_tool_set is not None:
-                self.req.func_tool = original_tool_set
 
             # 将结果添加到上下文中
             parts = []
@@ -405,6 +410,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
+        tool_set: ToolSet | None = None,
     ) -> T.AsyncGenerator[MessageChain | list[ToolCallMessageSegment], None]:
         """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
@@ -430,9 +436,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ],
             )
             try:
-                if not req.func_tool:
+                active_tool_set = tool_set or req.func_tool
+                if not active_tool_set:
                     return
-                func_tool = req.func_tool.get_func(func_tool_name)
+                if hasattr(active_tool_set, "get_tool"):
+                    func_tool = active_tool_set.get_tool(func_tool_name)
+                else:
+                    func_tool = active_tool_set.get_func(func_tool_name)
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
