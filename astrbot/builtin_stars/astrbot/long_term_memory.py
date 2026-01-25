@@ -27,6 +27,7 @@ class ChatRecord:
     created_at: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
     """创建时间（ISO 格式），用于调试/扩展"""
 
+
 def _get_event_msg_id(event: AstrMessageEvent) -> str:
     """
     获取当前事件对应的消息 ID。
