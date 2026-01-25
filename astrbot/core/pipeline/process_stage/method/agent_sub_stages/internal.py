@@ -23,6 +23,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -492,6 +493,35 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
         req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
+    def _apply_tool_schema_mode(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
+        """Apply tool schema lazy loading to reduce initial tool schema size."""
+        if not req.func_tool:
+            return
+
+        tool_set = req.func_tool
+        if isinstance(tool_set, FunctionToolManager):
+            tool_set = tool_set.get_full_tool_set()
+        if not isinstance(tool_set, ToolSet):
+            return
+
+        active_set = ToolSet()
+        for tool in tool_set.tools:
+            if getattr(tool, "active", True):
+                active_set.add_tool(tool)
+        if not active_set.tools:
+            req.func_tool = active_set
+            return
+
+        func_tool_mgr = self.ctx.plugin_manager.context.get_llm_tool_manager()
+        light_set = func_tool_mgr.get_light_tool_set(active_set)
+        param_set = func_tool_mgr.get_param_only_tool_set(active_set)
+        event.set_extra("_tool_schema_full_set", active_set)
+        event.set_extra("_tool_schema_light_set", light_set)
+        event.set_extra("_tool_schema_param_set", param_set)
+        req.func_tool = light_set
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -638,6 +668,9 @@ class InternalAgentSubStage(Stage):
                 # apply sandbox tools
                 if self.sandbox_cfg.get("enable", False):
                     self._apply_sandbox_tools(req, req.session_id)
+
+                # apply tool schema lazy loading
+                self._apply_tool_schema_mode(event, req)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

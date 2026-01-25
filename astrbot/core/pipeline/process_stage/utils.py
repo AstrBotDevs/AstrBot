@@ -39,9 +39,12 @@ SANDBOX_MODE_PROMPT = (
 
 TOOL_CALL_PROMPT = (
     "You MUST NOT return an empty response, especially after invoking a tool."
-    "Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
-    "After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
-    "Keep the role-play and style consistent throughout the conversation."
+    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " Tool schemas are provided in two stages: first only name and description; "
+    "if you decide to use a tool, the full parameter schema will be provided in "
+    "a follow-up step. Do not guess arguments before you see the schema."
+    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+    " Keep the role-play and style consistent throughout the conversation."
 )
 
 CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (

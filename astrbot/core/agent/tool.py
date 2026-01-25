@@ -147,18 +147,17 @@ class ToolSet:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def = {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                },
-            }
+            func_def = {"type": "function", "function": {"name": tool.name}}
+            if tool.description:
+                func_def["function"]["description"] = tool.description
 
-            if (
-                tool.parameters and tool.parameters.get("properties")
-            ) or not omit_empty_parameter_field:
-                func_def["function"]["parameters"] = tool.parameters
+            if tool.parameters is not None:
+                if tool.parameters.get("x-astrbot-light"):
+                    pass
+                elif (
+                    tool.parameters and tool.parameters.get("properties")
+                ) or not omit_empty_parameter_field:
+                    func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
         return result
@@ -171,11 +170,9 @@ class ToolSet:
             if tool.parameters:
                 input_schema["properties"] = tool.parameters.get("properties", {})
                 input_schema["required"] = tool.parameters.get("required", [])
-            tool_def = {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": input_schema,
-            }
+            tool_def = {"name": tool.name, "input_schema": input_schema}
+            if tool.description:
+                tool_def["description"] = tool.description
             result.append(tool_def)
         return result
 
@@ -245,11 +242,10 @@ class ToolSet:
 
         tools = []
         for tool in self.tools:
-            d: dict[str, Any] = {
-                "name": tool.name,
-                "description": tool.description,
-            }
-            if tool.parameters:
+            d: dict[str, Any] = {"name": tool.name}
+            if tool.description:
+                d["description"] = tool.description
+            if tool.parameters and not tool.parameters.get("x-astrbot-light"):
                 d["parameters"] = convert_schema(tool.parameters)
             tools.append(d)
 

@@ -179,6 +179,48 @@ class FunctionToolManager:
         tool_set = ToolSet(self.func_list.copy())
         return tool_set
 
+    def get_light_tool_set(self, tool_set: ToolSet | None = None) -> ToolSet:
+        """仅保留工具 name/description 的轻量工具集。"""
+        source_tools = tool_set.tools if tool_set else self.func_list
+        light_tools = []
+        for tool in source_tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            light_params = {"type": "object", "properties": {}, "x-astrbot-light": True}
+            light_tools.append(
+                FuncTool(
+                    name=tool.name,
+                    parameters=light_params,
+                    description=tool.description,
+                    handler=None,
+                )
+            )
+        return ToolSet(light_tools)
+
+    def get_param_only_tool_set(self, tool_set: ToolSet | None = None) -> ToolSet:
+        """仅保留工具 name/parameters 的工具集（不带 description）。"""
+        source_tools = tool_set.tools if tool_set else self.func_list
+        param_tools = []
+        for tool in source_tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            params = (
+                copy.deepcopy(tool.parameters)
+                if tool.parameters
+                else {"type": "object", "properties": {}}
+            )
+            if isinstance(params, dict):
+                params.pop("x-astrbot-light", None)
+            param_tools.append(
+                FuncTool(
+                    name=tool.name,
+                    parameters=params,
+                    description="",
+                    handler=None,
+                )
+            )
+        return ToolSet(param_tools)
+
     async def init_mcp_clients(self) -> None:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
