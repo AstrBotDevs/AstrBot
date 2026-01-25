@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
+from pathlib import Path
 from typing import Any
 
 from quart import request
@@ -932,15 +933,12 @@ class ConfigRoute(Route):
         return scope, name, key_path, md, md.config
 
     def _get_config_file_staging_roots(self, scope: str, name: str) -> tuple[str, str]:
-        """获取某个 scope 的（主、旧）暂存目录。"""
+        """获取某个 scope 的暂存目录。"""
 
         primary = os.path.abspath(
             os.path.join(get_astrbot_temp_path(), "config_file_uploads", scope, name),
         )
-        legacy = os.path.abspath(
-            os.path.join(get_astrbot_temp_path(), "plugin_file_uploads", name),
-        )
-        return primary, legacy
+        return primary, ""
 
     async def upload_config_file(self):
         """上传文件到暂存区（用于某个 file 类型配置项）。
@@ -1039,15 +1037,16 @@ class ConfigRoute(Route):
         if not md:
             return Response().error(f"Plugin {name} not found").__dict__
 
-        primary_root, legacy_root = self._get_config_file_staging_roots(scope, name)
-        for staging_root in (primary_root, legacy_root):
-            staged_path = os.path.abspath(
-                os.path.normpath(os.path.join(staging_root, rel_path)),
-            )
-            if staged_path.startswith(staging_root + os.sep) and os.path.isfile(
-                staged_path
-            ):
-                os.remove(staged_path)
+        primary_root, _legacy_root = self._get_config_file_staging_roots(scope, name)
+        for staging_root in (primary_root,):
+            staging_root_path = Path(staging_root).resolve(strict=False)
+            staged_path = (staging_root_path / rel_path).resolve(strict=False)
+            try:
+                staged_path.relative_to(staging_root_path)
+            except ValueError:
+                continue
+            if staged_path.is_file():
+                staged_path.unlink()
 
         return Response().ok(None, "Deletion staged").__dict__
 
@@ -1317,23 +1316,16 @@ class ConfigRoute(Route):
             storage_root = os.path.abspath(
                 os.path.join(get_astrbot_plugin_data_path(), plugin_name),
             )
-            primary_staging, legacy_staging = self._get_config_file_staging_roots(
+            primary_staging, _legacy_staging = self._get_config_file_staging_roots(
                 "plugin",
                 plugin_name,
-            )
-            staging_root = (
-                legacy_staging
-                if (
-                    not os.path.isdir(primary_staging) and os.path.isdir(legacy_staging)
-                )
-                else primary_staging
             )
             apply_config_file_ops(
                 schema=getattr(md.config, "schema", None),
                 old_config=dict(md.config),
                 post_configs=post_configs,
                 storage_root=storage_root,
-                staging_root=staging_root,
+                staging_root=primary_staging,
             )
             md.config.save_config(post_configs)
         except Exception as e:
