@@ -24,14 +24,12 @@ from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_plugin_data_path,
-    get_astrbot_temp_path,
 )
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
 from .util import (
-    apply_config_file_ops,
     config_key_to_folder,
     get_schema_item,
     normalize_rel_path,
@@ -128,6 +126,22 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                         errors.append(
                             f"Invalid type {path}{key}[{idx}]: expected string, got {type(item).__name__}",
                         )
+                        continue
+                    normalized = normalize_rel_path(item)
+                    if not normalized or not normalized.startswith("files/"):
+                        errors.append(
+                            f"Invalid file path {path}{key}[{idx}]: {item}",
+                        )
+                        continue
+                    key_path = f"{path}{key}"
+                    expected_folder = config_key_to_folder(key_path)
+                    expected_prefix = f"files/{expected_folder}/"
+                    if not normalized.startswith(expected_prefix):
+                        errors.append(
+                            f"Invalid file path {path}{key}[{idx}]: {item}",
+                        )
+                        continue
+                    value[idx] = normalized
                 continue
 
             if meta["type"] == "list" and not isinstance(value, list):
@@ -932,19 +946,8 @@ class ConfigRoute(Route):
 
         return scope, name, key_path, md, md.config
 
-    def _get_config_file_staging_roots(self, scope: str, name: str) -> tuple[str, str]:
-        """获取某个 scope 的暂存目录。"""
-
-        primary = os.path.abspath(
-            os.path.join(get_astrbot_temp_path(), "config_file_uploads", scope, name),
-        )
-        return primary, ""
-
     async def upload_config_file(self):
-        """上传文件到暂存区（用于某个 file 类型配置项）。
-
-        文件会先保存到临时目录，只有在“保存配置”时才会被移动到最终目录。
-        """
+        """上传文件到插件数据目录（用于某个 file 类型配置项）。"""
 
         try:
             scope, name, key_path, md, config = self._resolve_config_file_scope()
@@ -966,8 +969,13 @@ class ConfigRoute(Route):
         if not files:
             return Response().error("No files uploaded").__dict__
 
-        staging_root, _legacy_root = self._get_config_file_staging_roots(scope, name)
-        os.makedirs(staging_root, exist_ok=True)
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+        plugin_root_path.mkdir(parents=True, exist_ok=True)
 
         uploaded: list[str] = []
         folder = config_key_to_folder(key_path)
@@ -989,14 +997,17 @@ class ConfigRoute(Route):
                 continue
 
             rel_path = f"files/{folder}/{filename}"
-            save_path = os.path.join(staging_root, rel_path)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            await file.save(save_path)
-            if (
-                os.path.isfile(save_path)
-                and os.path.getsize(save_path) > MAX_FILE_BYTES
-            ):
-                os.remove(save_path)
+            save_path = (plugin_root_path / rel_path).resolve(strict=False)
+            try:
+                save_path.relative_to(plugin_root_path)
+            except ValueError:
+                errors.append(f"Invalid path: {filename}")
+                continue
+
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            await file.save(str(save_path))
+            if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
+                save_path.unlink()
                 errors.append(f"File too large: {filename}")
                 continue
             uploaded.append(rel_path)
@@ -1015,10 +1026,7 @@ class ConfigRoute(Route):
         return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
 
     async def delete_config_file(self):
-        """删除暂存区中的文件。
-
-        最终的数据目录删除是在保存配置时，根据更新后的配置值统一应用。
-        """
+        """删除插件数据目录中的文件。"""
 
         scope = request.args.get("scope") or "plugin"
         name = request.args.get("name")
@@ -1037,18 +1045,21 @@ class ConfigRoute(Route):
         if not md:
             return Response().error(f"Plugin {name} not found").__dict__
 
-        primary_root, _legacy_root = self._get_config_file_staging_roots(scope, name)
-        for staging_root in (primary_root,):
-            staging_root_path = Path(staging_root).resolve(strict=False)
-            staged_path = (staging_root_path / rel_path).resolve(strict=False)
-            try:
-                staged_path.relative_to(staging_root_path)
-            except ValueError:
-                continue
-            if staged_path.is_file():
-                staged_path.unlink()
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+        target_path = (plugin_root_path / rel_path).resolve(strict=False)
+        try:
+            target_path.relative_to(plugin_root_path)
+        except ValueError:
+            return Response().error("Invalid path parameter").__dict__
+        if target_path.is_file():
+            target_path.unlink()
 
-        return Response().ok(None, "Deletion staged").__dict__
+        return Response().ok(None, "Deleted").__dict__
 
     async def post_new_platform(self):
         new_platform_config = await request.json
@@ -1312,21 +1323,6 @@ class ConfigRoute(Route):
             )
             if errors:
                 raise ValueError(f"格式校验未通过: {errors}")
-
-            storage_root = os.path.abspath(
-                os.path.join(get_astrbot_plugin_data_path(), plugin_name),
-            )
-            primary_staging, _legacy_staging = self._get_config_file_staging_roots(
-                "plugin",
-                plugin_name,
-            )
-            apply_config_file_ops(
-                schema=getattr(md.config, "schema", None),
-                old_config=dict(md.config),
-                post_configs=post_configs,
-                storage_root=storage_root,
-                staging_root=primary_staging,
-            )
             md.config.save_config(post_configs)
         except Exception as e:
             raise e
