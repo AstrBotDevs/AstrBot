@@ -31,6 +31,10 @@ class HandoffTool(FunctionTool, Generic[TContext]):
             **kwargs,
         )
 
+        # Optional provider override for this subagent. When set, the handoff
+        # execution will use this chat provider id instead of the global/default.
+        self.provider_id: str | None = None
+
     def default_parameters(self) -> dict:
         return {
             "type": "object",

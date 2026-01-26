@@ -29,17 +29,13 @@
         </v-row>
 
         <div class="text-caption text-medium-emphasis mt-1">
-          启用后：主 LLM 只会看到 transfer_to_*，不会直接注入/调用其他工具；所有工具调用交给 SubAgent 完成。
-          关闭后：恢复原有行为（按 persona 选择并直接注入工具）。
+          <div>
+            启用：主 LLM 仅负责对话与“转交”，只会看到 transfer_to_* 这类委派工具；需要调用工具时，会把任务交给对应 SubAgent 执行。SubAgent 负责真正的工具调用与结果整理，并把结论回传给主 LLM。
+          </div>
+          <div>
+            关闭：恢复原有行为（按 persona 选择并直接注入工具）。
+          </div>
         </div>
-
-        <v-alert
-          type="info"
-          variant="tonal"
-          class="mt-3"
-        >
-          Router Prompt 当前使用系统内置默认值，暂不支持在 WebUI 中自定义。
-        </v-alert>
 
         <div class="d-flex align-center justify-space-between mt-6 mb-2">
           <div class="text-subtitle-1 font-weight-bold">SubAgents</div>
@@ -59,8 +55,8 @@
             :key="agent.__key"
           >
             <v-expansion-panel-title>
-              <div class="d-flex align-center justify-space-between" style="width: 100%;">
-                <div class="d-flex align-center" style="gap: 10px; min-width: 0;">
+              <div class="subagent-panel-title">
+                <div class="subagent-title-left">
                   <v-chip
                     :color="agent.enabled ? 'success' : 'grey'"
                     size="small"
@@ -68,12 +64,25 @@
                   >
                     {{ agent.enabled ? '启用' : '停用' }}
                   </v-chip>
-                  <div class="text-body-1 font-weight-medium text-truncate" style="max-width: 520px;">
-                    {{ agent.name || '未命名 SubAgent' }}
+
+                  <div class="subagent-title-text">
+                    <div class="subagent-title-name">{{ agent.name || '未命名 SubAgent' }}</div>
+                    <div class="subagent-title-sub">transfer_to_{{ agent.name || '...' }}</div>
                   </div>
                 </div>
 
-                <div class="d-flex align-center" style="gap: 8px;">
+                <div class="subagent-title-right">
+                  <v-switch
+                    v-model="agent.enabled"
+                    inset
+                    color="primary"
+                    hide-details
+                    class="subagent-enabled-inline"
+                    @click.stop
+                  >
+                    <template #label>启用</template>
+                  </v-switch>
+
                   <v-btn
                     size="small"
                     variant="text"
@@ -87,8 +96,8 @@
             </v-expansion-panel-title>
 
             <v-expansion-panel-text>
-              <v-row>
-                <v-col cols="12" md="4">
+              <v-row class="subagent-grid">
+                <v-col cols="12" md="5">
                   <v-text-field
                     v-model="agent.name"
                     label="Agent 名称（用于 transfer_to_{name}）"
@@ -98,16 +107,18 @@
                     persistent-hint
                   />
                 </v-col>
-                <v-col cols="12" md="3">
-                  <v-switch
-                    v-model="agent.enabled"
-                    inset
-                    color="primary"
-                    label="启用"
-                    hide-details
+                <v-col cols="12" md="7" class="subagent-actions">
+                  <ProviderSelector
+                    v-model="agent.provider_id"
+                    provider-type="chat_completion"
+                    label="Chat Provider（可选）"
+                    hint="留空表示跟随全局默认 provider。"
+                    persistent-hint
+                    clearable
+                    class="subagent-provider"
                   />
                 </v-col>
-                <v-col cols="12" md="5">
+                <v-col cols="12">
                   <v-autocomplete
                     v-model="agent.tools"
                     :items="toolOptions"
@@ -183,6 +194,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import axios from 'axios'
+import ProviderSelector from '@/components/shared/ProviderSelector.vue'
 
 type ToolOption = { title: string; value: string }
 
@@ -193,6 +205,7 @@ type SubAgentItem = {
   system_prompt: string
   tools: string[]
   enabled: boolean
+  provider_id?: string
 }
 
 type SubAgentConfig = {
@@ -240,6 +253,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
     const system_prompt = (a?.system_prompt ?? '').toString()
     const tools = Array.isArray(a?.tools) ? a.tools.map((x: any) => String(x)) : []
     const enabled = a?.enabled !== false
+    const provider_id = (a?.provider_id ?? undefined) as (string | undefined)
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
@@ -248,6 +262,8 @@ function normalizeConfig(raw: any): SubAgentConfig {
       system_prompt,
       tools,
       enabled
+      ,
+      provider_id
     }
   })
 
@@ -316,7 +332,8 @@ function addAgent() {
     public_description: '',
     system_prompt: '',
     tools: [],
-    enabled: true
+    enabled: true,
+    provider_id: undefined
   })
 }
 
@@ -337,7 +354,8 @@ async function save() {
         public_description: a.public_description,
         system_prompt: a.system_prompt,
         tools: a.tools,
-        enabled: a.enabled
+        enabled: a.enabled,
+        provider_id: a.provider_id
       }))
     }
 
@@ -368,6 +386,77 @@ onMounted(() => {
   padding: 20px;
   padding-top: 8px;
   padding-bottom: 40px;
+}
+
+.subagent-panel-title {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subagent-title-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.subagent-title-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subagent-title-name {
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 520px;
+}
+
+.subagent-title-sub {
+  font-size: 12px;
+  opacity: 0.72;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 520px;
+}
+
+.subagent-title-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subagent-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.subagent-provider {
+  flex: 1;
+  min-width: 260px;
+}
+
+.subagent-enabled-inline {
+  margin-right: 2px;
+}
+
+/* Keep the switch compact inside the expansion-panel title row. */
+.subagent-enabled-inline :deep(.v-input__details) {
+  display: none;
+}
+
+.subagent-enabled-inline :deep(.v-selection-control) {
+  min-height: 32px;
 }
 </style>
 

@@ -74,7 +74,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         umo = event.unified_msg_origin
-        prov_id = await ctx.get_current_chat_provider_id(umo)
+
+        # Use per-subagent provider override if configured; otherwise fall back
+        # to the current/default provider resolution.
+        prov_id = getattr(tool, "provider_id", None) or await ctx.get_current_chat_provider_id(umo)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,

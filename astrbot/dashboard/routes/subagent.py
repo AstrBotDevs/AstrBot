@@ -48,6 +48,13 @@ class SubAgentRoute(Route):
             data.setdefault("main_enable", False)
             data.setdefault("main_tools_policy", "handoff_only")
             data.setdefault("agents", [])
+
+            # Backward/forward compatibility: ensure each agent contains provider_id.
+            # None means follow global/default provider settings.
+            if isinstance(data.get("agents"), list):
+                for a in data["agents"]:
+                    if isinstance(a, dict):
+                        a.setdefault("provider_id", None)
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())

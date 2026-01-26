@@ -68,6 +68,9 @@ class SubAgentOrchestrator:
 
             instructions = str(item.get("system_prompt", "")).strip()
             public_description = str(item.get("public_description", "")).strip()
+            provider_id = item.get("provider_id")
+            if provider_id is not None:
+                provider_id = str(provider_id).strip() or None
             tools = item.get("tools", [])
             if not isinstance(tools, list):
                 tools = []
@@ -81,6 +84,9 @@ class SubAgentOrchestrator:
             # The tool description should be a short description for the main LLM,
             # while the subagent system prompt can be longer/more specific.
             handoff = HandoffTool(agent=agent, description=public_description or None)
+
+            # Optional per-subagent chat provider override.
+            handoff.provider_id = provider_id
 
             # Mark as dynamic so we can replace/remove later.
             handoff.handler_module_path = "core.subagent_orchestrator"
