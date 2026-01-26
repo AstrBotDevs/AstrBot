@@ -120,23 +120,45 @@
                 </v-col>
                 <v-col cols="12">
                   <v-autocomplete
-                    v-model="agent.tools"
-                    :items="toolOptions"
+                    v-model="agent.__tool_group"
+                    :items="toolGroupOptions"
                     item-title="title"
                     item-value="value"
-                    label="分配工具（多选）"
+                    label="选择插件/来源"
+                    variant="outlined"
+                    density="comfortable"
+                    class="subagent-tools"
+                    :loading="toolsLoading"
+                    :disabled="toolsLoading"
+                    clearable
+                    @update:modelValue="onGroupChanged(agent)"
+                  />
+                </v-col>
+
+                <v-col cols="12">
+                  <v-autocomplete
+                    v-model="agent.__tool_group_selected"
+                    :items="getToolOptionsByGroup(agent.__tool_group)"
+                    item-title="title"
+                    item-value="value"
+                    label="选择该插件下的工具（多选）"
                     variant="outlined"
                     density="comfortable"
                     class="subagent-tools"
                     multiple
                     chips
                     closable-chips
-                    :menu-props="{ maxHeight: 320 }"
+                    :menu-props="{ maxHeight: 380 }"
                     :max-chips="8"
                     :loading="toolsLoading"
-                    :disabled="toolsLoading"
+                    :disabled="toolsLoading || !agent.__tool_group"
                     clearable
+                    @update:modelValue="syncGroupSelectionToAgentTools(agent)"
                   />
+
+                  <div class="text-caption text-medium-emphasis mt-1">
+                    已分配：{{ (agent.tools || []).length }} 个工具
+                  </div>
                 </v-col>
               </v-row>
 
@@ -198,6 +220,12 @@ import ProviderSelector from '@/components/shared/ProviderSelector.vue'
 
 type ToolOption = { title: string; value: string }
 
+type ToolGroup = {
+  key: string
+  label: string
+  options: ToolOption[]
+}
+
 type SubAgentItem = {
   __key: string
   name: string
@@ -206,6 +234,9 @@ type SubAgentItem = {
   tools: string[]
   enabled: boolean
   provider_id?: string
+  // UI-only: current tool group selection state
+  __tool_group?: string
+  __tool_group_selected?: string[]
 }
 
 type SubAgentConfig = {
@@ -240,7 +271,58 @@ const cfg = ref<SubAgentConfig>({
 })
 
 
-const toolOptions = ref<ToolOption[]>([])
+const toolGroups = ref<ToolGroup[]>([])
+const toolGroupOptions = ref<{ title: string; value: string }[]>([])
+
+function modulePathToLabel(mp: unknown): string {
+  const raw = (mp ?? '').toString().trim()
+  if (!raw) return '其他/未归类'
+  // Typical module paths look like:
+  // - data.plugins.<plugin_name>.main
+  // - astrbot.builtin_stars.<star_name>.main
+  // - astrbot.plugins.<plugin_name>.main
+  // We strip common prefixes and the trailing ".main" for display.
+  const trimmed = raw.replace(/\.main$/, '')
+  if (trimmed.startsWith('data.plugins.')) return trimmed.replace(/^data\.plugins\./, '')
+  if (trimmed.startsWith('astrbot.builtin_stars.')) return `builtin: ${trimmed.replace(/^astrbot\.builtin_stars\./, '')}`
+  if (trimmed.startsWith('astrbot.plugins.')) return trimmed.replace(/^astrbot\.plugins\./, '')
+  if (raw.startsWith('plugins.')) return raw.replace(/^plugins\./, '')
+  if (raw.startsWith('builtin_stars.')) return `builtin: ${raw.replace(/^builtin_stars\./, '')}`
+  if (raw.startsWith('core.')) return `core: ${raw.replace(/^core\./, '')}`
+  return raw
+}
+
+function rebuildToolGroupOptions() {
+  toolGroupOptions.value = toolGroups.value.map(g => ({ title: g.label, value: g.key }))
+}
+
+function getToolOptionsByGroup(groupKey: string | undefined): ToolOption[] {
+  if (!groupKey) return []
+  return toolGroups.value.find(g => g.key === groupKey)?.options ?? []
+}
+
+function onGroupChanged(agent: SubAgentItem) {
+  // When switching groups, reflect already-assigned tools for that group.
+  const groupOptions = getToolOptionsByGroup(agent.__tool_group)
+  const allowed = new Set(groupOptions.map(o => o.value))
+  agent.__tool_group_selected = (agent.tools || []).filter(t => allowed.has(t))
+}
+
+function syncGroupSelectionToAgentTools(agent: SubAgentItem) {
+  const groupOptions = getToolOptionsByGroup(agent.__tool_group)
+  const allowed = new Set(groupOptions.map(o => o.value))
+
+  const selected = Array.isArray(agent.__tool_group_selected)
+    ? agent.__tool_group_selected
+    : []
+
+  // Replace only tools belonging to this group; keep tools from other groups intact.
+  const kept = (agent.tools || []).filter(t => !allowed.has(t))
+  const merged = [...kept, ...selected.filter(t => allowed.has(t))]
+
+  const seen = new Set<string>()
+  agent.tools = merged.filter(t => (seen.has(t) ? false : (seen.add(t), true)))
+}
 
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
@@ -263,7 +345,9 @@ function normalizeConfig(raw: any): SubAgentConfig {
       tools,
       enabled
       ,
-      provider_id
+      provider_id,
+      __tool_group: undefined,
+      __tool_group_selected: []
     }
   })
 
@@ -293,13 +377,27 @@ async function loadTools() {
     const res = await axios.get('/api/subagent/available-tools')
     if (res.data.status === 'ok') {
       const list = Array.isArray(res.data.data) ? res.data.data : []
-      toolOptions.value = list
-        .filter((t: any) => !!t?.name)
-        .map((t: any) => {
-          const name = String(t.name)
-          const desc = (t.description ?? '').toString().trim()
-          return { title: desc ? `${name} — ${desc}` : name, value: name }
-        })
+      const groups = new Map<string, ToolOption[]>()
+      for (const t of list) {
+        if (!t?.name) continue
+        const name = String(t.name)
+        const desc = (t.description ?? '').toString().trim()
+        const mp = (t.handler_module_path ?? '').toString()
+        const key = mp || '__other__'
+        const options = groups.get(key) ?? []
+        options.push({ title: desc ? `${name} — ${desc}` : name, value: name })
+        groups.set(key, options)
+      }
+
+      toolGroups.value = Array.from(groups.entries())
+        .map(([key, options]) => ({
+          key,
+          label: modulePathToLabel(key === '__other__' ? '' : key),
+          options: options.sort((a, b) => a.value.localeCompare(b.value))
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+
+      rebuildToolGroupOptions()
     } else {
       toast(res.data.message || '获取工具列表失败', 'error')
     }
@@ -309,13 +407,23 @@ async function loadTools() {
       const res2 = await axios.get('/api/tools/list')
       if (res2.data.status === 'ok') {
         const list = Array.isArray(res2.data.data) ? res2.data.data : []
-        toolOptions.value = list
+        const options = list
           .filter((t: any) => !!t?.name)
           .map((t: any) => {
             const name = String(t.name)
             const desc = (t.description ?? '').toString().trim()
             return { title: desc ? `${name} — ${desc}` : name, value: name }
           })
+          .sort((a: ToolOption, b: ToolOption) => a.value.localeCompare(b.value))
+
+        toolGroups.value = [
+          {
+            key: '__all__',
+            label: '全部工具',
+            options
+          }
+        ]
+        rebuildToolGroupOptions()
       }
     } catch {
       toast('获取工具列表失败', 'error')
@@ -333,7 +441,9 @@ function addAgent() {
     system_prompt: '',
     tools: [],
     enabled: true,
-    provider_id: undefined
+    provider_id: undefined,
+    __tool_group: undefined,
+    __tool_group_selected: []
   })
 }
 
@@ -341,7 +451,30 @@ function removeAgent(idx: number) {
   cfg.value.agents.splice(idx, 1)
 }
 
+function validateBeforeSave(): boolean {
+  const nameRe = /^[a-z][a-z0-9_]{0,63}$/
+  const seen = new Set<string>()
+  for (const a of cfg.value.agents) {
+    const name = (a.name || '').trim()
+    if (!name) {
+      toast('存在未填写名称的 SubAgent', 'warning')
+      return false
+    }
+    if (!nameRe.test(name)) {
+      toast('SubAgent 名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头', 'warning')
+      return false
+    }
+    if (seen.has(name)) {
+      toast(`SubAgent 名称重复：${name}`, 'warning')
+      return false
+    }
+    seen.add(name)
+  }
+  return true
+}
+
 async function save() {
+  if (!validateBeforeSave()) return
   saving.value = true
   try {
     // Strip UI-only fields
@@ -374,6 +507,12 @@ async function save() {
 
 async function reload() {
   await Promise.all([loadConfig(), loadTools()])
+
+  // Initialize UI-only selections after tools load.
+  for (const a of cfg.value.agents) {
+    if (!a.__tool_group) a.__tool_group = undefined
+    if (!Array.isArray(a.__tool_group_selected)) a.__tool_group_selected = []
+  }
 }
 
 onMounted(() => {
@@ -428,6 +567,7 @@ onMounted(() => {
   white-space: nowrap;
   max-width: 520px;
 }
+
 
 .subagent-title-right {
   display: flex;
