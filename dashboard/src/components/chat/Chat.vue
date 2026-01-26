@@ -26,6 +26,7 @@
                     @createProject="showCreateProjectDialog"
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
+                    @openSearch="handleOpenSearch"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -42,65 +43,99 @@
                             </v-btn>
                         </div>
 
-                        <!-- 面包屑导航 -->
-                        <div v-if="currentSessionProject && messages && messages.length > 0" class="breadcrumb-container">
-                            <div class="breadcrumb-content">
-                                <span class="breadcrumb-emoji">{{ currentSessionProject.emoji || '📁' }}</span>
-                                <span class="breadcrumb-project" @click="handleSelectProject(currentSessionProject.project_id)">{{ currentSessionProject.title }}</span>
-                                <v-icon size="small" class="breadcrumb-separator">mdi-chevron-right</v-icon>
-                                <span class="breadcrumb-session">{{ getCurrentSession?.display_name || tm('conversation.newConversation') }}</span>
-                            </div>
-                        </div>
-
-                        <div class="message-list-wrapper" v-if="currSessionId && !selectedProjectId">
-                            <MessageList :messages="messages" :isDark="isDark"
-                                :isStreaming="isStreaming || isConvRunning" 
-                                :isLoadingMessages="isLoadingMessages"
-                                @openImagePreview="openImagePreview"
-                                @replyMessage="handleReplyMessage"
-                                @replyWithText="handleReplyWithText"
-                                @openRefs="handleOpenRefs"
-                                ref="messageList" />
-                            <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
-                        </div>
-                        <ProjectView 
-                            v-else-if="selectedProjectId"
-                            :project="currentProject"
-                            :sessions="projectSessions"
+                        <ChatSearchView
+                            v-if="isSearchActive"
+                            @close="handleCloseSearch"
                             @selectSession="(sessionId) => handleSelectConversation([sessionId])"
-                            @editSessionTitle="showEditTitleDialog"
-                            @deleteSession="handleDeleteConversation"
-                        >
-                            <ChatInput
-                                v-model:prompt="prompt"
-                                :stagedImagesUrl="stagedImagesUrl"
-                                :stagedAudioUrl="stagedAudioUrl"
-                                :stagedFiles="stagedNonImageFiles"
-                                :disabled="isStreaming"
-                                :enableStreaming="enableStreaming"
-                                :isRecording="isRecording"
-                                :session-id="currSessionId || null"
-                                :current-session="getCurrentSession"
-                                :replyTo="replyTo"
-                                @send="handleSendMessage"
-                                @toggleStreaming="toggleStreaming"
-                                @removeImage="removeImage"
-                                @removeAudio="removeAudio"
-                                @removeFile="removeFile"
-                                @startRecording="handleStartRecording"
-                                @stopRecording="handleStopRecording"
-                            @pasteImage="handlePaste"
-                            @fileSelect="handleFileSelect"
-                            @clearReply="clearReply"
-                            @openLiveMode="openLiveMode"
-                            ref="chatInputRef"
                         />
-                        </ProjectView>
-                        <WelcomeView 
-                            v-else
-                            :isLoading="isLoadingMessages"
-                        >
+                        <template v-else>
+                            <!-- 面包屑导航 -->
+                            <div v-if="currentSessionProject && messages && messages.length > 0" class="breadcrumb-container">
+                                <div class="breadcrumb-content">
+                                    <span class="breadcrumb-emoji">{{ currentSessionProject.emoji || '📁' }}</span>
+                                    <span class="breadcrumb-project" @click="handleSelectProject(currentSessionProject.project_id)">{{ currentSessionProject.title }}</span>
+                                    <v-icon size="small" class="breadcrumb-separator">mdi-chevron-right</v-icon>
+                                    <span class="breadcrumb-session">{{ getCurrentSession?.display_name || tm('conversation.newConversation') }}</span>
+                                </div>
+                            </div>
+
+                            <div class="message-list-wrapper" v-if="currSessionId && !selectedProjectId">
+                                <MessageList :messages="messages" :isDark="isDark"
+                                    :isStreaming="isStreaming || isConvRunning" 
+                                    :isLoadingMessages="isLoadingMessages"
+                                    @openImagePreview="openImagePreview"
+                                    @replyMessage="handleReplyMessage"
+                                    @replyWithText="handleReplyWithText"
+                                    @openRefs="handleOpenRefs"
+                                    ref="messageList" />
+                                <div class="message-list-fade" :class="{ 'fade-dark': isDark }"></div>
+                            </div>
+                            <ProjectView 
+                                v-else-if="selectedProjectId"
+                                :project="currentProject"
+                                :sessions="projectSessions"
+                                @selectSession="(sessionId) => handleSelectConversation([sessionId])"
+                                @editSessionTitle="showEditTitleDialog"
+                                @deleteSession="handleDeleteConversation"
+                            >
+                                <ChatInput
+                                    v-model:prompt="prompt"
+                                    :stagedImagesUrl="stagedImagesUrl"
+                                    :stagedAudioUrl="stagedAudioUrl"
+                                    :stagedFiles="stagedNonImageFiles"
+                                    :disabled="isStreaming"
+                                    :enableStreaming="enableStreaming"
+                                    :isRecording="isRecording"
+                                    :session-id="currSessionId || null"
+                                    :current-session="getCurrentSession"
+                                    :replyTo="replyTo"
+                                    @send="handleSendMessage"
+                                    @toggleStreaming="toggleStreaming"
+                                    @removeImage="removeImage"
+                                    @removeAudio="removeAudio"
+                                    @removeFile="removeFile"
+                                    @startRecording="handleStartRecording"
+                                    @stopRecording="handleStopRecording"
+                                    @pasteImage="handlePaste"
+                                    @fileSelect="handleFileSelect"
+                                    @clearReply="clearReply"
+                                    @openLiveMode="openLiveMode"
+                                    ref="chatInputRef"
+                                />
+                            </ProjectView>
+                            <WelcomeView 
+                                v-else
+                                :isLoading="isLoadingMessages"
+                            >
+                                <ChatInput
+                                    v-model:prompt="prompt"
+                                    :stagedImagesUrl="stagedImagesUrl"
+                                    :stagedAudioUrl="stagedAudioUrl"
+                                    :stagedFiles="stagedNonImageFiles"
+                                    :disabled="isStreaming"
+                                    :enableStreaming="enableStreaming"
+                                    :isRecording="isRecording"
+                                    :session-id="currSessionId || null"
+                                    :current-session="getCurrentSession"
+                                    :replyTo="replyTo"
+                                    @send="handleSendMessage"
+                                    @toggleStreaming="toggleStreaming"
+                                    @removeImage="removeImage"
+                                    @removeAudio="removeAudio"
+                                    @removeFile="removeFile"
+                                    @startRecording="handleStartRecording"
+                                    @stopRecording="handleStopRecording"
+                                    @pasteImage="handlePaste"
+                                    @fileSelect="handleFileSelect"
+                                    @clearReply="clearReply"
+                                    @openLiveMode="openLiveMode"
+                                    ref="chatInputRef"
+                                />
+                            </WelcomeView>
+
+                            <!-- 输入区域 -->
                             <ChatInput
+                                v-if="currSessionId && !selectedProjectId"
                                 v-model:prompt="prompt"
                                 :stagedImagesUrl="stagedImagesUrl"
                                 :stagedAudioUrl="stagedAudioUrl"
@@ -124,34 +159,7 @@
                                 @openLiveMode="openLiveMode"
                                 ref="chatInputRef"
                             />
-                        </WelcomeView>
-
-                        <!-- 输入区域 -->
-                        <ChatInput
-                            v-if="currSessionId && !selectedProjectId"
-                            v-model:prompt="prompt"
-                            :stagedImagesUrl="stagedImagesUrl"
-                            :stagedAudioUrl="stagedAudioUrl"
-                            :stagedFiles="stagedNonImageFiles"
-                            :disabled="isStreaming"
-                            :enableStreaming="enableStreaming"
-                            :isRecording="isRecording"
-                            :session-id="currSessionId || null"
-                            :current-session="getCurrentSession"
-                            :replyTo="replyTo"
-                            @send="handleSendMessage"
-                            @toggleStreaming="toggleStreaming"
-                            @removeImage="removeImage"
-                            @removeAudio="removeAudio"
-                            @removeFile="removeFile"
-                            @startRecording="handleStartRecording"
-                            @stopRecording="handleStopRecording"
-                            @pasteImage="handlePaste"
-                            @fileSelect="handleFileSelect"
-                            @clearReply="clearReply"
-                            @openLiveMode="openLiveMode"
-                            ref="chatInputRef"
-                        />
+                        </template>
                     </template>
                 </div>
 
@@ -200,6 +208,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRouter, useRoute } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -209,6 +218,7 @@ import ConversationSidebar from '@/components/chat/ConversationSidebar.vue';
 import ChatInput from '@/components/chat/ChatInput.vue';
 import ProjectDialog from '@/components/chat/ProjectDialog.vue';
 import ProjectView from '@/components/chat/ProjectView.vue';
+import ChatSearchView from '@/components/chat/ChatSearchView.vue';
 import WelcomeView from '@/components/chat/WelcomeView.vue';
 import RefsSidebar from '@/components/chat/message_list_comps/RefsSidebar.vue';
 import LiveMode from '@/components/chat/LiveMode.vue';
@@ -219,6 +229,7 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useProjects } from '@/composables/useProjects';
 import type { Project } from '@/components/chat/ProjectList.vue';
 import { useRecording } from '@/composables/useRecording';
+import { useChatSearchStore } from '@/stores/chatSearch';
 
 interface Props {
     chatboxMode?: boolean;
@@ -233,6 +244,8 @@ const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 const theme = useTheme();
+const chatSearchStore = useChatSearchStore();
+const { active: isSearchActive } = storeToRefs(chatSearchStore);
 
 // UI 状态
 const isMobile = ref(false);
@@ -436,12 +449,15 @@ function handleOpenRefs(refs: any) {
     }
 }
 
-async function handleSelectConversation(sessionIds: string[]) {
+async function handleSelectConversation(sessionIds: string[], shouldCloseSearch: boolean = true) {
     if (!sessionIds[0]) return;
 
     // 退出项目视图
     selectedProjectId.value = null;
     projectSessions.value = [];
+    if (shouldCloseSearch) {
+        chatSearchStore.closeSearch();
+    }
 
     // 立即更新选中状态，避免需要点击两次
     currSessionId.value = sessionIds[0];
@@ -482,6 +498,7 @@ function handleNewChat() {
     // 退出项目视图
     selectedProjectId.value = null;
     projectSessions.value = [];
+    chatSearchStore.closeSearch();
 }
 
 async function handleDeleteConversation(sessionId: string) {
@@ -500,6 +517,7 @@ async function handleSelectProject(projectId: string) {
     const sessions = await getProjectSessions(projectId);
     projectSessions.value = sessions;
     messages.value = [];
+    chatSearchStore.closeSearch();
 
     // 清空当前会话ID，准备在项目中创建新对话
     currSessionId.value = '';
@@ -571,6 +589,17 @@ function openLiveMode() {
 
 function closeLiveMode() {
     liveModeOpen.value = false;
+}
+
+function handleOpenSearch() {
+    chatSearchStore.openSearch();
+    if (isMobile.value) {
+        closeMobileSidebar();
+    }
+}
+
+function handleCloseSearch() {
+    chatSearchStore.closeSearch();
 }
 
 async function handleSendMessage() {
@@ -647,7 +676,7 @@ watch(
                 if (sessions.value.length > 0) {
                     const session = sessions.value.find(s => s.session_id === pathSessionId);
                     if (session) {
-                        handleSelectConversation([pathSessionId]);
+                        handleSelectConversation([pathSessionId], !isSearchActive.value);
                     }
                 } else {
                     pendingSessionId.value = pathSessionId;
@@ -664,13 +693,13 @@ watch(sessions, (newSessions) => {
         const session = newSessions.find(s => s.session_id === pendingSessionId.value);
         if (session) {
             selectedSessions.value = [pendingSessionId.value];
-            handleSelectConversation([pendingSessionId.value]);
+            handleSelectConversation([pendingSessionId.value], !isSearchActive.value);
             pendingSessionId.value = null;
         }
     } else if (!currSessionId.value && newSessions.length > 0) {
         const firstSession = newSessions[0];
         selectedSessions.value = [firstSession.session_id];
-        handleSelectConversation([firstSession.session_id]);
+        handleSelectConversation([firstSession.session_id], !isSearchActive.value);
     }
 });
 

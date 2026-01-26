@@ -20,6 +20,15 @@
             </v-btn>
         </div>
 
+        <div style="padding: 8px; padding-bottom: 0px; opacity: 0.6;">
+            <v-btn block variant="text" class="search-chat-btn" @click="$emit('openSearch')"
+                v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-magnify">
+                {{ t('core.actions.search') }}
+            </v-btn>
+            <v-btn icon="mdi-magnify" rounded="xl" @click="$emit('openSearch')" 
+                v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
+        </div>
+
         <div style="padding: 8px; opacity: 0.6;">
             <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
                 v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-square-edit-outline">{{ tm('actions.newChat') }}</v-btn>
@@ -178,6 +187,7 @@ const emit = defineEmits<{
     createProject: [];
     editProject: [project: Project];
     deleteProject: [projectId: string];
+    openSearch: [];
 }>();
 
 const { t } = useI18n();
@@ -258,6 +268,13 @@ function handleDeleteConversation(session: Session) {
 }
 
 .new-chat-btn {
+    justify-content: flex-start;
+    background-color: transparent !important;
+    border-radius: 20px;
+    padding: 8px 16px !important;
+}
+
+.search-chat-btn {
     justify-content: flex-start;
     background-color: transparent !important;
     border-radius: 20px;
@@ -359,4 +376,3 @@ function handleDeleteConversation(session: Session) {
     justify-content: center;
 }
 </style>
-

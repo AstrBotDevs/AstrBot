@@ -100,6 +100,18 @@
     "noSessions": "该项目暂无对话",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
+  "search": {
+    "title": "搜索",
+    "placeholder": "输入关键词搜索标题或内容",
+    "hint": "输入关键词开始搜索",
+    "noResults": "没有找到匹配的对话",
+    "matchTitle": "标题匹配",
+    "matchContent": "内容匹配",
+    "matchPosition": "匹配位置",
+    "createdAt": "创建",
+    "updatedAt": "更新",
+    "pageSize": "每页条数"
+  },
   "time": {
     "today": "今天",
     "yesterday": "昨天"

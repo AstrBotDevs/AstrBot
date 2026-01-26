@@ -204,6 +204,23 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def search_platform_sessions(
+        self,
+        creator: str,
+        query: str,
+        context_len: int = 40,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[list[dict], int]:
+        """Search platform sessions (title or message content) for a given creator.
+
+        Returns a tuple of (results, total) where results is a list of dicts with keys:
+        session_id, title, match_field, match_index, match_length, snippet, snippet_start,
+        created_at, updated_at
+        """
+        ...
+
+    @abc.abstractmethod
     async def get_platform_message_history_by_id(
         self,
         message_id: int,

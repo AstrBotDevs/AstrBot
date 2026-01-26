@@ -98,6 +98,18 @@
     "noSessions": "No conversations in this project",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
+  "search": {
+    "title": "Search",
+    "placeholder": "Enter keywords to search titles or content",
+    "hint": "Enter keywords to start searching",
+    "noResults": "No matching conversations found",
+    "matchTitle": "Title match",
+    "matchContent": "Content match",
+    "matchPosition": "Match position",
+    "createdAt": "Created",
+    "updatedAt": "Updated",
+    "pageSize": "Items per page"
+  },
   "time": {
     "today": "Today",
     "yesterday": "Yesterday"

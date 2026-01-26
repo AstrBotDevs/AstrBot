@@ -46,6 +46,7 @@ class ChatRoute(Route):
                 "POST",
                 self.update_session_display_name,
             ),
+            "/chat/search": ("GET", self.search_sessions),
             "/chat/get_file": ("GET", self.get_file),
             "/chat/get_attachment": ("GET", self.get_attachment),
             "/chat/post_file": ("POST", self.post_file),
@@ -62,6 +63,35 @@ class ChatRoute(Route):
         self.umop_config_router = core_lifecycle.umop_config_router
 
         self.running_convs: dict[str, bool] = {}
+
+    @staticmethod
+    def _extract_plain_text(content: dict) -> str:
+        if not isinstance(content, dict):
+            return ""
+        message = content.get("message")
+        if isinstance(message, str):
+            return message
+        if not isinstance(message, list):
+            return ""
+
+        parts = []
+        for part in message:
+            if not isinstance(part, dict):
+                continue
+            part_type = part.get("type")
+            if part_type == "plain" and part.get("text"):
+                parts.append(str(part.get("text")))
+            elif part_type == "reply" and part.get("selected_text"):
+                parts.append(str(part.get("selected_text")))
+        return "\n".join(parts)
+
+    @staticmethod
+    def _build_snippet(text: str, match_index: int, match_length: int, context_len: int):
+        if match_index < 0:
+            return "", 0
+        start = max(match_index - context_len, 0)
+        end = min(match_index + match_length + context_len, len(text))
+        return text[start:end], start
 
     async def get_file(self):
         filename = request.args.get("filename")
@@ -730,6 +760,57 @@ class ChatRoute(Route):
             )
 
         return Response().ok(data=sessions_data).__dict__
+
+    async def search_sessions(self):
+        """Search sessions by title or content, with pagination."""
+        username = g.get("username", "guest")
+        query = request.args.get("query", "", type=str).strip()
+        page = max(request.args.get("page", 1, type=int), 1)
+        page_size = min(max(request.args.get("page_size", 10, type=int), 1), 100)
+        context_len = min(max(request.args.get("context", 40, type=int), 0), 200)
+
+        if not query:
+            return (
+                Response()
+                .ok(
+                    data={
+                        "results": [],
+                        "pagination": {
+                            "page": page,
+                            "page_size": page_size,
+                            "total": 0,
+                            "total_pages": 1,
+                        },
+                    }
+                )
+                .__dict__
+            )
+
+        # Delegate searching to the database implementation for efficiency
+        paged_results, total = await self.db.search_platform_sessions(
+            creator=username,
+            query=query,
+            context_len=context_len,
+            page=page,
+            page_size=page_size,
+        )
+
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        return (
+            Response()
+            .ok(
+                data={
+                    "results": paged_results,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total": total,
+                        "total_pages": total_pages,
+                    },
+                }
+            )
+            .__dict__
+        )
 
     async def get_session(self):
         """Get session information and message history by session_id."""
