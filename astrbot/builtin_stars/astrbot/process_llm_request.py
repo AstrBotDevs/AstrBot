@@ -7,11 +7,11 @@ from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.pipeline.process_stage.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
 )
-from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.provider.func_tool_manager import ToolSet
 
 

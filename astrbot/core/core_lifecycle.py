@@ -31,11 +31,11 @@ from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.star import PluginManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus

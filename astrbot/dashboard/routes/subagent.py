@@ -1,7 +1,6 @@
 import traceback
 
-from quart import request
-from quart import jsonify
+from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
