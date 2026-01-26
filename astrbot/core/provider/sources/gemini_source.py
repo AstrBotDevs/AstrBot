@@ -383,8 +383,8 @@ class ProviderGoogleGenAI(Provider):
 
             elif role == "tool" and not native_tool_enabled:
                 # 1. 尝试获取真实的函数名称 (AstrBot/OpenAI 格式的消息通常包含 name)
-                # 如果 message 中没有 name，说明上游数据丢失，这里可能需要 fallback 逻辑，但通常都会有
-                func_name = message.get("name", "unknown_tool")
+                # 如果 message 中没有 name，则回退使用 tool_call_id，便于在日志中追踪来源
+                func_name = message.get("name", message["tool_call_id"])
 
                 # 2. 创建 Part，注意 name 参数必须是函数名
                 part = types.Part.from_function_response(
