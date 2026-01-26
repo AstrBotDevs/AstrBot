@@ -41,7 +41,11 @@ class SubAgentRoute(Route):
                 }
 
             # Backward compatibility: older config used `enable`.
-            if isinstance(data, dict) and "main_enable" not in data and "enable" in data:
+            if (
+                isinstance(data, dict)
+                and "main_enable" not in data
+                and "enable" in data
+            ):
                 data["main_enable"] = bool(data.get("enable", False))
 
             # Ensure required keys exist.

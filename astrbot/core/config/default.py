@@ -121,7 +121,6 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
-
         # SubAgent orchestrator mode: the main LLM only delegates tasks to subagents
         # (via transfer_to_{agent} tools). Domain tools are mounted on subagents.
         "subagent_orchestrator": {

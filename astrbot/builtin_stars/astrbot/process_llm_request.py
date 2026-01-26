@@ -82,7 +82,8 @@ class ProcessLLMRequest:
             # Encourage the model to delegate to subagents.
             # Use the built-in default router prompt; user overrides are disabled for now.
             router_prompt = (
-                self.ctx.get_config().get("provider_settings", {})
+                self.ctx.get_config()
+                .get("provider_settings", {})
                 .get("subagent_orchestrator", {})
                 .get("router_system_prompt", "")
             ).strip()

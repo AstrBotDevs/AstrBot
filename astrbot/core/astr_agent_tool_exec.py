@@ -77,7 +77,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
-        prov_id = getattr(tool, "provider_id", None) or await ctx.get_current_chat_provider_id(umo)
+        prov_id = getattr(
+            tool, "provider_id", None
+        ) or await ctx.get_current_chat_provider_id(umo)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
