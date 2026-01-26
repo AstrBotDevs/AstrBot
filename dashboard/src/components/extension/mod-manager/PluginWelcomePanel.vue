@@ -123,7 +123,12 @@ onMounted(() => {
 
       <div v-else-if="content" class="welcome-readme">
         <div class="welcome-readme__container">
-          <GitHubMarkdownViewer :content="content" header-icon="mdi-book-open-outline" header-label="README.md" :show-header="false" />
+          <GitHubMarkdownViewer
+            :content="content"
+            header-icon="mdi-book-open-outline"
+            header-label="README.md"
+            :show-header="false"
+          />
 
           <v-alert type="info" variant="tonal" density="comfortable" class="mt-8">
             <div class="text-body-2">

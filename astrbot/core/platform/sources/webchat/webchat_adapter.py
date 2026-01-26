@@ -93,7 +93,8 @@ class WebChatAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ):
-        await WebChatMessageEvent._send(message_chain, session.session_id)
+        message_id = f"active_{str(uuid.uuid4())}"
+        await WebChatMessageEvent._send(message_id, message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
 
     async def _get_message_history(
@@ -196,7 +197,7 @@ class WebChatAdapter(Platform):
 
         abm.session_id = f"webchat!{username}!{cid}"
 
-        abm.message_id = str(uuid.uuid4())
+        abm.message_id = payload.get("message_id")
 
         # 处理消息段列表
         message_parts = payload.get("message", [])
@@ -234,6 +235,7 @@ class WebChatAdapter(Platform):
         message_event.set_extra(
             "enable_streaming", payload.get("enable_streaming", True)
         )
+        message_event.set_extra("action_type", payload.get("action_type"))
 
         self.commit_event(message_event)
 

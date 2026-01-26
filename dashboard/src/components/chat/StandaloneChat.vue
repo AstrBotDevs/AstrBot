@@ -36,6 +36,7 @@
                         @stopRecording="handleStopRecording"
                         @pasteImage="handlePaste"
                         @fileSelect="handleFileSelect"
+                        @openLiveMode=""
                         ref="chatInputRef"
                     />
                 </div>

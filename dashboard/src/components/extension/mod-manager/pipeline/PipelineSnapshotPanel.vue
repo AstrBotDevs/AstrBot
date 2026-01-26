@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+
 import { useModuleI18n } from '@/i18n/composables'
 import { usePipelineSnapshot } from '@/composables/usePipelineSnapshot'
-import type { EffectTarget, PipelineSnapshot, PipelineStageId, SnapshotScopeMode, StageParticipant } from './pipelineSnapshotTypes'
+import type {
+  EffectTarget,
+  PipelineSnapshot,
+  PipelineStageId,
+  SnapshotScopeMode,
+  StageParticipant
+} from './pipelineSnapshotTypes'
 
-import { applyTraceFilter, buildAvailableTargets, buildTraceRows, groupTraceRowsByTarget } from './traceGrouping'
+import {
+  applyTraceFilter,
+  buildAvailableTargets,
+  buildTraceRows,
+  groupTraceRowsByTarget
+} from './traceGrouping'
 import { inferTraceFocusTarget } from './traceFocus'
 
 import PipelineFishboneView from './PipelineFishboneView.vue'
@@ -14,7 +26,6 @@ import StageDetailPanel from './StageDetailPanel.vue'
 import ConflictListPanel from './ConflictListPanel.vue'
 import TraceImpactDetailPanel from './TraceImpactDetailPanel.vue'
 import PromptPreviewDialog from './PromptPreviewDialog.vue'
-
 import ResizableSplitPane from '../ResizableSplitPane.vue'
 
 type SnapshotPanelMode = 'pipeline' | 'trace'
@@ -90,62 +101,6 @@ watch(
 const traceSelectedTarget = ref<'__all__' | EffectTarget>('__all__')
 const traceSelectedImpactKey = ref<string | null>(null)
 
-const traceAllRows = computed(() => buildTraceRows(displaySnapshot.value))
-const traceAvailableTargets = computed(() => buildAvailableTargets(traceAllRows.value))
-const traceTargetItems = computed(() => [
-  { title: 'All', value: '__all__' as const },
-  ...traceAvailableTargets.value.map((t) => ({ title: String(t), value: t }))
-])
-
-const traceFilteredRows = computed(() =>
-  applyTraceFilter(traceAllRows.value, {
-    selectedTarget: traceSelectedTarget.value,
-    onlyHighImpact: false
-  })
-)
-
-const traceFilteredCount = computed(() => traceFilteredRows.value.length)
-
-const traceRootGroupsAll = computed(() => groupTraceRowsByTarget(displaySnapshot.value, traceAllRows.value))
-
-const traceActiveTarget = computed<EffectTarget | null>(() =>
-  traceSelectedTarget.value === '__all__' ? null : (traceSelectedTarget.value as EffectTarget)
-)
-
-const traceSelectedRow = computed(() => {
-  const key = traceSelectedImpactKey.value
-  if (!key) return null
-  return traceAllRows.value.find((r) => r.key === key) ?? null
-})
-
-const selectImpactKey = (key: string) => {
-  traceSelectedImpactKey.value = key || null
-}
-
-
-const applyExternalTraceFocus = () => {
-  if (props.mode !== 'trace') return
-
-  const token = Number(props.traceNavigationToken || 0)
-  const hasExternal = token > 0 || Boolean(props.traceFocusTarget) || Boolean(props.traceStageId) || Boolean(props.traceParticipantId)
-  if (!hasExternal) return
-
-  const target = (props.traceFocusTarget || 'result.chain') as EffectTarget
-  const stageId = props.traceStageId ?? null
-
-  selectedStageId.value = stageId
-  traceSelectedTarget.value = target
-
-  // 外部跳转时：只定位到 target/stage，不默认展开/选中任何具体影响点
-  traceSelectedImpactKey.value = null
-}
-
-watch(
-  () => [props.mode, props.traceNavigationToken, props.traceFocusTarget, props.traceStageId, props.traceParticipantId] as const,
-  () => applyExternalTraceFocus(),
-  { flush: 'post', immediate: true }
-)
-
 const promptDialog = ref(false)
 
 const { snapshot, loading, error, refresh } = usePipelineSnapshot({
@@ -193,7 +148,10 @@ const displaySnapshot = computed<PipelineSnapshot | null>(() => {
     byType[t] = (byType[t] ?? 0) + 1
   }
 
-  const riskCount = stages.reduce((acc, st) => acc + (st.participants ?? []).reduce((a2, p) => a2 + (p.risks?.length ?? 0), 0), 0)
+  const riskCount = stages.reduce(
+    (acc, st) => acc + (st.participants ?? []).reduce((a2, p) => a2 + (p.risks?.length ?? 0), 0),
+    0
+  )
   const handlerCount = stages.reduce((acc, st) => acc + (st.participants?.length ?? 0), 0)
 
   return {
@@ -215,15 +173,33 @@ const displaySnapshot = computed<PipelineSnapshot | null>(() => {
 
 const hasPromptPreview = computed(() => Boolean(displaySnapshot.value?.llm_prompt_preview))
 
-const findParticipantById = (snapshot: PipelineSnapshot | null, participantId: string): StageParticipant | null => {
-  if (!snapshot || !participantId) return null
-  for (const st of snapshot.stages ?? []) {
-    for (const p of st?.participants ?? []) {
-      if (p?.id === participantId) return p
-    }
-  }
-  return null
-}
+const traceAllRows = computed(() => buildTraceRows(displaySnapshot.value))
+const traceAvailableTargets = computed(() => buildAvailableTargets(traceAllRows.value))
+const traceTargetItems = computed(() => [
+  { title: 'All', value: '__all__' as const },
+  ...traceAvailableTargets.value.map((t) => ({ title: String(t), value: t }))
+])
+
+const traceFilteredRows = computed(() =>
+  applyTraceFilter(traceAllRows.value, {
+    selectedTarget: traceSelectedTarget.value,
+    onlyHighImpact: false
+  })
+)
+
+const traceFilteredCount = computed(() => traceFilteredRows.value.length)
+
+const traceRootGroupsAll = computed(() => groupTraceRowsByTarget(displaySnapshot.value, traceAllRows.value))
+
+const traceActiveTarget = computed<EffectTarget | null>(() =>
+  traceSelectedTarget.value === '__all__' ? null : (traceSelectedTarget.value as EffectTarget)
+)
+
+const traceSelectedRow = computed(() => {
+  const key = traceSelectedImpactKey.value
+  if (!key) return null
+  return traceAllRows.value.find((r) => r.key === key) ?? null
+})
 
 const participantIdByHandlerKey = computed(() => {
   const map = new Map<string, string>()
@@ -239,6 +215,44 @@ const participantIdByHandlerKey = computed(() => {
   }
   return map
 })
+
+const findParticipantById = (snap: PipelineSnapshot | null, participantId: string): StageParticipant | null => {
+  if (!snap || !participantId) return null
+  for (const st of snap.stages ?? []) {
+    for (const p of st?.participants ?? []) {
+      if (p?.id === participantId) return p
+    }
+  }
+  return null
+}
+
+const selectImpactKey = (key: string) => {
+  traceSelectedImpactKey.value = key || null
+}
+
+const applyExternalTraceFocus = () => {
+  if (props.mode !== 'trace') return
+
+  const token = Number(props.traceNavigationToken || 0)
+  const hasExternal =
+    token > 0 || Boolean(props.traceFocusTarget) || Boolean(props.traceStageId) || Boolean(props.traceParticipantId)
+  if (!hasExternal) return
+
+  const target = (props.traceFocusTarget || 'result.chain') as EffectTarget
+  const stageId = props.traceStageId ?? null
+
+  selectedStageId.value = stageId
+  traceSelectedTarget.value = target
+
+  // 外部跳转时：只定位到 target/stage，不默认展开/选中任何具体影响点
+  traceSelectedImpactKey.value = null
+}
+
+watch(
+  () => [props.mode, props.traceNavigationToken, props.traceFocusTarget, props.traceStageId, props.traceParticipantId] as const,
+  () => applyExternalTraceFocus(),
+  { flush: 'post', immediate: true }
+)
 
 const handleRefresh = async (forceRefresh = false) => {
   const mode = scopeMode.value
@@ -303,14 +317,14 @@ const handleViewImpactChain = (payload: { participantId: string; stageId: Pipeli
   emit('navigate-trace', { participantId: payload.participantId, stageId: payload.stageId, target })
 }
 
-
 const openPromptPreview = async () => {
   if (!hasPromptPreview.value) return
   const mode = scopeMode.value
   const umo = mode === 'session' ? (sessionUmo.value.trim() || null) : null
 
   // 打开预览前先请求渲染数据
-  const previewPrompt = String(displaySnapshot.value?.llm_prompt_preview?.prompt ?? '').trim() || '（预览）用户输入：<未提供>'
+  const previewPrompt =
+    String(displaySnapshot.value?.llm_prompt_preview?.prompt ?? '').trim() || '（预览）用户输入：<未提供>'
   await refresh({ scopeMode: mode, umo, forceRefresh: false, render: true, previewPrompt })
 
   // 然后再打开对话框
@@ -326,13 +340,7 @@ const scopeItems = computed(() => [
 <template>
   <v-card class="psp h-100 d-flex flex-column" rounded="lg" variant="flat">
     <div class="psp__toolbar px-4 py-3 d-flex align-center flex-wrap ga-2">
-      <v-btn
-        color="primary"
-        variant="tonal"
-        size="small"
-        :loading="loading"
-        @click="handleRefresh(true)"
-      >
+      <v-btn color="primary" variant="tonal" size="small" :loading="loading" @click="handleRefresh(true)">
         <v-icon start>mdi-refresh</v-icon>
         {{ tm('pipeline.toolbar.refresh') }}
       </v-btn>
@@ -360,13 +368,7 @@ const scopeItems = computed(() => [
 
       <v-spacer />
 
-      <v-switch
-        v-model="showAllStages"
-        density="compact"
-        hide-details
-        inset
-        label="显示全部阶段"
-      />
+      <v-switch v-model="showAllStages" density="compact" hide-details inset label="显示全部阶段" />
 
       <v-tooltip location="bottom">
         <template #activator="{ props: tooltipProps }">
@@ -386,21 +388,12 @@ const scopeItems = computed(() => [
         {{ tm('pipeline.filters.targetObjectTooltip') }}
       </v-tooltip>
 
-      <v-chip size="small" color="secondary" variant="tonal" class="font-weight-medium">
-        {{ traceFilteredCount }} 条
-      </v-chip>
+      <v-chip size="small" color="secondary" variant="tonal" class="font-weight-medium">{{ traceFilteredCount }} 条</v-chip>
 
-      <v-btn
-        color="secondary"
-        variant="tonal"
-        size="small"
-        :disabled="!hasPromptPreview"
-        @click="openPromptPreview"
-      >
+      <v-btn color="secondary" variant="tonal" size="small" :disabled="!hasPromptPreview" @click="openPromptPreview">
         <v-icon start>mdi-text-box-search-outline</v-icon>
         {{ tm('pipeline.toolbar.promptPreview') }}
       </v-btn>
-
     </div>
 
     <v-divider />
@@ -436,12 +429,8 @@ const scopeItems = computed(() => [
         <div class="psp__right">
           <div v-if="props.mode === 'pipeline'" class="psp__right-tabs">
             <v-btn-toggle v-model="rightTab" mandatory density="compact" class="psp__right-toggle w-100">
-              <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">
-                {{ tm('pipeline.rightTabs.detail') }}
-              </v-btn>
-              <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">
-                {{ tm('pipeline.rightTabs.conflicts') }}
-              </v-btn>
+              <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">{{ tm('pipeline.rightTabs.detail') }}</v-btn>
+              <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">{{ tm('pipeline.rightTabs.conflicts') }}</v-btn>
             </v-btn-toggle>
 
             <v-divider />
@@ -485,9 +474,7 @@ const scopeItems = computed(() => [
             </div>
 
             <div v-if="error" class="psp__error px-4 py-3">
-              <v-alert type="error" variant="tonal" density="comfortable">
-                {{ error }}
-              </v-alert>
+              <v-alert type="error" variant="tonal" density="comfortable">{{ error }}</v-alert>
             </div>
           </div>
         </div>
@@ -524,12 +511,8 @@ const scopeItems = computed(() => [
           <div class="psp__right">
             <div v-if="props.mode === 'pipeline'" class="psp__right-tabs">
               <v-btn-toggle v-model="rightTab" mandatory density="compact" class="psp__right-toggle w-100">
-                <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">
-                  {{ tm('pipeline.rightTabs.detail') }}
-                </v-btn>
-                <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">
-                  {{ tm('pipeline.rightTabs.conflicts') }}
-                </v-btn>
+                <v-btn value="detail" variant="text" class="psp__right-toggle-btn flex-1">{{ tm('pipeline.rightTabs.detail') }}</v-btn>
+                <v-btn value="conflicts" variant="text" class="psp__right-toggle-btn flex-1">{{ tm('pipeline.rightTabs.conflicts') }}</v-btn>
               </v-btn-toggle>
 
               <v-divider />
@@ -573,9 +556,7 @@ const scopeItems = computed(() => [
               </div>
 
               <div v-if="error" class="psp__error px-4 py-3">
-                <v-alert type="error" variant="tonal" density="comfortable">
-                  {{ error }}
-                </v-alert>
+                <v-alert type="error" variant="tonal" density="comfortable">{{ error }}</v-alert>
               </div>
             </div>
           </div>
@@ -601,6 +582,12 @@ const scopeItems = computed(() => [
   overflow: hidden;
 }
 
+.psp__split {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .psp__left {
   flex: 1 1 0;
   min-width: 0;
@@ -612,12 +599,6 @@ const scopeItems = computed(() => [
 }
 
 .psp__fishbone {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-}
-
-.psp__split {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
@@ -689,7 +670,8 @@ const scopeItems = computed(() => [
 }
 
 .psp__mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
 }
 
 @media (max-width: 960px) {
@@ -700,6 +682,12 @@ const scopeItems = computed(() => [
   .psp__left {
     border-right: 0;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  }
+
+  .psp__right {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 }
 </style>

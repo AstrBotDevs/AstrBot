@@ -127,6 +127,50 @@ class ProviderAnthropic(Provider):
                         ],
                     },
                 )
+            elif message["role"] == "user":
+                if isinstance(message.get("content"), list):
+                    converted_content = []
+                    for part in message["content"]:
+                        if part.get("type") == "image_url":
+                            # Convert OpenAI image_url format to Anthropic image format
+                            image_url_data = part.get("image_url", {})
+                            url = image_url_data.get("url", "")
+                            if url.startswith("data:"):
+                                try:
+                                    _, base64_data = url.split(",", 1)
+                                    # Detect actual image format from binary data
+                                    image_bytes = base64.b64decode(base64_data)
+                                    media_type = self._detect_image_mime_type(
+                                        image_bytes
+                                    )
+                                    converted_content.append(
+                                        {
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": base64_data,
+                                            },
+                                        }
+                                    )
+                                except ValueError:
+                                    logger.warning(
+                                        f"Failed to parse image data URI: {url[:50]}..."
+                                    )
+                            else:
+                                logger.warning(
+                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
+                                )
+                        else:
+                            converted_content.append(part)
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": converted_content,
+                        }
+                    )
+                else:
+                    new_messages.append(message)
             else:
                 new_messages.append(message)
 

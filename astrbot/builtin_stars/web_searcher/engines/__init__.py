@@ -32,6 +32,7 @@ class SearchResult:
     title: str
     url: str
     snippet: str
+    favicon: str | None = None
 
     def __str__(self) -> str:
         return f"{self.title} - {self.url}\n{self.snippet}"

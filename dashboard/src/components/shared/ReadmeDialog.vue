@@ -41,9 +41,8 @@ const { t } = useI18n();
 const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
-const isEmpty = ref(false); // 请求成功但无内容
+const isEmpty = ref(false);
 
-// 根据模式返回不同的配置
 const modeConfig = computed(() => {
   if (props.mode === "changelog") {
     return {
@@ -62,36 +61,6 @@ const modeConfig = computed(() => {
     apiPath: "/api/plugin/readme",
   };
 });
-
-// 监听show的变化，当显示对话框时加载内容
-watch(
-  () => props.show,
-  (newVal) => {
-    if (newVal && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听pluginName的变化
-watch(
-  () => props.pluginName,
-  (newVal) => {
-    if (props.show && newVal) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听mode的变化
-watch(
-  () => props.mode,
-  () => {
-    if (props.show && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
 
 // 获取内容
 async function fetchContent() {
@@ -123,6 +92,14 @@ async function fetchContent() {
   }
 }
 
+watch(
+  [() => props.show, () => props.pluginName, () => props.mode],
+  ([show, name]) => {
+    if (show && name) fetchContent();
+  },
+  { immediate: true },
+);
+
 // 打开GitHub中的仓库
 function openRepoInNewTab() {
   if (props.repoUrl) {
@@ -135,7 +112,6 @@ function refreshContent() {
   fetchContent();
 }
 
-// 计算属性处理双向绑定
 const _show = computed({
   get() {
     return props.show;
@@ -261,7 +237,6 @@ const _show = computed({
 .readme-dialog__content {
   min-height: 100%;
 }
-
 
 @media (max-width: 767px) {
   .readme-dialog__container {

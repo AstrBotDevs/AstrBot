@@ -201,6 +201,11 @@
       "title": "No New Version Detected",
       "message": "No new version detected for this plugin. Do you want to force reinstall? This will pull the latest code from the remote repository.",
       "confirm": "Force Update"
+    },
+    "updateAllConfirm": {
+      "title": "Confirm Update All Plugins",
+      "message": "Are you sure you want to update all {count} plugins? This operation may take some time.",
+      "confirm": "Confirm Update"
     }
   },
   "messages": {

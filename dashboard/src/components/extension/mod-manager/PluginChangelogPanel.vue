@@ -99,7 +99,12 @@ watch(
 
         <div v-else-if="content" class="changelog-scroll__content">
           <div class="changelog-scroll__container">
-            <GitHubMarkdownViewer :content="content" header-icon="mdi-history" header-label="CHANGELOG.md" :show-header="false" />
+            <GitHubMarkdownViewer
+              :content="content"
+              header-icon="mdi-history"
+              header-label="CHANGELOG.md"
+              :show-header="false"
+            />
           </div>
         </div>
 

@@ -155,6 +155,11 @@ const forceUpdateDialog = reactive({
   extensionName: "",
 });
 
+// 更新全部插件确认对话框
+const updateAllConfirmDialog = reactive({
+  show: false,
+});
+
 // 插件更新日志对话框（复用 ReadmeDialog）
 const changelogDialog = reactive({
   show: false,
@@ -651,6 +656,23 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
 };
 
 // 确认强制更新
+// 显示更新全部插件确认对话框
+const showUpdateAllConfirm = () => {
+  if (updatableExtensions.value.length === 0) return;
+  updateAllConfirmDialog.show = true;
+};
+
+// 确认更新全部插件
+const confirmUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+  updateAllExtensions();
+};
+
+// 取消更新全部插件
+const cancelUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+};
+
 const confirmForceUpdate = () => {
   const name = forceUpdateDialog.extensionName;
   forceUpdateDialog.show = false;
@@ -1348,7 +1370,7 @@ onBeforeUnmount(() => {
                     @update:show-reserved="showReserved = $event"
                     @update:installed-view-mode="installedViewMode = $event"
                     @install="dialog = true"
-                    @update-all="updateAllExtensions"
+                    @update-all="showUpdateAllConfirm"
                     @action-enable="pluginOn"
                     @action-disable="pluginOff"
                     @action-reload="reloadPlugin"
@@ -1374,8 +1396,14 @@ onBeforeUnmount(() => {
                           {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
                         </v-btn>
 
-                        <v-btn class="ml-2" color="warning" variant="tonal" :disabled="updatableExtensions.length === 0"
-                          :loading="updatingAll" @click="updateAllExtensions">
+                        <v-btn
+                          class="ml-2"
+                          color="warning"
+                          variant="tonal"
+                          :disabled="updatableExtensions.length === 0"
+                          :loading="updatingAll"
+                          @click="showUpdateAllConfirm"
+                        >
                           <v-icon>mdi-update</v-icon>
                           {{ tm('buttons.updateAll') }}
                         </v-btn>
@@ -1424,47 +1452,55 @@ onBeforeUnmount(() => {
                           </v-dialog>
                         </v-col>
                       </v-col>
-                  </v-row>
+                    </v-row>
 
-                  <LegacyInstalledView
-                    :plugins="filteredPlugins"
-                    :loading="loading_"
-                    :show-reserved="showReserved"
-                    :is-list-view="isListView"
-                    @update:is-list-view="isListView = $event"
-                    @action-enable="pluginOn"
-                    @action-disable="pluginOff"
-                    @action-reload="reloadPlugin"
-                    @action-update="updateExtension"
-                    @action-uninstall="(name, options) => uninstallExtension(name, options ?? false)"
-                    @action-configure="(plugin) => openExtensionConfig(plugin.name)"
-                    @action-view-handlers="showPluginInfo"
-                    @action-view-readme="viewReadme"
-                    @view-changelog="viewChangelog"
-                    @action-open-repo="(url) => window.open(url, '_blank')"
-                  />
-                </div>
-              </template>
-            </div>
-          </v-window-item>
+                    <LegacyInstalledView
+                      :plugins="filteredPlugins"
+                      :loading="loading_"
+                      :show-reserved="showReserved"
+                      :is-list-view="isListView"
+                      @update:is-list-view="isListView = $event"
+                      @action-enable="pluginOn"
+                      @action-disable="pluginOff"
+                      @action-reload="reloadPlugin"
+                      @action-update="updateExtension"
+                      @action-uninstall="(name, options) => uninstallExtension(name, options ?? false)"
+                      @action-configure="(plugin) => openExtensionConfig(plugin.name)"
+                      @action-view-handlers="showPluginInfo"
+                      @action-view-readme="viewReadme"
+                      @view-changelog="viewChangelog"
+                      @action-open-repo="(url) => window.open(url, '_blank')"
+                    />
+                  </div>
+                </template>
+              </div>
+            </v-window-item>
 
-          <!-- 指令面板标签页内容 -->
-          <v-window-item value="components" class="h-100">
-            <v-card class="h-100 d-flex flex-column rounded-lg" variant="flat" style="background-color: transparent; min-height: 0;">
-              <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-window-item>
+            <!-- 指令面板标签页内容 -->
+            <v-window-item value="components" class="h-100">
+              <v-card
+                class="h-100 d-flex flex-column rounded-lg"
+                variant="flat"
+                style="background-color: transparent; min-height: 0;"
+              >
+                <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
+                  <ComponentPanel :active="activeTab === 'components'" />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-window-item value="mcp" class="h-100">
-            <v-card class="h-100 d-flex flex-column rounded-lg" variant="flat" style="background-color: transparent; min-height: 0;">
-              <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
-          </v-window-item>
+            <!-- 已安装的 MCP 服务器标签页内容 -->
+            <v-window-item value="mcp" class="h-100">
+              <v-card
+                class="h-100 d-flex flex-column rounded-lg"
+                variant="flat"
+                style="background-color: transparent; min-height: 0;"
+              >
+                <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
           <!-- 插件市场标签页内容 -->
           <v-window-item value="market" class="h-100">
@@ -2216,6 +2252,34 @@ onBeforeUnmount(() => {
     v-model="showUninstallDialog"
     @confirm="handleUninstallConfirm"
   />
+
+  <!-- 更新全部插件确认对话框 -->
+  <v-dialog v-model="updateAllConfirmDialog.show" max-width="420">
+    <v-card class="rounded-lg">
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon color="warning" class="mr-2">mdi-update</v-icon>
+        {{ tm("dialogs.updateAllConfirm.title") }}
+      </v-card-title>
+      <v-card-text>
+        <p class="text-body-1">
+          {{ tm("dialogs.updateAllConfirm.message", { count: updatableExtensions.length }) }}
+        </p>
+      </v-card-text>
+      <v-card-actions class="pa-4">
+        <v-spacer></v-spacer>
+        <v-btn
+          variant="text"
+          @click="cancelUpdateAll"
+        >{{ tm("buttons.cancel") }}</v-btn>
+        <v-btn
+          color="warning"
+          variant="flat"
+          @click="confirmUpdateAll"
+        >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">
