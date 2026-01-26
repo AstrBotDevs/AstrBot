@@ -36,7 +36,7 @@
     "remixicon": "3.5.0",
     "shiki": "^3.20.0",
     "stream-markdown": "^0.0.13",
-    "stream-monaco": "^0.0.15",
+    "stream-monaco": "^0.0.18",
     "vee-validate": "4.11.3",
     "vite-plugin-vuetify": "1.0.2",
     "vue": "3.3.4",

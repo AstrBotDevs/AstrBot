@@ -59,11 +59,11 @@ class ProcessLLMRequest:
             if default_persona:
                 persona_id = default_persona.get("name") or persona_id
 
-                    # ChatUI special default persona
-                    if platform_type == "webchat":
-                        # non-existent persona_id to let following codes not working
-                        persona_id = "_chatui_default_"
-                        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+                # ChatUI special default persona
+                if platform_type == "webchat":
+                    # non-existent persona_id to let following codes not working
+                    persona_id = "_chatui_default_"
+                    req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
         persona = next(
             builtins.filter(
