@@ -53,6 +53,11 @@ const sidebarItem: menu[] = [
         to: '/persona'
       },
       {
+        title: 'core.navigation.subagent',
+        icon: 'mdi-vector-link',
+        to: '/subagent'
+      },
+      {
         title: 'core.navigation.conversation',
         icon: 'mdi-database',
         to: '/conversation'

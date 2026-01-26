@@ -35,6 +35,7 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus
@@ -52,6 +53,10 @@ class AstrBotCoreLifecycle:
         self.log_broker = log_broker  # 初始化日志代理
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
+
+        # Optional orchestrator that registers dynamic handoff tools (transfer_to_*)
+        # from provider_settings.subagent_orchestrator.
+        self.subagent_orchestrator: SubAgentOrchestrator | None = None
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -71,6 +76,23 @@ class AstrBotCoreLifecycle:
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
+
+    def _init_or_reload_subagent_orchestrator(self) -> None:
+        """Create (if needed) and reload the subagent orchestrator from config.
+
+        This keeps lifecycle wiring in one place while allowing the orchestrator
+        to manage enable/disable and tool registration details.
+        """
+        try:
+            if self.subagent_orchestrator is None:
+                self.subagent_orchestrator = SubAgentOrchestrator(
+                    self.provider_manager.llm_tools,
+                )
+            self.subagent_orchestrator.reload_from_config(
+                self.astrbot_config.get("provider_settings", {}),
+            )
+        except Exception as e:
+            logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
@@ -175,6 +197,8 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
         )
 
+        # Dynamic subagents (handoff tools) from config.
+        self._init_or_reload_subagent_orchestrator()
         # 记录启动时间
         self.start_time = int(time.time())
 

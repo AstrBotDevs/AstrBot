@@ -14,6 +14,7 @@ from .plugin import PluginRoute
 from .session_management import SessionManagementRoute
 from .stat import StatRoute
 from .static_file import StaticFileRoute
+from .subagent import SubAgentRoute
 from .tools import ToolsRoute
 from .update import UpdateRoute
 
@@ -34,6 +35,7 @@ __all__ = [
     "SessionManagementRoute",
     "StatRoute",
     "StaticFileRoute",
+    "SubAgentRoute",
     "ToolsRoute",
     "UpdateRoute",
 ]

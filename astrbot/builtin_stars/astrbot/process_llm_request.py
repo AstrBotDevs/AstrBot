@@ -11,6 +11,7 @@ from astrbot.core.agent.message import TextPart
 from astrbot.core.pipeline.process_stage.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
 )
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.provider.func_tool_manager import ToolSet
 
 
@@ -68,6 +69,32 @@ class ProcessLLMRequest:
 
         # tools select
         tmgr = self.ctx.get_llm_tool_manager()
+
+        # SubAgent orchestrator mode: main LLM only sees handoff tools.
+        orch_cfg = cfg.get("subagent_orchestrator", {})
+        if orch_cfg.get("main_enable", False):
+            toolset = ToolSet()
+            for tool in tmgr.func_list:
+                if isinstance(tool, HandoffTool) and tool.active:
+                    toolset.add_tool(tool)
+            req.func_tool = toolset
+
+            # Encourage the model to delegate to subagents.
+            # Use the built-in default router prompt; user overrides are disabled for now.
+            router_prompt = (
+                self.ctx.get_config().get("provider_settings", {})
+                .get("subagent_orchestrator", {})
+                .get("router_system_prompt", "")
+            ).strip()
+            if router_prompt:
+                req.system_prompt += f"\n{router_prompt}\n"
+
+            logger.debug(
+                f"Subagent orchestrator enabled; main tool set (handoff_only): {toolset.names()}"
+            )
+            return
+
+        # Default behavior: follow persona tool selection.
         if (persona and persona.get("tools") is None) or not persona:
             # select all
             toolset = tmgr.get_full_tool_set()
