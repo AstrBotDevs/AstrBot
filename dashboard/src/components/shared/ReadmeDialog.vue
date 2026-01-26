@@ -9,23 +9,10 @@ import { useI18n } from "@/i18n/composables";
 import GitHubMarkdownViewer from "@/components/shared/GitHubMarkdownViewer.vue";
 import { preprocessPluginMarkdown } from "@/utils/preprocessPluginMarkdown";
 
-enableKatex();
-enableMermaid();
-
 const props = defineProps({
-  show: {
-    type: Boolean,
-    default: false,
-  },
-  pluginName: {
-    type: String,
-    default: "",
-  },
-  repoUrl: {
-    type: String,
-    default: null,
-  },
-  // 模式: 'readme' 或 'changelog'
+  show: { type: Boolean, default: false },
+  pluginName: { type: String, default: "" },
+  repoUrl: { type: String, default: null },
   mode: {
     type: String,
     default: "readme",
@@ -34,69 +21,29 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:show"]);
-
-// 国际化
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
-const isEmpty = ref(false); // 请求成功但无内容
+const isEmpty = ref(false);
+const lastRequestId = ref(0);
 
-// 根据模式返回不同的配置
 const modeConfig = computed(() => {
-  if (props.mode === "changelog") {
-    return {
-      title: t("core.common.changelog.title"),
-      loading: t("core.common.changelog.loading"),
-      emptyTitle: t("core.common.changelog.empty.title"),
-      emptySubtitle: t("core.common.changelog.empty.subtitle"),
-      apiPath: "/api/plugin/changelog",
-    };
-  }
+  const isChangelog = props.mode === "changelog";
+  const keyBase = `core.common.${isChangelog ? "changelog" : "readme"}`;
   return {
-    title: t("core.common.readme.title"),
-    loading: t("core.common.readme.loading"),
-    emptyTitle: t("core.common.readme.empty.title"),
-    emptySubtitle: t("core.common.readme.empty.subtitle"),
-    apiPath: "/api/plugin/readme",
+    title: t(`${keyBase}.title`),
+    loading: t(`${keyBase}.loading`),
+    emptyTitle: t(`${keyBase}.empty.title`),
+    emptySubtitle: t(`${keyBase}.empty.subtitle`),
+    apiPath: `/api/plugin/${isChangelog ? "changelog" : "readme"}`,
   };
 });
 
-// 监听show的变化，当显示对话框时加载内容
-watch(
-  () => props.show,
-  (newVal) => {
-    if (newVal && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听pluginName的变化
-watch(
-  () => props.pluginName,
-  (newVal) => {
-    if (props.show && newVal) {
-      fetchContent();
-    }
-  },
-);
-
-// 监听mode的变化
-watch(
-  () => props.mode,
-  () => {
-    if (props.show && props.pluginName) {
-      fetchContent();
-    }
-  },
-);
-
-// 获取内容
 async function fetchContent() {
   if (!props.pluginName) return;
-
+  const requestId = ++lastRequestId.value;
   loading.value = true;
   content.value = null;
   error.value = null;
@@ -106,6 +53,8 @@ async function fetchContent() {
     const res = await axios.get(
       `${modeConfig.value.apiPath}?name=${props.pluginName}`,
     );
+    if (requestId !== lastRequestId.value) return;
+
     if (res.data.status === "ok") {
       if (res.data.data.content) {
         content.value = preprocessPluginMarkdown(res.data.data.content);
@@ -117,33 +66,30 @@ async function fetchContent() {
       error.value = res.data.message;
     }
   } catch (err) {
-    error.value = err.message;
+    if (requestId === lastRequestId.value) error.value = err.message;
   } finally {
-    loading.value = false;
+    if (requestId === lastRequestId.value) loading.value = false;
   }
 }
 
-// 打开GitHub中的仓库
-function openRepoInNewTab() {
-  if (props.repoUrl) {
-    window.open(props.repoUrl, "_blank");
-  }
-}
+watch(
+  [() => props.show, () => props.pluginName, () => props.mode],
+  ([show, name]) => {
+    if (show && name) fetchContent();
+  },
+  { immediate: true },
+);
 
-// 刷新内容
-function refreshContent() {
-  fetchContent();
-}
-
-// 计算属性处理双向绑定
 const _show = computed({
-  get() {
-    return props.show;
-  },
-  set(value) {
-    emit("update:show", value);
-  },
+  get: () => props.show,
+  set: (val) => emit("update:show", val),
 });
+
+// 安全打开外部链接
+function openExternalLink(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 </script>
 
 <template>
@@ -151,7 +97,7 @@ const _show = computed({
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
         <span class="text-h5">{{ modeConfig.title }}</span>
-        <v-btn icon @click="$emit('update:show', false)" variant="text">
+        <v-btn icon @click="_show = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -162,20 +108,19 @@ const _show = computed({
             v-if="repoUrl"
             color="primary"
             prepend-icon="mdi-github"
-            @click="openRepoInNewTab()"
+            @click="openExternalLink(repoUrl)"
           >
             {{ t("core.common.readme.buttons.viewOnGithub") }}
           </v-btn>
           <v-btn
             color="secondary"
             prepend-icon="mdi-refresh"
-            @click="refreshContent()"
+            @click="fetchContent"
           >
             {{ t("core.common.readme.buttons.refresh") }}
           </v-btn>
         </div>
 
-        <!-- 加载中 -->
         <div
           v-if="loading"
           class="d-flex flex-column align-center justify-center"
@@ -201,7 +146,6 @@ const _show = computed({
           </div>
         </div>
 
-        <!-- 错误提示 -->
         <div
           v-else-if="error"
           class="d-flex flex-column align-center justify-center"
@@ -218,7 +162,6 @@ const _show = computed({
           </p>
         </div>
 
-        <!-- 无内容提示 -->
         <div
           v-else-if="isEmpty"
           class="d-flex flex-column align-center justify-center"
@@ -238,11 +181,7 @@ const _show = computed({
       <v-divider></v-divider>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          @click="$emit('update:show', false)"
-        >
+        <v-btn color="primary" variant="tonal" @click="_show = false">
           {{ t("core.common.close") }}
         </v-btn>
       </v-card-actions>
@@ -261,7 +200,6 @@ const _show = computed({
   min-height: 100%;
 }
 
-
 @media (max-width: 767px) {
   .readme-dialog__container {
     padding: 16px;
@@ -271,4 +209,3 @@ const _show = computed({
   }
 }
 </style>
-

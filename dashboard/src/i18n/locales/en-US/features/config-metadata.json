@@ -133,6 +133,36 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent Sandbox Env(Beta)",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "Enable Sandbox Env",
+            "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
+          },
+          "booter": {
+            "description": "Sandbox Environment Driver"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "API access address for Shipyard service."
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard Access Token",
+            "hint": "Access token for accessing Shipyard service."
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Session TTL",
+            "hint": "Session time-to-live in seconds."
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Max Sessions",
+            "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "Context Management Strategy",
       "provider_settings": {
@@ -172,6 +202,14 @@
         "display_reasoning_text": {
           "description": "Display Reasoning Content"
         },
+        "llm_safety_mode": {
+          "description": "Healthy Mode",
+          "hint": "Add safety guardrails to model replies."
+        },
+        "safety_mode_strategy": {
+          "description": "Healthy Mode Strategy",
+          "hint": "How to apply healthy mode."
+        },
         "identifier": {
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."
@@ -186,6 +224,10 @@
         },
         "show_tool_use_status": {
           "description": "Output Function Call Status"
+        },
+        "sanitize_context_by_modalities": {
+          "description": "Sanitize History by Modalities",
+          "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
         },
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
@@ -405,7 +447,8 @@
             "description": "Segment Only LLM Results"
           },
           "interval_method": {
-            "description": "Interval Method"
+            "description": "Interval Method",
+            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
           },
           "interval": {
             "description": "Random Interval Time",
@@ -413,13 +456,15 @@
           },
           "log_base": {
             "description": "Logarithm Base",
-            "hint": "Base for logarithmic intervals, defaults to 2.0. Value range: 1.0-10.0."
+            "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: 1.0-10.0."
           },
           "words_count_threshold": {
-            "description": "Segmented Reply Word Count Threshold"
+            "description": "Segmented Reply Word Count Threshold",
+            "hint": "Segmented reply word count threshold. Only messages with less than this number of words will be segmented, and messages with more than this number of words will be sent directly (not segmented)."
           },
           "split_mode": {
             "description": "Split Mode",
+            "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
             "labels": [
               "Regex",
               "Words List"
@@ -523,5 +568,13 @@
         "description": "Direct Connection Address List"
       }
     }
+  },
+  "help": {
+    "documentation": "Official Documentation",
+    "support": "Join Support Group",
+    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
+    "helpPrefix": "Don't understand the configuration? See",
+    "helpMiddle": "or",
+    "helpSuffix": "."
   }
 }

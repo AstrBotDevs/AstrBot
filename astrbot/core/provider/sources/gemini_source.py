@@ -382,15 +382,18 @@ class ProviderGoogleGenAI(Provider):
                     append_or_extend(gemini_contents, parts, types.ModelContent)
 
             elif role == "tool" and not native_tool_enabled:
-                parts = [
-                    types.Part.from_function_response(
-                        name=message["tool_call_id"],
-                        response={
-                            "name": message["tool_call_id"],
-                            "content": message["content"],
-                        },
-                    ),
-                ]
+                func_name = message.get("name", message["tool_call_id"])
+                part = types.Part.from_function_response(
+                    name=func_name,
+                    response={
+                        "name": func_name,
+                        "content": message["content"],
+                    },
+                )
+                if part.function_response:
+                    part.function_response.id = message["tool_call_id"]
+
+                parts = [part]
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
         if gemini_contents and isinstance(gemini_contents[0], types.ModelContent):

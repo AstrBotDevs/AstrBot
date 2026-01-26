@@ -45,13 +45,13 @@ export interface MessagePart {
     // embedded fields - 加载后填充
     embedded_url?: string;   // blob URL for image, record
     embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
-    reply_content?: string;  // for reply - 被引用消息的内容
+    selected_text?: string;  // for reply - 被引用消息的内容
 }
 
 // 引用信息 (用于发送消息时)
 export interface ReplyInfo {
     messageId: number;
-    messageContent: string;
+    selectedText?: string;  // 选中的文本内容（可选）
 }
 
 // 简化的消息内容结构
@@ -82,6 +82,9 @@ export function useMessages(
     const activeSSECount = ref(0);
     const enableStreaming = ref(true);
     const attachmentCache = new Map<string, string>();  // attachment_id -> blob URL
+    
+    // 当前会话的项目信息
+    const currentSessionProject = ref<{ project_id: string; title: string; emoji: string } | null>(null);
 
     // 从 localStorage 读取流式响应开关状态
     const savedStreamingState = localStorage.getItem('enableStreaming');
@@ -179,6 +182,9 @@ export function useMessages(
             const response = await axios.get('/api/chat/get_session?session_id=' + sessionId);
             isConvRunning.value = response.data.data.is_running || false;
             let history = response.data.data.history;
+            
+            // 保存项目信息（如果存在）
+            currentSessionProject.value = response.data.data.project || null;
 
             if (isConvRunning.value) {
                 if (!isToastedRunningInfo.value) {
@@ -216,11 +222,12 @@ export function useMessages(
         const userMessageParts: MessagePart[] = [];
 
         // 添加引用消息段
+        console.log('ReplyTo in sendMessage:', replyTo);
         if (replyTo) {
             userMessageParts.push({
                 type: 'reply',
                 message_id: replyTo.messageId,
-                reply_content: replyTo.messageContent
+                selected_text: replyTo.selectedText
             });
         }
 
@@ -295,7 +302,8 @@ export function useMessages(
                 if (replyTo) {
                     parts.push({
                         type: 'reply',
-                        message_id: replyTo.messageId
+                        message_id: replyTo.messageId,
+                        selected_text: replyTo.selectedText
                     });
                 }
 
@@ -577,6 +585,7 @@ export function useMessages(
         isStreaming,
         isConvRunning,
         enableStreaming,
+        currentSessionProject,
         getSessionMessages,
         sendMessage,
         toggleStreaming,

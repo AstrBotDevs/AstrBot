@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.11.2"
+VERSION = "4.12.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -97,6 +97,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "sanitize_context_by_modalities": False,
         "agent_runner_type": "local",
         "dify_agent_runner_provider_id": "",
         "coze_agent_runner_provider_id": "",
@@ -105,10 +106,20 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
+        "llm_safety_mode": True,
+        "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
             "enable": False,
             "provider": "moonshotai",
             "moonshotai_api_key": "",
+        },
+        "sandbox": {
+            "enable": False,
+            "booter": "shipyard",
+            "shipyard_endpoint": "",
+            "shipyard_access_token": "",
+            "shipyard_ttl": 3600,
+            "shipyard_max_sessions": 10,
         },
     },
     "provider_stt_settings": {
@@ -155,6 +166,7 @@ DEFAULT_CONFIG = {
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
+        "disable_access_log": True,
     },
     "platform": [],
     "platform_specific": {
@@ -239,7 +251,7 @@ CONFIG_METADATA_2 = {
                         "callback_server_host": "0.0.0.0",
                         "port": 6196,
                     },
-                    "OneBot v11 (QQ 个人号等)": {
+                    "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
                         "enable": False,
@@ -310,6 +322,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "client_id": "",
                         "client_secret": "",
+                        "card_template_id": "",
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -571,6 +584,11 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。",
                     },
+                    "card_template_id": {
+                        "description": "卡片模板 ID",
+                        "type": "string",
+                        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
+                    },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
                         "type": "bool",
@@ -756,27 +774,21 @@ CONFIG_METADATA_2 = {
                             "interval_method": {
                                 "type": "string",
                                 "options": ["random", "log"],
-                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                             },
                             "interval": {
                                 "type": "string",
-                                "hint": "`random` 方法用。每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
                             },
                             "log_base": {
                                 "type": "float",
-                                "hint": "`log` 方法用。对数函数的底数。默认为 2.6",
                             },
                             "words_count_threshold": {
                                 "type": "int",
-                                "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                             },
                             "regex": {
                                 "type": "string",
-                                "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
                             },
                             "content_cleanup_rule": {
                                 "type": "string",
-                                "hint": "移除分段后的内容中的指定的内容。支持正则表达式。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.sub(r'<regex>', '', text)",
                             },
                         },
                     },
@@ -986,17 +998,6 @@ CONFIG_METADATA_2 = {
                         "api_base": "http://127.0.0.1:1234/v1",
                         "custom_headers": {},
                     },
-                    "ModelStack": {
-                        "id": "modelstack",
-                        "provider": "modelstack",
-                        "type": "openai_chat_completion",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "key": [],
-                        "api_base": "https://modelstack.app/v1",
-                        "timeout": 120,
-                        "custom_headers": {},
-                    },
                     "Gemini_OpenAI_API": {
                         "id": "google_gemini_openai",
                         "provider": "google",
@@ -1178,6 +1179,19 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
+                    },
+                    "Genie TTS": {
+                        "id": "genie_tts",
+                        "provider": "genie_tts",
+                        "type": "genie_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "genie_character_name": "mika",
+                        "genie_onnx_model_dir": "CharacterModels/v2ProPlus/mika/tts_models",
+                        "genie_language": "Japanese",
+                        "genie_refer_audio_path": "",
+                        "genie_refer_text": "",
+                        "timeout": 20,
                     },
                     "Edge TTS": {
                         "id": "edge_tts",
@@ -1395,6 +1409,16 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "genie_onnx_model_dir": {
+                        "description": "ONNX Model Directory",
+                        "type": "string",
+                        "hint": "The directory path containing the ONNX model files",
+                    },
+                    "genie_language": {
+                        "description": "Language",
+                        "type": "string",
+                        "options": ["Japanese", "English", "Chinese"],
+                    },
                     "provider_source_id": {
                         "invisible": True,
                         "type": "string",
@@ -2547,6 +2571,62 @@ CONFIG_METADATA_3 = {
             #         "provider_settings.enable": True,
             #     },
             # },
+            "sandbox": {
+                "description": "Agent 沙箱环境",
+                "type": "object",
+                "items": {
+                    "provider_settings.sandbox.enable": {
+                        "description": "启用沙箱环境",
+                        "type": "bool",
+                        "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。",
+                    },
+                    "provider_settings.sandbox.booter": {
+                        "description": "沙箱环境驱动器",
+                        "type": "string",
+                        "options": ["shipyard"],
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_endpoint": {
+                        "description": "Shipyard API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                        "_special": "check_shipyard_connection",
+                    },
+                    "provider_settings.sandbox.shipyard_access_token": {
+                        "description": "Shipyard Access Token",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard 服务的访问令牌。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_ttl": {
+                        "description": "Shipyard Session TTL",
+                        "type": "int",
+                        "hint": "Shipyard 会话的生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_max_sessions": {
+                        "description": "Shipyard Max Sessions",
+                        "type": "int",
+                        "hint": "Shipyard 最大会话数量。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                },
+            },
             "truncate_and_compress": {
                 "description": "上下文管理策略",
                 "type": "object",
@@ -2618,6 +2698,34 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                    "provider_settings.streaming_response": {
+                        "description": "流式输出",
+                        "type": "bool",
+                    },
+                    "provider_settings.unsupported_streaming_strategy": {
+                        "description": "不支持流式回复的平台",
+                        "type": "string",
+                        "options": ["realtime_segmenting", "turn_off"],
+                        "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时，立即发送当前已接收的内容",
+                        "labels": ["实时分段回复", "关闭流式回复"],
+                        "condition": {
+                            "provider_settings.streaming_response": True,
+                        },
+                    },
+                    "provider_settings.llm_safety_mode": {
+                        "description": "健康模式",
+                        "type": "bool",
+                        "hint": "引导模型输出健康、安全的内容，避免有害或敏感话题。",
+                    },
+                    "provider_settings.safety_mode_strategy": {
+                        "description": "健康模式策略",
+                        "type": "string",
+                        "options": ["system_prompt"],
+                        "hint": "选择健康模式的实现策略。",
+                        "condition": {
+                            "provider_settings.llm_safety_mode": True,
+                        },
+                    },
                     "provider_settings.identifier": {
                         "description": "用户识别",
                         "type": "bool",
@@ -2643,6 +2751,14 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                    "provider_settings.sanitize_context_by_modalities": {
+                        "description": "按模型能力清理历史上下文",
+                        "type": "bool",
+                        "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
@@ -2655,20 +2771,6 @@ CONFIG_METADATA_3 = {
                         "type": "int",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.streaming_response": {
-                        "description": "流式输出",
-                        "type": "bool",
-                    },
-                    "provider_settings.unsupported_streaming_strategy": {
-                        "description": "不支持流式回复的平台",
-                        "type": "string",
-                        "options": ["realtime_segmenting", "turn_off"],
-                        "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时，立即发送当前已接收的内容",
-                        "labels": ["实时分段回复", "关闭流式回复"],
-                        "condition": {
-                            "provider_settings.streaming_response": True,
                         },
                     },
                     "provider_settings.wake_prefix": {
@@ -2938,7 +3040,8 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                     },
                     "platform_settings.segmented_reply.interval_method": {
-                        "description": "间隔方法",
+                        "description": "间隔方法。",
+                        "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                         "type": "string",
                         "options": ["random", "log"],
                     },
@@ -2953,13 +3056,14 @@ CONFIG_METADATA_3 = {
                     "platform_settings.segmented_reply.log_base": {
                         "description": "对数底数",
                         "type": "float",
-                        "hint": "对数间隔的底数，默认为 2.0。取值范围为 1.0-10.0。",
+                        "hint": "对数间隔的底数，默认为 2.6。取值范围为 1.0-10.0。",
                         "condition": {
                             "platform_settings.segmented_reply.interval_method": "log",
                         },
                     },
                     "platform_settings.segmented_reply.words_count_threshold": {
                         "description": "分段回复字数阈值",
+                        "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                         "type": "int",
                     },
                     "platform_settings.segmented_reply.split_mode": {
@@ -2970,6 +3074,7 @@ CONFIG_METADATA_3 = {
                     },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",
+                        "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
                         "type": "string",
                         "condition": {
                             "platform_settings.segmented_reply.split_mode": "regex",

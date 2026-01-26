@@ -62,27 +62,44 @@ class AiocqhttpAdapter(Platform):
 
         @self.bot.on_request()
         async def request(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
+            try:
+                abm = await self.convert_message(event)
+                if not abm:
+                    return
                 await self.handle_msg(abm)
+            except Exception as e:
+                logger.exception(f"Handle request message failed: {e}")
+                return
 
         @self.bot.on_notice()
         async def notice(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
+            try:
+                abm = await self.convert_message(event)
+                if abm:
+                    await self.handle_msg(abm)
+            except Exception as e:
+                logger.exception(f"Handle notice message failed: {e}")
+                return
 
         @self.bot.on_message("group")
         async def group(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
+            try:
+                abm = await self.convert_message(event)
+                if abm:
+                    await self.handle_msg(abm)
+            except Exception as e:
+                logger.exception(f"Handle group message failed: {e}")
+                return
 
         @self.bot.on_message("private")
         async def private(event: Event):
-            abm = await self.convert_message(event)
-            if abm:
-                await self.handle_msg(abm)
+            try:
+                abm = await self.convert_message(event)
+                if abm:
+                    await self.handle_msg(abm)
+            except Exception as e:
+                logger.exception(f"Handle private message failed: {e}")
+                return
 
         @self.bot.on_websocket_connection
         def on_websocket_connection(_):
@@ -372,9 +389,10 @@ class AiocqhttpAdapter(Platform):
 
                 message_str += "".join(at_parts)
             elif t == "markdown":
-                text = m["data"].get("markdown") or m["data"].get("content", "")
-                abm.message.append(Plain(text=text))
-                message_str += text
+                for m in m_group:
+                    text = m["data"].get("markdown") or m["data"].get("content", "")
+                    abm.message.append(Plain(text=text))
+                    message_str += text
             else:
                 for m in m_group:
                     try:

@@ -8,7 +8,8 @@
     "upload": "Upload File",
     "voice": "Voice Input",
     "recordingPrompt": "Recording, please speak...",
-    "chatPrompt": "Let's chat!"
+    "chatPrompt": "Let's chat!",
+    "dropToUpload": "Drop files to upload"
   },
   "message": {
     "user": "User",
@@ -22,7 +23,11 @@
     "stop": "Stop Recording",
     "recording": "New Recording",
     "processing": "Processing...",
-    "error": "Recording Failed"
+    "error": "Recording Failed",
+    "listening": "Listening...",
+    "speaking": "Speaking",
+    "startRecording": "Start Voice Input",
+    "liveMode": "Live Mode"
   },
   "welcome": {
     "title": "Welcome to AstrBot",
@@ -42,7 +47,12 @@
     "fullscreen": "Fullscreen Mode",
     "exitFullscreen": "Exit Fullscreen",
     "reply": "Reply",
-    "providerConfig": "AI Configuration"
+    "providerConfig": "AI Configuration",
+    "toolsUsed": "Tool Used",
+    "pythonCodeAnalysis": "Python Code Analysis Used"
+  },
+  "ipython": {
+    "output": "Output"
   },
   "conversation": {
     "newConversation": "New Conversation",
@@ -69,13 +79,24 @@
     "disabled": "Streaming disabled",
     "on": "Stream",
     "off": "Normal"
-  },
-  "reasoning": {
+  },  "config": {
+    "title": "Config"
+  },  "reasoning": {
     "thinking": "Thinking Process"
   },
   "reply": {
     "replyTo": "Reply to",
     "notFound": "Message not found"
+  },
+  "project": {
+    "title": "Projects",
+    "create": "Create Project",
+    "edit": "Edit Project",
+    "name": "Project Name",
+    "emoji": "Icon (Emoji)",
+    "description": "Description (Optional)",
+    "noSessions": "No conversations in this project",
+    "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
   "time": {
     "today": "Today",
@@ -88,6 +109,10 @@
     "cachedTokens": "Cached Tokens",
     "duration": "Duration",
     "ttft": "Time to First Token"
+  },
+  "refs": {
+    "title": "References",
+    "sources": "Sources"
   },
   "connection": {
     "title": "Connection Status Notice",

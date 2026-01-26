@@ -94,29 +94,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   })
 
   const displayedProviderSources = computed(() => {
-    const existing = filteredProviderSources.value || []
-    const existingProviders = new Set(existing.map((src: any) => src.provider).filter(Boolean))
-    const placeholders: any[] = []
-
-    if (providerTemplates.value && Object.keys(providerTemplates.value).length > 0) {
-      for (const [templateKey, template] of Object.entries(providerTemplates.value)) {
-        if (template.provider_type !== selectedProviderType.value) continue
-        if (!template.provider) continue
-        if (existingProviders.has(template.provider)) continue
-
-        placeholders.push({
-          id: template.id || templateKey,
-          provider: template.provider,
-          provider_type: template.provider_type,
-          type: template.type,
-          api_base: template.api_base || '',
-          templateKey,
-          isPlaceholder: true
-        })
-      }
-    }
-
-    return [...existing, ...placeholders]
+    return filteredProviderSources.value || []
   })
 
   const sourceProviders = computed(() => {

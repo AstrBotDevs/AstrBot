@@ -1,11 +1,11 @@
 <template>
-    <div class="messages-container" ref="messageContainer">
+    <div class="messages-container" ref="messageContainer" :class="{ 'is-dark': isDark }">
         <!-- 加载指示器 -->
         <div v-if="isLoadingMessages" class="loading-overlay" :class="{ 'is-dark': isDark }">
             <v-progress-circular indeterminate size="48" width="4" color="primary"></v-progress-circular>
         </div>
         <!-- 聊天消息列表 -->
-        <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }">
+        <div class="message-list" :class="{ 'loading-blur': isLoadingMessages }" @mouseup="handleTextSelection">
             <div class="message-item fade-in" v-for="(msg, index) in messages" :key="index">
                 <!-- 用户消息 -->
                 <div v-if="msg.content.type == 'user'" class="user-message">
@@ -28,7 +28,7 @@
                             <div v-else-if="part.type === 'image' && part.embedded_url" class="image-attachments">
                                 <div class="image-attachment">
                                     <img :src="part.embedded_url" class="attached-image"
-                                        @click="$emit('openImagePreview', part.embedded_url)" />
+                                        @click="openImagePreview(part.embedded_url)" />
                                 </div>
                             </div>
 
@@ -90,86 +90,34 @@
 
                             <template v-else>
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
-                                <div v-if="msg.content.reasoning && msg.content.reasoning.trim()"
-                                    class="reasoning-container" :class="{ 'is-dark': isDark }"
-                                    :style="isDark ? { backgroundColor: 'rgba(103, 58, 183, 0.08)' } : {}">
-                                    <div class="reasoning-header" :class="{ 'is-dark': isDark }"
-                                        @click="toggleReasoning(index)">
-                                        <v-icon size="small" class="reasoning-icon">
-                                            {{ isReasoningExpanded(index) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                        </v-icon>
-                                        <span class="reasoning-label">{{ tm('reasoning.thinking') }}</span>
-                                    </div>
-                                    <div v-if="isReasoningExpanded(index)" class="reasoning-content">
-                                        <MarkdownRender :content="msg.content.reasoning"
-                                            class="reasoning-text markdown-content" :typewriter="false"
-                                            :style="isDark ? { opacity: '0.85' } : {}" :is-dark="isDark" />
-                                    </div>
-                                </div>
+                                <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
+                                    :reasoning="msg.content.reasoning" :is-dark="isDark"
+                                    :initial-expanded="isReasoningExpanded(index)" />
 
                                 <!-- 遍历 message parts (保持顺序) -->
                                 <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
-                                    <!-- Tool Calls Block -->
-                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0"
-                                        class="tool-calls-container">
-                                        <div v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id"
-                                            class="tool-call-card" :class="{ 'is-dark': isDark }" :style="isDark ? {
-                                                backgroundColor: 'rgba(40, 60, 100, 0.4)',
-                                                borderColor: 'rgba(100, 140, 200, 0.4)'
-                                            } : {}">
-                                            <div class="tool-call-header" :class="{ 'is-dark': isDark }"
-                                                @click="toggleToolCall(index, partIndex, tcIndex)">
-                                                <v-icon size="small" class="tool-call-expand-icon">
-                                                    {{ isToolCallExpanded(index, partIndex, tcIndex) ?
-                                                        'mdi-chevron-down' : 'mdi-chevron-right' }}
-                                                </v-icon>
-                                                <v-icon size="small" class="tool-call-icon">mdi-wrench-outline</v-icon>
-                                                <div class="tool-call-info">
-                                                    <span class="tool-call-name">{{ toolCall.name }}</span>
-                                                </div>
-                                                <span class="tool-call-status"
-                                                    :class="{ 'status-running': !toolCall.finished_ts, 'status-finished': toolCall.finished_ts }">
-                                                    <template v-if="toolCall.finished_ts">
-                                                        <v-icon size="x-small"
-                                                            class="status-icon">mdi-check-circle</v-icon>
-                                                        {{ formatDuration(toolCall.finished_ts - toolCall.ts) }}
-                                                    </template>
-                                                    <template v-else>
-                                                        <v-icon size="x-small"
-                                                            class="status-icon spinning">mdi-loading</v-icon>
-                                                        {{ getElapsedTime(toolCall.ts) }}
-                                                    </template>
-                                                </span>
-                                            </div>
-                                            <div v-if="isToolCallExpanded(index, partIndex, tcIndex)"
-                                                class="tool-call-details" :style="isDark ? {
-                                                    borderTopColor: 'rgba(100, 140, 200, 0.3)',
-                                                    backgroundColor: 'rgba(30, 45, 70, 0.5)'
-                                                } : {}">
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">ID:</span>
-                                                    <code class="detail-value"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ toolCall.id
-                    }}</code>
-                                                </div>
-                                                <div class="tool-call-detail-row">
-                                                    <span class="detail-label">Args:</span>
-                                                    <pre class="detail-value detail-json"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{
-                                                            JSON.stringify(toolCall.args, null, 2) }}</pre>
-                                                </div>
-                                                <div v-if="toolCall.result" class="tool-call-detail-row">
-                                                    <span class="detail-label">Result:</span>
-                                                    <pre class="detail-value detail-json detail-result"
-                                                        :style="isDark ? { backgroundColor: 'transparent' } : {}">{{ formatToolResult(toolCall.result) }}
-                </pre>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <!-- iPython Tool Special Block -->
+                                    <template v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0">
+                                        <template v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id">
+                                            <IPythonToolBlock v-if="isIPythonTool(toolCall)" :tool-call="toolCall" style="margin: 8px 0;"
+                                                :is-dark="isDark"
+                                                :initial-expanded="isIPythonToolExpanded(index, partIndex, tcIndex)" />
+                                        </template>
+                                    </template>
+
+                                    <!-- Regular Tool Calls Block (for non-iPython tools) -->
+                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.some(tc => !isIPythonTool(tc))"
+                                        class="flex flex-col gap-2">
+                                        <div class="font-medium opacity-70" style="font-size: 13px; margin-bottom: 16px;">{{ tm('actions.toolsUsed') }}</div>
+                                        <ToolCallCard v-for="(toolCall, tcIndex) in part.tool_calls.filter(tc => !isIPythonTool(tc))"
+                                            :key="toolCall.id" :tool-call="toolCall" :is-dark="isDark"
+                                            :initial-expanded="isToolCallExpanded(index, partIndex, tcIndex)" />
                                     </div>
 
                                     <!-- Text (Markdown) -->
                                     <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
+                                        custom-id="message-list"
+                                        :custom-html-tags="['ref']"
                                         :content="part.text" :typewriter="false" class="markdown-content"
                                         :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
@@ -177,7 +125,7 @@
                                     <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
                                         <div class="embedded-image">
                                             <img :src="part.embedded_url" class="bot-embedded-image"
-                                                @click="$emit('openImagePreview', part.embedded_url)" />
+                                                @click="openImagePreview(part.embedded_url)" />
                                         </div>
                                     </div>
 
@@ -224,7 +172,7 @@
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
                             <span class="message-time" v-if="msg.created_at">{{ formatMessageTime(msg.created_at)
-                            }}</span>
+                                }}</span>
                             <!-- Agent Stats Menu -->
                             <v-menu v-if="msg.content.agentStats" location="bottom" open-on-hover
                                 :close-on-content-click="false">
@@ -269,29 +217,65 @@
                                 @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
                             <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
                                 @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
+                            
+                            <!-- Refs Visualization -->
+                            <ActionRef :refs="msg.content.refs" @open-refs="openRefsSidebar" />
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- 浮动引用按钮 -->
+        <div v-if="selectedText.content && selectedText.messageIndex !== null" class="selection-quote-button" :style="{
+            top: selectedText.position.top + 'px',
+            left: selectedText.position.left + 'px',
+            position: 'fixed'
+        }">
+            <v-btn size="large" rounded="xl" @click="handleQuoteSelected" class="quote-btn"
+                :class="{ 'dark-mode': isDark }">
+                <v-icon left small>mdi-reply</v-icon>
+                引用
+            </v-btn>
+        </div>
     </div>
+
+    <!-- 图片预览 Overlay -->
+    <v-overlay v-model="imagePreview.show" class="image-preview-overlay" @click="closeImagePreview">
+        <div class="image-preview-container" @click.stop>
+            <img :src="imagePreview.url" class="preview-image" @click="closeImagePreview" />
+        </div>
+    </v-overlay>
 </template>
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { MarkdownRender, enableKatex, enableMermaid } from 'markstream-vue'
+import { MarkdownRender, enableKatex, enableMermaid, setCustomComponents } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
+import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
+import IPythonToolBlock from './message_list_comps/IPythonToolBlock.vue';
+import ToolCallCard from './message_list_comps/ToolCallCard.vue';
+import RefNode from './message_list_comps/RefNode.vue';
+import ActionRef from './message_list_comps/ActionRef.vue';
 
 enableKatex();
 enableMermaid();
 
+// 注册自定义 ref 组件
+setCustomComponents('message-list', { ref: RefNode });
+
 export default {
     name: 'MessageList',
     components: {
-        MarkdownRender
+        MarkdownRender,
+        ReasoningBlock,
+        IPythonToolBlock,
+        ToolCallCard,
+        RefNode,
+        ActionRef
     },
     props: {
         messages: {
@@ -311,7 +295,7 @@ export default {
             default: false
         }
     },
-    emits: ['openImagePreview', 'replyMessage'],
+    emits: ['openImagePreview', 'replyMessage', 'replyWithText', 'openRefs'],
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
@@ -319,6 +303,12 @@ export default {
         return {
             t,
             tm
+        };
+    },
+    provide() {
+        return {
+            isDark: this.isDark,
+            webSearchResults: () => this.webSearchResults
         };
     },
     data() {
@@ -330,16 +320,31 @@ export default {
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
             downloadingFiles: new Set(), // Track which files are being downloaded
             expandedToolCalls: new Set(), // Track which tool call cards are expanded
+            expandedIPythonTools: new Set(), // Track which iPython tools are expanded
             elapsedTimeTimer: null, // Timer for updating elapsed time
             currentTime: Date.now() / 1000, // Current time for elapsed time calculation
+            // 选中文本相关状态
+            selectedText: {
+                content: '',
+                messageIndex: null,
+                position: { top: 0, left: 0 }
+            },
+            // 图片预览
+            imagePreview: {
+                show: false,
+                url: ''
+            },
+            // Web search results mapping: { 'uuid.idx': { url, title, snippet } }
+            webSearchResults: {}
         };
     },
-    mounted() {
+    async mounted() {
         this.initCodeCopyButtons();
         this.initImageClickEvents();
         this.addScrollListener();
         this.scrollToBottom();
         this.startElapsedTimeTimer();
+        this.extractWebSearchResults();
     },
     updated() {
         this.initCodeCopyButtons();
@@ -347,8 +352,136 @@ export default {
         if (this.isUserNearBottom) {
             this.scrollToBottom();
         }
+        this.extractWebSearchResults();
     },
     methods: {
+        // 从消息中提取 web_search_tavily 的搜索结果
+        extractWebSearchResults() {
+            const results = {};
+            
+            this.messages.forEach(msg => {
+                if (msg.content.type !== 'bot' || !Array.isArray(msg.content.message)) {
+                    return;
+                }
+                
+                msg.content.message.forEach(part => {
+                    if (part.type !== 'tool_call' || !Array.isArray(part.tool_calls)) {
+                        return;
+                    }
+                    
+                    part.tool_calls.forEach(toolCall => {
+                        // 检查是否是 web_search_tavily 工具调用
+                        if (toolCall.name !== 'web_search_tavily' || !toolCall.result) {
+                            return;
+                        }
+                        
+                        try {
+                            // 解析工具调用结果
+                            const resultData = typeof toolCall.result === 'string' 
+                                ? JSON.parse(toolCall.result) 
+                                : toolCall.result;
+                            
+                            if (resultData.results && Array.isArray(resultData.results)) {
+                                resultData.results.forEach(item => {
+                                    if (item.index) {
+                                        results[item.index] = {
+                                            url: item.url,
+                                            title: item.title,
+                                            snippet: item.snippet
+                                        };
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse web search result:', e);
+                        }
+                    });
+                });
+            });
+            
+            this.webSearchResults = results;
+        },
+        
+        // 处理文本选择
+        handleTextSelection() {
+            const selection = window.getSelection();
+            const selectedText = selection.toString();
+
+            if (!selectedText.trim()) {
+                // 清除选中状态
+                this.selectedText.content = '';
+                this.selectedText.messageIndex = null;
+                return;
+            }
+
+            // 获取被选中的元素，找到对应的message-item
+            const range = selection.getRangeAt(0);
+            const startContainer = range.startContainer;
+            let messageItem = null;
+            let node = startContainer.parentElement;
+
+            // 遍历DOM树向上查找message-item
+            while (node && !node.classList.contains('message-item')) {
+                node = node.parentElement;
+            }
+
+            messageItem = node;
+
+            if (!messageItem) {
+                this.selectedText.content = '';
+                this.selectedText.messageIndex = null;
+                return;
+            }
+
+            // 获取message-item在messages数组中的索引
+            const messageItems = this.$refs.messageContainer?.querySelectorAll('.message-item');
+            let messageIndex = -1;
+            if (messageItems) {
+                for (let i = 0; i < messageItems.length; i++) {
+                    if (messageItems[i] === messageItem) {
+                        messageIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (messageIndex === -1) {
+                this.selectedText.content = '';
+                this.selectedText.messageIndex = null;
+                return;
+            }
+
+            // 获取选中文本的位置（相对于viewport）
+            const rect = selection.getRangeAt(0).getBoundingClientRect();
+
+            this.selectedText.content = selectedText;
+            this.selectedText.messageIndex = messageIndex;
+            this.selectedText.position = {
+                top: Math.max(0, rect.bottom + 5),
+                left: Math.max(0, (rect.left + rect.right) / 2)
+            };
+        },
+
+        // 处理引用选中的文本
+        handleQuoteSelected() {
+            if (this.selectedText.messageIndex === null) return;
+
+            const msg = this.messages[this.selectedText.messageIndex];
+            if (!msg || !msg.id) return;
+
+            // 触发replyWithText事件，传递选中的文本内容
+            this.$emit('replyWithText', {
+                messageId: msg.id,
+                selectedText: this.selectedText.content,
+                messageIndex: this.selectedText.messageIndex
+            });
+
+            // 清除选中状态
+            this.selectedText.content = '';
+            this.selectedText.messageIndex = null;
+            window.getSelection().removeAllRanges();
+        },
+
         // 检查 message 中是否有音频
         hasAudio(messageParts) {
             if (!Array.isArray(messageParts)) return false;
@@ -406,6 +539,23 @@ export default {
         // Check if reasoning is expanded
         isReasoningExpanded(messageIndex) {
             return this.expandedReasoning.has(messageIndex);
+        },
+
+        // Toggle iPython tool expansion state
+        toggleIPythonTool(messageIndex, partIndex, toolCallIndex) {
+            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
+            if (this.expandedIPythonTools.has(key)) {
+                this.expandedIPythonTools.delete(key);
+            } else {
+                this.expandedIPythonTools.add(key);
+            }
+            // Force reactivity
+            this.expandedIPythonTools = new Set(this.expandedIPythonTools);
+        },
+
+        // Check if iPython tool is expanded
+        isIPythonToolExpanded(messageIndex, partIndex, toolCallIndex) {
+            return this.expandedIPythonTools.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
         },
 
         // 下载文件
@@ -576,7 +726,7 @@ export default {
                     if (!img.hasAttribute('data-click-enabled')) {
                         img.style.cursor = 'pointer';
                         img.setAttribute('data-click-enabled', 'true');
-                        img.onclick = () => this.$emit('openImagePreview', img.src);
+                        img.onclick = () => this.openImagePreview(img.src);
                     }
                 });
             });
@@ -777,6 +927,30 @@ export default {
         formatTTFT(ttft) {
             if (!ttft || ttft <= 0) return '';
             return this.formatDuration(ttft);
+        },
+
+        // 打开图片预览
+        openImagePreview(url) {
+            this.imagePreview.url = url;
+            this.imagePreview.show = true;
+        },
+
+        // 关闭图片预览
+        closeImagePreview() {
+            this.imagePreview.show = false;
+            setTimeout(() => {
+                this.imagePreview.url = '';
+            }, 300);
+        },
+
+        // Check if tool is iPython executor
+        isIPythonTool(toolCall) {
+            return toolCall.name === 'astrbot_execute_ipython';
+        },
+
+        // Open refs sidebar
+        openRefsSidebar(refs) {
+            this.$emit('openRefs', refs);
         }
     }
 }
@@ -805,6 +979,23 @@ export default {
     gap: 8px;
 }
 
+:deep(code.bg-secondary) {
+    background-color: #ececec !important;
+    color: #0d0d0d !important;
+}
+
+:deep(code.rounded) {
+    border-radius: 6px !important;
+}
+
+.messages-container.is-dark :deep(code.bg-secondary) {
+    background-color: #424242 !important;
+    color: #ffffff !important;
+}
+
+.messages-container.is-dark :deep(.code-block-container) {
+    background-color: #1f1f1f !important;
+}
 
 /* 基础动画 */
 @keyframes fadeIn {
@@ -1151,10 +1342,10 @@ export default {
 }
 
 .bot-embedded-image {
-    max-width: 40%;
+    max-width: 55%;
     width: auto;
     height: auto;
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: pointer;
     transition: transform 0.2s ease;
 }
@@ -1229,211 +1420,37 @@ export default {
     animation: fadeIn 0.3s ease-in-out;
 }
 
-/* Reasoning 区块样式 */
-.reasoning-container {
-    margin-bottom: 12px;
-    margin-top: 6px;
-    border: 1px solid var(--v-theme-border);
-    border-radius: 20px;
-    overflow: hidden;
-    width: fit-content;
-}
-
-.reasoning-header {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 8px;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s ease;
-    border-radius: 20px;
-}
-
-.reasoning-header:hover {
-    background-color: rgba(103, 58, 183, 0.08);
-}
-
-.reasoning-header.is-dark:hover {
-    background-color: rgba(103, 58, 183, 0.15);
-}
-
-.reasoning-icon {
-    margin-right: 6px;
-    color: var(--v-theme-secondary);
-    transition: transform 0.2s ease;
-}
-
-.reasoning-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--v-theme-secondary);
-    letter-spacing: 0.3px;
-}
-
-.reasoning-content {
-    padding: 0px 12px;
-    border-top: 1px solid var(--v-theme-border);
-    color: gray;
-    animation: fadeIn 0.2s ease-in-out;
-    font-style: italic;
-}
-
-.reasoning-text {
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--v-theme-secondaryText);
-}
-
-/* Tool Call Card Styles */
-.tool-calls-container {
+/* 浮动引用按钮样式 */
+.selection-quote-button {
+    position: fixed;
+    z-index: 1000;
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
-    margin-top: 6px;
+    pointer-events: all;
 }
 
-.tool-call-card {
-    border-radius: 8px;
-    overflow: hidden;
-    background-color: #eff3f6;
-    margin: 8px 0px;
-}
-
-.tool-call-header {
-    display: flex;
-    align-items: center;
-    padding: 10px 12px;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.2s ease;
-    gap: 8px;
-}
-
-.tool-call-header:hover {
-    background-color: rgba(169, 194, 219, 0.15);
-}
-
-.tool-call-header.is-dark:hover {
-    background-color: rgba(100, 150, 200, 0.2);
-}
-
-.tool-call-expand-icon {
-    color: var(--v-theme-secondary);
-    transition: transform 0.2s ease;
-    flex-shrink: 0;
-}
-
-.tool-call-icon {
-    color: var(--v-theme-secondary);
-    flex-shrink: 0;
-}
-
-.tool-call-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 1;
-    min-width: 0;
-}
-
-.tool-call-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--v-theme-secondary);
-}
-
-.tool-call-id {
-    font-size: 11px;
-    color: var(--v-theme-secondaryText);
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.tool-call-status {
-    margin-left: 8px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    flex-shrink: 0;
-}
-
-.tool-call-status.status-running {
-    color: #ff9800;
-}
-
-.tool-call-status.status-finished {
-    color: #4caf50;
-}
-
-.tool-call-status .status-icon {
+.quote-btn {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     font-size: 14px;
+    padding: 4px 24px;
+    background-color: #f6f4fa !important;
+    color: #333333 !important;
 }
 
-.tool-call-status .status-icon.spinning {
-    animation: spin 1s linear infinite;
+.quote-btn:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    background-color: #f6f4fa !important;
 }
 
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+/* 深色主题 */
+.quote-btn.dark-mode {
+    background-color: #2d2d2d !important;
+    color: #ffffff !important;
 }
 
-.tool-call-details {
-    padding: 12px;
-    background-color: rgba(255, 255, 255, 0.5);
-    animation: fadeIn 0.2s ease-in-out;
-}
 
-.tool-call-detail-row {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 8px;
-}
 
-.tool-call-detail-row:last-child {
-    margin-bottom: 0;
-}
-
-.detail-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--v-theme-secondaryText);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-}
-
-.detail-value {
-    font-size: 12px;
-    color: var(--v-theme-primaryText);
-    background-color: transparent;
-    padding: 4px 8px;
-    border-radius: 4px;
-    word-break: break-all;
-}
-
-.detail-json {
-    font-family: 'Fira Code', 'Consolas', monospace;
-    white-space: pre-wrap;
-    max-height: 200px;
-    overflow-y: auto;
-    margin: 0;
-}
-
-.detail-result {
-    max-height: 300px;
-    background-color: transparent;
-}
 </style>
 
 <style>
@@ -1473,5 +1490,37 @@ export default {
     font-weight: 600;
     font-family: 'Fira Code', 'Consolas', monospace;
     color: var(--v-theme-primaryText);
+}
+
+/* 图片预览样式 */
+.image-preview-overlay {
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-preview-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.preview-image {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.close-preview-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
 }
 </style>

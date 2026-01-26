@@ -1,4 +1,4 @@
-{
+﻿{
   "title": "Custom Rules",
   "subtitle": "Set custom rules for specific sessions, which take priority over global settings",
   "buttons": {
@@ -94,6 +94,42 @@
     "title": "Confirm Batch Delete",
     "message": "Are you sure you want to delete {count} selected rules? Global settings will be used after deletion."
   },
+    "batchOperations": {
+    "title": "Batch Operations",
+    "hint": "Quick batch modify session settings",
+    "scope": "Apply to",
+    "scopeSelected": "Selected sessions",
+    "scopeAll": "All sessions",
+    "scopeGroup": "All groups",
+    "scopePrivate": "All private chats",
+    "llmStatus": "LLM Status",
+    "ttsStatus": "TTS Status",
+    "chatProvider": "Chat Model",
+    "ttsProvider": "TTS Model",
+    "apply": "Apply Changes"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "batchOperations": {
+    "title": "Batch Operations",
+    "hint": "Quick batch modify session settings",
+    "scope": "Apply to",
+    "scopeSelected": "Selected sessions",
+    "scopeAll": "All sessions",
+    "scopeGroup": "All groups",
+    "scopePrivate": "All private chats",
+    "llmStatus": "LLM Status",
+    "ttsStatus": "TTS Status",
+    "chatProvider": "Chat Model",
+    "ttsProvider": "TTS Model",
+    "apply": "Apply Changes"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
   "messages": {
     "refreshSuccess": "Data refreshed",
     "loadError": "Failed to load data",
@@ -105,6 +141,8 @@
     "deleteError": "Failed to delete",
     "noChanges": "No changes to save",
     "batchDeleteSuccess": "Batch delete successful",
-    "batchDeleteError": "Batch delete failed"
+    "batchDeleteError": "Batch delete failed",
+    "batchUpdateError": "Batch update failed",
+    "batchUpdateSuccess": "Batch update success"
   }
 }
