@@ -15,7 +15,10 @@ class SubAgentConfig:
     """Runtime representation of a configured subagent."""
 
     name: str
+    # Instructions are used as the subagent's system prompt.
     instructions: str
+    # Public description is what the main LLM sees for transfer_to_* tool description.
+    public_description: str
     tools: list[str]
     enabled: bool = True
 
@@ -63,7 +66,8 @@ class SubAgentOrchestrator:
             if not name:
                 continue
 
-            instructions = str(item.get("description", "")).strip()
+            instructions = str(item.get("system_prompt", "")).strip()
+            public_description = str(item.get("public_description", "")).strip()
             tools = item.get("tools", [])
             if not isinstance(tools, list):
                 tools = []
@@ -74,7 +78,9 @@ class SubAgentOrchestrator:
                 instructions=instructions,
                 tools=tools,
             )
-            handoff = HandoffTool(agent=agent)
+            # The tool description should be a short description for the main LLM,
+            # while the subagent system prompt can be longer/more specific.
+            handoff = HandoffTool(agent=agent, description=public_description or None)
 
             # Mark as dynamic so we can replace/remove later.
             handoff.handler_module_path = "core.subagent_orchestrator"

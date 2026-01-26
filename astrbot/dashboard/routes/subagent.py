@@ -1,6 +1,7 @@
 import traceback
 
 from quart import request
+from quart import jsonify
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -16,11 +17,13 @@ class SubAgentRoute(Route):
     ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
-        self.routes = {
-            "/subagent/config": ("GET", self.get_config),
-            "/subagent/config": ("POST", self.update_config),
-            "/subagent/available-tools": ("GET", self.get_available_tools),
-        }
+        # NOTE: dict cannot hold duplicate keys; use list form to register multiple
+        # methods for the same path.
+        self.routes = [
+            ("/subagent/config", ("GET", self.get_config)),
+            ("/subagent/config", ("POST", self.update_config)),
+            ("/subagent/available-tools", ("GET", self.get_available_tools)),
+        ]
         self.register_routes()
 
     async def get_config(self):
@@ -45,16 +48,16 @@ class SubAgentRoute(Route):
             data.setdefault("main_enable", False)
             data.setdefault("main_tools_policy", "handoff_only")
             data.setdefault("agents", [])
-            return Response().ok(data=data).__dict__
+            return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"获取 subagent 配置失败: {e!s}").__dict__
+            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
 
     async def update_config(self):
         try:
             data = await request.json
             if not isinstance(data, dict):
-                return Response().error("配置必须为 JSON 对象").__dict__
+                return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
             provider_settings = cfg.get("provider_settings", {})
@@ -62,17 +65,18 @@ class SubAgentRoute(Route):
             cfg["provider_settings"] = provider_settings
 
             # Persist to cmd_config.json
-            self.core_lifecycle.astrbot_config_mgr.save(cfg)
+            # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
+            cfg.save_config()
 
             # Reload dynamic handoff tools if orchestrator exists
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
             if orch is not None:
                 orch.reload_from_config(provider_settings)
 
-            return Response().ok(message="保存成功").__dict__
+            return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"保存 subagent 配置失败: {e!s}").__dict__
+            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").__dict__)
 
     async def get_available_tools(self):
         """Return all registered tools (name/description/parameters/active/origin).
@@ -92,7 +96,7 @@ class SubAgentRoute(Route):
                         "handler_module_path": tool.handler_module_path,
                     }
                 )
-            return Response().ok(data=tools_dict).__dict__
+            return jsonify(Response().ok(data=tools_dict).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"获取可用工具失败: {e!s}").__dict__
+            return jsonify(Response().error(f"获取可用工具失败: {e!s}").__dict__)

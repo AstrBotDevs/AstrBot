@@ -116,9 +116,12 @@
                     label="分配工具（多选）"
                     variant="outlined"
                     density="comfortable"
+                    class="subagent-tools"
                     multiple
                     chips
                     closable-chips
+                    :menu-props="{ maxHeight: 320 }"
+                    :max-chips="8"
                     :loading="toolsLoading"
                     :disabled="toolsLoading"
                     clearable
@@ -127,13 +130,24 @@
               </v-row>
 
               <v-textarea
-                v-model="agent.description"
-                label="SubAgent 描述 / 指令"
+                v-model="agent.public_description"
+                label="对主 LLM 的描述（用于决定是否 handoff）"
                 variant="outlined"
                 rows="3"
                 auto-grow
-                hint="主 LLM 主要通过这里的描述来决定是否 handoff 到该 SubAgent。"
+                hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
                 persistent-hint
+              />
+
+              <v-textarea
+                v-model="agent.system_prompt"
+                label="SubAgent System Prompt（该 SubAgent 自己的指令）"
+                variant="outlined"
+                rows="4"
+                auto-grow
+                hint="这段只给该 SubAgent 自己作为 system prompt 使用，可以更长、更严格。"
+                persistent-hint
+                class="mt-3"
               />
 
               <div class="mt-3">
@@ -175,7 +189,8 @@ type ToolOption = { title: string; value: string }
 type SubAgentItem = {
   __key: string
   name: string
-  description: string
+  public_description: string
+  system_prompt: string
   tools: string[]
   enabled: boolean
 }
@@ -221,14 +236,16 @@ function normalizeConfig(raw: any): SubAgentConfig {
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => {
     const name = (a?.name ?? '').toString()
-    const description = (a?.description ?? '').toString()
+    const public_description = (a?.public_description ?? '').toString()
+    const system_prompt = (a?.system_prompt ?? '').toString()
     const tools = Array.isArray(a?.tools) ? a.tools.map((x: any) => String(x)) : []
     const enabled = a?.enabled !== false
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
       name,
-      description,
+      public_description,
+      system_prompt,
       tools,
       enabled
     }
@@ -296,7 +313,8 @@ function addAgent() {
   cfg.value.agents.push({
     __key: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
     name: '',
-    description: '',
+    public_description: '',
+    system_prompt: '',
     tools: [],
     enabled: true
   })
@@ -316,7 +334,8 @@ async function save() {
       main_tools_policy: 'handoff_only',
       agents: cfg.value.agents.map(a => ({
         name: a.name,
-        description: a.description,
+        public_description: a.public_description,
+        system_prompt: a.system_prompt,
         tools: a.tools,
         enabled: a.enabled
       }))
@@ -350,4 +369,26 @@ onMounted(() => {
   padding-top: 8px;
   padding-bottom: 40px;
 }
+</style>
+
+<style>
+/*
+  Vuetify renders selected chips inside the input control and will grow the
+  field height as chips wrap. For subagent tool assignment this quickly becomes
+  unwieldy, so we cap the chip area height and allow scrolling.
+
+  Note: this must be a non-scoped style so it can reach Vuetify's internal
+  elements.
+*/
+.subagent-tools .v-field__input {
+  max-height: 160px;
+  overflow-y: auto;
+  align-content: flex-start;
+}
+
+/* Small breathing room so the scrollbar doesn't overlap chip close icons. */
+.subagent-tools .v-field__input {
+  padding-right: 6px;
+}
+
 </style>
