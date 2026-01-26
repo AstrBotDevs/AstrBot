@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from astrbot import logger
@@ -8,19 +7,6 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
-
-
-@dataclass(frozen=True)
-class SubAgentConfig:
-    """Runtime representation of a configured subagent."""
-
-    name: str
-    # Instructions are used as the subagent's system prompt.
-    instructions: str
-    # Public description is what the main LLM sees for transfer_to_* tool description.
-    public_description: str
-    tools: list[str]
-    enabled: bool = True
 
 
 class SubAgentOrchestrator:
@@ -32,23 +18,16 @@ class SubAgentOrchestrator:
 
     def __init__(self, tool_mgr: FunctionToolManager):
         self._tool_mgr = tool_mgr
-        self._registered_handoff_names: set[str] = set()
 
-    def reload_from_config(self, provider_settings: dict[str, Any]) -> None:
-        cfg = provider_settings.get("subagent_orchestrator", {})
+    def reload_from_config(self, cfg: dict[str, Any]) -> None:
         enabled = bool(cfg.get("main_enable", False))
 
-        # Remove previously registered dynamic handoff tools.
-        if self._registered_handoff_names:
-            for name in list(self._registered_handoff_names):
-                try:
-                    self._tool_mgr.remove_func(name)
-                except Exception:
-                    # remove_func is best-effort; keep going.
-                    pass
-            self._registered_handoff_names.clear()
-
         if not enabled:
+            # Ensure any previous dynamic handoff tools are cleared.
+            self._tool_mgr.sync_dynamic_handoff_tools(
+                [],
+                handler_module_path="core.subagent_orchestrator",
+            )
             return
 
         agents = cfg.get("agents", [])
@@ -56,6 +35,7 @@ class SubAgentOrchestrator:
             logger.warning("subagent_orchestrator.agents must be a list")
             return
 
+        handoffs: list[HandoffTool] = []
         for item in agents:
             if not isinstance(item, dict):
                 continue
@@ -83,32 +63,20 @@ class SubAgentOrchestrator:
             )
             # The tool description should be a short description for the main LLM,
             # while the subagent system prompt can be longer/more specific.
-            handoff = HandoffTool(agent=agent, description=public_description or None)
+            handoff = HandoffTool(
+                agent=agent,
+                tool_description=public_description or None,
+            )
 
             # Optional per-subagent chat provider override.
             handoff.provider_id = provider_id
 
-            # Mark as dynamic so we can replace/remove later.
-            handoff.handler_module_path = "core.subagent_orchestrator"
+            handoffs.append(handoff)
 
-            # Register tool (replaces if same name exists).
-            self._tool_mgr.add_func(
-                name=handoff.name,
-                func_args=[
-                    {
-                        "type": "string",
-                        "name": "input",
-                        "description": "Task input delegated from the main agent.",
-                    }
-                ],
-                desc=handoff.description,
-                handler=handoff.handler,
-            )
+        self._tool_mgr.sync_dynamic_handoff_tools(
+            handoffs,
+            handler_module_path="core.subagent_orchestrator",
+        )
 
-            # NOTE: add_func wraps handler into a FunctionTool; we want the actual HandoffTool.
-            # Therefore, directly append the HandoffTool to func_list (and remove any wrapper).
-            self._tool_mgr.remove_func(handoff.name)
-            self._tool_mgr.func_list.append(handoff)
-
-            self._registered_handoff_names.add(handoff.name)
+        for handoff in handoffs:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")

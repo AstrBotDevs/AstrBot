@@ -89,7 +89,7 @@ class AstrBotCoreLifecycle:
                     self.provider_manager.llm_tools,
                 )
             self.subagent_orchestrator.reload_from_config(
-                self.astrbot_config.get("provider_settings", {}),
+                self.astrbot_config.get("subagent_orchestrator", {}),
             )
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)

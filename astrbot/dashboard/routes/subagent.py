@@ -3,6 +3,7 @@ import traceback
 from quart import jsonify, request
 
 from astrbot.core import logger
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .route import Response, Route, RouteContext
@@ -28,8 +29,7 @@ class SubAgentRoute(Route):
     async def get_config(self):
         try:
             cfg = self.core_lifecycle.astrbot_config
-            provider_settings = cfg.get("provider_settings", {})
-            data = provider_settings.get("subagent_orchestrator")
+            data = cfg.get("subagent_orchestrator")
 
             # First-time access: return a sane default instead of erroring.
             if not isinstance(data, dict):
@@ -70,9 +70,7 @@ class SubAgentRoute(Route):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
-            provider_settings = cfg.get("provider_settings", {})
-            provider_settings["subagent_orchestrator"] = data
-            cfg["provider_settings"] = provider_settings
+            cfg["subagent_orchestrator"] = data
 
             # Persist to cmd_config.json
             # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
@@ -81,7 +79,7 @@ class SubAgentRoute(Route):
             # Reload dynamic handoff tools if orchestrator exists
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
             if orch is not None:
-                orch.reload_from_config(provider_settings)
+                orch.reload_from_config(data)
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
@@ -97,6 +95,12 @@ class SubAgentRoute(Route):
             tool_mgr = self.core_lifecycle.provider_manager.llm_tools
             tools_dict = []
             for tool in tool_mgr.func_list:
+                # Prevent recursive routing: subagents should not be able to select
+                # the handoff (transfer_to_*) tools as their own mounted tools.
+                if isinstance(tool, HandoffTool):
+                    continue
+                if tool.handler_module_path == "core.subagent_orchestrator":
+                    continue
                 tools_dict.append(
                     {
                         "name": tool.name,

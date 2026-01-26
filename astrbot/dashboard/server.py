@@ -132,8 +132,7 @@ class AstrBotDashboard:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        # Be tolerant of different header casing / formatting.
-        token = token.strip().removeprefix("Bearer ").strip()
+        token = token.removeprefix("Bearer ")
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]

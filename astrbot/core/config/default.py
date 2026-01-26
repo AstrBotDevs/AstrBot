@@ -121,18 +121,18 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
-        # SubAgent orchestrator mode: the main LLM only delegates tasks to subagents
-        # (via transfer_to_{agent} tools). Domain tools are mounted on subagents.
-        "subagent_orchestrator": {
-            "main_enable": False,
-            "main_tools_policy": "handoff_only",  # reserved for future; main_enable implies handoff_only
-            "router_system_prompt": (
-                "You are a task router. Your job is to chat naturally, recognize user intent, "
-                "and delegate work to the most suitable subagent using transfer_to_* tools. "
-                "Do not try to use domain tools yourself. If no subagent fits, respond directly."
-            ),
-            "agents": [],
-        },
+    },
+    # SubAgent orchestrator mode: the main LLM only delegates tasks to subagents
+    # (via transfer_to_{agent} tools). Domain tools are mounted on subagents.
+    "subagent_orchestrator": {
+        "main_enable": False,
+        "main_tools_policy": "handoff_only",  # reserved for future; main_enable implies handoff_only
+        "router_system_prompt": (
+            "You are a task router. Your job is to chat naturally, recognize user intent, "
+            "and delegate work to the most suitable subagent using transfer_to_* tools. "
+            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
+        ),
+        "agents": [],
     },
     "provider_stt_settings": {
         "enable": False,

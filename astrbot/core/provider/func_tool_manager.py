@@ -11,6 +11,7 @@ import aiohttp
 
 from astrbot import logger
 from astrbot.core import sp
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -178,6 +179,48 @@ class FunctionToolManager:
         """获取完整工具集"""
         tool_set = ToolSet(self.func_list.copy())
         return tool_set
+
+    def sync_dynamic_handoff_tools(
+        self,
+        handoffs: list[HandoffTool],
+        *,
+        handler_module_path: str,
+    ) -> None:
+        """Sync dynamic transfer_to_* tools in-place.
+
+        This removes any existing tools previously registered under the same
+        handler_module_path and then registers the provided HandoffTool list.
+
+        NOTE: add_func() stores a FunctionTool wrapper; for handoff tools we
+        want to keep the real HandoffTool objects in func_list so other parts
+        of the system can inspect agent/provider_id metadata.
+        """
+
+        # Remove previously registered dynamic handoff tools.
+        self.func_list = [
+            t for t in self.func_list if t.handler_module_path != handler_module_path
+        ]
+
+        for handoff in handoffs:
+            handoff.handler_module_path = handler_module_path
+
+            # Register tool (ensures the handler is reachable by name).
+            self.add_func(
+                name=handoff.name,
+                func_args=[
+                    {
+                        "type": "string",
+                        "name": "input",
+                        "description": "Task input delegated from the main agent.",
+                    }
+                ],
+                desc=handoff.description,
+                handler=handoff.handler,
+            )
+
+            # Replace wrapper with the actual HandoffTool instance.
+            self.remove_func(handoff.name)
+            self.func_list.append(handoff)
 
     async def init_mcp_clients(self) -> None:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：

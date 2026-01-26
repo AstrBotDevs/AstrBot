@@ -71,10 +71,13 @@ class ProcessLLMRequest:
         tmgr = self.ctx.get_llm_tool_manager()
 
         # SubAgent orchestrator mode: main LLM only sees handoff tools.
-        orch_cfg = cfg.get("subagent_orchestrator", {})
+        # NOTE: subagent_orchestrator config lives at top-level now.
+        orch_cfg = self.ctx.get_config().get("subagent_orchestrator", {})
         if orch_cfg.get("main_enable", False):
             toolset = ToolSet()
             for tool in tmgr.func_list:
+                # Prevent recursion / confusion: in handoff-only mode, the main LLM
+                # should only be able to call transfer_to_* tools.
                 if isinstance(tool, HandoffTool) and tool.active:
                     toolset.add_tool(tool)
             req.func_tool = toolset
@@ -83,16 +86,12 @@ class ProcessLLMRequest:
             # Use the built-in default router prompt; user overrides are disabled for now.
             router_prompt = (
                 self.ctx.get_config()
-                .get("provider_settings", {})
                 .get("subagent_orchestrator", {})
                 .get("router_system_prompt", "")
             ).strip()
             if router_prompt:
                 req.system_prompt += f"\n{router_prompt}\n"
 
-            logger.debug(
-                f"Subagent orchestrator enabled; main tool set (handoff_only): {toolset.names()}"
-            )
             return
 
         # Default behavior: follow persona tool selection.
