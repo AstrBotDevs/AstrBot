@@ -4,74 +4,52 @@
       <v-btn size="small" color="primary" variant="tonal" @click="dialog = true">
         {{ tm('fileUpload.button') }}
       </v-btn>
-      <span class="text-caption text-medium-emphasis">
+      <span class="text-caption text-medium-emphasis ml-2">
         {{ fileCountText }}
       </span>
     </div>
 
-    <v-dialog v-model="dialog" max-width="1200" width="1200">
-      <v-card class="file-dialog-card">
+    <v-dialog v-model="dialog" max-width="700">
+      <v-card class="file-dialog-card" variant="flat">
         <v-card-title class="d-flex align-center">
-          <span class="text-h6">{{ tm('fileUpload.dialogTitle') }}</span>
+          <span class="text-h3">{{ tm('fileUpload.dialogTitle') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
         </v-card-title>
 
         <v-card-text class="file-dialog-body">
-          <div class="file-dialog">
-            <div v-if="fileList.length === 0" class="empty-text">
-              {{ tm('fileUpload.empty') }}
-            </div>
-
-            <v-list class="file-list" density="compact" lines="one">
-              <v-list-item v-for="filePath in fileList" :key="filePath">
-                <template #prepend>
-                  <v-icon size="18">mdi-file</v-icon>
-                </template>
-                <v-list-item-title class="file-name">
-                  {{ getDisplayName(filePath) }}
-                </v-list-item-title>
-                <template #append>
-                  <v-btn
-                    icon="mdi-close"
-                    size="x-small"
-                    variant="text"
-                    @click="deleteFile(filePath)"
-                  />
-                </template>
-              </v-list-item>
-
-              <v-divider v-if="fileList.length > 0" class="my-2" />
-
-              <v-list-item
-                class="upload-item"
-                :class="{ dragover: isDragging }"
-                @drop.prevent="handleDrop"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @click="openFilePicker"
-              >
-                <template #prepend>
-                  <div class="upload-icon">
-                    <v-icon size="18" color="primary">mdi-plus</v-icon>
-                  </div>
-                </template>
-                <v-list-item-title>{{ tm('fileUpload.dropzone') }}</v-list-item-title>
-                <v-list-item-subtitle v-if="allowedTypesText" class="upload-hint">
-                  {{ tm('fileUpload.allowedTypes', { types: allowedTypesText }) }}
-                </v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
-
-            <input
-              ref="fileInput"
-              type="file"
-              multiple
-              hidden
-              :accept="acceptAttr"
-              @change="handleFileSelect"
-            />
+          <div v-if="fileList.length === 0" class="empty-text">
+            {{ tm('fileUpload.empty') }}
           </div>
+
+          <v-list density="compact" lines="one">
+            <v-list-item v-for="filePath in fileList" :key="filePath">
+              <template #prepend>
+                <v-icon size="18">mdi-file</v-icon>
+              </template>
+              <v-list-item-title class="file-name">
+                {{ getDisplayName(filePath) }}
+              </v-list-item-title>
+              <template #append>
+                <v-btn icon="mdi-close" size="x-small" variant="text" @click="deleteFile(filePath)" />
+              </template>
+            </v-list-item>
+
+            <v-divider v-if="fileList.length > 0" class="my-2" />
+
+            <v-list-item class="upload-item" :class="{ dragover: isDragging }" @drop.prevent="handleDrop"
+              @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="openFilePicker">
+              <template #prepend>
+                <v-icon size="18" color="primary">mdi-plus</v-icon>
+              </template>
+              <v-list-item-title>{{ tm('fileUpload.dropzone') }}</v-list-item-title>
+              <v-list-item-subtitle v-if="allowedTypesText" class="upload-hint">
+                {{ tm('fileUpload.allowedTypes', { types: allowedTypesText }) }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+
+          <input ref="fileInput" type="file" multiple hidden :accept="acceptAttr" @change="handleFileSelect" />
         </v-card-text>
 
         <v-card-actions class="file-dialog-actions">
@@ -267,14 +245,9 @@ const getDisplayName = (path) => {
   width: 100%;
 }
 
-.file-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .file-dialog-card {
   height: 70vh;
+  box-shadow: none;
 }
 
 .file-dialog-body {
@@ -296,40 +269,18 @@ const getDisplayName = (path) => {
   color: rgba(var(--v-theme-on-surface), 0.5);
 }
 
-.file-list {
-  border-radius: 16px;
-  background: rgba(var(--v-theme-surface), 0.95);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-}
-
 .file-name {
   font-weight: 600;
   word-break: break-word;
 }
 
 .upload-item {
-  border: 2px dashed rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 14px;
-  margin: 12px;
   cursor: pointer;
-  background: rgba(var(--v-theme-surface-variant), 0.22);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .upload-item:hover,
 .upload-item.dragover {
-  border-color: rgba(var(--v-theme-primary), 0.6);
-  background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.upload-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: rgba(var(--v-theme-primary), 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 </style>
