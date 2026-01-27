@@ -7,6 +7,56 @@
     "handlersOperation": "管理行为",
     "market": "插件市场"
   },
+  "modManager": {
+    "panelTabs": {
+      "info": "信息",
+      "config": "配置",
+      "behavior": "行为",
+      "overview": "文档",
+      "changelog": "更新日志"
+    },
+    "welcome": {
+      "title": "欢迎使用 AstrBot 插件管理器",
+      "subtitle": "选择插件以查看详情，或从插件市场安装更多扩展",
+      "body": "AstrBot 是一个功能强大的聊天机器人框架，支持多平台、多模型。\\n通过插件系统，您可以轻松扩展 AstrBot 的能力。\\n\\n## 快速开始\\n- 在左侧列表中选择一个插件查看详情\\n- 在「信息 / 配置 / 文档」标签页中查看配置、文档和更新信息\\n- 使用顶部工具栏可以安装新插件或批量更新\\n\\n## 相关链接\\n- GitHub: https://github.com/AstrBotDevs/AstrBot\\n- 文档: https://astrbot.app/",
+      "links": {
+        "github": "GitHub",
+        "docs": "文档"
+      },
+      "actions": {
+        "viewOnGithub": "在 GitHub 中查看",
+        "retry": "重试"
+      },
+      "readme": {
+        "loading": "正在加载文档...",
+        "errors": {
+          "fetchFailed": "无法加载文档，请检查网络连接",
+          "rateLimited": "GitHub API 速率限制，请稍后再试"
+        },
+        "empty": {
+          "title": "暂无文档内容。",
+          "subtitle": "请稍后重试或在 GitHub 中查看。"
+        }
+      },
+      "tip": {
+        "market": "插件市场：点击顶部「插件市场」标签页浏览与安装插件。"
+      }
+    },
+    "changelogPanel": {
+      "loading": "正在加载更新日志...",
+      "actions": {
+        "retry": "重试"
+      },
+      "errors": {
+        "fetchFailed": "获取更新日志失败",
+        "fetchError": "获取更新日志时发生错误"
+      },
+      "empty": {
+        "title": "该插件未提供更新日志。",
+        "subtitle": "开发者可在插件目录下添加 CHANGELOG.md 文件来提供更新日志。"
+      }
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
@@ -221,5 +271,145 @@
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
+  },
+  "pipeline": {
+    "tabTitle": "执行链路",
+    "traceTabTitle": "影响链路",
+    "tabs": {
+      "pipeline": "执行链路",
+      "pipelineTooltip": "按阶段展示插件处理器的参与情况与静态风险标记，用于排查冲突与定位处理器位置。这里展示的是快照分析结果，不是运行时日志。",
+      "trace": "影响链路",
+      "traceTooltip": "基于静态分析推断插件可能影响哪些内部字段，并按影响对象与阶段聚合，适合从\"被影响字段\"反查来源插件。不完全等同于运行时的真实轨迹。"
+    },
+    "toolbar": {
+      "refresh": "刷新快照",
+      "promptPreview": "提示词预览"
+    },
+    "scope": {
+      "label": "范围",
+      "global": "全局",
+      "session": "会话",
+      "sessionUmo": "会话 UMO"
+    },
+    "rightTabs": {
+      "detail": "阶段详情",
+      "conflicts": "冲突列表"
+    },
+    "fishbone": {
+      "noSnapshot": "暂无快照数据",
+      "noParticipants": "无参与者",
+      "viewDetail": "查看详情"
+    },
+    "detail": {
+      "viewImpactChain": "查看影响链路",
+      "noSnapshot": "暂无快照数据",
+      "noStageSelected": "未选择阶段",
+      "noStageSelectedHint": "请在左侧鱼骨图选择一个阶段",
+      "noParticipants": "无参与者",
+      "noParticipantsHint": "该阶段没有任何插件参与",
+      "participants": "个参与者",
+      "conflicts": "个冲突",
+      "plugin": "插件",
+      "trigger": "触发"
+    },
+    "conflictList": {
+      "title": "冲突列表",
+      "total": "共 {count} 条",
+      "none": "无冲突",
+      "noneHint": "当前未检测到冲突",
+      "severity": {
+        "error": "严重",
+        "warn": "警告",
+        "info": "提示"
+      },
+      "involved": "涉及对象"
+    },
+    "filters": {
+      "onlyHighImpact": "仅显示重点影响（启发式）",
+      "onlyHighImpactTooltip": "仅用于缩小排查范围：覆盖、清空、列表修改、中止、发送等会被标记为重点影响；不代表一定发生或一定有问题。",
+      "targetObject": "影响对象（字段）",
+      "targetObjectPlaceholder": "选择被影响的字段路径",
+      "targetObjectTooltip": "用于筛选\"被影响字段\"。例如选择 system_prompt 可查看哪些插件可能改写系统提示词。"
+    },
+    "promptPreview": {
+      "title": "提示词预览",
+      "emptyTitle": "暂无数据",
+      "emptyHint": "当前快照不包含提示词预览信息",
+      "overwriteWarn": "检测到多个 overwrite 操作，最终提示词可能被覆盖且顺序不稳定。",
+      "simulatedInput": "模拟用户输入",
+      "simulatedInputHint": "用于让预览渲染更接近真实请求的输入内容；不会用于搜索或过滤插件列表。",
+      "contexts": "上下文",
+      "contextsNotPresent": "上下文未注入（静态预览）",
+      "contextsTooltip": "本次预览未注入运行时上下文（例如历史消息、外部检索内容），因此\"上下文相关的注入/拼接\"可能为空或不可见。",
+      "injectedBy": "注入来源（推断）",
+      "injectedByTooltip": "表示\"可能参与注入链\"的来源列表（静态推断），用于回溯哪些处理器可能影响 prompt/system_prompt/persona_prompt。",
+      "dryRunHandlers": "预演处理器（仅请求阶段）",
+      "dryRunHandlersTooltip": "仅对请求阶段进行安全预演，用于发现潜在覆盖/拦截/告警；不代表全流程执行模拟。",
+      "renderWarnings": "预览告警",
+      "renderWarningsTooltip": "预览渲染/预演中发现的警告与原因，例如被安全策略拦截的动作或渲染无法完成的情况。",
+      "statusColumn": "预演结果",
+      "statusExecuted": "已执行预演",
+      "statusBlocked": "被策略阻止",
+      "statusErrored": "预演失败",
+      "statusSkipped": "未执行",
+      "stopColumn": "中止标记",
+      "stopTooltip": "该处理器在预演中可能中止事件链路",
+      "diffColumn": "变更摘要",
+      "diffTooltip": "本次预演是否改动prompt/system_prompt",
+      "blockedColumn": "策略拦截",
+      "blockedTooltip": "被预览策略阻止的动作与原因（例如 send/request_llm 等）",
+      "chain": "注入链路",
+      "headers": {
+        "plugin": "插件",
+        "handler": "处理器",
+        "priority": "优先级",
+        "field": "字段",
+        "mutation": "变更类型"
+      },
+      "finalSystemPrompt": "最终 System Prompt",
+      "finalPrompt": "最终 Prompt",
+      "close": "关闭"
+    },
+    "effectTargets": {
+      "provider_request.system_prompt": "系统提示词",
+      "provider_request.prompt": "用户提示词",
+      "provider_request.persona_prompt": "Persona 提示词",
+      "provider_request.contexts": "上下文列表",
+      "provider_request.func_tool": "函数工具请求",
+      "llm_response.completion_text": "模型回复文本",
+      "result.chain": "最终结果链",
+      "event.message_str": "原始消息文本",
+      "send": "直接发送",
+      "stop": "中止后续流程"
+    },
+    "effectOps": {
+      "overwrite": "覆盖",
+      "clear": "清空",
+      "append": "追加",
+      "mutate_list": "列表修改",
+      "call": "调用"
+    },
+    "traceDetail": {
+      "title": "影响点详情",
+      "impactLevel": "影响级别",
+      "keyImpact": "重点影响",
+      "normalImpact": "一般影响",
+      "confidence": "推断置信度",
+      "confidenceTooltip": "静态分析的置信度，高/中/低/未知",
+      "stage": "所属阶段",
+      "targetField": "影响对象（字段）",
+      "operation": "影响操作",
+      "evidence": "推断依据",
+      "codeLocation": "代码定位",
+      "plugin": "插件",
+      "handler": "处理器",
+      "priority": "优先级",
+      "jumpToPipeline": "在执行链路中定位",
+      "filterByTarget": "查看该影响对象的其它影响点",
+      "advancedInfo": "高级信息",
+      "rawTarget": "原始 target",
+      "rawOp": "原始 op",
+      "staticAnalysisNote": "这些是静态推断的可能影响，不等同于运行时日志"
+    }
   }
 }

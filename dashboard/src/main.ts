@@ -6,6 +6,7 @@ import vuetify from './plugins/vuetify';
 import confirmPlugin from './plugins/confirmPlugin';
 import { setupI18n } from './i18n/composables';
 import '@/scss/style.scss';
+import 'github-markdown-css/github-markdown.css';
 import VueApexCharts from 'vue3-apexcharts';
 
 import print from 'vue3-print-nb';

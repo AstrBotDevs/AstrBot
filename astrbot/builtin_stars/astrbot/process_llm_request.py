@@ -42,16 +42,28 @@ class ProcessLLMRequest:
 
         if not persona_id:
             persona_id = req.conversation.persona_id or cfg.get("default_personality")
-            if not persona_id and persona_id != "[%None]":  # [%None] 为用户取消人格
-                default_persona = self.ctx.persona_manager.selected_default_persona_v3
-                if default_persona:
-                    persona_id = default_persona["name"]
 
-                    # ChatUI special default persona
-                    if platform_type == "webchat":
-                        # non-existent persona_id to let following codes not working
-                        persona_id = "_chatui_default_"
-                        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+        # [%None] 为用户取消人格
+        # 同时兼容配置为 "default" 但库中不存在该 persona 的情况：
+        # - 优先使用当前 persona_manager 选中的默认 persona（会被插件如 meme_manager 修改）
+        # - 再兜底用 get_default_persona_v3()
+        if (not persona_id or persona_id == "default") and persona_id != "[%None]":
+            default_persona = self.ctx.persona_manager.selected_default_persona_v3
+            if not default_persona:
+                try:
+                    default_persona = (
+                        await self.ctx.persona_manager.get_default_persona_v3(umo)
+                    )
+                except Exception:
+                    default_persona = None
+            if default_persona:
+                persona_id = default_persona.get("name") or persona_id
+
+                # ChatUI special default persona
+                if platform_type == "webchat":
+                    # non-existent persona_id to let following codes not working
+                    persona_id = "_chatui_default_"
+                    req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
         persona = next(
             builtins.filter(
@@ -60,6 +72,16 @@ class ProcessLLMRequest:
             ),
             None,
         )
+
+        # 兼容：配置指向的 persona 不存在时，回退到默认 persona，避免 system_prompt 为空
+        if not persona and persona_id != "[%None]":
+            persona = self.ctx.persona_manager.selected_default_persona_v3
+            if not persona:
+                try:
+                    persona = await self.ctx.persona_manager.get_default_persona_v3(umo)
+                except Exception:
+                    persona = None
+
         if persona:
             if prompt := persona["prompt"]:
                 req.system_prompt += prompt

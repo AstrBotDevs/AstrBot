@@ -45,6 +45,7 @@ yarn.lock
 astrbot.lock
 
 # Other
+playwright-screenshots/
 chroma
 venv/*
 pytest.ini

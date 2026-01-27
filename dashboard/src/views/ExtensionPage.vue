@@ -1,25 +1,31 @@
-<script setup>
-import ExtensionCard from "@/components/shared/ExtensionCard.vue";
-import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
-import ProxySelector from "@/components/shared/ProxySelector.vue";
-import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
-import McpServersSection from "@/components/extension/McpServersSection.vue";
-import ComponentPanel from "@/components/extension/componentPanel/index.vue";
-import axios from "axios";
-import { pinyin } from "pinyin-pro";
-import { useCommonStore } from "@/stores/common";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+<script setup lang="ts">
+// @ts-nocheck
+import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
+import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
+import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
+import ProxySelector from '@/components/shared/ProxySelector.vue';
+import UninstallConfirmDialog from '@/components/shared/UninstallConfirmDialog.vue';
+import McpServersSection from '@/components/extension/McpServersSection.vue';
+import ComponentPanel from '@/components/extension/componentPanel/index.vue';
+import ModManagerLayout from '@/components/extension/mod-manager/ModManagerLayout.vue';
+import LegacyInstalledView from '@/components/extension/mod-manager/LegacyInstalledView.vue';
+import type { InstalledViewMode, PluginSummary } from '@/components/extension/mod-manager/types';
+import axios from 'axios';
+import { pinyin } from 'pinyin-pro';
+import { useCommonStore } from '@/stores/common';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
+import defaultPluginIcon from '@/assets/images/plugin_icon.png';
 
-import { ref, computed, onMounted, reactive, watch } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
+import { useDisplay } from 'vuetify';
 
 const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/extension");
 const router = useRouter();
+
+const display = useDisplay();
 
 // 检查指令冲突并提示
 const conflictDialog = reactive({
@@ -41,11 +47,68 @@ const checkAndPromptConflicts = async () => {
   }
 };
 const handleConflictConfirm = () => {
-  activeTab.value = "commands";
+  activeTab.value = "components";
 };
 
 const fileInput = ref(null);
-const activeTab = ref("installed");
+const activeTab = ref('installed');
+
+const tabWindowRef = ref<any>(null);
+
+const debugTabLayout = (payload: any) => {
+  if (!import.meta.env.DEV) return;
+  // eslint-disable-next-line no-console
+  console.log('[ExtensionPage][tab-layout]', JSON.stringify(payload));
+};
+
+const getRefEl = (target: any): HTMLElement | null => {
+  if (!target) return null;
+  if (target instanceof HTMLElement) return target;
+  if (target?.$el instanceof HTMLElement) return target.$el as HTMLElement;
+  return null;
+};
+
+const logTabWindowLayout = async (reason: string) => {
+  if (!import.meta.env.DEV) return;
+  await nextTick();
+
+  const windowEl = getRefEl(tabWindowRef.value);
+  const containerEl = windowEl?.querySelector('.v-window__container') as HTMLElement | null;
+  const windowItems = Array.from(windowEl?.querySelectorAll('.v-window-item') ?? []) as HTMLElement[];
+
+  const info = {
+    reason,
+    activeTab: activeTab.value,
+    window: windowEl
+      ? {
+          h: windowEl.clientHeight,
+          w: windowEl.clientWidth,
+          display: getComputedStyle(windowEl).display,
+          position: getComputedStyle(windowEl).position
+        }
+      : null,
+    container: containerEl
+      ? {
+          h: containerEl.clientHeight,
+          w: containerEl.clientWidth,
+          display: getComputedStyle(containerEl).display,
+          position: getComputedStyle(containerEl).position,
+          flexDirection: getComputedStyle(containerEl).flexDirection
+        }
+      : null,
+    items: windowItems.map((el) => ({
+      className: el.className,
+      h: el.clientHeight,
+      w: el.clientWidth,
+      display: getComputedStyle(el).display,
+      position: getComputedStyle(el).position,
+      flex: getComputedStyle(el).flex,
+      transform: getComputedStyle(el).transform
+    }))
+  };
+
+  debugTabLayout(info);
+};
 const extension_data = reactive({
   data: [],
   message: "",
@@ -104,20 +167,109 @@ const changelogDialog = reactive({
   repoUrl: null,
 });
 
-// 新增变量支持列表视图
-// 从 localStorage 恢复显示模式，默认为 false（卡片视图）
+// 新增变量支持列表视图（legacy 旧视图用）
 const getInitialListViewMode = () => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return localStorage.getItem("pluginListViewMode") === "true";
-  }
-  return false;
+ if (typeof window !== 'undefined' && window.localStorage) {
+   return localStorage.getItem('pluginListViewMode') === 'true';
+ }
+ return false;
 };
 const isListView = ref(getInitialListViewMode());
+
+// 视图模式：mod（新MOD管理器）| legacy（旧视图）
+const installedViewMode = ref<InstalledViewMode>(
+  (localStorage.getItem('installedViewMode') as InstalledViewMode) || 'mod'
+);
+
+// 视图模式变化时保存到localStorage
+watch(installedViewMode, (mode) => {
+  localStorage.setItem('installedViewMode', mode);
+  if (mode === 'legacy') {
+    isListView.value = getInitialListViewMode();
+  }
+});
+
+/** legacy（旧视图）列表/卡片视图：持久化到 localStorage */
+watch(isListView, (newVal) => {
+  if (installedViewMode.value !== 'legacy') return;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem('pluginListViewMode', String(newVal));
+  }
+});
+
 const pluginSearch = ref("");
 const loading_ = ref(false);
 
 // 分页相关
 const currentPage = ref(1);
+
+/** 插件市场：自适应每页数量，减少底部空白 */
+const marketScrollRef = ref<any>(null);
+const marketGridRef = ref<any>(null);
+const marketBottomPagerRef = ref<any>(null);
+
+const displayItemsPerPage = ref(9);
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+async function updateMarketItemsPerPage(reason: string) {
+  if (activeTab.value !== 'market') return;
+
+  await nextTick();
+
+  const containerEl = getRefEl(marketScrollRef.value);
+  const gridEl = getRefEl(marketGridRef.value);
+  const bottomEl = getRefEl(marketBottomPagerRef.value);
+
+  if (!containerEl || !gridEl) return;
+
+  const containerRect = containerEl.getBoundingClientRect();
+  const gridRect = gridEl.getBoundingClientRect();
+
+  const gridTopInContainer = gridRect.top - containerRect.top;
+  const bottomHeight = bottomEl?.offsetHeight ?? 0;
+
+  const availableHeight = containerEl.clientHeight - gridTopInContainer - bottomHeight - 16;
+  if (availableHeight <= 0) return;
+
+  const firstCol = gridEl.querySelector('.v-col') as HTMLElement | null;
+  const sampleRowHeight = firstCol?.getBoundingClientRect().height ?? 0;
+  if (sampleRowHeight <= 0) return;
+
+  const columns =
+    display.lgAndUp.value ? 3 :
+    display.mdAndUp.value ? 2 :
+    1;
+
+  const rows = Math.max(1, Math.floor(availableHeight / sampleRowHeight));
+  const next = clampInt(rows * columns, columns, 60);
+
+  if (next !== displayItemsPerPage.value) {
+    displayItemsPerPage.value = next;
+  }
+
+  // eslint-disable-next-line no-console
+  if (import.meta.env.DEV) console.log('[ExtensionPage][market-items-per-page]', { reason, columns, rows, next });
+}
+
+let marketResizeTimer: number | null = null;
+
+function scheduleMarketItemsPerPageUpdate(reason: string) {
+  if (activeTab.value !== 'market') return;
+  if (marketResizeTimer != null) {
+    window.clearTimeout(marketResizeTimer);
+    marketResizeTimer = null;
+  }
+  marketResizeTimer = window.setTimeout(() => {
+    marketResizeTimer = null;
+    updateMarketItemsPerPage(reason);
+  }, 120);
+}
+
+const handleWindowResize = () => scheduleMarketItemsPerPageUpdate('window-resize');
 
 // 危险插件确认对话框
 const dangerConfirmDialog = ref(false);
@@ -205,9 +357,27 @@ const pluginHeaders = computed(() => [
   },
 ]);
 
+
+// 插件市场表头
+const pluginMarketHeaders = computed(() => [
+  { title: tm('table.headers.name'), key: 'name', maxWidth: '200px' },
+  { title: tm('table.headers.description'), key: 'desc', maxWidth: '250px' },
+  { title: tm('table.headers.author'), key: 'author', maxWidth: '90px' },
+  { title: tm('table.headers.stars'), key: 'stars', maxWidth: '80px' },
+  { title: tm('table.headers.lastUpdate'), key: 'updated_at', maxWidth: '100px' },
+  { title: tm('table.headers.tags'), key: 'tags', maxWidth: '100px' },
+  { title: tm('table.headers.actions'), key: 'actions', sortable: false }
+]);
+
+
+// 插件列表（类型兼容）
+const pluginsForModManager = computed<PluginSummary[]>(() => {
+  return (extension_data.data || []) as PluginSummary[];
+});
+
 // 过滤要显示的插件
-const filteredExtensions = computed(() => {
-  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+const filteredExtensions = computed<PluginSummary[]>(() => {
+  const data = Array.isArray(pluginsForModManager.value) ? pluginsForModManager.value : [];
   if (!showReserved.value) {
     return data.filter((ext) => !ext.reserved);
   }
@@ -215,7 +385,7 @@ const filteredExtensions = computed(() => {
 });
 
 // 通过搜索过滤插件
-const filteredPlugins = computed(() => {
+const filteredPlugins = computed<PluginSummary[]>(() => {
   if (!pluginSearch.value) {
     return filteredExtensions.value;
   }
@@ -284,21 +454,30 @@ const sortedPlugins = computed(() => {
   return plugins;
 });
 
-// 分页计算属性
-const displayItemsPerPage = 9; // 固定每页显示6个卡片（2行）
-
+// 分页计算属性（插件市场：自适应 displayItemsPerPage）
 const totalPages = computed(() => {
-  return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
+  return Math.ceil(sortedPlugins.value.length / displayItemsPerPage.value);
 });
 
 const paginatedPlugins = computed(() => {
-  const start = (currentPage.value - 1) * displayItemsPerPage;
-  const end = start + displayItemsPerPage;
+  const start = (currentPage.value - 1) * displayItemsPerPage.value;
+  const end = start + displayItemsPerPage.value;
   return sortedPlugins.value.slice(start, end);
 });
 
-const updatableExtensions = computed(() => {
-  return extension_data?.data?.filter((ext) => ext.has_update) || [];
+watch(
+ [displayItemsPerPage, totalPages],
+ () => {
+   if (currentPage.value > totalPages.value) {
+     currentPage.value = Math.max(1, totalPages.value);
+   }
+ },
+ { flush: 'post' }
+);
+
+const updatableExtensions = computed<PluginSummary[]>(() => {
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.filter((ext) => ext?.has_update) as PluginSummary[];
 });
 
 // 方法
@@ -429,7 +608,8 @@ const handleUninstallConfirm = (options) => {
 
 const updateExtension = async (extension_name, forceUpdate = false) => {
   // 查找插件信息
-  const ext = extension_data.data?.find((e) => e.name === extension_name);
+  const list = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const ext = list.find((e) => e.name === extension_name);
 
   // 如果没有检测到更新且不是强制更新，则弹窗确认
   if (!ext?.has_update && !forceUpdate) {
@@ -553,6 +733,36 @@ const updateAllExtensions = async () => {
     onLoadingDialogResult(2, errorMsg, -1);
   } finally {
     updatingAll.value = false;
+  }
+};
+
+// 批量启用
+const handleBatchEnable = async (plugins: PluginSummary[]) => {
+  for (const plugin of plugins) {
+    await pluginOn(plugin);
+  }
+  await checkAndPromptConflicts();
+};
+
+// 批量停用
+const handleBatchDisable = async (plugins: PluginSummary[]) => {
+  for (const plugin of plugins) {
+    await pluginOff(plugin);
+  }
+};
+
+// 批量更新
+const handleBatchUpdate = async (names: string[]) => {
+  for (const name of names) {
+    await updateExtension(name);
+  }
+  await checkAndPromptConflicts();
+};
+
+// 批量卸载（默认保留配置与数据）
+const handleBatchUninstall = async (names: string[]) => {
+  for (const name of names) {
+    await uninstallExtension(name, { deleteConfig: false, deleteData: false });
   }
 };
 
@@ -1019,6 +1229,11 @@ onMounted(async () => {
   } catch (err) {
     toast(tm("messages.getMarketDataFailed") + " " + err, "error");
   }
+
+  logTabWindowLayout('mounted');
+  window.setTimeout(() => logTabWindowLayout('mounted+500ms'), 500);
+
+  window.addEventListener('resize', handleWindowResize);
 });
 
 // 搜索防抖处理
@@ -1035,20 +1250,49 @@ watch(marketSearch, (newVal) => {
   }, 300); // 300ms 防抖延迟
 });
 
-// 监听显示模式变化并保存到 localStorage
-watch(isListView, (newVal) => {
-  if (typeof window !== "undefined" && window.localStorage) {
-    localStorage.setItem("pluginListViewMode", String(newVal));
+watch(
+  activeTab,
+  () => {
+    logTabWindowLayout('tab-changed');
+    window.setTimeout(() => logTabWindowLayout('tab-changed+200ms'), 200);
+
+    if (activeTab.value === 'market') {
+      scheduleMarketItemsPerPageUpdate('tab-changed');
+      window.setTimeout(() => scheduleMarketItemsPerPageUpdate('tab-changed+250ms'), 250);
+    }
+  },
+  { flush: 'post' }
+);
+
+watch(
+  [display.mdAndUp, display.lgAndUp],
+  () => scheduleMarketItemsPerPageUpdate('breakpoint-changed'),
+  { flush: 'post' }
+);
+
+watch(
+  () => paginatedPlugins.value.length,
+  () => scheduleMarketItemsPerPageUpdate('market-items-changed'),
+  { flush: 'post' }
+);
+
+onBeforeUnmount(() => {
+  if (marketResizeTimer != null) {
+    window.clearTimeout(marketResizeTimer);
+    marketResizeTimer = null;
   }
+  window.removeEventListener('resize', handleWindowResize);
 });
+
+
 </script>
 
 <template>
-  <v-row>
-    <v-col cols="12" md="12">
-      <v-card variant="flat" style="background-color: transparent">
+  <v-row class="h-100">
+    <v-col cols="12" md="12" class="d-flex flex-column h-100">
+      <v-card class="d-flex flex-column flex-grow-1 h-100" variant="flat" style="background-color: transparent">
         <!-- 标签页 -->
-        <v-card-text style="padding: 0px 12px">
+        <v-card-text class="d-flex flex-column flex-grow-1 extension-page__card-text" style="padding: 0px 12px;">
           <!-- 标签栏和搜索栏 - 响应式布局 -->
           <div class="mb-4 d-flex flex-wrap">
             <!-- 标签栏 -->
@@ -1072,15 +1316,7 @@ watch(isListView, (newVal) => {
             </v-tabs>
 
             <!-- 搜索栏 - 在移动端时独占一行 -->
-            <div
-              style="
-                flex-grow: 1;
-                min-width: 250px;
-                max-width: 400px;
-                margin-left: auto;
-                margin-top: 8px;
-              "
-            >
+            <div style="flex-grow: 1; min-width: 250px; max-width: 400px; margin-left: auto; margin-top: 8px;">
               <v-text-field
                 v-if="activeTab === 'market'"
                 v-model="marketSearch"
@@ -1091,8 +1327,7 @@ watch(isListView, (newVal) => {
                 flat
                 hide-details
                 single-line
-              >
-              </v-text-field>
+              />
               <v-text-field
                 v-else-if="activeTab === 'installed'"
                 v-model="pluginSearch"
@@ -1103,446 +1338,174 @@ watch(isListView, (newVal) => {
                 flat
                 hide-details
                 single-line
-              >
-              </v-text-field>
+              />
             </div>
           </div>
 
-          <!-- 已安装插件标签页内容 -->
-          <v-tab-item v-show="activeTab === 'installed'">
-            <v-row class="mb-4">
-              <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
-                <v-btn-group
-                  variant="outlined"
-                  density="comfortable"
-                  color="primary"
-                >
-                  <v-btn
-                    @click="isListView = false"
-                    :color="!isListView ? 'primary' : undefined"
-                    :variant="!isListView ? 'flat' : 'outlined'"
-                  >
-                    <v-icon>mdi-view-grid</v-icon>
-                  </v-btn>
-                  <v-btn
-                    @click="isListView = true"
-                    :color="isListView ? 'primary' : undefined"
-                    :variant="isListView ? 'flat' : 'outlined'"
-                  >
-                    <v-icon>mdi-view-list</v-icon>
-                  </v-btn>
-                </v-btn-group>
 
-                <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
-                  <v-icon>{{
-                    showReserved ? "mdi-eye-off" : "mdi-eye"
-                  }}</v-icon>
-                  {{
-                    showReserved
-                      ? tm("buttons.hideSystemPlugins")
-                      : tm("buttons.showSystemPlugins")
-                  }}
-                </v-btn>
-
-                <v-btn
-                  class="ml-2"
-                  color="warning"
-                  variant="tonal"
-                  :disabled="updatableExtensions.length === 0"
-                  :loading="updatingAll"
-                  @click="showUpdateAllConfirm"
-                >
-                  <v-icon>mdi-update</v-icon>
-                  {{ tm("buttons.updateAll") }}
-                </v-btn>
-
-                <v-btn
-                  class="ml-2"
-                  color="primary"
-                  variant="tonal"
-                  @click="dialog = true"
-                >
-                  <v-icon>mdi-plus</v-icon>
-                  {{ tm("buttons.install") }}
-                </v-btn>
-
-                <v-col cols="12" sm="auto" class="ml-auto">
-                  <v-dialog max-width="500px" v-if="extension_data.message">
-                    <template v-slot:activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        icon
-                        size="small"
-                        color="error"
-                        class="ml-2"
-                        variant="tonal"
-                      >
-                        <v-icon>mdi-alert-circle</v-icon>
-                      </v-btn>
-                    </template>
-                    <template v-slot:default="{ isActive }">
-                      <v-card class="rounded-lg">
-                        <v-card-title class="headline d-flex align-center">
-                          <v-icon color="error" class="mr-2"
-                            >mdi-alert-circle</v-icon
-                          >
-                          {{ tm("dialogs.error.title") }}
-                        </v-card-title>
-                        <v-card-text>
-                          <p class="text-body-1">
-                            {{ extension_data.message }}
-                          </p>
-                          <p class="text-caption mt-2">
-                            {{ tm("dialogs.error.checkConsole") }}
-                          </p>
-                        </v-card-text>
-                        <v-card-actions>
-                          <v-spacer></v-spacer>
-                          <v-btn
-                            color="primary"
-                            @click="isActive.value = false"
-                            >{{ tm("buttons.close") }}</v-btn
-                          >
-                        </v-card-actions>
-                      </v-card>
-                    </template>
-                  </v-dialog>
-                </v-col>
-              </v-col>
-            </v-row>
-
-            <v-fade-transition hide-on-leave>
-              <!-- 表格视图 -->
-              <div v-if="isListView">
-                <v-card class="rounded-lg overflow-hidden elevation-1">
-                  <v-data-table
-                    :headers="pluginHeaders"
-                    :items="filteredPlugins"
+          <!-- 标签页内容（Vuetify3：v-window / v-window-item） -->
+          <v-window
+            ref="tabWindowRef"
+            v-model="activeTab"
+            class="flex-grow-1 extension-page__tab-window"
+            style="min-height: 0; height: 100%;"
+          >
+            <!-- 已安装插件标签页内容 -->
+            <v-window-item value="installed" class="h-100">
+              <div class="installed-content">
+                <template v-if="activeTab === 'installed'">
+                  <!-- MOD管理器视图（新默认）-->
+                  <ModManagerLayout
+                    v-if="installedViewMode === 'mod'"
+                    class="flex-grow-1 installed-content__manager"
+                    :plugins="filteredPlugins"
                     :loading="loading_"
-                    item-key="name"
-                    hover
-                  >
-                    <template v-slot:loader>
-                      <v-row class="py-8 d-flex align-center justify-center">
-                        <v-progress-circular
-                          indeterminate
-                          color="primary"
-                        ></v-progress-circular>
-                        <span class="ml-2">{{ tm("status.loading") }}</span>
-                      </v-row>
-                    </template>
+                    :show-reserved="showReserved"
+                    :installed-view-mode="installedViewMode"
+                    :updatable-count="updatableExtensions.length"
+                    :search="pluginSearch"
+                    :updating-all="updatingAll"
+                    :failed-message="extension_data.message"
+                    @update:search="pluginSearch = $event"
+                    @update:show-reserved="showReserved = $event"
+                    @update:installed-view-mode="installedViewMode = $event"
+                    @install="dialog = true"
+                    @update-all="showUpdateAllConfirm"
+                    @action-enable="pluginOn"
+                    @action-disable="pluginOff"
+                    @action-reload="reloadPlugin"
+                    @action-update="updateExtension"
+                    @action-uninstall="(name) => uninstallExtension(name, false)"
+                    @action-configure="(plugin) => openExtensionConfig(plugin.name)"
+                    @action-open-readme="(plugin) => viewReadme(plugin)"
+                    @action-open-repo="(url) => window.open(url, '_blank')"
+                    @batch-enable="handleBatchEnable"
+                    @batch-disable="handleBatchDisable"
+                    @batch-update="handleBatchUpdate"
+                    @batch-uninstall="handleBatchUninstall"
+                    @config-saved="getExtensions"
+                    @request-open-legacy-handlers="(plugin) => showPluginInfo(plugin)"
+                  />
 
-                    <template v-slot:item.name="{ item }">
-                      <div class="d-flex align-center py-2">
-                        <div
-                          v-if="item.logo"
-                          class="mr-3"
-                          style="flex-shrink: 0"
-                        >
-                          <img
-                            :src="item.logo"
-                            :alt="item.name"
-                            style="
-                              height: 40px;
-                              width: 40px;
-                              border-radius: 8px;
-                              object-fit: cover;
-                            "
-                          />
-                        </div>
-                        <div v-else class="mr-3" style="flex-shrink: 0">
-                          <img
-                            :src="defaultPluginIcon"
-                            :alt="item.name"
-                            style="
-                              height: 40px;
-                              width: 40px;
-                              border-radius: 8px;
-                              object-fit: cover;
-                            "
-                          />
-                        </div>
-                        <div>
-                          <div class="text-subtitle-1 font-weight-medium">
-                            {{
-                              item.display_name && item.display_name.length
-                                ? item.display_name
-                                : item.name
-                            }}
-                          </div>
-                          <div
-                            v-if="item.display_name && item.display_name.length"
-                            class="text-caption text-medium-emphasis mt-1"
-                          >
-                            {{ item.name }}
-                          </div>
-                          <div
-                            v-if="item.reserved"
-                            class="d-flex align-center mt-1"
-                          >
-                            <v-chip
-                              color="primary"
-                              size="x-small"
-                              class="font-weight-medium"
-                              >{{ tm("status.system") }}</v-chip
-                            >
-                          </div>
-                        </div>
-                      </div>
-                    </template>
+                  <!-- 旧视图（向前兼容）-->
+                  <div v-else>
+                    <v-row class="mb-4">
+                      <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
+                        <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
+                          <v-icon>{{ showReserved ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
+                          {{ showReserved ? tm('buttons.hideSystemPlugins') : tm('buttons.showSystemPlugins') }}
+                        </v-btn>
 
-                    <template v-slot:item.desc="{ item }">
-                      <div
-                        class="text-body-2 text-medium-emphasis mt-2 mb-2"
-                        style="
-                          display: -webkit-box;
-                          -webkit-line-clamp: 3;
-                          line-clamp: 3;
-                          -webkit-box-orient: vertical;
-                          overflow: hidden;
-                          text-overflow: ellipsis;
-                        "
-                      >
-                        {{ item.desc }}
-                      </div>
-                    </template>
-
-                    <template v-slot:item.version="{ item }">
-                      <div class="d-flex align-center">
-                        <span class="text-body-2">{{ item.version }}</span>
-                        <v-icon
-                          v-if="item.has_update"
+                        <v-btn
+                          class="ml-2"
                           color="warning"
-                          size="small"
-                          class="ml-1"
-                          >mdi-alert</v-icon
+                          variant="tonal"
+                          :disabled="updatableExtensions.length === 0"
+                          :loading="updatingAll"
+                          @click="showUpdateAllConfirm"
                         >
-                        <v-tooltip v-if="item.has_update" activator="parent">
-                          <span
-                            >{{ tm("messages.hasUpdate") }}
-                            {{ item.online_version }}</span
-                          >
-                        </v-tooltip>
-                      </div>
-                    </template>
+                          <v-icon>mdi-update</v-icon>
+                          {{ tm('buttons.updateAll') }}
+                        </v-btn>
 
-                    <template v-slot:item.author="{ item }">
-                      <div class="text-body-2">{{ item.author }}</div>
-                    </template>
+                        <v-btn class="ml-2" color="primary" variant="tonal" @click="dialog = true">
+                          <v-icon>mdi-plus</v-icon>
+                          {{ tm('buttons.install') }}
+                        </v-btn>
 
-                    <template v-slot:item.activated="{ item }">
-                      <v-chip
-                        :color="item.activated ? 'success' : 'error'"
-                        size="small"
-                        class="font-weight-medium"
-                        :variant="item.activated ? 'flat' : 'outlined'"
-                      >
-                        {{
-                          item.activated
-                            ? tm("status.enabled")
-                            : tm("status.disabled")
-                        }}
-                      </v-chip>
-                    </template>
+                        <v-menu offset-y>
+                          <template v-slot:activator="{ props }">
+                            <v-btn v-bind="props" icon size="small" class="ml-2" variant="tonal">
+                              <v-icon>mdi-dots-vertical</v-icon>
+                            </v-btn>
+                          </template>
+                          <v-list density="compact">
+                            <v-list-item @click="installedViewMode = 'mod'">
+                              <v-list-item-title>切换到 MOD 管理器</v-list-item-title>
+                            </v-list-item>
+                          </v-list>
+                        </v-menu>
 
-                    <template v-slot:item.actions="{ item }">
-                      <div class="d-flex align-center">
-                        <v-btn-group
-                          density="comfortable"
-                          variant="text"
-                          color="primary"
-                        >
-                          <v-btn
-                            v-if="!item.activated"
-                            icon
-                            size="small"
-                            color="success"
-                            @click="pluginOn(item)"
-                          >
-                            <v-icon>mdi-play</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.enable")
-                            }}</v-tooltip>
-                          </v-btn>
-                          <v-btn
-                            v-else
-                            icon
-                            size="small"
-                            color="error"
-                            @click="pluginOff(item)"
-                          >
-                            <v-icon>mdi-pause</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.disable")
-                            }}</v-tooltip>
-                          </v-btn>
+                        <v-col cols="12" sm="auto" class="ml-auto">
+                          <v-dialog max-width="500px" v-if="extension_data.message">
+                            <template v-slot:activator="{ props }">
+                              <v-btn v-bind="props" icon size="small" color="error" class="ml-2" variant="tonal">
+                                <v-icon>mdi-alert-circle</v-icon>
+                              </v-btn>
+                            </template>
+                            <template v-slot:default="{ isActive }">
+                              <v-card class="rounded-lg">
+                                <v-card-title class="headline d-flex align-center">
+                                  <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+                                  {{ tm('dialogs.error.title') }}
+                                </v-card-title>
+                                <v-card-text>
+                                  <p class="text-body-1">{{ extension_data.message }}</p>
+                                  <p class="text-caption mt-2">{{ tm('dialogs.error.checkConsole') }}</p>
+                                </v-card-text>
+                                <v-card-actions>
+                                  <v-spacer></v-spacer>
+                                  <v-btn color="primary" @click="isActive.value = false">{{ tm('buttons.close') }}</v-btn>
+                                </v-card-actions>
+                              </v-card>
+                            </template>
+                          </v-dialog>
+                        </v-col>
+                      </v-col>
+                    </v-row>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="reloadPlugin(item.name)"
-                          >
-                            <v-icon>mdi-refresh</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.reload")
-                            }}</v-tooltip>
-                          </v-btn>
-
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="openExtensionConfig(item.name)"
-                          >
-                            <v-icon>mdi-cog</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.configure")
-                            }}</v-tooltip>
-                          </v-btn>
-
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="showPluginInfo(item)"
-                          >
-                            <v-icon>mdi-information</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.viewInfo")
-                            }}</v-tooltip>
-                          </v-btn>
-
-                          <v-btn
-                            v-if="item.repo"
-                            icon
-                            size="small"
-                            @click="viewReadme(item)"
-                          >
-                            <v-icon>mdi-book-open-page-variant</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.viewDocs")
-                            }}</v-tooltip>
-                          </v-btn>
-
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="updateExtension(item.name)"
-                          >
-                            <v-icon>mdi-update</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.update")
-                            }}</v-tooltip>
-                          </v-btn>
-
-                          <v-btn
-                            icon
-                            size="small"
-                            color="error"
-                            @click="uninstallExtension(item.name)"
-                            :disabled="item.reserved"
-                          >
-                            <v-icon>mdi-delete</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.uninstall")
-                            }}</v-tooltip>
-                          </v-btn>
-                        </v-btn-group>
-                      </div>
-                    </template>
-
-                    <template v-slot:no-data>
-                      <div class="text-center pa-8">
-                        <v-icon size="64" color="info" class="mb-4"
-                          >mdi-puzzle-outline</v-icon
-                        >
-                        <div class="text-h5 mb-2">
-                          {{ tm("empty.noPlugins") }}
-                        </div>
-                        <div class="text-body-1 mb-4">
-                          {{ tm("empty.noPluginsDesc") }}
-                        </div>
-                      </div>
-                    </template>
-                  </v-data-table>
-                </v-card>
+                    <LegacyInstalledView
+                      :plugins="filteredPlugins"
+                      :loading="loading_"
+                      :show-reserved="showReserved"
+                      :is-list-view="isListView"
+                      @update:is-list-view="isListView = $event"
+                      @action-enable="pluginOn"
+                      @action-disable="pluginOff"
+                      @action-reload="reloadPlugin"
+                      @action-update="updateExtension"
+                      @action-uninstall="(name, options) => uninstallExtension(name, options ?? false)"
+                      @action-configure="(plugin) => openExtensionConfig(plugin.name)"
+                      @action-view-handlers="showPluginInfo"
+                      @action-view-readme="viewReadme"
+                      @view-changelog="viewChangelog"
+                      @action-open-repo="(url) => window.open(url, '_blank')"
+                    />
+                  </div>
+                </template>
               </div>
+            </v-window-item>
 
-              <!-- 卡片视图 -->
-              <div v-else>
-                <v-row v-if="filteredPlugins.length === 0" class="text-center">
-                  <v-col cols="12" class="pa-2">
-                    <v-icon size="64" color="info" class="mb-4"
-                      >mdi-puzzle-outline</v-icon
-                    >
-                    <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
-                    <div class="text-body-1 mb-4">
-                      {{ tm("empty.noPluginsDesc") }}
-                    </div>
-                  </v-col>
-                </v-row>
+            <!-- 指令面板标签页内容 -->
+            <v-window-item value="components" class="h-100">
+              <v-card
+                class="h-100 d-flex flex-column rounded-lg"
+                variant="flat"
+                style="background-color: transparent; min-height: 0;"
+              >
+                <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
+                  <ComponentPanel :active="activeTab === 'components'" />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
-                <v-row>
-                  <v-col
-                    cols="12"
-                    md="6"
-                    lg="4"
-                    v-for="extension in filteredPlugins"
-                    :key="extension.name"
-                    class="pb-2"
-                  >
-                    <ExtensionCard
-                      :extension="extension"
-                      class="rounded-lg"
-                      style="background-color: rgb(var(--v-theme-mcpCardBg))"
-                      @configure="openExtensionConfig(extension.name)"
-                      @uninstall="
-                        (ext, options) => uninstallExtension(ext.name, options)
-                      "
-                      @update="updateExtension(extension.name)"
-                      @reload="reloadPlugin(extension.name)"
-                      @toggle-activation="
-                        extension.activated
-                          ? pluginOff(extension)
-                          : pluginOn(extension)
-                      "
-                      @view-handlers="showPluginInfo(extension)"
-                      @view-readme="viewReadme(extension)"
-                      @view-changelog="viewChangelog(extension)"
-                    >
-                    </ExtensionCard>
-                  </v-col>
-                </v-row>
-              </div>
-            </v-fade-transition>
-          </v-tab-item>
-
-          <!-- 指令面板标签页内容 -->
-          <v-tab-item v-show="activeTab === 'components'">
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
-
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-tab-item v-show="activeTab === 'mcp'">
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
+            <!-- 已安装的 MCP 服务器标签页内容 -->
+            <v-window-item value="mcp" class="h-100">
+              <v-card
+                class="h-100 d-flex flex-column rounded-lg"
+                variant="flat"
+                style="background-color: transparent; min-height: 0;"
+              >
+                <v-card-text class="pa-0 flex-grow-1" style="min-height: 0; overflow-y: auto;">
+                  <McpServersSection />
+                </v-card-text>
+              </v-card>
+            </v-window-item>
 
           <!-- 插件市场标签页内容 -->
-          <v-tab-item v-show="activeTab === 'market'">
+          <v-window-item value="market" class="h-100">
+            <div ref="marketScrollRef" class="h-100 extension-tab-scroll">
+
             <!-- 插件源管理区域 -->
             <div class="mb-6">
               <div
@@ -1830,19 +1793,11 @@ watch(isListView, (newVal) => {
                 </div>
               </div>
 
-              <v-row style="min-height: 26rem">
-                <v-col
-                  v-for="plugin in paginatedPlugins"
-                  :key="plugin.name"
-                  cols="12"
-                  md="6"
-                  lg="4"
-                >
-                  <v-card
-                    class="rounded-lg d-flex flex-column plugin-card"
-                    elevation="0"
-                    style="height: 12rem; position: relative"
-                  >
+              <v-row ref="marketGridRef" style="min-height: 26rem;">
+                <v-col v-for="plugin in paginatedPlugins" :key="plugin.name" cols="12" md="6" lg="4">
+                  <v-card class="rounded-lg d-flex flex-column plugin-card" elevation="0"
+                    style=" height: 12rem; position: relative;">
+
                     <!-- 推荐标记 -->
                     <v-chip
                       v-if="plugin?.pinned"
@@ -2091,16 +2046,13 @@ watch(isListView, (newVal) => {
               </v-row>
 
               <!-- 底部分页控件 -->
-              <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-                <v-pagination
-                  v-model="currentPage"
-                  :length="totalPages"
-                  :total-visible="7"
-                  size="small"
-                ></v-pagination>
+              <div ref="marketBottomPagerRef" class="d-flex justify-center mt-4" v-if="totalPages > 1">
+                <v-pagination v-model="currentPage" :length="totalPages" :total-visible="7" size="small"></v-pagination>
               </div>
             </div>
-          </v-tab-item>
+            </div>
+          </v-window-item>
+        </v-window>
 
           <v-row v-if="loading_">
             <v-col cols="12" class="d-flex justify-center">
@@ -2586,6 +2538,69 @@ watch(isListView, (newVal) => {
 </template>
 
 <style scoped>
+.extension-page__card-text {
+  min-height: 0;
+}
+
+.extension-page__tab-window {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 只约束该 v-window 的第一层 container，避免影响内部嵌套 v-window */
+.extension-page__tab-window > :deep(.v-window__container) {
+  min-height: 0;
+  height: 100% !important;
+  flex: 1 1 auto;
+}
+
+/*
+  只约束第一层 item 的“尺寸”，不要强行设置 display，
+  否则会覆盖 Vuetify 对非激活 item 的 display:none，导致多个 item 同时参与布局（出现半屏空白）。
+*/
+.extension-page__tab-window > :deep(.v-window__container > .v-window-item) {
+  min-height: 0;
+  height: 100% !important;
+}
+
+/* 仅对激活 item 启用 flex 布局以撑满内容区 */
+.extension-page__tab-window > :deep(.v-window__container > .v-window-item.v-window-item--active) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.extension-page__tab-window > :deep(.v-window__container > .v-window-item.v-window-item--active > *) {
+  min-height: 0;
+}
+
+.extension-page__tab-window > :deep(.v-window__container > .v-window-item.v-window-item--active .v-card) {
+  min-height: 0;
+}
+
+.extension-page__tab-window > :deep(.v-window__container > .v-window-item.v-window-item--active .v-card-text) {
+  min-height: 0;
+}
+
+.extension-tab-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.installed-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.installed-content__manager {
+  min-height: 0;
+}
+
 .plugin-handler-item {
   margin-bottom: 10px;
   padding: 5px;

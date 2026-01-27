@@ -72,6 +72,7 @@ class AstrBotDashboard:
             core_lifecycle.plugin_manager,
         )
         self.command_route = CommandRoute(self.context)
+        self.pipeline_route = PipelineRoute(self.context, core_lifecycle)
         self.cr = ConfigRoute(self.context, core_lifecycle)
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
