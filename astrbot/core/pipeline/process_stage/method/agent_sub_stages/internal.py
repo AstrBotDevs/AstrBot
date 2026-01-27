@@ -43,8 +43,6 @@ from ...utils import (
     KNOWLEDGE_BASE_QUERY_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
@@ -106,7 +104,6 @@ class InternalAgentSubStage(Stage):
         )
 
         self.sandbox_cfg = settings.get("sandbox", {})
-        self.skills_cfg = settings.get("skills", {})
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -495,13 +492,6 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
         req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
-    def _apply_local_env_tools(self, req: ProviderRequest) -> None:
-        """Add local environment tools to the provider request."""
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
-        req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
-
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -648,11 +638,6 @@ class InternalAgentSubStage(Stage):
                 # apply sandbox tools
                 if self.sandbox_cfg.get("enable", False):
                     self._apply_sandbox_tools(req, req.session_id)
-                elif self.skills_cfg.get("enable", False):
-                    # if user wants to use skills in non-sandbox mode, apply local env tools
-                    runtime = self.skills_cfg.get("runtime", "local")
-                    if runtime == "local":
-                        self._apply_local_env_tools(req)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

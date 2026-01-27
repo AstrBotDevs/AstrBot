@@ -2655,9 +2655,6 @@ CONFIG_METADATA_3 = {
                         "options": ["local", "sandbox"],
                         "labels": ["本地", "沙箱"],
                         "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。",
-                        "condition": {
-                            "provider_settings.skills.enable": True,
-                        },
                     },
                 },
                 "condition": {

@@ -77,6 +77,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "- Coordination:\n"
         "  - If multiple skills apply, choose the minimal set that covers the request and state the order in which you will use them.\n"
         "  - Announce which skill(s) you are using and why (one short line). If you skip an obvious skill, explain why.\n"
+        "  - Prefer to use `astrbot_*` tools to perform skills that need to run scripts.\n"
         "- Context hygiene:\n"
         "  - Keep context small: summarize long sections instead of pasting them, and load extra files only when necessary.\n"
         "  - Avoid deep reference chasing: unless blocked, open only files that are directly linked from `SKILL.md`.\n"

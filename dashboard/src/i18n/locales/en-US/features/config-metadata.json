@@ -170,7 +170,7 @@
         "skills": {
           "runtime": {
             "description": "Skill Runtime",
-            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first. BE CAUTIOUS when using `local`, agents will have FULL ACCESS to your PC."
+            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first. In local mode, the Agent CAN FULLY ACCESS the runtime environment through Shell and Python tools, but non-admin users will be automatically prohibited from using it to ensure security."
           }
         }
       }

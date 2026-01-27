@@ -46,6 +46,9 @@ class ExecuteShellTool(FunctionTool):
         background: bool = False,
         env: dict = {},
     ) -> ToolExecResult:
+        if context.context.event.role != "admin":
+            return "error: Permission denied. Shell execution is only allowed for admin users. Set admins in AstrBot WebUI."
+
         if self.is_local:
             sb = get_local_booter()
         else:

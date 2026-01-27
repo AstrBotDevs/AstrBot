@@ -170,7 +170,7 @@
         "skills": {
           "runtime": {
             "description": "Skill Runtime",
-            "hint": "选择 Skills 运行环境。使用 sandbox 时需先启用沙箱环境。请谨慎使用 local, Agent 将拥有对 AstrBot 所在运行环境的完全访问权限。"
+            "hint": "选择 Skills 运行环境。使用 sandbox 前需启用沙箱；local 模式下 Agent 可通过 Shell 和 Python 功能完全访问运行环境，非管理员将被自动禁止使用以保证安全。"
           }
         }
       }
