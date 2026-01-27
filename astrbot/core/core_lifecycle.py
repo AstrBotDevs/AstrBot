@@ -95,6 +95,19 @@ class AstrBotCoreLifecycle:
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
+    async def _load_priority_overrides(self) -> None:
+        overrides = await sp.global_get("handler_priority_overrides", {})
+        if not isinstance(overrides, dict) or not overrides:
+            return
+
+        priority_map = {
+            k: v.get("priority", 0) for k, v in overrides.items() if isinstance(v, dict)
+        }
+        if not priority_map:
+            return
+
+        star_handlers_registry.load_priority_overrides(priority_map)
+
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
@@ -191,6 +204,8 @@ class AstrBotCoreLifecycle:
 
         # 扫描、注册插件、实例化插件类
         await self.plugin_manager.reload()
+
+        await self._load_priority_overrides()
 
         # 根据配置实例化各个 Provider
         await self.provider_manager.initialize()

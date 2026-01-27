@@ -15,6 +15,19 @@ class StarHandlerRegistry(Generic[T]):
     def __init__(self):
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
+        self._priority_overrides: dict[str, int] = {}
+
+    def load_priority_overrides(self, overrides: dict[str, int]):
+        self._priority_overrides = overrides
+        self._handlers.sort(key=lambda h: -self._get_effective_priority(h))
+
+    def get_original_priority(self, handler: StarHandlerMetadata) -> int:
+        return handler.extras_configs.get("priority", 0)
+
+    def _get_effective_priority(self, handler: StarHandlerMetadata) -> int:
+        if handler.handler_full_name in self._priority_overrides:
+            return self._priority_overrides[handler.handler_full_name]
+        return handler.extras_configs.get("priority", 0)
 
     def append(self, handler: StarHandlerMetadata):
         """添加一个 Handler，并保持按优先级有序"""
@@ -23,7 +36,7 @@ class StarHandlerRegistry(Generic[T]):
 
         self.star_handlers_map[handler.handler_full_name] = handler
         self._handlers.append(handler)
-        self._handlers.sort(key=lambda h: -h.extras_configs["priority"])
+        self._handlers.sort(key=lambda h: -self._get_effective_priority(h))
 
     def _print_handlers(self):
         for handler in self._handlers:
