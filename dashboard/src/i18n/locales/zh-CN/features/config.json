@@ -96,11 +96,15 @@
     "dropzone": "上传新文件",
     "allowedTypes": "允许类型：{types}",
     "empty": "暂无已上传文件",
+    "statusMissing": "文件缺失",
+    "statusUnconfigured": "未加入配置",
     "uploadSuccess": "已上传 {count} 个文件",
     "uploadFailed": "上传失败",
+    "loadFailed": "获取文件列表失败",
     "fileTooLarge": "文件过大（上限 {max} MB）：{name}",
     "deleteSuccess": "已删除文件",
     "deleteFailed": "删除失败",
+    "addToConfig": "已加入配置",
     "fileCount": "文件：{count}",
     "done": "完成"
   }

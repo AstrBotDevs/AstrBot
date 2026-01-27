@@ -258,6 +258,7 @@ class ConfigRoute(Route):
             "/config/plugin/update": ("POST", self.post_plugin_configs),
             "/config/file/upload": ("POST", self.upload_config_file),
             "/config/file/delete": ("POST", self.delete_config_file),
+            "/config/file/get": ("GET", self.get_config_file_list),
             "/config/platform/new": ("POST", self.post_new_platform),
             "/config/platform/update": ("POST", self.post_update_platform),
             "/config/platform/delete": ("POST", self.post_delete_platform),
@@ -1060,6 +1061,48 @@ class ConfigRoute(Route):
             target_path.unlink()
 
         return Response().ok(None, "Deleted").__dict__
+
+    async def get_config_file_list(self):
+        """获取配置项对应目录下的文件列表。"""
+
+        try:
+            _, name, key_path, _, config = self._resolve_config_file_scope()
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+
+        meta = get_schema_item(getattr(config, "schema", None), key_path)
+        if not meta or meta.get("type") != "file":
+            return Response().error("Config item not found or not file type").__dict__
+
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+
+        folder = config_key_to_folder(key_path)
+        target_dir = (plugin_root_path / "files" / folder).resolve(strict=False)
+        try:
+            target_dir.relative_to(plugin_root_path)
+        except ValueError:
+            return Response().error("Invalid path parameter").__dict__
+
+        if not target_dir.exists() or not target_dir.is_dir():
+            return Response().ok({"files": []}).__dict__
+
+        files: list[str] = []
+        for path in target_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                rel_path = path.relative_to(plugin_root_path).as_posix()
+            except ValueError:
+                continue
+            if rel_path.startswith("files/"):
+                files.append(rel_path)
+
+        return Response().ok({"files": files}).__dict__
 
     async def post_new_platform(self):
         new_platform_config = await request.json

@@ -96,11 +96,15 @@
     "dropzone": "Upload new file",
     "allowedTypes": "Allowed types: {types}",
     "empty": "No files uploaded",
+    "statusMissing": "Missing file",
+    "statusUnconfigured": "Not in config",
     "uploadSuccess": "Uploaded {count} files",
     "uploadFailed": "Upload failed",
+    "loadFailed": "Failed to load file list",
     "fileTooLarge": "File too large (max {max} MB): {name}",
     "deleteSuccess": "Deleted file",
     "deleteFailed": "Delete failed",
+    "addToConfig": "Added to config",
     "fileCount": "Files: {count}",
     "done": "Done"
   }
