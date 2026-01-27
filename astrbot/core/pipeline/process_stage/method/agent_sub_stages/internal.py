@@ -23,8 +23,8 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
+from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.metrics import Metric
@@ -44,9 +44,9 @@ from ...utils import (
     KNOWLEDGE_BASE_QUERY_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
-    PYTHON_TOOL,
-    LOCAL_PYTHON_TOOL,
     LOCAL_EXECUTE_SHELL_TOOL,
+    LOCAL_PYTHON_TOOL,
+    PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     decoded_blocked,

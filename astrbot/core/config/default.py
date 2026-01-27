@@ -2653,7 +2653,7 @@ CONFIG_METADATA_3 = {
                 "items": {
                     "provider_settings.skills.enable": {
                         "description": "启用 Skills",
-                        "type": "bool"
+                        "type": "bool",
                     },
                     "provider_settings.skills.runtime": {
                         "description": "Skill Runtime",

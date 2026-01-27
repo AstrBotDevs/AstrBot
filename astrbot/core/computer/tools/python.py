@@ -72,6 +72,7 @@ class PythonTool(FunctionTool):
         except Exception as e:
             return f"Error executing code: {str(e)}"
 
+
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
