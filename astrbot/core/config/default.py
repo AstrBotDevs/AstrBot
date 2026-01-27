@@ -3244,6 +3244,7 @@ DEFAULT_VALUE_MAP = {
     "string": "",
     "text": "",
     "list": [],
+    "file": [],
     "object": {},
     "template_list": [],
 }

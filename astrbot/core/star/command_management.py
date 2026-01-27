@@ -303,7 +303,7 @@ def _locate_primary_filter(
     handler: StarHandlerMetadata,
 ) -> CommandFilter | CommandGroupFilter | None:
     for filter_ref in handler.event_filters:
-        if isinstance(filter_ref, (CommandFilter, CommandGroupFilter)):
+        if isinstance(filter_ref, CommandFilter | CommandGroupFilter):
             return filter_ref
     return None
 

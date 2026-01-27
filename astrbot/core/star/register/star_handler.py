@@ -150,7 +150,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         if args:
             raise_error = args[0]
 
-    if not isinstance(custom_filter, (CustomFilterAnd, CustomFilterOr)):
+    if not isinstance(custom_filter, CustomFilterAnd | CustomFilterOr):
         custom_filter = custom_filter(raise_error)
 
     def decorator(awaitable):

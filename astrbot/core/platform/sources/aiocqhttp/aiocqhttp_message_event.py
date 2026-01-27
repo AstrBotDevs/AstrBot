@@ -33,7 +33,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _from_segment_to_dict(segment: BaseMessageComponent) -> dict:
         """修复部分字段"""
-        if isinstance(segment, (Image, Record)):
+        if isinstance(segment, Image | Record):
             # For Image and Record segments, we convert them to base64
             bs64 = await segment.convert_to_base64()
             return {
@@ -110,7 +110,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         """
         # 转发消息、文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
-            isinstance(seg, (Node, Nodes, File)) for seg in message_chain.chain
+            isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
         if not send_one_by_one:
             ret = await cls._parse_onebot_json(message_chain)
@@ -119,7 +119,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await cls._dispatch_send(bot, event, is_group, session_id, ret)
             return
         for seg in message_chain.chain:
-            if isinstance(seg, (Node, Nodes)):
+            if isinstance(seg, Node | Nodes):
                 # 合并转发消息
                 if isinstance(seg, Node):
                     nodes = Nodes([seg])

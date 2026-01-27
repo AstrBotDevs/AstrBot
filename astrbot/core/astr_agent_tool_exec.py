@@ -256,7 +256,7 @@ async def call_local_llm_tool(
                 # 这里逐步执行异步生成器, 对于每个 yield 返回的 ret, 执行下面的代码
                 # 返回值只能是 MessageEventResult 或者 None（无返回值）
                 _has_yielded = True
-                if isinstance(ret, (MessageEventResult, CommandResult)):
+                if isinstance(ret, MessageEventResult | CommandResult):
                     # 如果返回值是 MessageEventResult, 设置结果并继续
                     event.set_result(ret)
                     yield
@@ -273,7 +273,7 @@ async def call_local_llm_tool(
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
         ret = await ready_to_call
-        if isinstance(ret, (MessageEventResult, CommandResult)):
+        if isinstance(ret, MessageEventResult | CommandResult):
             event.set_result(ret)
             yield
         else:
