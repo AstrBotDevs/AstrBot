@@ -10,6 +10,7 @@ DEFAULT_PERSONALITY = Personality(
     begin_dialogs=[],
     mood_imitation_dialogs=[],
     tools=None,
+    skills=None,
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
 )
@@ -71,6 +72,7 @@ class PersonaManager:
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        skills: list[str] | None = None,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
@@ -81,6 +83,7 @@ class PersonaManager:
             system_prompt,
             begin_dialogs,
             tools=tools,
+            skills=skills,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -239,6 +242,7 @@ class PersonaManager:
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        skills: list[str] | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
     ) -> Persona:
@@ -249,6 +253,7 @@ class PersonaManager:
             system_prompt: 系统提示词
             begin_dialogs: 预设对话列表
             tools: 工具列表，None 表示使用所有工具，空列表表示不使用任何工具
+            skills: Skills 列表，None 表示使用所有 Skills，空列表表示不使用任何 Skills
             folder_id: 所属文件夹 ID，None 表示根目录
             sort_order: 排序顺序
         """
@@ -259,6 +264,7 @@ class PersonaManager:
             system_prompt,
             begin_dialogs,
             tools=tools,
+            skills=skills,
             folder_id=folder_id,
             sort_order=sort_order,
         )
@@ -284,6 +290,7 @@ class PersonaManager:
                 "begin_dialogs": persona.begin_dialogs or [],
                 "mood_imitation_dialogs": [],  # deprecated
                 "tools": persona.tools,
+                "skills": persona.skills,
             }
             for persona in self.personas
         ]
@@ -339,6 +346,7 @@ class PersonaManager:
             system_prompt=selected_default_persona["prompt"],
             begin_dialogs=selected_default_persona["begin_dialogs"],
             tools=selected_default_persona["tools"] or None,
+            skills=selected_default_persona["skills"] or None,
         )
 
         return v3_persona_config, personas_v3, selected_default_persona

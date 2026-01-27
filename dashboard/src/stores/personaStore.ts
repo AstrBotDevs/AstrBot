@@ -20,6 +20,7 @@ export interface Persona {
   system_prompt: string;
   begin_dialogs: string[];
   tools: string[] | null;
+  skills: string[] | null;
   folder_id: string | null;
   sort_order: number;
   created_at: string;

@@ -7,10 +7,11 @@ from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.sandbox.tools import (
+from astrbot.core.computer.tools import (
     ExecuteShellTool,
     FileDownloadTool,
     FileUploadTool,
+    LocalPythonTool,
     PythonTool,
 )
 from astrbot.core.star.context import Context
@@ -194,7 +195,9 @@ async def retrieve_knowledge_base(
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
 
 EXECUTE_SHELL_TOOL = ExecuteShellTool()
+LOCAL_EXECUTE_SHELL_TOOL = ExecuteShellTool(is_local=True)
 PYTHON_TOOL = PythonTool()
+LOCAL_PYTHON_TOOL = LocalPythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
 FILE_DOWNLOAD_TOOL = FileDownloadTool()
 

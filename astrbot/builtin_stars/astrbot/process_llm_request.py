@@ -10,8 +10,11 @@ from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
 from astrbot.core.pipeline.process_stage.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    LOCAL_EXECUTE_SHELL_TOOL,
+    LOCAL_PYTHON_TOOL,
 )
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 
 
 class ProcessLLMRequest:
@@ -24,6 +27,15 @@ class ProcessLLMRequest:
             self.timezone = None
         else:
             logger.info(f"Timezone set to: {self.timezone}")
+
+        self.skill_manager = SkillManager()
+
+    def _apply_local_env_tools(self, req: ProviderRequest) -> None:
+        """Add local environment tools to the provider request."""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
+        req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
     async def _ensure_persona(
         self, req: ProviderRequest, cfg: dict, umo: str, platform_type: str
@@ -66,6 +78,30 @@ class ProcessLLMRequest:
             if begin_dialogs := copy.deepcopy(persona["_begin_dialogs_processed"]):
                 req.contexts[:0] = begin_dialogs
 
+        # skills select and prompt
+        runtime = self.skills_cfg.get("runtime", "local")
+        skills = self.skill_manager.list_skills(active_only=True, runtime=runtime)
+        if runtime == "sandbox" and not self.sandbox_cfg.get("enable", False):
+            logger.warning(
+                "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
+            )
+            req.system_prompt += "\n[Background: User added some skills, and skills runtime is set to sandbox, but sandbox mode is disabled. So skills will be unavailable.]\n"
+        elif skills:
+            # persona.skills == None means all skills are allowed
+            if persona and persona.get("skills") is not None:
+                if not persona["skills"]:
+                    return
+                allowed = set(persona["skills"])
+                skills = [skill for skill in skills if skill.name in allowed]
+            if skills:
+                req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
+
+            # if user wants to use skills in non-sandbox mode, apply local env tools
+            runtime = self.skills_cfg.get("runtime", "local")
+            sandbox_enabled = self.sandbox_cfg.get("enable", False)
+            if runtime == "local" and not sandbox_enabled:
+                self._apply_local_env_tools(req)
+
         # tools select
         tmgr = self.ctx.get_llm_tool_manager()
         if (persona and persona.get("tools") is None) or not persona:
@@ -81,7 +117,10 @@ class ProcessLLMRequest:
                     tool = tmgr.get_func(tool_name)
                     if tool and tool.active:
                         toolset.add_tool(tool)
-        req.func_tool = toolset
+        if not req.func_tool:
+            req.func_tool = toolset
+        else:
+            req.func_tool.merge(toolset)
         logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
     async def _ensure_img_caption(
@@ -134,6 +173,8 @@ class ProcessLLMRequest:
         cfg: dict = self.ctx.get_config(umo=event.unified_msg_origin)[
             "provider_settings"
         ]
+        self.skills_cfg = cfg.get("skills", {})
+        self.sandbox_cfg = cfg.get("sandbox", {})
 
         # prompt prefix
         if prefix := cfg.get("prompt_prefix"):

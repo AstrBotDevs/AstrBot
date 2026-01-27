@@ -11,7 +11,7 @@ from shipyard.shell import ShellComponent as ShipyardShellComponent
 from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
-from .base import SandboxBooter
+from .base import ComputerBooter
 
 
 class MockShipyardSandboxClient:
@@ -124,7 +124,7 @@ class MockShipyardSandboxClient:
                 loop -= 1
 
 
-class BoxliteBooter(SandboxBooter):
+class BoxliteBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(
             f"Booting(Boxlite) for session: {session_id}, this may take a while..."

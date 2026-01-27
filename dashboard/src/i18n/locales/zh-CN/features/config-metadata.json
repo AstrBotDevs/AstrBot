@@ -135,6 +135,7 @@
     },
     "sandbox": {
       "description": "Agent 沙箱环境(Beta)",
+      "hint": "https://docs.astrbot.app/use/astrbot-agent-sandbox.html",
       "provider_settings": {
         "sandbox": {
           "enable": {
@@ -159,6 +160,17 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Ship 会话复用上限",
             "hint": "决定了一个实例承载的最大会话数量。"
+          }
+        }
+      }
+    },
+    "skills": {
+      "description": "Skills",
+      "provider_settings": {
+        "skills": {
+          "runtime": {
+            "description": "Skill Runtime",
+            "hint": "选择 Skills 运行环境。使用 sandbox 前需启用沙箱；local 模式下 Agent 可通过 Shell 和 Python 功能完全访问运行环境，非管理员将被自动禁止使用以保证安全。"
           }
         }
       }

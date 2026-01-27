@@ -274,6 +274,11 @@ class ToolSet:
         """获取所有工具的名称列表"""
         return [tool.name for tool in self.tools]
 
+    def merge(self, other: "ToolSet"):
+        """Merge another ToolSet into this one."""
+        for tool in other.tools:
+            self.add_tool(tool)
+
     def __len__(self):
         return len(self.tools)
 
