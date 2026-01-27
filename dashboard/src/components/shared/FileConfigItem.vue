@@ -38,7 +38,7 @@
                   </v-chip>
                   <v-btn v-if="item.status === 'unconfigured'" icon="mdi-plus" size="x-small" variant="text"
                     @click="addToConfig(item.path)" />
-                  <v-btn icon="mdi-close" size="x-small" variant="text"
+                  <v-btn icon="mdi-delete" size="x-small" variant="text"
                     @click="item.status === 'unconfigured' ? deletePhysicalFile(item.path) : deleteFile(item.path)" />
                 </div>
               </template>
