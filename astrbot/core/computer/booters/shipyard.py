@@ -3,10 +3,10 @@ from shipyard import ShipyardClient, Spec
 from astrbot.api import logger
 
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
-from .base import SandboxBooter
+from .base import ComputerBooter
 
 
-class ShipyardBooter(SandboxBooter):
+class ShipyardBooter(ComputerBooter):
     def __init__(
         self,
         endpoint_url: str,

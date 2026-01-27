@@ -52,7 +52,7 @@ class PreProcessStage(Stage):
             message_chain = event.get_messages()
 
             for idx, component in enumerate(message_chain):
-                if isinstance(component, (Record, Image)) and component.url:
+                if isinstance(component, Record | Image) and component.url:
                     for mapping in mappings:
                         from_, to_ = mapping.split(":")
                         from_ = from_.removesuffix("/")

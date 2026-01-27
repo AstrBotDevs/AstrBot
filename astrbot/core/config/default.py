@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.12.3"
+VERSION = "4.12.4"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -121,6 +121,7 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
+        "skills": {"runtime": "sandbox"},
     },
     "provider_stt_settings": {
         "enable": False,
@@ -166,6 +167,7 @@ DEFAULT_CONFIG = {
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
+        "disable_access_log": True,
     },
     "platform": [],
     "platform_specific": {
@@ -773,27 +775,21 @@ CONFIG_METADATA_2 = {
                             "interval_method": {
                                 "type": "string",
                                 "options": ["random", "log"],
-                                "hint": "分段回复的间隔时间计算方法。random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                             },
                             "interval": {
                                 "type": "string",
-                                "hint": "`random` 方法用。每一段回复的间隔时间，格式为 `最小时间,最大时间`。如 `0.75,2.5`",
                             },
                             "log_base": {
                                 "type": "float",
-                                "hint": "`log` 方法用。对数函数的底数。默认为 2.6",
                             },
                             "words_count_threshold": {
                                 "type": "int",
-                                "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                             },
                             "regex": {
                                 "type": "string",
-                                "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。re.findall(r'<regex>', text)",
                             },
                             "content_cleanup_rule": {
                                 "type": "string",
-                                "hint": "移除分段后的内容中的指定的内容。支持正则表达式。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.sub(r'<regex>', '', text)",
                             },
                         },
                     },
@@ -2201,6 +2197,17 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
+                    "skills": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "runtime": {
+                                "type": "string",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2578,6 +2585,7 @@ CONFIG_METADATA_3 = {
             # },
             "sandbox": {
                 "description": "Agent 沙箱环境",
+                "hint": "",
                 "type": "object",
                 "items": {
                     "provider_settings.sandbox.enable": {
@@ -2589,6 +2597,7 @@ CONFIG_METADATA_3 = {
                         "description": "沙箱环境驱动器",
                         "type": "string",
                         "options": ["shipyard"],
+                        "labels": ["Shipyard"],
                         "condition": {
                             "provider_settings.sandbox.enable": True,
                         },
@@ -2630,6 +2639,27 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.booter": "shipyard",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
+            "skills": {
+                "description": "Skills",
+                "type": "object",
+                "items": {
+                    "provider_settings.skills.runtime": {
+                        "description": "Skill Runtime",
+                        "type": "string",
+                        "options": ["local", "sandbox"],
+                        "labels": ["本地", "沙箱"],
+                        "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "truncate_and_compress": {
@@ -2690,6 +2720,10 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "others": {
@@ -3045,7 +3079,8 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                     },
                     "platform_settings.segmented_reply.interval_method": {
-                        "description": "间隔方法",
+                        "description": "间隔方法。",
+                        "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。",
                         "type": "string",
                         "options": ["random", "log"],
                     },
@@ -3060,13 +3095,14 @@ CONFIG_METADATA_3 = {
                     "platform_settings.segmented_reply.log_base": {
                         "description": "对数底数",
                         "type": "float",
-                        "hint": "对数间隔的底数，默认为 2.0。取值范围为 1.0-10.0。",
+                        "hint": "对数间隔的底数，默认为 2.6。取值范围为 1.0-10.0。",
                         "condition": {
                             "platform_settings.segmented_reply.interval_method": "log",
                         },
                     },
                     "platform_settings.segmented_reply.words_count_threshold": {
                         "description": "分段回复字数阈值",
+                        "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段）。默认为 150",
                         "type": "int",
                     },
                     "platform_settings.segmented_reply.split_mode": {
@@ -3077,6 +3113,7 @@ CONFIG_METADATA_3 = {
                     },
                     "platform_settings.segmented_reply.regex": {
                         "description": "分段正则表达式",
+                        "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
                         "type": "string",
                         "condition": {
                             "platform_settings.segmented_reply.split_mode": "regex",
@@ -3246,6 +3283,7 @@ DEFAULT_VALUE_MAP: dict[str, int | float | bool | str | list | dict] = {
     "string": "",
     "text": "",
     "list": [],
+    "file": [],
     "object": {},
     "template_list": [],
     "palette": "",

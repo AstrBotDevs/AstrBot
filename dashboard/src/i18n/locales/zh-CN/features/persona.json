@@ -38,6 +38,17 @@
     "loadingTools": "正在加载工具...",
     "allToolsAvailable": "使用所有可用工具",
     "noToolsSelected": "未选择任何工具",
+    "skills": "Skills 选择",
+    "skillsHelp": "为这个人格选择可用的 Skills。Skills 会给 AI 提供可复用的流程与规范。",
+    "skillsAllAvailable": "默认使用全部 Skills",
+    "skillsSelectSpecific": "选择指定 Skills",
+    "searchSkills": "搜索 Skills",
+    "selectedSkills": "已选择的 Skills",
+    "noSkillsAvailable": "暂无可用 Skills",
+    "noSkillsFound": "未找到匹配的 Skills",
+    "loadingSkills": "正在加载 Skills...",
+    "allSkillsAvailable": "使用所有可用 Skills",
+    "noSkillsSelected": "未选择任何 Skills",
     "createInFolder": "将在「{folder}」中创建",
     "rootFolder": "全部人格"
   },
@@ -73,6 +84,7 @@
   "persona": {
     "personasTitle": "人格",
     "toolsCount": "个工具",
+    "skillsCount": "个 Skills",
     "contextMenu": {
       "moveTo": "移动到..."
     },
