@@ -47,6 +47,14 @@ TOOL_CALL_PROMPT = (
     " Keep the role-play and style consistent throughout the conversation."
 )
 
+TOOL_CALL_PROMPT_FULL = (
+    "You MUST NOT return an empty response, especially after invoking a tool."
+    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " Use the provided tool schema to format arguments and do not guess parameters that are not defined."
+    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+    " Keep the role-play and style consistent throughout the conversation."
+)
+
 CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
     "You are a calm, patient friend with a systems-oriented way of thinking.\n"
     "When someone expresses strong emotional needs, you begin by offering a concise, grounding response "

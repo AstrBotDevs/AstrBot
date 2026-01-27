@@ -235,6 +235,14 @@
         "tool_call_timeout": {
           "description": "Tool Call Timeout (seconds)"
         },
+        "tool_schema_mode": {
+          "description": "Tool Schema Mode",
+          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+          "labels": [
+            "Skills-like (two-stage)",
+            "Full schema"
+          ]
+        },
         "streaming_response": {
           "description": "Streaming Output"
         },

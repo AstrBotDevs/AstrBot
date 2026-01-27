@@ -47,6 +47,7 @@ from ...utils import (
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
+    TOOL_CALL_PROMPT_FULL,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -63,6 +64,13 @@ class InternalAgentSubStage(Stage):
         ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.tool_schema_mode: str = settings.get("tool_schema_mode", "skills_like")
+        if self.tool_schema_mode not in ("skills_like", "full"):
+            logger.warning(
+                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                self.tool_schema_mode,
+            )
+            self.tool_schema_mode = "skills_like"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -514,10 +522,14 @@ class InternalAgentSubStage(Stage):
             req.func_tool = active_set
             return
 
+        event.set_extra("_tool_schema_full_set", active_set)
+        if self.tool_schema_mode == "full":
+            req.func_tool = active_set
+            return
+
         func_tool_mgr = self.ctx.plugin_manager.context.get_llm_tool_manager()
         light_set = func_tool_mgr.get_light_tool_set(active_set)
         param_set = func_tool_mgr.get_param_only_tool_set(active_set)
-        event.set_extra("_tool_schema_full_set", active_set)
         event.set_extra("_tool_schema_light_set", light_set)
         event.set_extra("_tool_schema_param_set", param_set)
         req.func_tool = light_set
@@ -705,7 +717,12 @@ class InternalAgentSubStage(Stage):
 
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
-                    req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
+                    tool_prompt = (
+                        TOOL_CALL_PROMPT_FULL
+                        if self.tool_schema_mode == "full"
+                        else TOOL_CALL_PROMPT
+                    )
+                    req.system_prompt += f"\n{tool_prompt}\n"
 
                 action_type = event.get_extra("action_type")
                 if action_type == "live":
