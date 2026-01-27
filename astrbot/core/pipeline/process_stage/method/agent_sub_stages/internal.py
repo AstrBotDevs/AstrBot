@@ -24,6 +24,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType, star_map
+from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.metrics import Metric
@@ -44,6 +45,8 @@ from ...utils import (
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
+    LOCAL_PYTHON_TOOL,
+    LOCAL_EXECUTE_SHELL_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     decoded_blocked,
@@ -104,6 +107,8 @@ class InternalAgentSubStage(Stage):
         )
 
         self.sandbox_cfg = settings.get("sandbox", {})
+        self.skills_cfg = settings.get("skills", {})
+        self.skill_manager = SkillManager()
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -492,6 +497,29 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
         req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
+    def _apply_local_env_tools(self, req: ProviderRequest) -> None:
+        """Add local environment tools to the provider request."""
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
+        req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
+
+    def _apply_skills_prompt(self, req: ProviderRequest) -> None:
+        if not self.skills_cfg.get("enable", False):
+            return
+        runtime = self.skills_cfg.get("runtime", "local")
+        if runtime == "sandbox" and not self.sandbox_cfg.get("enable", False):
+            logger.warning(
+                "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
+            )
+            return
+        skills = self.skill_manager.list_skills(active_only=True, runtime=runtime)
+        if not skills:
+            return
+        if req.system_prompt is None:
+            req.system_prompt = ""
+        req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -611,6 +639,8 @@ class InternalAgentSubStage(Stage):
 
                 # apply knowledge base feature
                 await self._apply_kb(event, req)
+                # apply skills prompt
+                self._apply_skills_prompt(req)
 
                 # truncate contexts to fit max length
                 # NOW moved to ContextManager inside ToolLoopAgentRunner
@@ -638,6 +668,11 @@ class InternalAgentSubStage(Stage):
                 # apply sandbox tools
                 if self.sandbox_cfg.get("enable", False):
                     self._apply_sandbox_tools(req, req.session_id)
+                elif self.skills_cfg.get("enable", False):
+                    # if user wants to use skills in non-sandbox mode, apply local env tools
+                    runtime = self.skills_cfg.get("runtime", "local")
+                    if runtime == "local":
+                        self._apply_local_env_tools(req)
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"

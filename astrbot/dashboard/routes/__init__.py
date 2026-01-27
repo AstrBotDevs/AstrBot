@@ -15,6 +15,7 @@ from .session_management import SessionManagementRoute
 from .stat import StatRoute
 from .static_file import StaticFileRoute
 from .tools import ToolsRoute
+from .skills import SkillsRoute
 from .update import UpdateRoute
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "StatRoute",
     "StaticFileRoute",
     "ToolsRoute",
+    "SkillsRoute",
     "UpdateRoute",
 ]

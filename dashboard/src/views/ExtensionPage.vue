@@ -6,6 +6,7 @@ import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import McpServersSection from "@/components/extension/McpServersSection.vue";
+import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import axios from "axios";
 import { pinyin } from "pinyin-pro";
@@ -1061,6 +1062,10 @@ watch(isListView, (newVal) => {
                 <v-icon class="mr-2">mdi-server-network</v-icon>
                 {{ tm("tabs.installedMcpServers") }}
               </v-tab>
+              <v-tab value="skills">
+                <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
+                {{ tm("tabs.skills") }}
+              </v-tab>
               <v-tab value="market">
                 <v-icon class="mr-2">mdi-store</v-icon>
                 {{ tm("tabs.market") }}
@@ -1537,6 +1542,19 @@ watch(isListView, (newVal) => {
             >
               <v-card-text class="pa-0">
                 <McpServersSection />
+              </v-card-text>
+            </v-card>
+          </v-tab-item>
+
+          <!-- Skills 标签页内容 -->
+          <v-tab-item v-show="activeTab === 'skills'">
+            <v-card
+              class="rounded-lg"
+              variant="flat"
+              style="background-color: transparent"
+            >
+              <v-card-text class="pa-0">
+                <SkillsSection />
               </v-card-text>
             </v-card>
           </v-tab-item>

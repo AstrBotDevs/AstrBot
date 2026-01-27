@@ -163,6 +163,20 @@
         }
       }
     },
+    "skills": {
+      "description": "Skills",
+      "provider_settings": {
+        "skills": {
+          "enable": {
+            "description": "Enable Skills"
+          },
+          "runtime": {
+            "description": "Skill Runtime",
+            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "Context Management Strategy",
       "provider_settings": {

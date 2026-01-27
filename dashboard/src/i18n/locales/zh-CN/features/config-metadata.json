@@ -163,6 +163,20 @@
         }
       }
     },
+    "skills": {
+      "description": "Skills",
+      "provider_settings": {
+        "skills": {
+          "enable": {
+            "description": "启用 Skills"
+          },
+          "runtime": {
+            "description": "Skill Runtime",
+            "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。"
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
       "description": "上下文管理策略",
       "provider_settings": {

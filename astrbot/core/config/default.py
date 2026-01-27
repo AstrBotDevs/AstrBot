@@ -121,6 +121,10 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
+        "skills": {
+            "enable": False,
+            "runtime": "local",
+        },
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2196,6 +2200,17 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
+                    "skills": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "runtime": {
+                                "type": "string",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2584,6 +2599,7 @@ CONFIG_METADATA_3 = {
                         "description": "沙箱环境驱动器",
                         "type": "string",
                         "options": ["shipyard"],
+                        "labels": ["Shipyard"],
                         "condition": {
                             "provider_settings.sandbox.enable": True,
                         },
@@ -2625,6 +2641,34 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.booter": "shipyard",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
+            "skills": {
+                "description": "Skills",
+                "type": "object",
+                "items": {
+                    "provider_settings.skills.enable": {
+                        "description": "启用 Skills",
+                        "type": "bool"
+                    },
+                    "provider_settings.skills.runtime": {
+                        "description": "Skill Runtime",
+                        "type": "string",
+                        "options": ["local", "sandbox"],
+                        "labels": ["本地", "沙箱"],
+                        "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。",
+                        "condition": {
+                            "provider_settings.skills.enable": True,
+                        },
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "truncate_and_compress": {
@@ -2685,6 +2729,10 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "others": {
