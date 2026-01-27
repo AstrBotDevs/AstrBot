@@ -52,8 +52,9 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
             await conn.execute(text("PRAGMA mmap_size=134217728"))
             await conn.execute(text("PRAGMA optimize"))
-            # 确保 personas 表有 folder_id 和 sort_order 列（前向兼容）
+            # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
+            await self._ensure_persona_skills_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -75,6 +76,18 @@ class SQLiteDatabase(BaseDatabase):
             await conn.execute(
                 text("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 0")
             )
+
+    async def _ensure_persona_skills_column(self, conn) -> None:
+        """确保 personas 表有 skills 列。
+
+        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列。
+        """
+        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "skills" not in columns:
+            await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
 
     # ====
     # Platform Statistics
@@ -564,6 +577,7 @@ class SQLiteDatabase(BaseDatabase):
         system_prompt,
         begin_dialogs=None,
         tools=None,
+        skills=None,
         folder_id=None,
         sort_order=0,
     ):
@@ -576,6 +590,7 @@ class SQLiteDatabase(BaseDatabase):
                     system_prompt=system_prompt,
                     begin_dialogs=begin_dialogs or [],
                     tools=tools,
+                    skills=skills,
                     folder_id=folder_id,
                     sort_order=sort_order,
                 )
@@ -606,6 +621,7 @@ class SQLiteDatabase(BaseDatabase):
         system_prompt=None,
         begin_dialogs=None,
         tools=NOT_GIVEN,
+        skills=NOT_GIVEN,
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -619,6 +635,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["begin_dialogs"] = begin_dialogs
                 if tools is not NOT_GIVEN:
                     values["tools"] = tools
+                if skills is not NOT_GIVEN:
+                    values["skills"] = skills
                 if not values:
                     return None
                 query = query.values(**values)

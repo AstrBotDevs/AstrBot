@@ -49,6 +49,14 @@
                     prepend-icon="mdi-tools">
                     {{ persona.tools.length }} {{ tm('persona.toolsCount') }}
                 </v-chip>
+                <v-chip v-if="persona.skills === null" size="small" color="success" variant="tonal"
+                    prepend-icon="mdi-lightning-bolt">
+                    {{ tm('form.allSkillsAvailable') }}
+                </v-chip>
+                <v-chip v-else-if="persona.skills && persona.skills.length > 0" size="small" color="primary"
+                    variant="tonal" prepend-icon="mdi-lightning-bolt">
+                    {{ persona.skills.length }} {{ tm('persona.skillsCount') }}
+                </v-chip>
             </div>
 
             <div class="mt-3 text-caption text-medium-emphasis">
@@ -73,6 +81,7 @@ interface Persona {
     system_prompt: string;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
+    skills?: string[] | null;
     created_at?: string;
     updated_at?: string;
     folder_id?: string | null;

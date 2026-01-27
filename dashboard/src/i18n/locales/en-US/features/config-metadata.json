@@ -135,6 +135,7 @@
     },
     "sandbox": {
       "description": "Agent Sandbox Env(Beta)",
+      "hint": "https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html",
       "provider_settings": {
         "sandbox": {
           "enable": {
@@ -167,12 +168,9 @@
       "description": "Skills",
       "provider_settings": {
         "skills": {
-          "enable": {
-            "description": "Enable Skills"
-          },
           "runtime": {
             "description": "Skill Runtime",
-            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first."
+            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first. BE CAUTIOUS when using `local`, agents will have FULL ACCESS to your PC."
           }
         }
       }

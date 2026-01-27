@@ -135,6 +135,7 @@
     },
     "sandbox": {
       "description": "Agent 沙箱环境(Beta)",
+      "hint": "https://docs.astrbot.app/use/astrbot-agent-sandbox.html",
       "provider_settings": {
         "sandbox": {
           "enable": {
@@ -167,12 +168,9 @@
       "description": "Skills",
       "provider_settings": {
         "skills": {
-          "enable": {
-            "description": "启用 Skills"
-          },
           "runtime": {
             "description": "Skill Runtime",
-            "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。"
+            "hint": "选择 Skills 运行环境。使用 sandbox 时需先启用沙箱环境。请谨慎使用 local, Agent 将拥有对 AstrBot 所在运行环境的完全访问权限。"
           }
         }
       }

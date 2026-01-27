@@ -23,7 +23,6 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -108,7 +107,6 @@ class InternalAgentSubStage(Stage):
 
         self.sandbox_cfg = settings.get("sandbox", {})
         self.skills_cfg = settings.get("skills", {})
-        self.skill_manager = SkillManager()
 
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
@@ -504,22 +502,6 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
         req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
-    def _apply_skills_prompt(self, req: ProviderRequest) -> None:
-        if not self.skills_cfg.get("enable", False):
-            return
-        runtime = self.skills_cfg.get("runtime", "local")
-        if runtime == "sandbox" and not self.sandbox_cfg.get("enable", False):
-            logger.warning(
-                "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
-            )
-            return
-        skills = self.skill_manager.list_skills(active_only=True, runtime=runtime)
-        if not skills:
-            return
-        if req.system_prompt is None:
-            req.system_prompt = ""
-        req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
-
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -639,8 +621,6 @@ class InternalAgentSubStage(Stage):
 
                 # apply knowledge base feature
                 await self._apply_kb(event, req)
-                # apply skills prompt
-                self._apply_skills_prompt(req)
 
                 # truncate contexts to fit max length
                 # NOW moved to ContextManager inside ToolLoopAgentRunner

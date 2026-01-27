@@ -121,10 +121,7 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
-        "skills": {
-            "enable": False,
-            "runtime": "local",
-        },
+        "skills": {"runtime": "sandbox"},
     },
     "provider_stt_settings": {
         "enable": False,
@@ -2588,6 +2585,7 @@ CONFIG_METADATA_3 = {
             # },
             "sandbox": {
                 "description": "Agent 沙箱环境",
+                "hint": "",
                 "type": "object",
                 "items": {
                     "provider_settings.sandbox.enable": {
@@ -2651,10 +2649,6 @@ CONFIG_METADATA_3 = {
                 "description": "Skills",
                 "type": "object",
                 "items": {
-                    "provider_settings.skills.enable": {
-                        "description": "启用 Skills",
-                        "type": "bool",
-                    },
                     "provider_settings.skills.runtime": {
                         "description": "Skill Runtime",
                         "type": "string",

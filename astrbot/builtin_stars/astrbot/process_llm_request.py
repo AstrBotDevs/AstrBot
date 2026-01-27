@@ -12,6 +12,7 @@ from astrbot.core.pipeline.process_stage.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
 )
 from astrbot.core.provider.func_tool_manager import ToolSet
+from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 
 
 class ProcessLLMRequest:
@@ -24,6 +25,8 @@ class ProcessLLMRequest:
             self.timezone = None
         else:
             logger.info(f"Timezone set to: {self.timezone}")
+
+        self.skill_manager = SkillManager()
 
     async def _ensure_persona(
         self, req: ProviderRequest, cfg: dict, umo: str, platform_type: str
@@ -65,6 +68,25 @@ class ProcessLLMRequest:
                 req.system_prompt += prompt
             if begin_dialogs := copy.deepcopy(persona["_begin_dialogs_processed"]):
                 req.contexts[:0] = begin_dialogs
+
+        # skills select and prompt
+        if self.skills_cfg.get("enable", False):
+            runtime = self.skills_cfg.get("runtime", "local")
+            skills = self.skill_manager.list_skills(active_only=True, runtime=runtime)
+            if runtime == "sandbox" and not self.sandbox_cfg.get("enable", False):
+                logger.warning(
+                    "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
+                )
+                req.system_prompt += "\n[Background: User added some skills, and skills runtime is set to sandbox, but sandbox mode is disabled. So skills will be unavailable.]\n"
+            elif skills:
+                # persona.skills == None means all skills are allowed
+                if persona and persona.get("skills") is not None:
+                    if not persona["skills"]:
+                        return
+                    allowed = set(persona["skills"])
+                    skills = [skill for skill in skills if skill.name in allowed]
+                if skills:
+                    req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
 
         # tools select
         tmgr = self.ctx.get_llm_tool_manager()
@@ -134,6 +156,8 @@ class ProcessLLMRequest:
         cfg: dict = self.ctx.get_config(umo=event.unified_msg_origin)[
             "provider_settings"
         ]
+        self.skills_cfg = cfg.get("skills", {})
+        self.sandbox_cfg = cfg.get("sandbox", {})
 
         # prompt prefix
         if prefix := cfg.get("prompt_prefix"):
