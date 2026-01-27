@@ -289,7 +289,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         is_group=isinstance(filter_ref, CommandGroupFilter),
         is_sub_command=is_sub_command,
         reserved=plugin_meta.reserved if plugin_meta else False,
-        priority=handler.extras_configs.get("priority", 0),
+        priority=star_handlers_registry._get_effective_priority(handler),
     )
     return descriptor
 

@@ -429,21 +429,32 @@ class PluginRoute(Route):
 
         return ", ".join(parts) if parts else "event_listener"
 
+    def _build_priority_map(self, stored: dict) -> dict[str, int]:
+        """Build a priority map from stored override data."""
+        return {
+            k: int(v.get("priority", 0))
+            for k, v in stored.items()
+            if isinstance(v, dict)
+        }
+
+    async def _load_priority_overrides(self) -> tuple[dict, dict[str, int]]:
+        """Load priority overrides from storage and return (stored_data, priority_map)."""
+        stored = await sp.global_get("handler_priority_overrides", {})
+        stored = stored if isinstance(stored, dict) else {}
+        return stored, self._build_priority_map(stored)
+
+    async def _save_and_apply_priority_overrides(self, stored: dict) -> None:
+        """Save priority overrides to storage and apply to registry."""
+        await sp.global_put("handler_priority_overrides", stored)
+        star_handlers_registry.load_priority_overrides(self._build_priority_map(stored))
+
     async def get_priority(self):
         try:
-            stored = await sp.global_get("handler_priority_overrides", {})
-            stored = stored if isinstance(stored, dict) else {}
-
-            priority_map = {
-                k: v.get("priority", 0)
-                for k, v in stored.items()
-                if isinstance(v, dict)
-            }
+            _, priority_map = await self._load_priority_overrides()
             star_handlers_registry.load_priority_overrides(priority_map)
 
             plugins = []
             for star in star_registry:
-                # star_map 的 key 是模块路径
                 if not star.module_path:
                     continue
 
@@ -456,11 +467,16 @@ class PluginRoute(Route):
                     if handler is None:
                         continue
 
-                    effective_priority = priority_map.get(
-                        handler.handler_full_name,
-                        handler.extras_configs.get("priority", 0),
+                    effective_priority = int(
+                        priority_map.get(
+                            handler.handler_full_name,
+                            handler.extras_configs.get("priority", 0) or 0,
+                        )
+                        or 0
                     )
-                    original_priority = handler.extras_configs.get("priority", 0)
+                    original_priority = int(
+                        handler.extras_configs.get("priority", 0) or 0
+                    )
                     is_overridden = handler.handler_full_name in priority_map
 
                     handlers_payload.append(
@@ -513,13 +529,7 @@ class PluginRoute(Route):
                     Response().error("updates fields must be a non-empty list").__dict__
                 )
 
-            stored = await sp.global_get("handler_priority_overrides", {})
-            stored = stored if isinstance(stored, dict) else {}
-
-            priority_map: dict[str, int] = {}
-            for handler_full_name, v in stored.items():
-                if isinstance(v, dict) and "priority" in v:
-                    priority_map[handler_full_name] = int(v.get("priority", 0))
+            stored, priority_map = await self._load_priority_overrides()
 
             for item in updates:
                 if not isinstance(item, dict):
@@ -555,8 +565,7 @@ class PluginRoute(Route):
                 }
                 priority_map[handler_full_name] = new_priority
 
-            await sp.global_put("handler_priority_overrides", stored)
-            star_handlers_registry.load_priority_overrides(priority_map)
+            await self._save_and_apply_priority_overrides(stored)
 
             return Response().ok(None, "优先级更新成功").__dict__
         except Exception as e:
@@ -579,8 +588,7 @@ class PluginRoute(Route):
             reset_all = data.get("reset_all", False) is True
             handler_full_names = data.get("handler_full_names", [])
 
-            stored = await sp.global_get("handler_priority_overrides", {})
-            stored = stored if isinstance(stored, dict) else {}
+            stored, _ = await self._load_priority_overrides()
             if reset_all:
                 stored = {}
             else:
@@ -596,13 +604,7 @@ class PluginRoute(Route):
                     if isinstance(h, str):
                         stored.pop(h, None)
 
-            await sp.global_put("handler_priority_overrides", stored)
-            priority_map = {
-                k: v.get("priority", 0)
-                for k, v in stored.items()
-                if isinstance(v, dict)
-            }
-            star_handlers_registry.load_priority_overrides(priority_map)
+            await self._save_and_apply_priority_overrides(stored)
 
             return Response().ok(None, "重置成功").__dict__
         except Exception as e:
