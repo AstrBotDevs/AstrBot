@@ -3239,5 +3239,16 @@ CONFIG_METADATA_3_SYSTEM = {
 }
 
 
-# Re-export DEFAULT_VALUE_MAP from config_types for backward compatibility
-from astrbot.core.config.config_types import DEFAULT_VALUE_MAP
+DEFAULT_VALUE_MAP: dict[str, int | float | bool | str | list | dict] = {
+    "int": 0,
+    "float": 0.0,
+    "bool": False,
+    "string": "",
+    "text": "",
+    "list": [],
+    "object": {},
+    "template_list": [],
+    "palette": "",
+    "palette_rgb": "",
+    "palette_hsv": "",
+}

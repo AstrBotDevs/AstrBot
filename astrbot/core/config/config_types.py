@@ -45,21 +45,14 @@ PALETTE_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Default values for each config type
-# For palette types, empty string is valid (means no color selected)
-DEFAULT_VALUE_MAP: dict[str, int | float | bool | str | list | dict] = {
-    ConfigType.INT: 0,
-    ConfigType.FLOAT: 0.0,
-    ConfigType.BOOL: False,
-    ConfigType.STRING: "",
-    ConfigType.TEXT: "",
-    ConfigType.LIST: [],
-    ConfigType.OBJECT: {},
-    ConfigType.TEMPLATE_LIST: [],
-    ConfigType.PALETTE: "",
-    ConfigType.PALETTE_RGB: "",
-    ConfigType.PALETTE_HSV: "",
-}
+# Palette types specifically
+PALETTE_TYPES: frozenset[str] = frozenset(
+    {
+        ConfigType.PALETTE,
+        ConfigType.PALETTE_RGB,
+        ConfigType.PALETTE_HSV,
+    }
+)
 
 
 def get_default_value(config_type: str) -> int | float | bool | str | list | dict:
@@ -72,6 +65,8 @@ def get_default_value(config_type: str) -> int | float | bool | str | list | dic
         The default value for the given type, or empty string if unknown
 
     """
+    from astrbot.core.config.default import DEFAULT_VALUE_MAP
+
     return DEFAULT_VALUE_MAP.get(config_type, "")
 
 
