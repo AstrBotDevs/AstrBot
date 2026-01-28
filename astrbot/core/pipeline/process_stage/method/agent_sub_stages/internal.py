@@ -46,7 +46,7 @@ from ...utils import (
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
-    TOOL_CALL_PROMPT_FULL,
+    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -681,9 +681,9 @@ class InternalAgentSubStage(Stage):
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
                     tool_prompt = (
-                        TOOL_CALL_PROMPT_FULL
+                        TOOL_CALL_PROMPT
                         if self.tool_schema_mode == "full"
-                        else TOOL_CALL_PROMPT
+                        else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
                     )
                     req.system_prompt += f"\n{tool_prompt}\n"
 
