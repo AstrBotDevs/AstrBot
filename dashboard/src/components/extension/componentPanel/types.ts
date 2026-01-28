@@ -22,6 +22,7 @@ export interface CommandItem {
   is_group: boolean;
   has_conflict: boolean;
   reserved: boolean;
+  priority?: number;
   sub_commands: CommandItem[];
 }
 
