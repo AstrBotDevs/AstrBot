@@ -23,27 +23,28 @@
       <slot name="item-details" :item="item"></slot>
     </v-card-text>
 
-    <v-card-actions style="margin: 8px;">
-      <v-btn
-        variant="outlined"
-        color="error"
-        size="small"
-        rounded="xl"
-        :disabled="loading"
-        @click="$emit('delete', item)"
-      >
-        {{ t('core.common.itemCard.delete') }}
-      </v-btn>
-      <v-btn
-        variant="tonal"
-        color="primary"
-        size="small"
-        rounded="xl"
-        :disabled="loading"
-        @click="$emit('edit', item)"
-      >
-        {{ t('core.common.itemCard.edit') }}
-      </v-btn>
+  <v-card-actions style="margin: 8px;">
+    <v-btn
+      variant="outlined"
+      color="error"
+      size="small"
+      rounded="xl"
+      :disabled="loading"
+      @click="$emit('delete', item)"
+    >
+      {{ t('core.common.itemCard.delete') }}
+    </v-btn>
+    <v-btn
+      v-if="showEditButton"
+      variant="tonal"
+      color="primary"
+      size="small"
+      rounded="xl"
+      :disabled="loading"
+      @click="$emit('edit', item)"
+    >
+      {{ t('core.common.itemCard.edit') }}
+    </v-btn>
       <v-btn
         v-if="showCopyButton"
         variant="tonal"
@@ -103,6 +104,10 @@ export default {
     showCopyButton: {
       type: Boolean,
       default: false
+    },
+    showEditButton: {
+      type: Boolean,
+      default: true
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],

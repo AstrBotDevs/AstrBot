@@ -165,7 +165,6 @@ class WakingCheckStage(Stage):
                 and handler.handler_module_path
                 == "astrbot.builtin_stars.builtin_commands.main"
             ):
-                logger.debug("skipping builtin command")
                 continue
 
             # filter 需满足 AND 逻辑关系

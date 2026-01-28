@@ -235,6 +235,7 @@ class WebChatAdapter(Platform):
         message_event.set_extra(
             "enable_streaming", payload.get("enable_streaming", True)
         )
+        message_event.set_extra("action_type", payload.get("action_type"))
 
         self.commit_event(message_event)
 

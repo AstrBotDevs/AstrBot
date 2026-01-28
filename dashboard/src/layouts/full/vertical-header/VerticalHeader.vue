@@ -46,6 +46,13 @@ let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 
+const getSelectedGitHubProxy = () => {
+  if (typeof window === "undefined" || !window.localStorage) return "";
+  return localStorage.getItem("githubProxyRadioValue") === "1"
+    ? localStorage.getItem("selectedGitHubProxy") || ""
+    : "";
+};
+
 // Release Notes Modal
 let releaseNotesDialog = ref(false);
 let selectedReleaseNotes = ref('');
@@ -204,7 +211,7 @@ function switchVersion(version: string) {
   installLoading.value = true;
   axios.post('/api/update/do', {
     version: version,
-    proxy: localStorage.getItem('selectedGitHubProxy') || ''
+    proxy: getSelectedGitHubProxy()
   })
     .then((res) => {
       updateStatus.value = res.data.message;

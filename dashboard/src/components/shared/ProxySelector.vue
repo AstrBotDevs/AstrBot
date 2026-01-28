@@ -121,6 +121,13 @@ export default {
         this.selectedGitHubProxy = localStorage.getItem('selectedGitHubProxy') || "";
         this.radioValue = localStorage.getItem('githubProxyRadioValue') || "0";
         this.githubProxyRadioControl = localStorage.getItem('githubProxyRadioControl') || "0";
+        if (this.radioValue === "1") {
+            if (this.githubProxyRadioControl !== "-1") {
+                this.selectedGitHubProxy = this.githubProxies[this.githubProxyRadioControl] || "";
+            }
+        } else {
+            this.selectedGitHubProxy = "";
+        }
     },
     watch: {
         selectedGitHubProxy: function (newVal, oldVal) {
@@ -133,10 +140,16 @@ export default {
             localStorage.setItem('githubProxyRadioValue', newVal);
             if (newVal === "0") {
                 this.selectedGitHubProxy = "";
+            } else if (this.githubProxyRadioControl !== "-1") {
+                this.selectedGitHubProxy = this.githubProxies[this.githubProxyRadioControl] || "";
             }
         },
         githubProxyRadioControl: function (newVal) {
             localStorage.setItem('githubProxyRadioControl', newVal);
+            if (this.radioValue !== "1") {
+                this.selectedGitHubProxy = "";
+                return;
+            }
             if (newVal !== "-1") {
                 this.selectedGitHubProxy = this.githubProxies[newVal] || "";
             } else {

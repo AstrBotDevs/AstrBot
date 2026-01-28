@@ -9,7 +9,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
-from ..sandbox_client import get_booter
+from ..computer_client import get_booter
 
 # @dataclass
 # class CreateFileTool(FunctionTool):

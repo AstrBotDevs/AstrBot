@@ -20,6 +20,14 @@ const props = defineProps({
     type: String,
     required: true
   },
+  pluginName: {
+    type: String,
+    default: ''
+  },
+  pathPrefix: {
+    type: String,
+    default: ''
+  },
   isEditing: {
     type: Boolean,
     default: false
@@ -103,6 +111,10 @@ function shouldShowItem(itemMeta, itemKey) {
   return true
 }
 
+function getItemPath(key) {
+  return props.pathPrefix ? `${props.pathPrefix}.${key}` : key
+}
+
 function hasVisibleItemsAfter(items, currentIndex) {
   const itemEntries = Object.entries(items)
 
@@ -150,7 +162,13 @@ function hasVisibleItemsAfter(items, currentIndex) {
         <div v-if="metadata[metadataKey].items[key]?.type === 'object'" class="nested-object">
           <div v-if="metadata[metadataKey].items[key] && !metadata[metadataKey].items[key]?.invisible && shouldShowItem(metadata[metadataKey].items[key], key)" class="nested-container">
             <v-expand-transition>
-              <AstrBotConfig :metadata="metadata[metadataKey].items" :iterable="iterable[key]" :metadataKey="key">
+              <AstrBotConfig
+                :metadata="metadata[metadataKey].items"
+                :iterable="iterable[key]"
+                :metadataKey="key"
+                :pluginName="pluginName"
+                :pathPrefix="getItemPath(key)"
+              >
               </AstrBotConfig>
             </v-expand-transition>
           </div>
@@ -205,6 +223,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <ConfigItemRenderer
                 v-model="iterable[key]"
                 :item-meta="metadata[metadataKey].items[key] || null"
+                :plugin-name="pluginName"
+                :config-key="getItemPath(key)"
                 :loading="loadingEmbeddingDim"
                 :show-fullscreen-btn="!!metadata[metadataKey].items[key]?.editor_mode"
                 @get-embedding-dim="getEmbeddingDimensions(iterable)"
@@ -249,6 +269,8 @@ function hasVisibleItemsAfter(items, currentIndex) {
             v-else
             v-model="iterable[metadataKey]"
             :item-meta="metadata[metadataKey]"
+            :plugin-name="pluginName"
+            :config-key="getItemPath(metadataKey)"
           />
         </v-col>
       </v-row>

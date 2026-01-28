@@ -574,7 +574,7 @@ class Node(BaseMessageComponent):
     async def to_dict(self):
         data_content = []
         for comp in self.content:
-            if isinstance(comp, (Image, Record)):
+            if isinstance(comp, Image | Record):
                 # For Image and Record segments, we convert them to base64
                 bs64 = await comp.convert_to_base64()
                 data_content.append(
@@ -591,7 +591,7 @@ class Node(BaseMessageComponent):
                 # For File segments, we need to handle the file differently
                 d = await comp.to_dict()
                 data_content.append(d)
-            elif isinstance(comp, (Node, Nodes)):
+            elif isinstance(comp, Node | Nodes):
                 # For Node segments, we recursively convert them to dict
                 d = await comp.to_dict()
                 data_content.append(d)

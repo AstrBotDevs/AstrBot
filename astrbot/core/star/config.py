@@ -38,7 +38,7 @@ def put_config(namespace: str, name: str, key: str, value, description: str):
         raise ValueError("namespace 不能以 internal_ 开头。")
     if not isinstance(key, str):
         raise ValueError("key 只支持 str 类型。")
-    if not isinstance(value, (str, int, float, bool, list)):
+    if not isinstance(value, str | int | float | bool | list):
         raise ValueError("value 只支持 str, int, float, bool, list 类型。")
 
     config_dir = os.path.join(get_astrbot_data_path(), "config")

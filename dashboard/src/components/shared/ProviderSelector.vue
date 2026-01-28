@@ -3,7 +3,7 @@
     <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText));">
       {{ tm('providerSelector.notSelected') }}
     </span>
-    <span v-else>
+    <span v-else class="provider-name-text">
       {{ modelValue }}
     </span>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
@@ -228,6 +228,14 @@ function closeProviderDrawer() {
 </script>
 
 <style scoped>
+.provider-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: calc(100% - 80px);
+  display: inline-block;
+}
+
 .v-list-item {
   transition: all 0.2s ease;
 }

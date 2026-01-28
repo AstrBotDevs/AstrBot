@@ -4,6 +4,7 @@
   "tabs": {
     "installedPlugins": "Installed Plugins",
     "installedMcpServers": "Installed MCP Servers",
+    "skills": "Skills",
     "handlersOperation": "Manage Handlers",
     "market": "Extension Market"
   },
@@ -151,6 +152,11 @@
       "title": "No New Version Detected",
       "message": "No new version detected for this plugin. Do you want to force reinstall? This will pull the latest code from the remote repository.",
       "confirm": "Force Update"
+    },
+    "updateAllConfirm": {
+      "title": "Confirm Update All Plugins",
+      "message": "Are you sure you want to update all {count} plugins? This operation may take some time.",
+      "confirm": "Confirm Update"
     }
   },
   "messages": {
@@ -183,6 +189,28 @@
     "fromUrl": "Install from URL",
     "selectFile": "Select File",
     "enterUrl": "Enter extension repository URL"
+  },
+  "skills": {
+    "upload": "Upload Skills",
+    "refresh": "Refresh",
+    "empty": "No Skills found",
+    "emptyHint": "Upload a Skills zip to get started",
+    "uploadDialogTitle": "Upload Skills",
+    "uploadHint": "Upload a zip file that contains skill_name/ and a SKILL.md inside.",
+    "selectFile": "Select file",
+    "confirmUpload": "Upload",
+    "cancel": "Cancel",
+    "noDescription": "No description",
+    "path": "Path",
+    "uploadSuccess": "Upload succeeded",
+    "uploadFailed": "Upload failed",
+    "loadFailed": "Failed to load Skills",
+    "updateSuccess": "Updated successfully",
+    "updateFailed": "Update failed",
+    "deleteTitle": "Delete confirmation",
+    "deleteMessage": "Are you sure you want to delete this Skill?",
+    "deleteSuccess": "Deleted successfully",
+    "deleteFailed": "Delete failed"
   },
   "card": {
     "actions": {

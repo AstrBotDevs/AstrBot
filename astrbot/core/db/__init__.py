@@ -14,6 +14,7 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     Persona,
+    PersonaFolder,
     PlatformMessageHistory,
     PlatformSession,
     PlatformStat,
@@ -253,8 +254,21 @@ class BaseDatabase(abc.ABC):
         system_prompt: str,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        skills: list[str] | None = None,
+        folder_id: str | None = None,
+        sort_order: int = 0,
     ) -> Persona:
-        """Insert a new persona record."""
+        """Insert a new persona record.
+
+        Args:
+            persona_id: Unique identifier for the persona
+            system_prompt: System prompt for the persona
+            begin_dialogs: Optional list of initial dialog strings
+            tools: Optional list of tool names (None means all tools, [] means no tools)
+            skills: Optional list of skill names (None means all skills, [] means no skills)
+            folder_id: Optional folder ID to place the persona in (None means root)
+            sort_order: Sort order within the folder (default 0)
+        """
         ...
 
     @abc.abstractmethod
@@ -274,6 +288,7 @@ class BaseDatabase(abc.ABC):
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
+        skills: list[str] | None = None,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
@@ -281,6 +296,84 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def delete_persona(self, persona_id: str) -> None:
         """Delete a persona by its ID."""
+        ...
+
+    # ====
+    # Persona Folder Management
+    # ====
+
+    @abc.abstractmethod
+    async def insert_persona_folder(
+        self,
+        name: str,
+        parent_id: str | None = None,
+        description: str | None = None,
+        sort_order: int = 0,
+    ) -> PersonaFolder:
+        """Insert a new persona folder."""
+        ...
+
+    @abc.abstractmethod
+    async def get_persona_folder_by_id(self, folder_id: str) -> PersonaFolder | None:
+        """Get a persona folder by its folder_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_persona_folders(
+        self, parent_id: str | None = None
+    ) -> list[PersonaFolder]:
+        """Get all persona folders, optionally filtered by parent_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_all_persona_folders(self) -> list[PersonaFolder]:
+        """Get all persona folders."""
+        ...
+
+    @abc.abstractmethod
+    async def update_persona_folder(
+        self,
+        folder_id: str,
+        name: str | None = None,
+        parent_id: T.Any = None,
+        description: T.Any = None,
+        sort_order: int | None = None,
+    ) -> PersonaFolder | None:
+        """Update a persona folder."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_persona_folder(self, folder_id: str) -> None:
+        """Delete a persona folder by its folder_id."""
+        ...
+
+    @abc.abstractmethod
+    async def move_persona_to_folder(
+        self, persona_id: str, folder_id: str | None
+    ) -> Persona | None:
+        """Move a persona to a folder (or root if folder_id is None)."""
+        ...
+
+    @abc.abstractmethod
+    async def get_personas_by_folder(
+        self, folder_id: str | None = None
+    ) -> list[Persona]:
+        """Get all personas in a specific folder."""
+        ...
+
+    @abc.abstractmethod
+    async def batch_update_sort_order(
+        self,
+        items: list[dict],
+    ) -> None:
+        """Batch update sort_order for personas and/or folders.
+
+        Args:
+            items: List of dicts with keys:
+                - id: The persona_id or folder_id
+                - type: Either "persona" or "folder"
+                - sort_order: The new sort_order value
+        """
         ...
 
     @abc.abstractmethod
