@@ -23,7 +23,6 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.star.star_handler import EventType, star_map
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
@@ -509,8 +508,6 @@ class InternalAgentSubStage(Stage):
             return
 
         tool_set = req.func_tool
-        if isinstance(tool_set, FunctionToolManager):
-            tool_set = tool_set.get_full_tool_set()
         if not isinstance(tool_set, ToolSet):
             return
 
@@ -527,9 +524,8 @@ class InternalAgentSubStage(Stage):
             req.func_tool = active_set
             return
 
-        func_tool_mgr = self.ctx.plugin_manager.context.get_llm_tool_manager()
-        light_set = func_tool_mgr.get_light_tool_set(active_set)
-        param_set = func_tool_mgr.get_param_only_tool_set(active_set)
+        light_set = active_set.get_light_tool_set()
+        param_set = active_set.get_param_only_tool_set()
         event.set_extra("_tool_schema_light_set", light_set)
         event.set_extra("_tool_schema_param_set", param_set)
         req.func_tool = light_set
@@ -681,9 +677,6 @@ class InternalAgentSubStage(Stage):
                 if self.sandbox_cfg.get("enable", False):
                     self._apply_sandbox_tools(req, req.session_id)
 
-                # apply tool schema lazy loading
-                self._apply_tool_schema_mode(event, req)
-
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"
                     and not event.platform_meta.support_streaming_message
@@ -717,12 +710,15 @@ class InternalAgentSubStage(Stage):
 
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
-                    tool_prompt = (
-                        TOOL_CALL_PROMPT_FULL
-                        if self.tool_schema_mode == "full"
-                        else TOOL_CALL_PROMPT
-                    )
-                    req.system_prompt += f"\n{tool_prompt}\n"
+                    # apply tool schema lazy loading
+                    self._apply_tool_schema_mode(event, req)
+                    if req.func_tool and req.func_tool.tools:
+                        tool_prompt = (
+                            TOOL_CALL_PROMPT_FULL
+                            if self.tool_schema_mode == "full"
+                            else TOOL_CALL_PROMPT
+                        )
+                        req.system_prompt += f"\n{tool_prompt}\n"
 
                 action_type = event.get_extra("action_type")
                 if action_type == "live":

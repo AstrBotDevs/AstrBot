@@ -437,12 +437,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             try:
                 active_tool_set = tool_set or req.func_tool
-                if not active_tool_set:
-                    return
-                if hasattr(active_tool_set, "get_tool"):
-                    func_tool = active_tool_set.get_tool(func_tool_name)
-                else:
-                    func_tool = active_tool_set.get_func(func_tool_name)
+                func_tool = active_tool_set.get_tool(func_tool_name)
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
