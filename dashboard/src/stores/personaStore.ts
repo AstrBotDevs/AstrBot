@@ -330,5 +330,29 @@ export const usePersonaStore = defineStore({
       };
       return findNode(this.folderTree);
     },
+
+    /**
+     * 导入人格数据
+     */
+    async importPersona(data: Partial<Persona>): Promise<Persona> {
+      const response = await axios.post('/api/persona/create', {
+        persona_id: data.persona_id,
+        system_prompt: data.system_prompt,
+        begin_dialogs: data.begin_dialogs,
+        tools: data.tools,
+        skills: data.skills,
+        folder_id: data.folder_id ?? this.currentFolderId,
+        sort_order: data.sort_order ?? 0,
+      });
+
+      if (response.data.status !== 'ok') {
+        throw new Error(response.data.message || '导入人格失败');
+      }
+
+      // 刷新当前文件夹内容
+      await this.refreshCurrentFolder();
+
+      return response.data.data.persona;
+    },
   }
 });

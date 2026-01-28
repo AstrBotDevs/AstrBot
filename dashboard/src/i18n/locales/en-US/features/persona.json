@@ -88,11 +88,16 @@
     "toolsCount": "tools",
     "skillsCount": "skills",
     "contextMenu": {
-      "moveTo": "Move to..."
+      "moveTo": "Move to...",
+      "export": "Export"
     },
     "messages": {
       "moveSuccess": "Persona moved successfully",
-      "moveError": "Failed to move persona"
+      "moveError": "Failed to move persona",
+      "exportSuccess": "Exported successfully",
+      "exportError": "Export failed",
+      "importSuccess": "Imported successfully",
+      "importError": "Import failed"
     }
   },
   "folder": {
