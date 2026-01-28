@@ -36,6 +36,10 @@
                             rounded="lg">
                             {{ tm('folder.createButton') }}
                         </v-btn>
+                        <v-btn variant="outlined" prepend-icon="mdi-upload" @click="handleImportPersona"
+                            rounded="lg">
+                            {{ tm('buttons.import') }}
+                        </v-btn>
                     </div>
                 </div>
 
@@ -80,7 +84,7 @@
                                 xl="3">
                                 <PersonaCard :persona="persona" @view="viewPersona(persona)"
                                     @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
-                                    @delete="confirmDeletePersona(persona)" />
+                                    @export="handleExportPersona(persona)" @delete="confirmDeletePersona(persona)" />
                             </v-col>
                         </v-row>
                     </div>
@@ -384,7 +388,7 @@ export default defineComponent({
         await this.initialize();
     },
     methods: {
-        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder']),
+        ...mapActions(usePersonaStore, ['loadFolderTree', 'navigateToFolder', 'updateFolder', 'deleteFolder', 'deletePersona', 'refreshCurrentFolder', 'movePersonaToFolder', 'importPersona']),
 
         async initialize() {
             await Promise.all([
@@ -442,6 +446,103 @@ export default defineComponent({
             } catch (error: any) {
                 this.showError(error.message || this.tm('persona.messages.moveError'));
             }
+        },
+
+        // 导出人格数据
+        async handleExportPersona(persona: Persona) {
+            try {
+                console.log(this.tm('persona.messages.exportStart'), persona.persona_id);
+                
+                // 直接使用前端已有的 persona 数据
+                const personaData = persona;
+                console.log(this.tm('persona.messages.exportSuccessData'), personaData);
+                
+                // 清理文件名中的特殊字符
+                const safeFileName = personaData.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
+                
+                // 创建 JSON 文件并下载
+                const jsonStr = JSON.stringify(personaData, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${safeFileName}.json`;
+                document.body.appendChild(link);
+                link.click();
+                
+                // 清理
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                this.showSuccess(this.tm('persona.messages.exportSuccess'));
+            } catch (error: any) {
+                console.error(this.tm('persona.messages.exportFailed'), error);
+                
+                // 构建详细的错误消息
+                let errorMessage = this.tm('persona.messages.exportError');
+                if (error.message) {
+                    errorMessage += `: ${error.message}`;
+                }
+                
+                this.showError(errorMessage);
+            }
+        },
+
+        // 导入人格数据
+        async handleImportPersona() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            
+            input.onchange = async (event: Event) => {
+                const target = event.target as HTMLInputElement;
+                const file = target.files?.[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    
+                    // 白名单过滤
+                    const whitelist = ['persona_id', 'system_prompt', 'begin_dialogs', 'tools', 'skills', 'folder_id'];
+                    const filteredData: any = {};
+                    
+                    for (const key of whitelist) {
+                        if (key in data) {
+                            filteredData[key] = data[key];
+                        }
+                    }
+                    
+                    // 验证必需字段
+                    if (!filteredData.persona_id || !filteredData.system_prompt) {
+                        throw new Error(this.tm('persona.messages.importMissingFields'));
+                    }
+                    
+                    // 执行导入
+                    await this.importPersona(filteredData);
+                    this.showSuccess(this.tm('persona.messages.importSuccess'));
+                } catch (error: any) {
+                    console.error(this.tm('persona.messages.importFailed'), error);
+                    
+                    // 构建详细的错误消息
+                    let errorMessage = this.tm('persona.messages.importError');
+                    if (error.response) {
+                        // 后端返回的错误
+                        errorMessage += `: ${error.response.data?.message || error.response.statusText}`;
+                    } else if (error.request) {
+                        // 请求发送但没有收到响应
+                        errorMessage += `: ${this.tm('persona.messages.importNetworkError')}`;
+                    } else if (error.message) {
+                        // 其他错误
+                        errorMessage += `: ${error.message}`;
+                    }
+                    
+                    this.showError(errorMessage);
+                }
+            };
+            
+            input.click();
         },
 
         // 文件夹操作
