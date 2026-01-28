@@ -100,6 +100,9 @@
                     <v-skeleton-loader type="card" rounded="lg"></v-skeleton-loader>
                 </v-col>
             </v-row>
+
+            <!-- 主容器组件 -->
+            <PersonaManager />
         </v-container>
     </div>
 </template>
@@ -226,27 +229,27 @@ export default {
                     begin_dialogs: persona.begin_dialogs,
                     tools: persona.tools
                 };
-                
+
                 // 格式化 JSON
                 const jsonString = JSON.stringify(cleanPersona, null, 4);
-                
+
                 // 创建 Blob 对象
                 const blob = new Blob([jsonString], { type: 'application/json' });
-                
+
                 // 创建下载链接
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `${persona.persona_id}.json`;
-                
+
                 // 触发下载
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
+
                 // 清理 URL 对象
                 URL.revokeObjectURL(url);
-                
+
                 // 显示成功消息
                 this.showSuccess(this.tm('messages.downloadSuccess') || 'JSON 文件已下载');
             } catch (error) {
@@ -266,7 +269,7 @@ export default {
             try {
                 const text = await file.text();
     const parsedData = JSON.parse(text);
-    
+
     console.log("Parsed Data:", parsedData);
 
     // 验证必需字段
@@ -316,7 +319,7 @@ export default {
             event.target.value = '';
         }
     }
-}
+};
 </script>
 
 <style scoped>
