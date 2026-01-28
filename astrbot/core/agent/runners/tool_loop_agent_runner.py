@@ -45,6 +45,33 @@ else:
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    def _build_active_tool_set(self, tool_set: ToolSet) -> ToolSet:
+        active_set = ToolSet()
+        for tool in tool_set.tools:
+            if getattr(tool, "active", True):
+                active_set.add_tool(tool)
+        return active_set
+
+    def _apply_tool_schema_mode(self, tool_schema_mode: str | None) -> None:
+        tool_set = self.req.func_tool
+        if not isinstance(tool_set, ToolSet):
+            return
+
+        active_set = self._build_active_tool_set(tool_set)
+        if not active_set.tools:
+            self.req.func_tool = active_set
+            return
+
+        self._tool_schema_full_set = active_set
+
+        if tool_schema_mode in (None, "full"):
+            self.req.func_tool = active_set
+            return
+
+        light_set = active_set.get_light_tool_set()
+        self._tool_schema_param_set = active_set.get_param_only_tool_set()
+        self.req.func_tool = light_set
+
     def _build_tool_requery_context(
         self, tool_names: list[str]
     ) -> list[dict[str, T.Any]]:
@@ -82,12 +109,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
-
-        event = getattr(self.run_context.context, "event", None)
-        if not event:
-            return llm_resp, self.req.func_tool
-
-        full_tool_set = event.get_extra("_tool_schema_full_set")
+        full_tool_set = self._tool_schema_full_set or self.req.func_tool
         if not isinstance(full_tool_set, ToolSet):
             return llm_resp, self.req.func_tool
 
@@ -95,9 +117,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not subset.tools:
             return llm_resp, full_tool_set
 
-        param_tool_set = event.get_extra("_tool_schema_param_set")
-        if isinstance(param_tool_set, ToolSet):
-            param_subset = self._build_tool_subset(param_tool_set, tool_names)
+        if isinstance(self._tool_schema_param_set, ToolSet):
+            param_subset = self._build_tool_subset(
+                self._tool_schema_param_set, tool_names
+            )
             if param_subset.tools:
                 requery_resp = await self._requery_tool_calls(param_subset, tool_names)
                 if requery_resp:
@@ -140,6 +163,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
+        tool_schema_mode: str | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -174,6 +198,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self._tool_schema_full_set = None
+        self._tool_schema_param_set = None
 
         messages = []
         # append existing messages in the run context
@@ -188,6 +214,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+        self._apply_tool_schema_mode(tool_schema_mode)
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()

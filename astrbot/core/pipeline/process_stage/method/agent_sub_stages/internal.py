@@ -500,36 +500,6 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
         req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
-    def _apply_tool_schema_mode(
-        self, event: AstrMessageEvent, req: ProviderRequest
-    ) -> None:
-        """Apply tool schema lazy loading to reduce initial tool schema size."""
-        if not req.func_tool:
-            return
-
-        tool_set = req.func_tool
-        if not isinstance(tool_set, ToolSet):
-            return
-
-        active_set = ToolSet()
-        for tool in tool_set.tools:
-            if getattr(tool, "active", True):
-                active_set.add_tool(tool)
-        if not active_set.tools:
-            req.func_tool = active_set
-            return
-
-        event.set_extra("_tool_schema_full_set", active_set)
-        if self.tool_schema_mode == "full":
-            req.func_tool = active_set
-            return
-
-        light_set = active_set.get_light_tool_set()
-        param_set = active_set.get_param_only_tool_set()
-        event.set_extra("_tool_schema_light_set", light_set)
-        event.set_extra("_tool_schema_param_set", param_set)
-        req.func_tool = light_set
-
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -710,15 +680,12 @@ class InternalAgentSubStage(Stage):
 
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
-                    # apply tool schema lazy loading
-                    self._apply_tool_schema_mode(event, req)
-                    if req.func_tool and req.func_tool.tools:
-                        tool_prompt = (
-                            TOOL_CALL_PROMPT_FULL
-                            if self.tool_schema_mode == "full"
-                            else TOOL_CALL_PROMPT
-                        )
-                        req.system_prompt += f"\n{tool_prompt}\n"
+                    tool_prompt = (
+                        TOOL_CALL_PROMPT_FULL
+                        if self.tool_schema_mode == "full"
+                        else TOOL_CALL_PROMPT
+                    )
+                    req.system_prompt += f"\n{tool_prompt}\n"
 
                 action_type = event.get_extra("action_type")
                 if action_type == "live":
@@ -739,6 +706,7 @@ class InternalAgentSubStage(Stage):
                     llm_compress_provider=self._get_compress_provider(),
                     truncate_turns=self.dequeue_context_length,
                     enforce_max_turns=self.max_context_length,
+                    tool_schema_mode=self.tool_schema_mode,
                 )
 
                 # 检测 Live Mode
