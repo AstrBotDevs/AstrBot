@@ -7,8 +7,6 @@
     "createFirst": "创建第一个人格",
     "edit": "编辑",
     "delete": "删除",
-    "export": "导出 JSON",
-    "import": "导入",
     "cancel": "取消",
     "save": "保存",
     "move": "移动",
