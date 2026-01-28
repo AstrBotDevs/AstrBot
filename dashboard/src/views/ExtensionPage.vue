@@ -6,6 +6,7 @@ import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import McpServersSection from "@/components/extension/McpServersSection.vue";
+import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import axios from "axios";
 import { pinyin } from "pinyin-pro";
@@ -20,6 +21,13 @@ const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/extension");
 const router = useRouter();
+
+const getSelectedGitHubProxy = () => {
+  if (typeof window === "undefined" || !window.localStorage) return "";
+  return localStorage.getItem("githubProxyRadioValue") === "1"
+    ? localStorage.getItem("selectedGitHubProxy") || ""
+    : "";
+};
 
 // 检查指令冲突并提示
 const conflictDialog = reactive({
@@ -90,6 +98,11 @@ const readmeDialog = reactive({
 const forceUpdateDialog = reactive({
   show: false,
   extensionName: "",
+});
+
+// 更新全部插件确认对话框
+const updateAllConfirmDialog = reactive({
+  show: false,
 });
 
 // 插件更新日志对话框（复用 ReadmeDialog）
@@ -293,7 +306,8 @@ const paginatedPlugins = computed(() => {
 });
 
 const updatableExtensions = computed(() => {
-  return extension_data?.data?.filter((ext) => ext.has_update) || [];
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.filter((ext) => ext.has_update);
 });
 
 // 方法
@@ -424,7 +438,8 @@ const handleUninstallConfirm = (options) => {
 
 const updateExtension = async (extension_name, forceUpdate = false) => {
   // 查找插件信息
-  const ext = extension_data.data?.find((e) => e.name === extension_name);
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const ext = data.find((e) => e.name === extension_name);
 
   // 如果没有检测到更新且不是强制更新，则弹窗确认
   if (!ext?.has_update && !forceUpdate) {
@@ -438,7 +453,7 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
   try {
     const res = await axios.post("/api/plugin/update", {
       name: extension_name,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -471,6 +486,23 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
 };
 
 // 确认强制更新
+// 显示更新全部插件确认对话框
+const showUpdateAllConfirm = () => {
+  if (updatableExtensions.value.length === 0) return;
+  updateAllConfirmDialog.show = true;
+};
+
+// 确认更新全部插件
+const confirmUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+  updateAllExtensions();
+};
+
+// 取消更新全部插件
+const cancelUpdateAll = () => {
+  updateAllConfirmDialog.show = false;
+};
+
 const confirmForceUpdate = () => {
   const name = forceUpdateDialog.extensionName;
   forceUpdateDialog.show = false;
@@ -490,7 +522,7 @@ const updateAllExtensions = async () => {
   try {
     const res = await axios.post("/api/plugin/update-all", {
       names: targets,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -909,7 +941,7 @@ const newExtension = async () => {
     axios
       .post("/api/plugin/install", {
         url: extension_url.value,
-        proxy: localStorage.getItem("selectedGitHubProxy") || "",
+        proxy: getSelectedGitHubProxy(),
       })
       .then(async (res) => {
         loading_.value = false;
@@ -1039,6 +1071,10 @@ watch(isListView, (newVal) => {
                 <v-icon class="mr-2">mdi-server-network</v-icon>
                 {{ tm("tabs.installedMcpServers") }}
               </v-tab>
+              <v-tab value="skills">
+                <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
+                {{ tm("tabs.skills") }}
+              </v-tab>
               <v-tab value="market">
                 <v-icon class="mr-2">mdi-store</v-icon>
                 {{ tm("tabs.market") }}
@@ -1128,7 +1164,7 @@ watch(isListView, (newVal) => {
                   variant="tonal"
                   :disabled="updatableExtensions.length === 0"
                   :loading="updatingAll"
-                  @click="updateAllExtensions"
+                  @click="showUpdateAllConfirm"
                 >
                   <v-icon>mdi-update</v-icon>
                   {{ tm("buttons.updateAll") }}
@@ -1515,6 +1551,19 @@ watch(isListView, (newVal) => {
             >
               <v-card-text class="pa-0">
                 <McpServersSection />
+              </v-card-text>
+            </v-card>
+          </v-tab-item>
+
+          <!-- Skills 标签页内容 -->
+          <v-tab-item v-show="activeTab === 'skills'">
+            <v-card
+              class="rounded-lg"
+              variant="flat"
+              style="background-color: transparent"
+            >
+              <v-card-text class="pa-0">
+                <SkillsSection />
               </v-card-text>
             </v-card>
           </v-tab-item>
@@ -2127,19 +2176,22 @@ watch(isListView, (newVal) => {
   </v-row>
 
   <!-- 配置对话框 -->
-  <v-dialog v-model="configDialog" width="1000">
+  <v-dialog v-model="configDialog" max-width="900">
     <v-card>
-      <v-card-title class="text-h5">{{
+      <v-card-title class="text-h2 pa-4 pl-6 pb-0">{{
         tm("dialogs.config.title")
       }}</v-card-title>
       <v-card-text>
-        <AstrBotConfig
-          v-if="extension_config.metadata"
-          :metadata="extension_config.metadata"
-          :iterable="extension_config.config"
-          :metadataKey="curr_namespace"
-        />
-        <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+        <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
+          <AstrBotConfig
+            v-if="extension_config.metadata"
+            :metadata="extension_config.metadata"
+            :iterable="extension_config.config"
+            :metadataKey="curr_namespace"
+            :pluginName="curr_namespace"
+          />
+          <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+        </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
@@ -2278,6 +2330,34 @@ watch(isListView, (newVal) => {
     v-model="showUninstallDialog"
     @confirm="handleUninstallConfirm"
   />
+
+  <!-- 更新全部插件确认对话框 -->
+  <v-dialog v-model="updateAllConfirmDialog.show" max-width="420">
+    <v-card class="rounded-lg">
+      <v-card-title class="d-flex align-center pa-4">
+        <v-icon color="warning" class="mr-2">mdi-update</v-icon>
+        {{ tm("dialogs.updateAllConfirm.title") }}
+      </v-card-title>
+      <v-card-text>
+        <p class="text-body-1">
+          {{ tm("dialogs.updateAllConfirm.message", { count: updatableExtensions.length }) }}
+        </p>
+      </v-card-text>
+      <v-card-actions class="pa-4">
+        <v-spacer></v-spacer>
+        <v-btn
+          variant="text"
+          @click="cancelUpdateAll"
+        >{{ tm("buttons.cancel") }}</v-btn>
+        <v-btn
+          color="warning"
+          variant="flat"
+          @click="confirmUpdateAll"
+        >{{ tm("dialogs.updateAllConfirm.confirm") }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
 
   <!-- 指令冲突提示对话框 -->
   <v-dialog v-model="conflictDialog.show" max-width="420">

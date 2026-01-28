@@ -1,12 +1,54 @@
 import builtins
+from typing import TYPE_CHECKING
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+
+if TYPE_CHECKING:
+    from astrbot.core.db.po import Persona
 
 
 class PersonaCommands:
     def __init__(self, context: star.Context):
         self.context = context
+
+    def _build_tree_output(
+        self,
+        folder_tree: list[dict],
+        all_personas: list["Persona"],
+        depth: int = 0,
+    ) -> list[str]:
+        """递归构建树状输出，使用短线条表示层级"""
+        lines: list[str] = []
+        # 使用短线条作为缩进前缀，每层只用 "│" 加一个空格
+        prefix = "│ " * depth
+
+        for folder in folder_tree:
+            # 输出文件夹
+            lines.append(f"{prefix}├ 📁 {folder['name']}/")
+
+            # 获取该文件夹下的人格
+            folder_personas = [
+                p for p in all_personas if p.folder_id == folder["folder_id"]
+            ]
+            child_prefix = "│ " * (depth + 1)
+
+            # 输出该文件夹下的人格
+            for persona in folder_personas:
+                lines.append(f"{child_prefix}├ 👤 {persona.persona_id}")
+
+            # 递归处理子文件夹
+            children = folder.get("children", [])
+            if children:
+                lines.extend(
+                    self._build_tree_output(
+                        children,
+                        all_personas,
+                        depth + 1,
+                    )
+                )
+
+        return lines
 
     async def persona(self, message: AstrMessageEvent):
         l = message.message_str.split(" ")  # noqa: E741
@@ -69,12 +111,32 @@ class PersonaCommands:
                 .use_t2i(False),
             )
         elif l[1] == "list":
-            parts = ["人格列表：\n"]
-            for persona in self.context.provider_manager.personas:
-                parts.append(f"- {persona['name']}\n")
-            parts.append("\n\n*输入 `/persona view 人格名` 查看人格详细信息")
-            msg = "".join(parts)
-            message.set_result(MessageEventResult().message(msg))
+            # 获取文件夹树和所有人格
+            folder_tree = await self.context.persona_manager.get_folder_tree()
+            all_personas = self.context.persona_manager.personas
+
+            lines = ["📂 人格列表：\n"]
+
+            # 构建树状输出
+            tree_lines = self._build_tree_output(folder_tree, all_personas)
+            lines.extend(tree_lines)
+
+            # 输出根目录下的人格（没有文件夹的）
+            root_personas = [p for p in all_personas if p.folder_id is None]
+            if root_personas:
+                if tree_lines:  # 如果有文件夹内容，加个空行
+                    lines.append("")
+                for persona in root_personas:
+                    lines.append(f"👤 {persona.persona_id}")
+
+            # 统计信息
+            total_count = len(all_personas)
+            lines.append(f"\n共 {total_count} 个人格")
+            lines.append("\n*使用 `/persona <人格名>` 设置人格")
+            lines.append("*使用 `/persona view <人格名>` 查看详细信息")
+
+            msg = "\n".join(lines)
+            message.set_result(MessageEventResult().message(msg).use_t2i(False))
         elif l[1] == "view":
             if len(l) == 2:
                 message.set_result(MessageEventResult().message("请输入人格情景名"))

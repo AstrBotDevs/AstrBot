@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import os
 import traceback
+from pathlib import Path
 from typing import Any
 
 from quart import request
@@ -20,11 +21,22 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
-from astrbot.core.star.star import star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_plugin_data_path,
+)
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 
 from .route import Response, Route, RouteContext
+from .util import (
+    config_key_to_folder,
+    get_schema_item,
+    normalize_rel_path,
+    sanitize_filename,
+)
+
+MAX_FILE_BYTES = 500 * 1024 * 1024
 
 
 def try_cast(value: Any, type_: str):
@@ -104,6 +116,32 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
 
             if meta["type"] == "template_list":
                 _validate_template_list(value, meta, f"{path}{key}", errors, validate)
+                continue
+
+            if meta["type"] == "file":
+                if not _expect_type(value, list, f"{path}{key}", errors, "list"):
+                    continue
+                for idx, item in enumerate(value):
+                    if not isinstance(item, str):
+                        errors.append(
+                            f"Invalid type {path}{key}[{idx}]: expected string, got {type(item).__name__}",
+                        )
+                        continue
+                    normalized = normalize_rel_path(item)
+                    if not normalized or not normalized.startswith("files/"):
+                        errors.append(
+                            f"Invalid file path {path}{key}[{idx}]: {item}",
+                        )
+                        continue
+                    key_path = f"{path}{key}"
+                    expected_folder = config_key_to_folder(key_path)
+                    expected_prefix = f"files/{expected_folder}/"
+                    if not normalized.startswith(expected_prefix):
+                        errors.append(
+                            f"Invalid file path {path}{key}[{idx}]: {item}",
+                        )
+                        continue
+                    value[idx] = normalized
                 continue
 
             if meta["type"] == "list" and not isinstance(value, list):
@@ -218,6 +256,9 @@ class ConfigRoute(Route):
             "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
             "/config/plugin/update": ("POST", self.post_plugin_configs),
+            "/config/file/upload": ("POST", self.upload_config_file),
+            "/config/file/delete": ("POST", self.delete_config_file),
+            "/config/file/get": ("GET", self.get_config_file_list),
             "/config/platform/new": ("POST", self.post_new_platform),
             "/config/platform/update": ("POST", self.post_update_platform),
             "/config/platform/delete": ("POST", self.post_delete_platform),
@@ -876,6 +917,193 @@ class ConfigRoute(Route):
         except Exception as e:
             return Response().error(str(e)).__dict__
 
+    def _get_plugin_metadata_by_name(self, plugin_name: str) -> StarMetadata | None:
+        for plugin_md in star_registry:
+            if plugin_md.name == plugin_name:
+                return plugin_md
+        return None
+
+    def _resolve_config_file_scope(
+        self,
+    ) -> tuple[str, str, str, StarMetadata, AstrBotConfig]:
+        """将请求参数解析为一个明确的配置作用域。
+
+        当前支持的 scope：
+        - scope=plugin：name=<plugin_name>，key=<config_key_path>
+        """
+
+        scope = request.args.get("scope") or "plugin"
+        name = request.args.get("name")
+        key_path = request.args.get("key")
+
+        if scope != "plugin":
+            raise ValueError(f"Unsupported scope: {scope}")
+        if not name or not key_path:
+            raise ValueError("Missing name or key parameter")
+
+        md = self._get_plugin_metadata_by_name(name)
+        if not md or not md.config:
+            raise ValueError(f"Plugin {name} not found or has no config")
+
+        return scope, name, key_path, md, md.config
+
+    async def upload_config_file(self):
+        """上传文件到插件数据目录（用于某个 file 类型配置项）。"""
+
+        try:
+            scope, name, key_path, md, config = self._resolve_config_file_scope()
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+
+        meta = get_schema_item(getattr(config, "schema", None), key_path)
+        if not meta or meta.get("type") != "file":
+            return Response().error("Config item not found or not file type").__dict__
+
+        file_types = meta.get("file_types")
+        allowed_exts: list[str] = []
+        if isinstance(file_types, list):
+            allowed_exts = [
+                str(ext).lstrip(".").lower() for ext in file_types if str(ext).strip()
+            ]
+
+        files = await request.files
+        if not files:
+            return Response().error("No files uploaded").__dict__
+
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+        plugin_root_path.mkdir(parents=True, exist_ok=True)
+
+        uploaded: list[str] = []
+        folder = config_key_to_folder(key_path)
+        errors: list[str] = []
+        for file in files.values():
+            filename = sanitize_filename(file.filename or "")
+            if not filename:
+                errors.append("Invalid filename")
+                continue
+
+            file_size = getattr(file, "content_length", None)
+            if isinstance(file_size, int) and file_size > MAX_FILE_BYTES:
+                errors.append(f"File too large: {filename}")
+                continue
+
+            ext = os.path.splitext(filename)[1].lstrip(".").lower()
+            if allowed_exts and ext not in allowed_exts:
+                errors.append(f"Unsupported file type: {filename}")
+                continue
+
+            rel_path = f"files/{folder}/{filename}"
+            save_path = (plugin_root_path / rel_path).resolve(strict=False)
+            try:
+                save_path.relative_to(plugin_root_path)
+            except ValueError:
+                errors.append(f"Invalid path: {filename}")
+                continue
+
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            await file.save(str(save_path))
+            if save_path.is_file() and save_path.stat().st_size > MAX_FILE_BYTES:
+                save_path.unlink()
+                errors.append(f"File too large: {filename}")
+                continue
+            uploaded.append(rel_path)
+
+        if not uploaded:
+            return (
+                Response()
+                .error(
+                    "Upload failed: " + ", ".join(errors)
+                    if errors
+                    else "Upload failed",
+                )
+                .__dict__
+            )
+
+        return Response().ok({"uploaded": uploaded, "errors": errors}).__dict__
+
+    async def delete_config_file(self):
+        """删除插件数据目录中的文件。"""
+
+        scope = request.args.get("scope") or "plugin"
+        name = request.args.get("name")
+        if not name:
+            return Response().error("Missing name parameter").__dict__
+        if scope != "plugin":
+            return Response().error(f"Unsupported scope: {scope}").__dict__
+
+        data = await request.get_json()
+        rel_path = data.get("path") if isinstance(data, dict) else None
+        rel_path = normalize_rel_path(rel_path)
+        if not rel_path or not rel_path.startswith("files/"):
+            return Response().error("Invalid path parameter").__dict__
+
+        md = self._get_plugin_metadata_by_name(name)
+        if not md:
+            return Response().error(f"Plugin {name} not found").__dict__
+
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+        target_path = (plugin_root_path / rel_path).resolve(strict=False)
+        try:
+            target_path.relative_to(plugin_root_path)
+        except ValueError:
+            return Response().error("Invalid path parameter").__dict__
+        if target_path.is_file():
+            target_path.unlink()
+
+        return Response().ok(None, "Deleted").__dict__
+
+    async def get_config_file_list(self):
+        """获取配置项对应目录下的文件列表。"""
+
+        try:
+            _, name, key_path, _, config = self._resolve_config_file_scope()
+        except ValueError as e:
+            return Response().error(str(e)).__dict__
+
+        meta = get_schema_item(getattr(config, "schema", None), key_path)
+        if not meta or meta.get("type") != "file":
+            return Response().error("Config item not found or not file type").__dict__
+
+        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        plugin_root_path = (storage_root_path / name).resolve(strict=False)
+        try:
+            plugin_root_path.relative_to(storage_root_path)
+        except ValueError:
+            return Response().error("Invalid name parameter").__dict__
+
+        folder = config_key_to_folder(key_path)
+        target_dir = (plugin_root_path / "files" / folder).resolve(strict=False)
+        try:
+            target_dir.relative_to(plugin_root_path)
+        except ValueError:
+            return Response().error("Invalid path parameter").__dict__
+
+        if not target_dir.exists() or not target_dir.is_dir():
+            return Response().ok({"files": []}).__dict__
+
+        files: list[str] = []
+        for path in target_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                rel_path = path.relative_to(plugin_root_path).as_posix()
+            except ValueError:
+                continue
+            if rel_path.startswith("files/"):
+                files.append(rel_path)
+
+        return Response().ok({"files": files}).__dict__
+
     async def post_new_platform(self):
         new_platform_config = await request.json
 
@@ -1130,8 +1358,14 @@ class ConfigRoute(Route):
             raise ValueError(f"插件 {plugin_name} 不存在")
         if not md.config:
             raise ValueError(f"插件 {plugin_name} 没有注册配置")
+        assert md.config is not None
 
         try:
-            save_config(post_configs, md.config)
+            errors, post_configs = validate_config(
+                post_configs, getattr(md.config, "schema", {}), is_core=False
+            )
+            if errors:
+                raise ValueError(f"格式校验未通过: {errors}")
+            md.config.save_config(post_configs)
         except Exception as e:
             raise e

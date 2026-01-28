@@ -1,11 +1,23 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="500px" persistent>
+    <v-dialog v-model="showDialog" max-width="500px">
         <v-card>
             <v-card-title class="text-h2">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
             <v-card-text>
+                <!-- 创建位置提示 -->
+                <v-alert
+                    v-if="!editingPersona"
+                    type="info"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-4"
+                    icon="mdi-folder-outline"
+                >
+                    {{ tm('form.createInFolder', { folder: folderDisplayName }) }}
+                </v-alert>
+
                 <v-form ref="personaForm" v-model="formValid">
                     <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
                         :rules="personaIdRules" :disabled="editingPersona" variant="outlined" density="comfortable"
@@ -143,6 +155,100 @@
                             </v-expansion-panel-text>
                         </v-expansion-panel>
 
+                        <!-- Skills 选择面板 -->
+                        <v-expansion-panel value="skills">
+                            <v-expansion-panel-title>
+                                <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
+                                {{ tm('form.skills') }}
+                                <v-chip v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
+                                    size="small" color="primary" variant="tonal" class="ml-2">
+                                    {{ personaForm.skills.length }}
+                                </v-chip>
+                            </v-expansion-panel-title>
+
+                            <v-expansion-panel-text>
+                                <div class="mb-3">
+                                    <p class="text-body-2 text-medium-emphasis">
+                                        {{ tm('form.skillsHelp') }}
+                                    </p>
+                                </div>
+
+                                <v-radio-group class="mt-2" v-model="skillSelectValue" hide-details="true">
+                                    <v-radio :label="tm('form.skillsAllAvailable')" value="0"></v-radio>
+                                    <v-radio :label="tm('form.skillsSelectSpecific')" value="1"></v-radio>
+                                </v-radio-group>
+
+                                <div v-if="skillSelectValue === '1'" class="mt-3 ml-8">
+                                    <v-text-field v-model="skillSearch" :label="tm('form.searchSkills')"
+                                        prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
+                                        hide-details clearable class="mb-3" />
+
+                                    <div v-if="filteredSkills.length > 0" class="skills-selection">
+                                        <v-virtual-scroll :items="filteredSkills" height="240" item-height="48">
+                                            <template v-slot:default="{ item }">
+                                                <v-list-item :key="item.name" density="comfortable"
+                                                    @click="toggleSkill(item.name)">
+                                                    <template v-slot:prepend>
+                                                        <v-checkbox-btn :model-value="isSkillSelected(item.name)"
+                                                            @click.stop="toggleSkill(item.name)" />
+                                                    </template>
+                                                    <v-list-item-title>
+                                                        {{ item.name }}
+                                                    </v-list-item-title>
+                                                    <v-list-item-subtitle v-if="item.description">
+                                                        {{ truncateText(item.description, 100) }}
+                                                    </v-list-item-subtitle>
+                                                </v-list-item>
+                                            </template>
+                                        </v-virtual-scroll>
+                                    </div>
+
+                                    <div v-else-if="!loadingSkills && availableSkills.length === 0"
+                                        class="text-center pa-4">
+                                        <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-lightning-bolt</v-icon>
+                                        <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSkillsAvailable') }}
+                                        </p>
+                                    </div>
+
+                                    <div v-else-if="!loadingSkills && filteredSkills.length === 0"
+                                        class="text-center pa-4">
+                                        <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-magnify</v-icon>
+                                        <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSkillsFound') }}
+                                        </p>
+                                    </div>
+
+                                    <div v-if="loadingSkills" class="text-center pa-4">
+                                        <v-progress-circular indeterminate color="primary" />
+                                        <p class="text-body-2 text-medium-emphasis mt-2">{{ tm('form.loadingSkills') }}
+                                        </p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <h4 class="text-subtitle-2 mb-2">
+                                            {{ tm('form.selectedSkills') }}
+                                            <span v-if="personaForm.skills === null" class="text-success">
+                                                ({{ tm('form.allSelected') }})
+                                            </span>
+                                            <span v-else-if="Array.isArray(personaForm.skills)">
+                                                ({{ personaForm.skills.length }})
+                                            </span>
+                                        </h4>
+                                        <div v-if="Array.isArray(personaForm.skills) && personaForm.skills.length > 0"
+                                            class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
+                                            <v-chip v-for="skillName in personaForm.skills" :key="skillName"
+                                                size="small" color="primary" variant="tonal" closable
+                                                @click:close="removeSkill(skillName)">
+                                                {{ skillName }}
+                                            </v-chip>
+                                        </div>
+                                        <div v-else class="text-body-2 text-medium-emphasis">
+                                            {{ tm('form.noSkillsSelected') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </v-expansion-panel-text>
+                        </v-expansion-panel>
+
                         <!-- 预设对话面板 -->
                         <v-expansion-panel value="dialogs">
                             <v-expansion-panel-title>
@@ -209,6 +315,14 @@ export default {
         editingPersona: {
             type: Object,
             default: null
+        },
+        currentFolderId: {
+            type: String,
+            default: null
+        },
+        currentFolderName: {
+            type: String,
+            default: null
         }
     },
     emits: ['update:modelValue', 'saved', 'error'],
@@ -225,21 +339,29 @@ export default {
             mcpServers: [],
             availableTools: [],
             loadingTools: false,
+            availableSkills: [],
+            loadingSkills: false,
+            existingPersonaIds: [], // 已存在的人格ID列表
             personaForm: {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                skills: [],
+                folder_id: null
             },
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
-                v => (v && v.length >= 0) || this.tm('validation.minLength', { min: 2 }),
+                v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
+                v => !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
                 v => (v && v.length >= 10) || this.tm('validation.minLength', { min: 10 })
             ],
-            toolSearch: ''
+            toolSearch: '',
+            skillSearch: '',
+            skillSelectValue: '0'
         }
     },
 
@@ -262,6 +384,28 @@ export default {
                 (tool.description && tool.description.toLowerCase().includes(search)) ||
                 (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
             );
+        },
+        filteredSkills() {
+            if (!this.skillSearch) {
+                return this.availableSkills;
+            }
+            const search = this.skillSearch.toLowerCase();
+            return this.availableSkills.filter(skill =>
+                skill.name.toLowerCase().includes(search) ||
+                (skill.description && skill.description.toLowerCase().includes(search))
+            );
+        },
+        folderDisplayName() {
+            // 优先使用传入的文件夹名称
+            if (this.currentFolderName) {
+                return this.currentFolderName;
+            }
+            // 如果没有文件夹 ID，显示根目录
+            if (!this.currentFolderId) {
+                return this.tm('form.rootFolder');
+            }
+            // 否则显示文件夹 ID（作为备用）
+            return this.currentFolderId;
         }
     },
 
@@ -273,9 +417,12 @@ export default {
                     this.initFormWithPersona(this.editingPersona);
                 } else {
                     this.initForm();
+                    // 只在创建新人格时加载已存在的人格列表
+                    this.loadExistingPersonaIds();
                 }
                 this.loadMcpServers();
                 this.loadTools();
+                this.loadSkills();
             }
         },
         editingPersona: {
@@ -301,6 +448,15 @@ export default {
                     this.personaForm.tools = [];
                 }
             }
+        },
+        skillSelectValue(newValue) {
+            if (newValue === '0') {
+                this.personaForm.skills = null;
+            } else if (newValue === '1') {
+                if (this.personaForm.skills === null) {
+                    this.personaForm.skills = [];
+                }
+            }
         }
     },
 
@@ -310,9 +466,12 @@ export default {
                 persona_id: '',
                 system_prompt: '',
                 begin_dialogs: [],
-                tools: []
+                tools: [],
+                skills: [],
+                folder_id: this.currentFolderId
             };
             this.toolSelectValue = '0';
+            this.skillSelectValue = '0';
             this.expandedPanels = [];
         },
 
@@ -321,10 +480,13 @@ export default {
                 persona_id: persona.persona_id,
                 system_prompt: persona.system_prompt,
                 begin_dialogs: [...(persona.begin_dialogs || [])],
-                tools: persona.tools === null ? null : [...(persona.tools || [])]
+                tools: persona.tools === null ? null : [...(persona.tools || [])],
+                skills: persona.skills === null ? null : [...(persona.skills || [])],
+                folder_id: persona.folder_id
             };
             // 根据 tools 的值设置 toolSelectValue
             this.toolSelectValue = persona.tools === null ? '0' : '1';
+            this.skillSelectValue = persona.skills === null ? '0' : '1';
             this.expandedPanels = [];
         },
 
@@ -360,6 +522,36 @@ export default {
                 this.availableTools = [];
             } finally {
                 this.loadingTools = false;
+            }
+        },
+
+        async loadSkills() {
+            this.loadingSkills = true;
+            try {
+                const response = await axios.get('/api/skills');
+                if (response.data.status === 'ok') {
+                    const skills = response.data.data || [];
+                    this.availableSkills = skills.filter(skill => skill.active !== false);
+                } else {
+                    this.$emit('error', response.data.message || 'Failed to load skills');
+                }
+            } catch (error) {
+                this.$emit('error', error.response?.data?.message || 'Failed to load skills');
+                this.availableSkills = [];
+            } finally {
+                this.loadingSkills = false;
+            }
+        },
+
+        async loadExistingPersonaIds() {
+            try {
+                const response = await axios.get('/api/persona/list');
+                if (response.data.status === 'ok') {
+                    this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
+                }
+            } catch (error) {
+                // 加载失败不影响表单使用，只是无法进行前端重名校验
+                this.existingPersonaIds = [];
             }
         },
 
@@ -497,6 +689,37 @@ export default {
             }
         },
 
+        toggleSkill(skillName) {
+            if (this.personaForm.skills === null) {
+                this.personaForm.skills = this.availableSkills.map(skill => skill.name)
+                    .filter(name => name !== skillName);
+                this.skillSelectValue = '1';
+            } else if (Array.isArray(this.personaForm.skills)) {
+                const index = this.personaForm.skills.indexOf(skillName);
+                if (index !== -1) {
+                    this.personaForm.skills.splice(index, 1);
+                } else {
+                    this.personaForm.skills.push(skillName);
+                }
+            } else {
+                this.personaForm.skills = [skillName];
+                this.skillSelectValue = '1';
+            }
+        },
+
+        removeSkill(skillName) {
+            if (this.personaForm.skills === null) {
+                this.personaForm.skills = this.availableSkills.map(skill => skill.name)
+                    .filter(name => name !== skillName);
+                this.skillSelectValue = '1';
+            } else if (Array.isArray(this.personaForm.skills)) {
+                const index = this.personaForm.skills.indexOf(skillName);
+                if (index !== -1) {
+                    this.personaForm.skills.splice(index, 1);
+                }
+            }
+        },
+
         truncateText(text, maxLength) {
             if (!text) return '';
             return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
@@ -518,6 +741,13 @@ export default {
             return Array.isArray(this.personaForm.tools) && this.personaForm.tools.includes(toolName);
         },
 
+        isSkillSelected(skillName) {
+            if (this.personaForm.skills === null) {
+                return true;
+            }
+            return Array.isArray(this.personaForm.skills) && this.personaForm.skills.includes(skillName);
+        },
+
         isServerSelected(server) {
             if (!server.tools || server.tools.length === 0) return false;
 
@@ -536,6 +766,11 @@ export default {
 
 <style scoped>
 .tools-selection {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.skills-selection {
     max-height: 300px;
     overflow-y: auto;
 }
