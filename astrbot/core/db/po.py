@@ -50,7 +50,7 @@ class ConversationV2(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
     title: str | None = Field(default=None, max_length=255)
     persona_id: str | None = Field(default=None)
@@ -95,7 +95,7 @@ class PersonaFolder(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -134,7 +134,7 @@ class Persona(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -164,7 +164,7 @@ class Preference(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -201,7 +201,7 @@ class PlatformMessageHistory(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
 
@@ -236,7 +236,7 @@ class PlatformSession(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -272,7 +272,7 @@ class Attachment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -313,7 +313,7 @@ class ChatUIProject(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
@@ -371,7 +371,7 @@ class CommandConfig(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
 
@@ -395,7 +395,7 @@ class CommandConflict(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )
 
     __table_args__ = (
