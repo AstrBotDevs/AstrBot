@@ -150,7 +150,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         if args:
             raise_error = args[0]
 
-    if not isinstance(custom_filter, (CustomFilterAnd, CustomFilterOr)):
+    if not isinstance(custom_filter, CustomFilterAnd | CustomFilterOr):
         custom_filter = custom_filter(raise_error)
 
     def decorator(awaitable):
@@ -452,9 +452,7 @@ def register_on_llm_tool_respond(**kwargs):
     """
 
     def decorator(awaitable):
-        _ = get_handler_or_create(
-            awaitable, EventType.OnLLMToolRespondEvent, **kwargs
-        )
+        _ = get_handler_or_create(awaitable, EventType.OnLLMToolRespondEvent, **kwargs)
         return awaitable
 
     return decorator

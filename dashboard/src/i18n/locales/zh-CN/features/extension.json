@@ -4,6 +4,7 @@
   "tabs": {
     "installedPlugins": "已安装的插件",
     "installedMcpServers": "已安装的 MCP 服务器",
+    "skills": "Skills",
     "handlersOperation": "管理行为",
     "market": "插件市场"
   },
@@ -151,6 +152,11 @@
       "title": "未检测到新版本",
       "message": "当前插件未检测到新版本，是否强制重新安装？这将从远程仓库拉取最新代码。",
       "confirm": "强制更新"
+    },
+    "updateAllConfirm": {
+      "title": "确认更新全部插件",
+      "message": "确定要更新全部 {count} 个插件吗？此操作可能需要一些时间。",
+      "confirm": "确认更新"
     }
   },
   "messages": {
@@ -183,6 +189,28 @@
     "fromUrl": "从链接安装",
     "selectFile": "选择文件",
     "enterUrl": "输入插件仓库链接"
+  },
+  "skills": {
+    "upload": "上传 Skills",
+    "refresh": "刷新",
+    "empty": "暂无 Skills",
+    "emptyHint": "请上传 Skills 压缩包",
+    "uploadDialogTitle": "上传 Skills",
+    "uploadHint": "请上传 zip 压缩包，解压后为 skill_name/ 目录，且包含 SKILL.md",
+    "selectFile": "选择文件",
+    "confirmUpload": "上传",
+    "cancel": "取消",
+    "noDescription": "无描述",
+    "path": "路径",
+    "uploadSuccess": "上传成功",
+    "uploadFailed": "上传失败",
+    "loadFailed": "加载 Skills 失败",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失败",
+    "deleteTitle": "删除确认",
+    "deleteMessage": "确定要删除该 Skill 吗？",
+    "deleteSuccess": "删除成功",
+    "deleteFailed": "删除失败"
   },
   "card": {
     "actions": {

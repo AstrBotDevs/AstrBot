@@ -11,6 +11,7 @@
     "import": "Import",
     "cancel": "Cancel",
     "save": "Save",
+    "move": "Move",
     "addDialogPair": "Add Dialog Pair"
   },
   "labels": {
@@ -38,7 +39,20 @@
     "noToolsFound": "No matching tools found",
     "loadingTools": "Loading tools...",
     "allToolsAvailable": "Use all available tools",
-    "noToolsSelected": "No tools selected"
+    "noToolsSelected": "No tools selected",
+    "skills": "Skills Selection",
+    "skillsHelp": "Select available Skills for this persona. Skills provide reusable workflows and guidance.",
+    "skillsAllAvailable": "Use all available Skills",
+    "skillsSelectSpecific": "Select specific Skills",
+    "searchSkills": "Search Skills",
+    "selectedSkills": "Selected Skills",
+    "noSkillsAvailable": "No skills available",
+    "noSkillsFound": "No matching skills found",
+    "loadingSkills": "Loading skills...",
+    "allSkillsAvailable": "Use all available Skills",
+    "noSkillsSelected": "No skills selected",
+    "createInFolder": "Will be created in \"{folder}\"",
+    "rootFolder": "All Personas"
   },
   "dialog": {
     "create": {
@@ -50,13 +64,16 @@
   },
   "empty": {
     "title": "No Persona Configured",
-    "description": "Create your first persona to start using personalized chatbots"
+    "description": "Create your first persona to start using personalized chatbots",
+    "folderEmpty": "This folder is empty",
+    "folderEmptyDescription": "Create a new persona or folder to get started"
   },
   "validation": {
     "required": "This field is required",
     "minLength": "Minimum {min} characters required",
     "alphanumeric": "Only letters, numbers, underscores and hyphens are allowed",
-    "dialogRequired": "{type} cannot be empty"
+    "dialogRequired": "{type} cannot be empty",
+    "personaIdExists": "This persona name already exists"
   },
   "messages": {
     "loadError": "Failed to load persona list",
@@ -65,5 +82,64 @@
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
     "deleteError": "Delete failed"
+  },
+  "persona": {
+    "personasTitle": "Personas",
+    "toolsCount": "tools",
+    "skillsCount": "skills",
+    "contextMenu": {
+      "moveTo": "Move to..."
+    },
+    "messages": {
+      "moveSuccess": "Persona moved successfully",
+      "moveError": "Failed to move persona"
+    }
+  },
+  "folder": {
+    "sidebarTitle": "Folders",
+    "rootFolder": "Root",
+    "foldersTitle": "Folders",
+    "noFolders": "No folders yet",
+    "createButton": "New Folder",
+    "searchPlaceholder": "Search folders...",
+    "form": {
+      "name": "Folder Name",
+      "description": "Description (optional)"
+    },
+    "validation": {
+      "nameRequired": "Folder name is required"
+    },
+    "contextMenu": {
+      "open": "Open",
+      "rename": "Rename",
+      "moveTo": "Move to...",
+      "delete": "Delete"
+    },
+    "createDialog": {
+      "title": "Create New Folder",
+      "createButton": "Create"
+    },
+    "renameDialog": {
+      "title": "Rename Folder"
+    },
+    "deleteDialog": {
+      "title": "Delete Folder",
+      "message": "Are you sure you want to delete folder \"{name}\"?",
+      "warning": "All personas inside will be moved to root folder."
+    },
+    "messages": {
+      "createSuccess": "Folder created successfully",
+      "createError": "Failed to create folder",
+      "renameSuccess": "Folder renamed successfully",
+      "renameError": "Failed to rename folder",
+      "deleteSuccess": "Folder deleted successfully",
+      "deleteError": "Failed to delete folder"
+    }
+  },
+  "moveDialog": {
+    "title": "Move to Folder",
+    "description": "Select a destination folder for \"{name}\"",
+    "success": "Moved successfully",
+    "error": "Failed to move"
   }
 }

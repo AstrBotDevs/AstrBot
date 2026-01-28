@@ -56,8 +56,10 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         )
 
         # special handle web_search_tavily
+        platform_name = run_context.context.event.get_platform_name()
         if (
-            tool.name == "web_search_tavily"
+            platform_name == "webchat"
+            and tool.name == "web_search_tavily"
             and len(run_context.messages) > 0
             and tool_result
             and len(tool_result.content)

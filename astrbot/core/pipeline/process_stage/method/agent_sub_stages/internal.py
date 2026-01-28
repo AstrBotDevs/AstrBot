@@ -31,7 +31,7 @@ from astrbot.core.utils.session_lock import session_lock_manager
 
 from .....astr_agent_context import AgentContextWrapper
 from .....astr_agent_hooks import MAIN_AGENT_HOOKS
-from .....astr_agent_run_util import AgentRunner, run_agent
+from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from .....astr_agent_tool_exec import FunctionToolExecutor
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
@@ -41,6 +41,7 @@ from ...utils import (
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
+    LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
@@ -115,8 +116,12 @@ class InternalAgentSubStage(Stage):
             if not provider:
                 logger.error(f"未找到指定的提供商: {sel_provider}。")
             return provider
-
-        return _ctx.get_using_provider(umo=event.unified_msg_origin)
+        try:
+            prov = _ctx.get_using_provider(umo=event.unified_msg_origin)
+        except ValueError as e:
+            logger.error(f"Error occurred while selecting provider: {e}")
+            return None
+        return prov
 
     async def _get_session_conv(self, event: AstrMessageEvent) -> Conversation:
         umo = event.unified_msg_origin
@@ -495,6 +500,7 @@ class InternalAgentSubStage(Stage):
         try:
             provider = self._select_provider(event)
             if provider is None:
+                logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
                 return
             if not isinstance(provider, Provider):
                 logger.error(
@@ -511,7 +517,7 @@ class InternalAgentSubStage(Stage):
             has_valid_message = bool(event.message_str and event.message_str.strip())
             # 检查是否有图片或其他媒体内容
             has_media_content = any(
-                isinstance(comp, (Image, File)) for comp in event.message_obj.message
+                isinstance(comp, Image | File) for comp in event.message_obj.message
             )
 
             if (
@@ -668,6 +674,10 @@ class InternalAgentSubStage(Stage):
                 if req.func_tool and req.func_tool.tools:
                     req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
 
+                action_type = event.get_extra("action_type")
+                if action_type == "live":
+                    req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+
                 await agent_runner.reset(
                     provider=provider,
                     request=req,
@@ -685,7 +695,50 @@ class InternalAgentSubStage(Stage):
                     enforce_max_turns=self.max_context_length,
                 )
 
-                if streaming_response and not stream_to_general:
+                # 检测 Live Mode
+                if action_type == "live":
+                    # Live Mode: 使用 run_live_agent
+                    logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+
+                    # 获取 TTS Provider
+                    tts_provider = (
+                        self.ctx.plugin_manager.context.get_using_tts_provider(
+                            event.unified_msg_origin
+                        )
+                    )
+
+                    if not tts_provider:
+                        logger.warning(
+                            "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                        )
+
+                    # 使用 run_live_agent，总是使用流式响应
+                    event.set_result(
+                        MessageEventResult()
+                        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                        .set_async_stream(
+                            run_live_agent(
+                                agent_runner,
+                                tts_provider,
+                                self.max_step,
+                                self.show_tool_use,
+                                show_reasoning=self.show_reasoning,
+                            ),
+                        ),
+                    )
+                    yield
+
+                    # 保存历史记录
+                    if not event.is_stopped() and agent_runner.done():
+                        await self._save_to_history(
+                            event,
+                            req,
+                            agent_runner.get_final_llm_resp(),
+                            agent_runner.run_context.messages,
+                            agent_runner.stats,
+                        )
+
+                elif streaming_response and not stream_to_general:
                     # 流式响应
                     event.set_result(
                         MessageEventResult()
