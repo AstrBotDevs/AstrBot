@@ -338,11 +338,9 @@ export const usePersonaStore = defineStore({
       const response = await axios.post('/api/persona/create', {
         persona_id: data.persona_id,
         system_prompt: data.system_prompt,
-        begin_dialogs: data.begin_dialogs,
+        begin_dialogs: data.begin_dialogs || [],
         tools: data.tools,
         skills: data.skills,
-        folder_id: data.folder_id ?? this.currentFolderId,
-        sort_order: data.sort_order ?? 0,
       });
 
       if (response.data.status !== 'ok') {

@@ -506,11 +506,11 @@ export default defineComponent({
                     
                     // 白名单过滤
                     const whitelist = ['persona_id', 'system_prompt', 'begin_dialogs', 'tools', 'skills', 'folder_id'];
-                    const filteredData: Partial<Persona> = {};
+                    const filteredData: any = {};
                     
                     for (const key of whitelist) {
                         if (key in data) {
-                            filteredData[key as keyof Persona] = data[key];
+                            filteredData[key] = data[key];
                         }
                     }
                     
@@ -520,10 +520,25 @@ export default defineComponent({
                     }
                     
                     // 执行导入
-                    await (this as any).importPersona(filteredData);
+                    await this.importPersona(filteredData);
                     this.showSuccess(this.tm('persona.messages.importSuccess'));
                 } catch (error: any) {
-                    this.showError(error.message || this.tm('persona.messages.importError'));
+                    console.error('导入人格失败:', error);
+                    
+                    // 构建详细的错误消息
+                    let errorMessage = this.tm('persona.messages.importError');
+                    if (error.response) {
+                        // 后端返回的错误
+                        errorMessage += `: ${error.response.data?.message || error.response.statusText}`;
+                    } else if (error.request) {
+                        // 请求发送但没有收到响应
+                        errorMessage += ': 无法连接到服务器';
+                    } else if (error.message) {
+                        // 其他错误
+                        errorMessage += `: ${error.message}`;
+                    }
+                    
+                    this.showError(errorMessage);
                 }
             };
             
