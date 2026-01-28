@@ -451,11 +451,11 @@ export default defineComponent({
         // 导出人格数据
         async handleExportPersona(persona: Persona) {
             try {
-                console.log('开始导出人格:', persona.persona_id);
+                console.log(this.tm('persona.messages.exportStart'), persona.persona_id);
                 
                 // 直接使用前端已有的 persona 数据
                 const personaData = persona;
-                console.log('导出成功，人格数据:', personaData);
+                console.log(this.tm('persona.messages.exportSuccessData'), personaData);
                 
                 // 清理文件名中的特殊字符
                 const safeFileName = personaData.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
@@ -477,7 +477,7 @@ export default defineComponent({
                 
                 this.showSuccess(this.tm('persona.messages.exportSuccess'));
             } catch (error: any) {
-                console.error('导出人格失败:', error);
+                console.error(this.tm('persona.messages.exportFailed'), error);
                 
                 // 构建详细的错误消息
                 let errorMessage = this.tm('persona.messages.exportError');
@@ -516,14 +516,14 @@ export default defineComponent({
                     
                     // 验证必需字段
                     if (!filteredData.persona_id || !filteredData.system_prompt) {
-                        throw new Error('导入数据缺少必需字段');
+                        throw new Error(this.tm('persona.messages.importMissingFields'));
                     }
                     
                     // 执行导入
                     await this.importPersona(filteredData);
                     this.showSuccess(this.tm('persona.messages.importSuccess'));
                 } catch (error: any) {
-                    console.error('导入人格失败:', error);
+                    console.error(this.tm('persona.messages.importFailed'), error);
                     
                     // 构建详细的错误消息
                     let errorMessage = this.tm('persona.messages.importError');
@@ -532,7 +532,7 @@ export default defineComponent({
                         errorMessage += `: ${error.response.data?.message || error.response.statusText}`;
                     } else if (error.request) {
                         // 请求发送但没有收到响应
-                        errorMessage += ': 无法连接到服务器';
+                        errorMessage += `: ${this.tm('persona.messages.importNetworkError')}`;
                     } else if (error.message) {
                         // 其他错误
                         errorMessage += `: ${error.message}`;

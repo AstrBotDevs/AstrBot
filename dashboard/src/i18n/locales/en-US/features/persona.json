@@ -95,7 +95,13 @@
       "exportSuccess": "Exported successfully",
       "exportError": "Export failed",
       "importSuccess": "Imported successfully",
-      "importError": "Import failed"
+      "importError": "Import failed",
+      "importMissingFields": "Import data missing required fields",
+      "importNetworkError": "Unable to connect to server",
+      "exportStart": "Starting persona export:",
+      "exportSuccessData": "Export successful, persona data:",
+      "exportFailed": "Persona export failed:",
+      "importFailed": "Persona import failed:"
     }
   },
   "folder": {
