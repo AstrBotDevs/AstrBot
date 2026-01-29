@@ -72,6 +72,11 @@ const sidebarItem: menu[] = [
         icon: 'mdi-console',
         to: '/console'
       },
+      {
+        title: 'core.navigation.trace',
+        icon: 'mdi-timeline-text-outline',
+        to: '/trace'
+      },
     ]
   }
   // {

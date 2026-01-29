@@ -38,7 +38,12 @@ class ProcessLLMRequest:
         req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
     async def _ensure_persona(
-        self, req: ProviderRequest, cfg: dict, umo: str, platform_type: str
+        self,
+        req: ProviderRequest,
+        cfg: dict,
+        umo: str,
+        platform_type: str,
+        event: AstrMessageEvent,
     ):
         """确保用户人格已加载"""
         if not req.conversation:
@@ -121,6 +126,9 @@ class ProcessLLMRequest:
             req.func_tool = toolset
         else:
             req.func_tool.merge(toolset)
+        event.trace.record(
+            "sel_persona", persona_id=persona_id, persona_toolset=toolset.names()
+        )
         logger.debug(f"Tool set for persona {persona_id}: {toolset.names()}")
 
     async def _ensure_img_caption(
@@ -225,7 +233,7 @@ class ProcessLLMRequest:
             # inject persona for this request
             platform_type = event.get_platform_name()
             await self._ensure_persona(
-                req, cfg, event.unified_msg_origin, platform_type
+                req, cfg, event.unified_msg_origin, platform_type, event
             )
 
             # image caption

@@ -691,6 +691,17 @@ class InternalAgentSubStage(Stage):
                 if action_type == "live":
                     req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
+                event.trace.record(
+                    "astr_agent_prepare",
+                    system_prompt=req.system_prompt,
+                    tools=req.func_tool.names() if req.func_tool else [],
+                    stream=streaming_response,
+                    chat_provider={
+                        "id": provider.provider_config.get("id", ""),
+                        "model": provider.get_model(),
+                    },
+                )
+
                 await agent_runner.reset(
                     provider=provider,
                     request=req,
@@ -795,12 +806,20 @@ class InternalAgentSubStage(Stage):
                     ):
                         yield
 
+                final_resp = agent_runner.get_final_llm_resp()
+
+                event.trace.record(
+                    "astr_agent_complete",
+                    stats=agent_runner.stats.to_dict(),
+                    resp=final_resp.completion_text if final_resp else None,
+                )
+
                 # 检查事件是否被停止，如果被停止则不保存历史记录
                 if not event.is_stopped():
                     await self._save_to_history(
                         event,
                         req,
-                        agent_runner.get_final_llm_resp(),
+                        final_resp,
                         agent_runner.run_context.messages,
                         agent_runner.stats,
                     )

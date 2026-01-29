@@ -85,4 +85,6 @@ class PipelineScheduler:
         if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
             await event.send(None)
 
+        event.trace.record("event_end")
+
         logger.debug("pipeline 执行完毕。")
