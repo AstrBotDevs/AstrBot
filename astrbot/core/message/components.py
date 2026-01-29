@@ -653,12 +653,12 @@ class Json(BaseMessageComponent):
         # 如果原始数据是字符串，使用 content 包装形式
         if self.raw_data is not None:
             return {
-                "type": "json",
+                "type": self.type.lower(),
                 "data": {"content": self.raw_data},
             }
         # 如果原始数据是字典，直接返回原始字典结构
         return {
-            "type": "json",
+            "type": self.type.lower(),
             "data": self.data,
         }
 
