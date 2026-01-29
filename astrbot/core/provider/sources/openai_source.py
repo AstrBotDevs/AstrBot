@@ -133,94 +133,6 @@ class ProviderOpenAIOfficial(Provider):
                     return True
         return False
 
-    async def _fallback_to_text_only_and_retry(
-        self,
-        payloads: dict,
-        context_query: list,
-        chosen_key: str,
-        available_api_keys: list[str],
-        func_tool: ToolSet | None,
-        reason: str,
-        *,
-        image_fallback_used: bool = False,
-    ) -> tuple:
-        logger.warning(
-            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
-            reason,
-        )
-        new_contexts = await self._remove_image_from_context(context_query)
-        payloads["messages"] = new_contexts
-        return (
-            False,
-            chosen_key,
-            available_api_keys,
-            payloads,
-            new_contexts,
-            func_tool,
-            image_fallback_used,
-        )
-
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
-        proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
-
-    def __init__(self, provider_config, provider_settings) -> None:
-        super().__init__(provider_config, provider_settings)
-        self.chosen_api_key = None
-        self.api_keys: list = super().get_keys()
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
-
-        if "api_version" in provider_config:
-            # Using Azure OpenAI API
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-        else:
-            # Using OpenAI Official API
-            self.client = AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
-                default_headers=self.custom_headers,
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-
-        self.default_params = inspect.signature(
-            self.client.chat.completions.create,
-        ).parameters.keys()
-
-        model = provider_config.get("model", "unknown")
-        self.set_model(model)
-
-        self.reasoning_key = "reasoning_content"
-
-    async def get_models(self):
-        try:
-            models_str = []
-            models = await self.client.models.list()
-            models = sorted(models.data, key=lambda x: x.id)
-            for model in models:
-                models_str.append(model.id)
-            return models_str
-        except NotFoundError as e:
-            raise Exception(f"获取模型列表失败：{e}")
-
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
@@ -372,6 +284,83 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+        *,
+        image_fallback_used: bool = False,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["messages"] = new_contexts
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+            image_fallback_used,
+        )
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("OpenAI", proxy)
+
+    def __init__(self, provider_config, provider_settings) -> None:
+        super().__init__(provider_config, provider_settings)
+        self.chosen_api_key = None
+        self.api_keys: list = super().get_keys()
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.timeout = provider_config.get("timeout", 120)
+        self.custom_headers = provider_config.get("custom_headers", {})
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
+
+        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
+            self.custom_headers = None
+        else:
+            for key in self.custom_headers:
+                self.custom_headers[key] = str(self.custom_headers[key])
+
+        if "api_version" in provider_config:
+            # Using Azure OpenAI API
+            self.client = AsyncAzureOpenAI(
+                api_key=self.chosen_api_key,
+                api_version=provider_config.get("api_version", None),
+                default_headers=self.custom_headers,
+                base_url=provider_config.get("api_base", ""),
+                timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
+            )
+        else:
+            # Using OpenAI Official API
+            self.client = AsyncOpenAI(
+                api_key=self.chosen_api_key,
+                base_url=provider_config.get("api_base", None),
+                default_headers=self.custom_headers,
+                timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
+            )
+
+        self.default_params = inspect.signature(
+            self.client.chat.completions.create,
+        ).parameters.keys()
+
+        model = provider_config.get("model", "unknown")
+        self.set_model(model)
+
+        self.reasoning_key = "reasoning_content"
+
     @staticmethod
     def _normalize_content(raw_content: Any, strip: bool = True) -> str:
         """Normalize content from various formats to plain string.
@@ -462,6 +451,31 @@ class ProviderOpenAIOfficial(Provider):
         # Fallback for other types (int, float, etc.)
         return str(raw_content) if raw_content is not None else ""
 
+    def _parse_image_url_part(self, image_field) -> str | None:
+        """解析 OpenAI image_url 部分并提取 URL
+
+        Args:
+            image_field: 可以是字典或字符串格式的 image_url 字段
+
+        Returns:
+            提取的 URL 或 base64 数据，如果无效则返回 None
+        """
+        if isinstance(image_field, dict):
+            url = image_field.get("url")
+        else:
+            url = image_field
+
+        if not url:
+            return None
+
+        # 统一处理 base64 格式，提取纯 base64 数据
+        if isinstance(url, str) and "base64," in url:
+            return url.split("base64,", 1)[1]
+        elif isinstance(url, str) and url.startswith("base64://"):
+            return url.replace("base64://", "")
+        else:
+            return url
+
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
@@ -474,21 +488,6 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the text completion
         if choice.message.content is not None:
-<<<<<<< HEAD
-            completion_text = self._normalize_content(choice.message.content)
-            # specially, some providers may set <think> tags around reasoning content in the completion text,
-            # we use regex to remove them, and store then in reasoning_content field
-            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-            matches = reasoning_pattern.findall(completion_text)
-            if matches:
-                llm_response.reasoning_content = "\n".join(
-                    [match.strip() for match in matches],
-                )
-                completion_text = reasoning_pattern.sub("", completion_text).strip()
-            # Also clean up orphan </think> tags that may leak from some models
-            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
-            llm_response.result_chain = MessageChain().message(completion_text)
-=======
             # content can be either a plain string or a multimodal list
             content = choice.message.content
             # handle multimodal content returned as a list of parts
@@ -505,20 +504,13 @@ class ProviderOpenAIOfficial(Provider):
                         mc.message(part.get("text", ""))
                     elif ptype == "image_url":
                         image_field = part.get("image_url")
-                        url = None
-                        if isinstance(image_field, dict):
-                            url = image_field.get("url")
-                        else:
-                            url = image_field
+                        url = self._parse_image_url_part(image_field)
                         if url:
-                            # data:image/...;base64,xxx
-                            if isinstance(url, str) and "base64," in url:
-                                base64_data = url.split("base64,", 1)[1]
-                                mc.base64_image(base64_data)
-                            elif isinstance(url, str) and url.startswith("base64://"):
-                                mc.base64_image(url.replace("base64://", ""))
-                            else:
+                            # 判断是 base64 数据还是 URL
+                            if url.startswith("http"):
                                 mc.url_image(url)
+                            else:
+                                mc.base64_image(url)
                     elif ptype == "think":
                         # collect reasoning parts for later extraction
                         think_val = part.get("think")
@@ -546,7 +538,6 @@ class ProviderOpenAIOfficial(Provider):
                     )
                     completion_text = reasoning_pattern.sub("", completion_text).strip()
                 llm_response.result_chain = MessageChain().message(completion_text)
->>>>>>> 987878e4 ([Bug]当 LLM 的回复本身包含类似 JSON 的格式的时候消息的 content 字段可能被错误地多次序列化)
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
