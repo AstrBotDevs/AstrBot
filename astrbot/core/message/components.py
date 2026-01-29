@@ -531,7 +531,7 @@ class Reply(BaseMessageComponent):
     async def to_dict(self) -> dict:
         chain = self.chain if self.chain is not None else []
         return {
-            "type": "reply",
+            "type": self.type.lower(),
             "data": {"id": self.id, "chain": [await comp.to_dict() for comp in chain]},
         }
 
