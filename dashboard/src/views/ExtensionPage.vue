@@ -6,6 +6,7 @@ import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import McpServersSection from "@/components/extension/McpServersSection.vue";
+import SkillsSection from "@/components/extension/SkillsSection.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import axios from "axios";
 import { pinyin } from "pinyin-pro";
@@ -20,6 +21,13 @@ const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/extension");
 const router = useRouter();
+
+const getSelectedGitHubProxy = () => {
+  if (typeof window === "undefined" || !window.localStorage) return "";
+  return localStorage.getItem("githubProxyRadioValue") === "1"
+    ? localStorage.getItem("selectedGitHubProxy") || ""
+    : "";
+};
 
 // 检查指令冲突并提示
 const conflictDialog = reactive({
@@ -298,7 +306,8 @@ const paginatedPlugins = computed(() => {
 });
 
 const updatableExtensions = computed(() => {
-  return extension_data?.data?.filter((ext) => ext.has_update) || [];
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.filter((ext) => ext.has_update);
 });
 
 // 方法
@@ -429,7 +438,8 @@ const handleUninstallConfirm = (options) => {
 
 const updateExtension = async (extension_name, forceUpdate = false) => {
   // 查找插件信息
-  const ext = extension_data.data?.find((e) => e.name === extension_name);
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const ext = data.find((e) => e.name === extension_name);
 
   // 如果没有检测到更新且不是强制更新，则弹窗确认
   if (!ext?.has_update && !forceUpdate) {
@@ -443,7 +453,7 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
   try {
     const res = await axios.post("/api/plugin/update", {
       name: extension_name,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -512,7 +522,7 @@ const updateAllExtensions = async () => {
   try {
     const res = await axios.post("/api/plugin/update-all", {
       names: targets,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -931,7 +941,7 @@ const newExtension = async () => {
     axios
       .post("/api/plugin/install", {
         url: extension_url.value,
-        proxy: localStorage.getItem("selectedGitHubProxy") || "",
+        proxy: getSelectedGitHubProxy(),
       })
       .then(async (res) => {
         loading_.value = false;
@@ -1060,6 +1070,10 @@ watch(isListView, (newVal) => {
               <v-tab value="mcp">
                 <v-icon class="mr-2">mdi-server-network</v-icon>
                 {{ tm("tabs.installedMcpServers") }}
+              </v-tab>
+              <v-tab value="skills">
+                <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
+                {{ tm("tabs.skills") }}
               </v-tab>
               <v-tab value="market">
                 <v-icon class="mr-2">mdi-store</v-icon>
@@ -1537,6 +1551,19 @@ watch(isListView, (newVal) => {
             >
               <v-card-text class="pa-0">
                 <McpServersSection />
+              </v-card-text>
+            </v-card>
+          </v-tab-item>
+
+          <!-- Skills 标签页内容 -->
+          <v-tab-item v-show="activeTab === 'skills'">
+            <v-card
+              class="rounded-lg"
+              variant="flat"
+              style="background-color: transparent"
+            >
+              <v-card-text class="pa-0">
+                <SkillsSection />
               </v-card-text>
             </v-card>
           </v-tab-item>
@@ -2149,19 +2176,22 @@ watch(isListView, (newVal) => {
   </v-row>
 
   <!-- 配置对话框 -->
-  <v-dialog v-model="configDialog" width="1000">
+  <v-dialog v-model="configDialog" max-width="900">
     <v-card>
-      <v-card-title class="text-h5">{{
+      <v-card-title class="text-h2 pa-4 pl-6 pb-0">{{
         tm("dialogs.config.title")
       }}</v-card-title>
       <v-card-text>
-        <AstrBotConfig
-          v-if="extension_config.metadata"
-          :metadata="extension_config.metadata"
-          :iterable="extension_config.config"
-          :metadataKey="curr_namespace"
-        />
-        <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+        <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
+          <AstrBotConfig
+            v-if="extension_config.metadata"
+            :metadata="extension_config.metadata"
+            :iterable="extension_config.config"
+            :metadataKey="curr_namespace"
+            :pluginName="curr_namespace"
+          />
+          <p v-else>{{ tm("dialogs.config.noConfig") }}</p>
+        </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>

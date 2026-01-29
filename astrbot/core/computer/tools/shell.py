@@ -6,7 +6,7 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
-from ..sandbox_client import get_booter
+from ..computer_client import get_booter, get_local_booter
 
 
 @dataclass
@@ -37,6 +37,8 @@ class ExecuteShellTool(FunctionTool):
         }
     )
 
+    is_local: bool = False
+
     async def call(
         self,
         context: ContextWrapper[AstrAgentContext],
@@ -44,10 +46,16 @@ class ExecuteShellTool(FunctionTool):
         background: bool = False,
         env: dict = {},
     ) -> ToolExecResult:
-        sb = await get_booter(
-            context.context.context,
-            context.context.event.unified_msg_origin,
-        )
+        if context.context.event.role != "admin":
+            return "error: Permission denied. Shell execution is only allowed for admin users. Set admins in AstrBot WebUI."
+
+        if self.is_local:
+            sb = get_local_booter()
+        else:
+            sb = await get_booter(
+                context.context.context,
+                context.context.event.unified_msg_origin,
+            )
         try:
             result = await sb.shell.exec(command, background=background, env=env)
             return json.dumps(result)

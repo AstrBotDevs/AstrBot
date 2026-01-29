@@ -945,7 +945,7 @@ export default {
 
         // Check if tool is iPython executor
         isIPythonTool(toolCall) {
-            return toolCall.name === 'astrbot_execute_ipython';
+            return toolCall.name === 'astrbot_execute_ipython' || toolCall.name === 'astrbot_execute_python';
         },
 
         // Open refs sidebar

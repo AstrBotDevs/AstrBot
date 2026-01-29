@@ -580,6 +580,12 @@ export default {
         this.getProviderList();
     },
     methods: {
+        getSelectedGitHubProxy() {
+            if (typeof window === "undefined" || !window.localStorage) return "";
+            return localStorage.getItem("githubProxyRadioValue") === "1"
+                ? localStorage.getItem("selectedGitHubProxy") || ""
+                : "";
+        },
         llmModelProps(providerConfig) {
             return {
                 title: providerConfig.llm_model || providerConfig.id,
@@ -675,7 +681,7 @@ export default {
             try {
                 const response = await axios.post('/api/plugin/update', {
                     name: 'astrbot_plugin_knowledge_base',
-                    proxy: localStorage.getItem('selectedGitHubProxy') || ""
+                    proxy: this.getSelectedGitHubProxy()
                 });
 
                 if (response.data.status === 'ok') {
@@ -699,7 +705,7 @@ export default {
             this.installing = true;
             axios.post('/api/plugin/install', {
                 url: "https://github.com/lxfight/astrbot_plugin_knowledge_base",
-                proxy: localStorage.getItem('selectedGitHubProxy') || ""
+                proxy: this.getSelectedGitHubProxy()
             })
                 .then(response => {
                     if (response.data.status === 'ok') {

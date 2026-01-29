@@ -38,6 +38,17 @@
     "loadingTools": "Loading tools...",
     "allToolsAvailable": "Use all available tools",
     "noToolsSelected": "No tools selected",
+    "skills": "Skills Selection",
+    "skillsHelp": "Select available Skills for this persona. Skills provide reusable workflows and guidance.",
+    "skillsAllAvailable": "Use all available Skills",
+    "skillsSelectSpecific": "Select specific Skills",
+    "searchSkills": "Search Skills",
+    "selectedSkills": "Selected Skills",
+    "noSkillsAvailable": "No skills available",
+    "noSkillsFound": "No matching skills found",
+    "loadingSkills": "Loading skills...",
+    "allSkillsAvailable": "Use all available Skills",
+    "noSkillsSelected": "No skills selected",
     "createInFolder": "Will be created in \"{folder}\"",
     "rootFolder": "All Personas"
   },
@@ -73,6 +84,7 @@
   "persona": {
     "personasTitle": "Personas",
     "toolsCount": "tools",
+    "skillsCount": "skills",
     "contextMenu": {
       "moveTo": "Move to..."
     },

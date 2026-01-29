@@ -156,6 +156,25 @@
                         </div>
                     </div>
 
+                    <div class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.skills') }}</h4>
+                        <div v-if="viewingPersona.skills === null" class="text-body-2 text-medium-emphasis">
+                            <v-chip size="small" color="success" variant="tonal" prepend-icon="mdi-check-all">
+                                {{ tm('form.allSkillsAvailable') }}
+                            </v-chip>
+                        </div>
+                        <div v-else-if="viewingPersona.skills && viewingPersona.skills.length > 0"
+                            class="d-flex flex-wrap ga-1">
+                            <v-chip v-for="skillName in viewingPersona.skills" :key="skillName" size="small"
+                                color="primary" variant="tonal">
+                                {{ skillName }}
+                            </v-chip>
+                        </div>
+                        <div v-else class="text-body-2 text-medium-emphasis">
+                            {{ tm('form.noSkillsSelected') }}
+                        </div>
+                    </div>
+
                     <div class="text-caption text-medium-emphasis">
                         <div>{{ tm('labels.createdAt') }}: {{ formatDate(viewingPersona.created_at) }}</div>
                         <div v-if="viewingPersona.updated_at">{{ tm('labels.updatedAt') }}:
@@ -249,6 +268,7 @@ interface Persona {
     system_prompt: string;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
+    skills?: string[] | null;
     created_at?: string;
     updated_at?: string;
     folder_id?: string | null;

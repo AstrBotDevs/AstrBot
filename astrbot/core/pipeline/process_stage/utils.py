@@ -7,10 +7,11 @@ from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.sandbox.tools import (
+from astrbot.core.computer.tools import (
     ExecuteShellTool,
     FileDownloadTool,
     FileUploadTool,
+    LocalPythonTool,
     PythonTool,
 )
 from astrbot.core.star.context import Context
@@ -39,10 +40,22 @@ SANDBOX_MODE_PROMPT = (
 
 TOOL_CALL_PROMPT = (
     "You MUST NOT return an empty response, especially after invoking a tool."
-    "Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
-    "After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
-    "Keep the role-play and style consistent throughout the conversation."
+    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " Use the provided tool schema to format arguments and do not guess parameters that are not defined."
+    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+    " Keep the role-play and style consistent throughout the conversation."
 )
+
+TOOL_CALL_PROMPT_SKILLS_LIKE_MODE = (
+    "You MUST NOT return an empty response, especially after invoking a tool."
+    " Before calling any tool, provide a brief explanatory message to the user stating the purpose of the tool call."
+    " Tool schemas are provided in two stages: first only name and description; "
+    "if you decide to use a tool, the full parameter schema will be provided in "
+    "a follow-up step. Do not guess arguments before you see the schema."
+    " After the tool call is completed, you must briefly summarize the results returned by the tool for the user."
+    " Keep the role-play and style consistent throughout the conversation."
+)
+
 
 CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
     "You are a calm, patient friend with a systems-oriented way of thinking.\n"
@@ -194,7 +207,9 @@ async def retrieve_knowledge_base(
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
 
 EXECUTE_SHELL_TOOL = ExecuteShellTool()
+LOCAL_EXECUTE_SHELL_TOOL = ExecuteShellTool(is_local=True)
 PYTHON_TOOL = PythonTool()
+LOCAL_PYTHON_TOOL = LocalPythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
 FILE_DOWNLOAD_TOOL = FileDownloadTool()
 

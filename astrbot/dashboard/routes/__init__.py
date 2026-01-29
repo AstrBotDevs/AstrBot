@@ -12,6 +12,7 @@ from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
 from .session_management import SessionManagementRoute
+from .skills import SkillsRoute
 from .stat import StatRoute
 from .static_file import StaticFileRoute
 from .subagent import SubAgentRoute
@@ -37,5 +38,6 @@ __all__ = [
     "StaticFileRoute",
     "SubAgentRoute",
     "ToolsRoute",
+    "SkillsRoute",
     "UpdateRoute",
 ]

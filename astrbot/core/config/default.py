@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.12.4"
+VERSION = "4.13.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -106,6 +106,7 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
+        "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -121,6 +122,7 @@ DEFAULT_CONFIG = {
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
+        "skills": {"runtime": "sandbox"},
     },
     # SubAgent orchestrator mode: the main LLM only delegates tasks to subagents
     # (via transfer_to_{agent} tools). Domain tools are mounted on subagents.
@@ -2194,6 +2196,9 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
+                    "tool_schema_mode": {
+                        "type": "string",
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -2204,6 +2209,17 @@ CONFIG_METADATA_2 = {
                                 "type": "string",
                             },
                             "moonshotai_api_key": {
+                                "type": "string",
+                            },
+                        },
+                    },
+                    "skills": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "runtime": {
                                 "type": "string",
                             },
                         },
@@ -2585,6 +2601,7 @@ CONFIG_METADATA_3 = {
             # },
             "sandbox": {
                 "description": "Agent 沙箱环境",
+                "hint": "",
                 "type": "object",
                 "items": {
                     "provider_settings.sandbox.enable": {
@@ -2596,6 +2613,7 @@ CONFIG_METADATA_3 = {
                         "description": "沙箱环境驱动器",
                         "type": "string",
                         "options": ["shipyard"],
+                        "labels": ["Shipyard"],
                         "condition": {
                             "provider_settings.sandbox.enable": True,
                         },
@@ -2637,6 +2655,27 @@ CONFIG_METADATA_3 = {
                             "provider_settings.sandbox.booter": "shipyard",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
+            "skills": {
+                "description": "Skills",
+                "type": "object",
+                "items": {
+                    "provider_settings.skills.runtime": {
+                        "description": "Skill Runtime",
+                        "type": "string",
+                        "options": ["local", "sandbox"],
+                        "labels": ["本地", "沙箱"],
+                        "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "truncate_and_compress": {
@@ -2697,6 +2736,10 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
                 },
             },
             "others": {
@@ -2781,6 +2824,16 @@ CONFIG_METADATA_3 = {
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_schema_mode": {
+                        "description": "工具调用模式",
+                        "type": "string",
+                        "options": ["skills_like", "full"],
+                        "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
+                        "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
@@ -3256,6 +3309,7 @@ DEFAULT_VALUE_MAP = {
     "string": "",
     "text": "",
     "list": [],
+    "file": [],
     "object": {},
     "template_list": [],
 }
