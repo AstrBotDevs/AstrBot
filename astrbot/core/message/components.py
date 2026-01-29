@@ -658,9 +658,16 @@ class Json(BaseMessageComponent):
         super().__init__(data=data, **_)
 
     async def to_dict(self) -> dict:
+        # 如果原始数据是字符串，使用 content 包装形式
+        if self.raw_data is not None:
+            return {
+                "type": "json",
+                "data": {"content": self.raw_data},
+            }
+        # 如果原始数据是字典，直接返回原始字典结构
         return {
             "type": "json",
-            "data": {"content": getattr(self, "raw_data", json.dumps(self.data))},
+            "data": self.data,
         }
 
 
