@@ -157,14 +157,37 @@ class AstrBotExporter:
                             "kb_documents", total_kbs, total_kbs, "知识库文档导出完成"
                         )
 
-                # 3. 导出配置文件
+                # 3. 导出配置文件（包括拆分的配置文件）
                 if progress_callback:
                     await progress_callback("config", 0, 100, "正在导出配置文件...")
+
+                # 导出核心配置文件
                 if os.path.exists(self.config_path):
                     with open(self.config_path, encoding="utf-8") as f:
                         config_content = f.read()
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
+
+                # 导出供应商配置文件
+                providers_config_path = os.path.join(
+                    get_astrbot_data_path(), "providers.json"
+                )
+                if os.path.exists(providers_config_path):
+                    with open(providers_config_path, encoding="utf-8") as f:
+                        providers_content = f.read()
+                    zf.writestr("config/providers.json", providers_content)
+                    self._add_checksum("config/providers.json", providers_content)
+
+                # 导出平台配置文件
+                platforms_config_path = os.path.join(
+                    get_astrbot_data_path(), "platforms.json"
+                )
+                if os.path.exists(platforms_config_path):
+                    with open(platforms_config_path, encoding="utf-8") as f:
+                        platforms_content = f.read()
+                    zf.writestr("config/platforms.json", platforms_content)
+                    self._add_checksum("config/platforms.json", platforms_content)
+
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导出完成")
 
