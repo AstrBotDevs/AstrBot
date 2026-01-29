@@ -5,8 +5,10 @@ import os
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from . import config_migration
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
+# 配置文件路径
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 logger = logging.getLogger("astrbot")
 
@@ -44,6 +46,15 @@ class AstrBotConfig(dict):
         if schema:
             default_config = self._config_schema_to_default_config(schema)
 
+        # 检查并执行配置迁移（从单文件到多文件）
+        is_default_config = config_path == ASTRBOT_CONFIG_PATH
+        if is_default_config and config_migration.needs_migration():
+            success, msg = config_migration.migrate_config()
+            if success:
+                logger.info(f"配置迁移完成: {msg}")
+            else:
+                logger.warning(f"配置迁移失败: {msg}")
+
         if not self.check_exist():
             """不存在时载入默认配置"""
             with open(config_path, "w", encoding="utf-8-sig") as f:
@@ -53,6 +64,10 @@ class AstrBotConfig(dict):
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
             conf = json.loads(conf_str)
+
+        # 对于默认配置，从独立文件加载 provider 和 platform 配置
+        if is_default_config:
+            conf = config_migration.get_merged_config(conf)
 
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
@@ -148,15 +163,36 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None):
+    def save_config(self, replace_config: dict | None = None) -> bool:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
+        对于默认配置文件，会将 provider 和 platform 相关配置保存到独立文件
+
+        Returns:
+            保存是否成功
         """
         if replace_config:
             self.update(replace_config)
-        with open(self.config_path, "w", encoding="utf-8-sig") as f:
-            json.dump(self, f, indent=2, ensure_ascii=False)
+
+        # 判断是否是默认配置文件
+        is_default_config = self.config_path == ASTRBOT_CONFIG_PATH
+
+        if is_default_config:
+            # 使用 config_migration 的集中化分类保存工具
+            if not config_migration.save_config_by_category(dict(self)):
+                logger.error("保存配置失败")
+                return False
+            return True
+        else:
+            # 非默认配置直接保存到单一文件
+            try:
+                with open(self.config_path, "w", encoding="utf-8-sig") as f:
+                    json.dump(self, f, indent=2, ensure_ascii=False)
+                return True
+            except OSError as e:
+                logger.error(f"保存配置失败: {e}")
+                return False
 
     def __getattr__(self, item):
         try:
