@@ -35,7 +35,7 @@ class SubAgentRoute(Route):
             if not isinstance(data, dict):
                 data = {
                     "main_enable": False,
-                    "main_tools_policy": "handoff_only",
+                    "main_tools_policy": "disabled",
                     "agents": [],
                 }
 
@@ -49,7 +49,10 @@ class SubAgentRoute(Route):
 
             # Ensure required keys exist.
             data.setdefault("main_enable", False)
-            data.setdefault("main_tools_policy", "handoff_only")
+            if "main_tools_policy" not in data:
+                data["main_tools_policy"] = (
+                    "handoff_only" if data.get("main_enable", False) else "disabled"
+                )
             data.setdefault("agents", [])
 
             # Backward/forward compatibility: ensure each agent contains provider_id.

@@ -124,11 +124,15 @@ DEFAULT_CONFIG = {
         },
         "skills": {"runtime": "sandbox"},
     },
-    # SubAgent orchestrator mode: the main LLM only delegates tasks to subagents
-    # (via transfer_to_{agent} tools). Domain tools are mounted on subagents.
+    # SubAgent orchestrator mode:
+    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
+    # - main_enable = True: enabled; main LLM tool mounting is controlled by main_tools_policy.
     "subagent_orchestrator": {
         "main_enable": False,
-        "main_tools_policy": "handoff_only",  # reserved for future; main_enable implies handoff_only
+        # - handoff_only: main LLM only sees transfer_to_* tools (recommended default when enabled).
+        # - unassigned_to_main: tools not assigned to any subagent are still mounted on main LLM.
+        # - disabled: UI convenience value; ignored when main_enable is False.
+        "main_tools_policy": "disabled",
         "router_system_prompt": (
             "You are a task router. Your job is to chat naturally, recognize user intent, "
             "and delegate work to the most suitable subagent using transfer_to_* tools. "

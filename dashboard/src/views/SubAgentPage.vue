@@ -17,23 +17,29 @@
     <v-card class="rounded-lg" variant="flat">
       <v-card-text>
         <v-row>
-          <v-col cols="12" md="6">
-            <v-switch
-              v-model="cfg.main_enable"
-              inset
-              color="primary"
-              label="启用 SubAgent 分派模式（主 LLM 仅通过 transfer_to_* 委派）"
+          <v-col cols="12" md="8">
+            <v-select
+              v-model="cfg.main_mode"
+              :items="mainModes"
+              item-title="label"
+              item-value="value"
+              label="SubAgent 模式"
+              variant="outlined"
+              density="comfortable"
               hide-details
             />
           </v-col>
         </v-row>
 
         <div class="text-caption text-medium-emphasis mt-1">
-          <div>
-            启用：主 LLM 仅负责对话与“转交”，只会看到 transfer_to_* 这类委派工具；需要调用工具时，会把任务交给对应 SubAgent 执行。SubAgent 负责真正的工具调用与结果整理，并把结论回传给主 LLM。
+          <div v-if="cfg.main_mode === 'disabled'">
+            不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。
           </div>
-          <div>
-            关闭：恢复原有行为（按 persona 选择并直接注入工具）。
+          <div v-else-if="cfg.main_mode === 'unassigned_to_main'">
+            启动：SubAgent 可分派；未分配给任何 SubAgent 的工具仍挂载到主 LLM 上。
+          </div>
+          <div v-else>
+            启动：仅 SubAgent；主 LLM 只保留 transfer_to_* 这类委派工具，不挂载其他工具。
           </div>
         </div>
 
@@ -239,9 +245,10 @@ type SubAgentItem = {
   __tool_group_selected?: string[]
 }
 
+type MainMode = 'disabled' | 'unassigned_to_main' | 'handoff_only'
+
 type SubAgentConfig = {
-  main_enable: boolean
-  main_tools_policy: 'handoff_only' | 'persona'
+  main_mode: MainMode
   agents: SubAgentItem[]
 }
 
@@ -259,14 +266,14 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
   snackbar.value = { show: true, message, color }
 }
 
-const mainToolPolicies = [
-  { label: 'handoff_only（主 LLM 仅 transfer_to_*）', value: 'handoff_only' },
-  { label: 'persona（仍按 persona 选择工具）', value: 'persona' }
+const mainModes: Array<{ label: string; value: MainMode }> = [
+  { label: '不启动：SubAgent 关闭（主 LLM 按 persona 挂载工具）', value: 'disabled' },
+  { label: '启动：未分配工具仍挂载到主 LLM', value: 'unassigned_to_main' },
+  { label: '启动：仅 SubAgent（主 LLM 仅 transfer_to_*）', value: 'handoff_only' }
 ]
 
 const cfg = ref<SubAgentConfig>({
-  main_enable: false,
-  main_tools_policy: 'handoff_only',
+  main_mode: 'disabled',
   agents: []
 })
 
@@ -326,7 +333,10 @@ function syncGroupSelectionToAgentTools(agent: SubAgentItem) {
 
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
-  const main_tools_policy = (raw?.main_tools_policy === 'persona' ? 'persona' : 'handoff_only')
+  const policy = (raw?.main_tools_policy ?? '').toString().trim()
+  const main_mode: MainMode = !main_enable
+    ? 'disabled'
+    : (policy === 'unassigned_to_main' ? 'unassigned_to_main' : 'handoff_only')
   const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => {
@@ -351,7 +361,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
     }
   })
 
-  return { main_enable, main_tools_policy, agents }
+  return { main_mode, agents }
 }
 
 async function loadConfig() {
@@ -478,10 +488,10 @@ async function save() {
   saving.value = true
   try {
     // Strip UI-only fields
+    const mode = cfg.value.main_mode
     const payload = {
-      main_enable: cfg.value.main_enable,
-      // Reserved for future; backend treats main_enable as handoff-only.
-      main_tools_policy: 'handoff_only',
+      main_enable: mode !== 'disabled',
+      main_tools_policy: mode,
       agents: cfg.value.agents.map(a => ({
         name: a.name,
         public_description: a.public_description,
