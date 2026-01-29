@@ -640,13 +640,14 @@ class Json(BaseMessageComponent):
     raw_data: str | None = None
 
     def __init__(self, data: str | dict, **_) -> None:
+        raw_data = None
         if isinstance(data, str):
+            raw_data = data
             try:
-                self.raw_data = data
                 data = json.loads(data)
             except json.JSONDecodeError:
                 data = {"raw": data}
-        super().__init__(data=data, **_)
+        super().__init__(data=data, raw_data=raw_data, **_)
 
     async def to_dict(self) -> dict:
         # 如果原始数据是字符串，使用 content 包装形式
