@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+# Contact links 会显示在“新建 Issue”页面，引导用户去正确的渠道。
+contact_links:
+  - name: 💡 功能想法 / Ideas
+    url: https://github.com/AstrBotDevs/AstrBot/discussions/new?category=ideas
+    about: 你对现有功能的想法或对新需求的讨论 / Your thoughts on existing features or discuss new requirements
+  - name: ❓ 使用问题 / Questions
+    url: https://github.com/AstrBotDevs/AstrBot/discussions/new?category=q-a
+    about: 使用问题与排错问答 / Usage issues and troubleshooting Q&A
+
+
