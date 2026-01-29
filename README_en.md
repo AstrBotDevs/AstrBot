@@ -38,7 +38,7 @@
 
 AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or enterprise knowledge base, AstrBot enables you to quickly build production-ready AI applications within your IM platform workflows.
 
-![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
+![070d50ba43ea3c96980787127bbbe552](https://github.com/user-attachments/assets/6fe147c5-68d9-4f47-a8de-252e63fdcbd8)
 
 ## Key Features
 
