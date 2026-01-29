@@ -4,6 +4,7 @@
   "providers": "模型提供商",
   "commands": "指令管理",
   "persona": "人格设定",
+  "subagent": "SubAgent 编排",
   "toolUse": "MCP",
   "extension": "插件",
   "config": "配置文件",

@@ -4,6 +4,7 @@
   "providers": "Providers",
   "commands": "Commands",
   "persona": "Persona",
+  "subagent": "SubAgents",
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",

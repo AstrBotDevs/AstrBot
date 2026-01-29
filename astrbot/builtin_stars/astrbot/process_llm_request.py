@@ -7,6 +7,7 @@ from astrbot.api import logger, sp, star
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.pipeline.process_stage.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
@@ -104,6 +105,76 @@ class ProcessLLMRequest:
 
         # tools select
         tmgr = self.ctx.get_llm_tool_manager()
+
+        # SubAgent orchestrator mode: main LLM only sees handoff tools.
+        # NOTE: subagent_orchestrator config lives at top-level now.
+        orch_cfg = self.ctx.get_config().get("subagent_orchestrator", {})
+        if orch_cfg.get("main_enable", False):
+            policy = str(orch_cfg.get("main_tools_policy", "handoff_only")).strip()
+            if policy not in {"handoff_only", "unassigned_to_main"}:
+                # Prefer the safer default when config contains unknown values.
+                policy = "handoff_only"
+
+            assigned_tools: set[str] = set()
+            agents = orch_cfg.get("agents", [])
+            if isinstance(agents, list):
+                for a in agents:
+                    if not isinstance(a, dict):
+                        continue
+                    if a.get("enabled", True) is False:
+                        continue
+                    tools = a.get("tools", [])
+                    if not isinstance(tools, list):
+                        continue
+                    for t in tools:
+                        name = str(t).strip()
+                        if name:
+                            assigned_tools.add(name)
+
+            toolset = ToolSet()
+
+            # Always expose handoff tools (transfer_to_*) when orchestrator is enabled.
+            for tool in tmgr.func_list:
+                if isinstance(tool, HandoffTool) and tool.active:
+                    toolset.add_tool(tool)
+
+            # Optional mode: keep tools that are not assigned to any subagent on the main LLM.
+            if policy == "unassigned_to_main":
+                for tool in tmgr.func_list:
+                    if not tool.active:
+                        continue
+                    if isinstance(tool, HandoffTool):
+                        continue
+                    if tool.handler_module_path == "core.subagent_orchestrator":
+                        continue
+                    if tool.name in assigned_tools:
+                        continue
+                    toolset.add_tool(tool)
+
+            # Override any earlier tool injection (e.g. skills local env tools) to keep
+            # main-LLM tool visibility predictable under subagent orchestrator.
+            req.func_tool = toolset
+
+            # Encourage the model to delegate to subagents.
+            # Use the built-in default router prompt; user overrides are disabled for now.
+            router_prompt = (
+                self.ctx.get_config()
+                .get("subagent_orchestrator", {})
+                .get("router_system_prompt", "")
+            ).strip()
+            if router_prompt:
+                req.system_prompt += f"\n{router_prompt}\n"
+
+            if policy == "unassigned_to_main":
+                req.system_prompt += (
+                    "\n[Note: You may directly call the tools visible to the main LLM "
+                    "if they are not assigned to any subagent; otherwise prefer delegating "
+                    "to subagents via transfer_to_*.]\n"
+                )
+
+            return
+
+        # Default behavior: follow persona tool selection.
         if (persona and persona.get("tools") is None) or not persona:
             # select all
             toolset = tmgr.get_full_tool_set()
