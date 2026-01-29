@@ -247,6 +247,31 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
+    def _parse_image_url_part(self, image_field) -> str | None:
+        """解析 OpenAI image_url 部分并提取 URL
+
+        Args:
+            image_field: 可以是字典或字符串格式的 image_url 字段
+
+        Returns:
+            提取的 URL 或 base64 数据，如果无效则返回 None
+        """
+        if isinstance(image_field, dict):
+            url = image_field.get("url")
+        else:
+            url = image_field
+
+        if not url:
+            return None
+
+        # 统一处理 base64 格式，提取纯 base64 数据
+        if isinstance(url, str) and "base64," in url:
+            return url.split("base64,", 1)[1]
+        elif isinstance(url, str) and url.startswith("base64://"):
+            return url.replace("base64://", "")
+        else:
+            return url
+
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
@@ -275,20 +300,13 @@ class ProviderOpenAIOfficial(Provider):
                         mc.message(part.get("text", ""))
                     elif ptype == "image_url":
                         image_field = part.get("image_url")
-                        url = None
-                        if isinstance(image_field, dict):
-                            url = image_field.get("url")
-                        else:
-                            url = image_field
+                        url = self._parse_image_url_part(image_field)
                         if url:
-                            # data:image/...;base64,xxx
-                            if isinstance(url, str) and "base64," in url:
-                                base64_data = url.split("base64,", 1)[1]
-                                mc.base64_image(base64_data)
-                            elif isinstance(url, str) and url.startswith("base64://"):
-                                mc.base64_image(url.replace("base64://", ""))
-                            else:
+                            # 判断是 base64 数据还是 URL
+                            if url.startswith("http"):
                                 mc.url_image(url)
+                            else:
+                                mc.base64_image(url)
                     elif ptype == "think":
                         # collect reasoning parts for later extraction
                         think_val = part.get("think")
