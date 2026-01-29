@@ -14,7 +14,7 @@
                         <v-icon size="x-small" v-else>
                             mdi-wrench
                         </v-icon>
-                        已使用 {{ toolCall.name }} 工具
+                        {{ tm('actions.toolCallUsed', { name: toolCall.name }) }}
                         <span style="opacity: 0.6;">{{ toolCall.finished_ts ? formatDuration(toolCall.finished_ts -
                             toolCall.ts) : getElapsedTime(toolCall.ts) }}</span>
                         <v-icon size="x-small" class="tool-call-chevron" :class="{ rotated: expanded }">
