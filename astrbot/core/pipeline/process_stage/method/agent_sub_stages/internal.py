@@ -46,6 +46,7 @@ from ...utils import (
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
+    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -62,6 +63,13 @@ class InternalAgentSubStage(Stage):
         ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        if self.tool_schema_mode not in ("skills_like", "full"):
+            logger.warning(
+                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                self.tool_schema_mode,
+            )
+            self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -672,7 +680,12 @@ class InternalAgentSubStage(Stage):
 
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
-                    req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
+                    tool_prompt = (
+                        TOOL_CALL_PROMPT
+                        if self.tool_schema_mode == "full"
+                        else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+                    )
+                    req.system_prompt += f"\n{tool_prompt}\n"
 
                 action_type = event.get_extra("action_type")
                 if action_type == "live":
@@ -693,6 +706,7 @@ class InternalAgentSubStage(Stage):
                     llm_compress_provider=self._get_compress_provider(),
                     truncate_turns=self.dequeue_context_length,
                     enforce_max_turns=self.max_context_length,
+                    tool_schema_mode=self.tool_schema_mode,
                 )
 
                 # 检测 Live Mode

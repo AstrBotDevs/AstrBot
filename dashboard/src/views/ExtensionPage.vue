@@ -22,6 +22,13 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/extension");
 const router = useRouter();
 
+const getSelectedGitHubProxy = () => {
+  if (typeof window === "undefined" || !window.localStorage) return "";
+  return localStorage.getItem("githubProxyRadioValue") === "1"
+    ? localStorage.getItem("selectedGitHubProxy") || ""
+    : "";
+};
+
 // 检查指令冲突并提示
 const conflictDialog = reactive({
   show: false,
@@ -299,7 +306,8 @@ const paginatedPlugins = computed(() => {
 });
 
 const updatableExtensions = computed(() => {
-  return extension_data?.data?.filter((ext) => ext.has_update) || [];
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  return data.filter((ext) => ext.has_update);
 });
 
 // 方法
@@ -430,7 +438,8 @@ const handleUninstallConfirm = (options) => {
 
 const updateExtension = async (extension_name, forceUpdate = false) => {
   // 查找插件信息
-  const ext = extension_data.data?.find((e) => e.name === extension_name);
+  const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+  const ext = data.find((e) => e.name === extension_name);
 
   // 如果没有检测到更新且不是强制更新，则弹窗确认
   if (!ext?.has_update && !forceUpdate) {
@@ -444,7 +453,7 @@ const updateExtension = async (extension_name, forceUpdate = false) => {
   try {
     const res = await axios.post("/api/plugin/update", {
       name: extension_name,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -513,7 +522,7 @@ const updateAllExtensions = async () => {
   try {
     const res = await axios.post("/api/plugin/update-all", {
       names: targets,
-      proxy: localStorage.getItem("selectedGitHubProxy") || "",
+      proxy: getSelectedGitHubProxy(),
     });
 
     if (res.data.status === "error") {
@@ -932,7 +941,7 @@ const newExtension = async () => {
     axios
       .post("/api/plugin/install", {
         url: extension_url.value,
-        proxy: localStorage.getItem("selectedGitHubProxy") || "",
+        proxy: getSelectedGitHubProxy(),
       })
       .then(async (res) => {
         loading_.value = false;
