@@ -195,6 +195,14 @@
       class="config-field"
     />
 
+    <PaletteEditor
+      v-else-if="isPaletteType(itemMeta?.type)"
+      :model-value="modelValue"
+      @update:model-value="emitUpdate"
+      :format="getPaletteFormatFromType(itemMeta?.type)"
+      class="config-field"
+    />
+
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
       :model-value="modelValue"
@@ -225,6 +233,8 @@ import PersonaSelector from './PersonaSelector.vue'
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue'
 import PluginSetSelector from './PluginSetSelector.vue'
 import T2ITemplateEditor from './T2ITemplateEditor.vue'
+import PaletteEditor from './PaletteEditor.vue'
+import { isPaletteType, getPaletteFormatFromType } from '@/utils/color'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({

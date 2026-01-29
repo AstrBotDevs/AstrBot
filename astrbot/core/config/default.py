@@ -3290,7 +3290,7 @@ CONFIG_METADATA_3_SYSTEM = {
 }
 
 
-DEFAULT_VALUE_MAP = {
+DEFAULT_VALUE_MAP: dict[str, int | float | bool | str | list | dict] = {
     "int": 0,
     "float": 0.0,
     "bool": False,
@@ -3300,4 +3300,7 @@ DEFAULT_VALUE_MAP = {
     "file": [],
     "object": {},
     "template_list": [],
+    "palette": "",
+    "palette_rgb": "",
+    "palette_hsv": "",
 }
