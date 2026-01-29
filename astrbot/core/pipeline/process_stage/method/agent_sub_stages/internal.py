@@ -582,9 +582,7 @@ class InternalAgentSubStage(Stage):
                             req.extra_user_content_parts.append(
                                 TextPart(text=f"[Image Attachment: path {image_path}]")
                             )
-                        elif isinstance(comp, File) and self.sandbox_cfg.get(
-                            "enable", False
-                        ):
+                        elif isinstance(comp, File):
                             file_path = await comp.get_file()
                             file_name = comp.name or os.path.basename(file_path)
                             req.extra_user_content_parts.append(
@@ -611,7 +609,10 @@ class InternalAgentSubStage(Stage):
                         logger.error(f"Error occurred while applying file extract: {e}")
 
                 if not req.prompt and not req.image_urls:
-                    return
+                    if not event.get_group_id() and req.extra_user_content_parts:
+                        req.prompt = "<attachment>"
+                    else:
+                        return
 
                 # call event hook
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
