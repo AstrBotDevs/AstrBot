@@ -1,14 +1,6 @@
 <template>
-    <div class="mb-3 mt-1.5">
-        <div class="ipython-header" :class="{ 'expanded': isExpanded }" @click="toggleExpanded">
-            <span class="ipython-label">
-                {{ tm('actions.pythonCodeAnalysis') }}
-            </span>
-            <v-icon size="small" class="ipython-icon" :class="{ 'rotated': isExpanded }">
-                mdi-chevron-right
-            </v-icon>
-        </div>
-        <div v-if="isExpanded" class="py-3 animate-fade-in">
+    <div class="ipython-tool-block" :class="{ compact: !showHeader }">
+        <div v-if="displayExpanded" class="py-3 animate-fade-in">
             <!-- Code Section -->
             <div class="code-section">
                 <div v-if="shikiReady && code" class="code-highlighted"
@@ -46,6 +38,14 @@ const props = defineProps({
     initialExpanded: {
         type: Boolean,
         default: false
+    },
+    showHeader: {
+        type: Boolean,
+        default: true
+    },
+    forceExpanded: {
+        type: Boolean,
+        default: null
     }
 });
 
@@ -92,9 +92,12 @@ const highlightedCode = computed(() => {
     }
 });
 
-const toggleExpanded = () => {
-    isExpanded.value = !isExpanded.value;
-};
+const displayExpanded = computed(() => {
+    if (props.forceExpanded === null) {
+        return isExpanded.value;
+    }
+    return props.forceExpanded;
+});
 
 onMounted(async () => {
     try {
@@ -110,40 +113,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.mb-3 {
+.ipython-tool-block {
     margin-bottom: 12px;
-}
-
-.mt-1\.5 {
     margin-top: 6px;
 }
 
-.ipython-header {
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    border-radius: 20px;
-    opacity: 0.7;
-    transition: opacity;
-}
-
-.ipython-header:hover,
-.ipython-header.expanded {
-    opacity: 1;
-}
-
-.ipython-label {
-    font-size: 16px;
-}
-
-.ipython-icon {
-    margin-left: 6px;
-    transition: transform 0.2s ease;
-}
-
-.ipython-icon.rotated {
-    transform: rotate(90deg);
+.ipython-tool-block.compact {
+    margin: 0;
 }
 
 .py-3 {
@@ -160,6 +136,7 @@ onMounted(async () => {
     overflow: hidden;
     font-size: 14px;
     line-height: 1.5;
+    overflow-x: auto;
 }
 
 .code-fallback {
@@ -206,6 +183,10 @@ onMounted(async () => {
 
 .animate-fade-in {
     animation: fadeIn 0.2s ease-in-out;
+}
+
+:deep(.code-highlighted pre) {
+    background-color: transparent !important;
 }
 
 @keyframes fadeIn {
