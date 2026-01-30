@@ -17,7 +17,8 @@ from astrbot.core.utils.astrbot_path import (
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
-SANDBOX_SKILLS_ROOT = "/home/shared/skills"
+# SANDBOX_SKILLS_ROOT = "/home/shared/skills"
+SANDBOX_SKILLS_ROOT = "skills"
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 

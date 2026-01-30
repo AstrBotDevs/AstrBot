@@ -49,6 +49,7 @@
     "reply": "引用回复",
     "providerConfig": "AI 配置",
     "toolsUsed": "已使用工具",
+    "toolCallUsed": "已使用 {name} 工具",
     "pythonCodeAnalysis": "已使用 Python 代码分析"
   },
   "ipython": {

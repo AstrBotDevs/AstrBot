@@ -46,6 +46,7 @@ from ...utils import (
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
+    TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     decoded_blocked,
     retrieve_knowledge_base,
 )
@@ -62,6 +63,13 @@ class InternalAgentSubStage(Stage):
         ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        if self.tool_schema_mode not in ("skills_like", "full"):
+            logger.warning(
+                "Unsupported tool_schema_mode: %s, fallback to skills_like",
+                self.tool_schema_mode,
+            )
+            self.tool_schema_mode = "full"
         if isinstance(self.max_step, bool):  # workaround: #2622
             self.max_step = 30
         self.show_tool_use: bool = settings.get("show_tool_use_status", True)
@@ -574,9 +582,7 @@ class InternalAgentSubStage(Stage):
                             req.extra_user_content_parts.append(
                                 TextPart(text=f"[Image Attachment: path {image_path}]")
                             )
-                        elif isinstance(comp, File) and self.sandbox_cfg.get(
-                            "enable", False
-                        ):
+                        elif isinstance(comp, File):
                             file_path = await comp.get_file()
                             file_name = comp.name or os.path.basename(file_path)
                             req.extra_user_content_parts.append(
@@ -603,7 +609,10 @@ class InternalAgentSubStage(Stage):
                         logger.error(f"Error occurred while applying file extract: {e}")
 
                 if not req.prompt and not req.image_urls:
-                    return
+                    if not event.get_group_id() and req.extra_user_content_parts:
+                        req.prompt = "<attachment>"
+                    else:
+                        return
 
                 # call event hook
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
@@ -672,7 +681,12 @@ class InternalAgentSubStage(Stage):
 
                 # 注入基本 prompt
                 if req.func_tool and req.func_tool.tools:
-                    req.system_prompt += f"\n{TOOL_CALL_PROMPT}\n"
+                    tool_prompt = (
+                        TOOL_CALL_PROMPT
+                        if self.tool_schema_mode == "full"
+                        else TOOL_CALL_PROMPT_SKILLS_LIKE_MODE
+                    )
+                    req.system_prompt += f"\n{tool_prompt}\n"
 
                 action_type = event.get_extra("action_type")
                 if action_type == "live":
@@ -693,6 +707,7 @@ class InternalAgentSubStage(Stage):
                     llm_compress_provider=self._get_compress_provider(),
                     truncate_turns=self.dequeue_context_length,
                     enforce_max_turns=self.max_context_length,
+                    tool_schema_mode=self.tool_schema_mode,
                 )
 
                 # 检测 Live Mode

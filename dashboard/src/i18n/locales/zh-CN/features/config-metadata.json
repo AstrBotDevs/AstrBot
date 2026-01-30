@@ -244,6 +244,14 @@
         "tool_call_timeout": {
           "description": "工具调用超时时间(秒)"
         },
+        "tool_schema_mode": {
+          "description": "工具调用模式",
+          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+          "labels": [
+            "Skills-like（两阶段）",
+            "Full（完整参数）"
+          ]
+        },
         "streaming_response": {
           "description": "流式输出"
         },
