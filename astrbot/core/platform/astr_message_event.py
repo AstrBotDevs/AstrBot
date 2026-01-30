@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import abc
 import asyncio
 import hashlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
 from astrbot.core.db.po import Conversation
@@ -26,6 +28,11 @@ from astrbot.core.utils.metrics import Metric
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+
+if TYPE_CHECKING:
+    from astrbot.core.pipeline.agent import AgentExecutor
+    from astrbot.core.pipeline.engine.chain_config import ChainConfig
+    from astrbot.core.pipeline.engine.send_service import SendService
 
 
 class AstrMessageEvent(abc.ABC):
@@ -69,6 +76,14 @@ class AstrMessageEvent(abc.ABC):
 
         # back_compability
         self.platform = platform_meta
+
+        # Chain-level configs (set by ChainExecutor)
+        self.chain_config: ChainConfig | None = None
+        self.node_config: Any | None = None
+
+        # Pipeline services (set by ChainExecutor)
+        self.send_service: SendService | None = None
+        self.agent_executor: AgentExecutor | None = None
 
     @property
     def unified_msg_origin(self) -> str:
@@ -229,11 +244,11 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def _pre_send(self):
-        """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
+    async def _pre_send(self, message: MessageChain | None = None, **_):
+        """发送前钩子（平台可覆写）"""
 
-    async def _post_send(self):
-        """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
+    async def _post_send(self, message: MessageChain | None = None, **_):
+        """发送后钩子（平台可覆写）"""
 
     def set_result(self, result: MessageEventResult | str):
         """设置消息事件的结果。

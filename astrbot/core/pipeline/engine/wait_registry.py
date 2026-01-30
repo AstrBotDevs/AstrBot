@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
+
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
+from .chain_config import ChainConfig
+
+
+@dataclass
+class WaitState:
+    chain_config: ChainConfig
+    node_name: str
+    node_uuid: str | None = None
+    config_id: str | None = None
+
+
+def build_wait_key(event: AstrMessageEvent) -> str:
+    """Build a stable wait key that is independent of preprocessing."""
+    return (
+        f"{event.get_platform_id()}:"
+        f"{event.get_message_type().value}:"
+        f"{event.get_sender_id()}:"
+        f"{event.get_group_id()}"
+    )
+
+
+class WaitRegistry:
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._by_key: dict[str, WaitState] = {}
+
+    async def set(self, key: str, state: WaitState) -> None:
+        async with self._lock:
+            self._by_key[key] = state
+
+    async def get(self, key: str) -> WaitState | None:
+        async with self._lock:
+            return self._by_key.get(key)
+
+    async def pop(self, key: str) -> WaitState | None:
+        async with self._lock:
+            return self._by_key.pop(key, None)
+
+    async def clear(self, key: str) -> None:
+        async with self._lock:
+            self._by_key.pop(key, None)
+
+
+wait_registry = WaitRegistry()

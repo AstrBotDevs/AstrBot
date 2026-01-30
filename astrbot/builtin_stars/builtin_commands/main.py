@@ -12,6 +12,7 @@ from .commands import (
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
+    STTCommand,
     T2ICommand,
     TTSCommand,
 )
@@ -30,14 +31,30 @@ class Main(star.Star):
         self.persona_c = PersonaCommands(self.context)
         self.alter_cmd_c = AlterCmdCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
+        self.sid_c = SIDCommand(self.context)
         self.t2i_c = T2ICommand(self.context)
         self.tts_c = TTSCommand(self.context)
-        self.sid_c = SIDCommand(self.context)
+        self.stt_c = STTCommand(self.context)
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent):
         """查看帮助"""
         await self.help_c.help(event)
+
+    @filter.command("t2i")
+    async def t2i(self, event: AstrMessageEvent):
+        """开关文本转图片"""
+        await self.t2i_c.t2i(event)
+
+    @filter.command("tts")
+    async def tts(self, event: AstrMessageEvent):
+        """开关文本转语音"""
+        await self.tts_c.tts(event)
+
+    @filter.command("stt")
+    async def stt(self, event: AstrMessageEvent):
+        """开关语音转文本"""
+        await self.stt_c.stt(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
@@ -76,16 +93,6 @@ class Main(star.Star):
     async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = ""):
         """获取插件帮助"""
         await self.plugin_c.plugin_help(event, plugin_name)
-
-    @filter.command("t2i")
-    async def t2i(self, event: AstrMessageEvent):
-        """开关文本转图片"""
-        await self.t2i_c.t2i(event)
-
-    @filter.command("tts")
-    async def tts(self, event: AstrMessageEvent):
-        """开关文本转语音（会话级别）"""
-        await self.tts_c.tts(event)
 
     @filter.command("sid")
     async def sid(self, event: AstrMessageEvent):

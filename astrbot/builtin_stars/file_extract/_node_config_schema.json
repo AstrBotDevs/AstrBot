@@ -1,0 +1,14 @@
+{
+  "provider": {
+    "type": "string",
+    "default": "moonshotai",
+    "description": "Extraction provider",
+    "options": ["local", "moonshotai"]
+  },
+  "moonshotai_api_key": {
+    "type": "string",
+    "default": "",
+    "description": "Moonshot AI API key",
+    "hint": "Required when provider is moonshotai."
+  }
+}

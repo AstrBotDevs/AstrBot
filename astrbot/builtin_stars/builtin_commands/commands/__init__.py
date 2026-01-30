@@ -10,6 +10,7 @@ from .plugin import PluginCommands
 from .provider import ProviderCommands
 from .setunset import SetUnsetCommands
 from .sid import SIDCommand
+from .stt import STTCommand
 from .t2i import T2ICommand
 from .tts import TTSCommand
 
@@ -24,6 +25,7 @@ __all__ = [
     "ProviderCommands",
     "SIDCommand",
     "SetUnsetCommands",
+    "STTCommand",
     "T2ICommand",
     "TTSCommand",
 ]

@@ -241,17 +241,12 @@ class ConfigRoute(Route):
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
-        self.ucr = core_lifecycle.umop_config_router
         self.routes = {
             "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
             "/config/abconfs": ("GET", self.get_abconf_list),
             "/config/abconf/delete": ("POST", self.delete_abconf),
             "/config/abconf/update": ("POST", self.update_abconf),
-            "/config/umo_abconf_routes": ("GET", self.get_uc_table),
-            "/config/umo_abconf_route/update_all": ("POST", self.update_ucr_all),
-            "/config/umo_abconf_route/update": ("POST", self.update_ucr),
-            "/config/umo_abconf_route/delete": ("POST", self.delete_ucr),
             "/config/get": ("GET", self.get_configs),
             "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
@@ -416,67 +411,6 @@ class ConfigRoute(Route):
             "provider_sources": astrbot_config["provider_sources"],
         }
         return Response().ok(data=data).__dict__
-
-    async def get_uc_table(self):
-        """获取 UMOP 配置路由表"""
-        return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
-
-    async def update_ucr_all(self):
-        """更新 UMOP 配置路由表的全部内容"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        new_routing = post_data.get("routing", None)
-
-        if not new_routing or not isinstance(new_routing, dict):
-            return Response().error("缺少或错误的路由表数据").__dict__
-
-        try:
-            await self.ucr.update_routing_data(new_routing)
-            return Response().ok(message="更新成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
-
-    async def update_ucr(self):
-        """更新 UMOP 配置路由表"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        umo = post_data.get("umo", None)
-        conf_id = post_data.get("conf_id", None)
-
-        if not umo or not conf_id:
-            return Response().error("缺少 UMO 或配置文件 ID").__dict__
-
-        try:
-            await self.ucr.update_route(umo, conf_id)
-            return Response().ok(message="更新成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
-
-    async def delete_ucr(self):
-        """删除 UMOP 配置路由表中的一项"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        umo = post_data.get("umo", None)
-
-        if not umo:
-            return Response().error("缺少 UMO").__dict__
-
-        try:
-            if umo in self.ucr.umop_to_conf_id:
-                del self.ucr.umop_to_conf_id[umo]
-                await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
-            return Response().ok(message="删除成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除路由表项失败: {e!s}").__dict__
 
     async def get_default_config(self):
         """获取默认配置文件"""

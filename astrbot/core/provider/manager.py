@@ -186,7 +186,7 @@ class ProviderManager:
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
-                provider_id = config["provider_stt_settings"].get("provider_id")
+                provider_id = config.get("provider_stt_settings", {}).get("provider_id")
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)
@@ -195,7 +195,7 @@ class ProviderManager:
                         self.stt_provider_insts[0] if self.stt_provider_insts else None
                     )
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
-                provider_id = config["provider_tts_settings"].get("provider_id")
+                provider_id = config.get("provider_tts_settings", {}).get("provider_id")
                 if not provider_id:
                     return None
                 provider = self.inst_map.get(provider_id)

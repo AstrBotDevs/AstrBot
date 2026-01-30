@@ -2,6 +2,7 @@ import traceback
 
 from astrbot.core import astrbot_config, logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
+from astrbot.core.db.migration.migra_4_to_5 import migrate_4_to_5
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
 from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
@@ -138,6 +139,13 @@ async def migra(
         await migrate_webchat_session(db)
     except Exception as e:
         logger.error(f"Migration for webchat session failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+    # migration for chain configs (v4 to v5)
+    try:
+        await migrate_4_to_5(db, astrbot_config_mgr, umop_config_router)
+    except Exception as e:
+        logger.error(f"Migration from version 4 to 5 failed: {e!s}")
         logger.error(traceback.format_exc())
 
     # migration for token_usage column

@@ -9,7 +9,7 @@
   "config": "配置文件",
   "chat": "聊天",
   "conversation": "对话数据",
-  "sessionManagement": "自定义规则",
+  "chainManagement": "Chain 路由",
   "console": "平台日志",
   "alkaid": "Alkaid",
   "knowledgeBase": "知识库",

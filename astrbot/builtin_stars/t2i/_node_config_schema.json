@@ -1,0 +1,27 @@
+{
+  "word_threshold": {
+    "type": "int",
+    "default": 150,
+    "description": "Word threshold",
+    "hint": "Minimum plain-text length to trigger text-to-image."
+  },
+  "strategy": {
+    "type": "string",
+    "description": "Strategy",
+    "options": ["remote", "local"],
+    "default": "remote",
+    "hint": "Remote uses the t2i endpoint; local uses the renderer directly."
+  },
+  "active_template": {
+    "type": "string",
+    "description": "Active template",
+    "default": "",
+    "hint": "Template name for rendering (leave empty to use the global template)."
+  },
+  "use_file_service": {
+    "type": "bool",
+    "default": false,
+    "description": "Use file service",
+    "hint": "Serve generated images through the file service when enabled."
+  }
+}

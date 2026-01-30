@@ -9,7 +9,7 @@
   "chat": "Chat",
   "extension": "Extensions",
   "conversation": "Conversations",
-  "sessionManagement": "Custom Rules",
+  "chainManagement": "Chain Routing",
   "console": "Console",
   "alkaid": "Alkaid Lab",
   "knowledgeBase": "Knowledge Base",

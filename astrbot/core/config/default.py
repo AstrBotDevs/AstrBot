@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
             "strategy": "stall",  # stall, discard
         },
         "reply_prefix": "",
+        "forward_wrapper": False,
         "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
@@ -109,11 +110,6 @@ DEFAULT_CONFIG = {
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
-        "file_extract": {
-            "enable": False,
-            "provider": "moonshotai",
-            "moonshotai_api_key": "",
-        },
         "sandbox": {
             "enable": False,
             "booter": "shipyard",
@@ -125,15 +121,10 @@ DEFAULT_CONFIG = {
         "skills": {"runtime": "sandbox"},
     },
     "provider_stt_settings": {
-        "enable": False,
         "provider_id": "",
     },
     "provider_tts_settings": {
-        "enable": False,
         "provider_id": "",
-        "dual_output": False,
-        "use_file_service": False,
-        "trigger_probability": 1.0,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -147,17 +138,8 @@ DEFAULT_CONFIG = {
             "whitelist": [],
         },
     },
-    "content_safety": {
-        "also_use_in_response": False,
-        "internal_keywords": {"enable": True, "extra_keywords": []},
-        "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
-    },
     "admins_id": ["astrbot"],
-    "t2i": False,
-    "t2i_word_threshold": 150,
-    "t2i_strategy": "remote",
     "t2i_endpoint": "",
-    "t2i_use_file_service": False,
     "t2i_active_template": "base",
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1"],
@@ -798,6 +780,10 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "机器人回复消息时带有的前缀。",
                     },
+                    "forward_wrapper": {
+                        "type": "bool",
+                        "hint": "启用后，超过转发阈值的消息会以合并转发形式发送（仅 QQ 平台适用）。",
+                    },
                     "forward_threshold": {
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
@@ -832,42 +818,6 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
-                    },
-                },
-            },
-            "content_safety": {
-                "type": "object",
-                "items": {
-                    "also_use_in_response": {
-                        "type": "bool",
-                        "hint": "启用后，大模型的响应也会通过内容安全审核。",
-                    },
-                    "baidu_aip": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                                "hint": "启用此功能前，您需要手动在设备中安装 baidu-aip 库。一般来说，安装指令如下: `pip3 install baidu-aip`",
-                            },
-                            "app_id": {"description": "APP ID", "type": "string"},
-                            "api_key": {"description": "API Key", "type": "string"},
-                            "secret_key": {
-                                "type": "string",
-                            },
-                        },
-                    },
-                    "internal_keywords": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "extra_keywords": {
-                                "type": "list",
-                                "items": {"type": "string"},
-                                "hint": "额外的屏蔽关键词列表，支持正则表达式。",
-                            },
-                        },
                     },
                 },
             },
@@ -2187,20 +2137,6 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
-                    "file_extract": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "provider": {
-                                "type": "string",
-                            },
-                            "moonshotai_api_key": {
-                                "type": "string",
-                            },
-                        },
-                    },
                     "skills": {
                         "type": "object",
                         "items": {
@@ -2217,9 +2153,6 @@ CONFIG_METADATA_2 = {
             "provider_stt_settings": {
                 "type": "object",
                 "items": {
-                    "enable": {
-                        "type": "bool",
-                    },
                     "provider_id": {
                         "type": "string",
                     },
@@ -2228,20 +2161,8 @@ CONFIG_METADATA_2 = {
             "provider_tts_settings": {
                 "type": "object",
                 "items": {
-                    "enable": {
-                        "type": "bool",
-                    },
                     "provider_id": {
                         "type": "string",
-                    },
-                    "dual_output": {
-                        "type": "bool",
-                    },
-                    "use_file_service": {
-                        "type": "bool",
-                    },
-                    "trigger_probability": {
-                        "type": "float",
                     },
                 },
             },
@@ -2292,12 +2213,6 @@ CONFIG_METADATA_2 = {
                 "type": "list",
                 "items": {"type": "string"},
             },
-            "t2i": {
-                "type": "bool",
-            },
-            "t2i_word_threshold": {
-                "type": "int",
-            },
             "admins_id": {
                 "type": "list",
                 "items": {"type": "string"},
@@ -2321,15 +2236,8 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
-            "t2i_strategy": {
-                "type": "string",
-                "options": ["remote", "local"],
-            },
             "t2i_endpoint": {
                 "type": "string",
-            },
-            "t2i_use_file_service": {
-                "type": "bool",
             },
             "pip_install_arg": {
                 "type": "string",
@@ -2426,40 +2334,16 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
-                    "provider_stt_settings.enable": {
-                        "description": "启用语音转文本",
-                        "type": "bool",
-                        "hint": "STT 总开关",
-                    },
                     "provider_stt_settings.provider_id": {
                         "description": "默认语音转文本模型",
                         "type": "string",
                         "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
                         "_special": "select_provider_stt",
-                        "condition": {
-                            "provider_stt_settings.enable": True,
-                        },
-                    },
-                    "provider_tts_settings.enable": {
-                        "description": "启用文本转语音",
-                        "type": "bool",
-                        "hint": "TTS 总开关",
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",
                         "type": "string",
                         "_special": "select_provider_tts",
-                        "condition": {
-                            "provider_tts_settings.enable": True,
-                        },
-                    },
-                    "provider_tts_settings.trigger_probability": {
-                        "description": "TTS 触发概率",
-                        "type": "float",
-                        "slider": {"min": 0, "max": 1, "step": 0.05},
-                        "condition": {
-                            "provider_tts_settings.enable": True,
-                        },
                     },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
@@ -2836,10 +2720,6 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
-                    "provider_tts_settings.dual_output": {
-                        "description": "开启 TTS 时同时输出语音和文字内容",
-                        "type": "bool",
-                    },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
@@ -2888,6 +2768,10 @@ CONFIG_METADATA_3 = {
                     },
                     "platform_settings.reply_with_quote": {
                         "description": "回复时引用发送人消息",
+                        "type": "bool",
+                    },
+                    "platform_settings.forward_wrapper": {
+                        "description": "启用合并转发",
                         "type": "bool",
                     },
                     "platform_settings.forward_threshold": {
@@ -2951,66 +2835,6 @@ CONFIG_METADATA_3 = {
                         "description": "速率限制策略",
                         "type": "string",
                         "options": ["stall", "discard"],
-                    },
-                },
-            },
-            "content_safety": {
-                "description": "内容安全",
-                "type": "object",
-                "items": {
-                    "content_safety.also_use_in_response": {
-                        "description": "同时检查模型的响应内容",
-                        "type": "bool",
-                    },
-                    "content_safety.baidu_aip.enable": {
-                        "description": "使用百度内容安全审核",
-                        "type": "bool",
-                        "hint": "您需要手动安装 baidu-aip 库。",
-                    },
-                    "content_safety.baidu_aip.app_id": {
-                        "description": "App ID",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.baidu_aip.api_key": {
-                        "description": "API Key",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.baidu_aip.secret_key": {
-                        "description": "Secret Key",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.internal_keywords.enable": {
-                        "description": "关键词检查",
-                        "type": "bool",
-                    },
-                    "content_safety.internal_keywords.extra_keywords": {
-                        "description": "额外关键词",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "额外的屏蔽关键词列表，支持正则表达式。",
-                    },
-                },
-            },
-            "t2i": {
-                "description": "文本转图像",
-                "type": "object",
-                "items": {
-                    "t2i": {
-                        "description": "文本转图像输出",
-                        "type": "bool",
-                    },
-                    "t2i_word_threshold": {
-                        "description": "文本转图像字数阈值",
-                        "type": "int",
                     },
                 },
             },
@@ -3218,27 +3042,15 @@ CONFIG_METADATA_3_SYSTEM = {
                 "description": "系统配置",
                 "type": "object",
                 "items": {
-                    "t2i_strategy": {
-                        "description": "文本转图像策略",
-                        "type": "string",
-                        "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
-                        "options": ["remote", "local"],
-                    },
                     "t2i_endpoint": {
                         "description": "文本转图像服务 API 地址",
                         "type": "string",
                         "hint": "为空时使用 AstrBot API 服务",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
                     },
                     "t2i_template": {
                         "description": "文本转图像自定义模版",
                         "type": "bool",
                         "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
                         "_special": "t2i_template",
                     },
                     "t2i_active_template": {

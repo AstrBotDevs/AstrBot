@@ -27,7 +27,6 @@
                         :isRecording="isRecording"
                         :session-id="currSessionId || null"
                         :current-session="getCurrentSession"
-                        :config-id="configId"
                         @send="handleSendMessage"
                         @toggleStreaming="toggleStreaming"
                         @removeImage="removeImage"

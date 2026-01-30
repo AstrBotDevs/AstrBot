@@ -8,7 +8,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import Image, Reply
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
-from astrbot.core.pipeline.process_stage.utils import (
+from astrbot.core.pipeline.agent.utils import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,

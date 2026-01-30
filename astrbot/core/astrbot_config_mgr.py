@@ -6,7 +6,6 @@ from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
 from astrbot.core.utils.shared_preferences import SharedPreferences
 
@@ -34,15 +33,14 @@ class AstrBotConfigManager:
     def __init__(
         self,
         default_config: AstrBotConfig,
-        ucr: UmopConfigRouter,
         sp: SharedPreferences,
     ):
         self.sp = sp
-        self.ucr = ucr
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
         self.confs["default"] = default_config
         self.abconf_data = None
+        self._runtime_conf_mapping: dict[str, str] = {}
         self._load_all_configs()
 
     def _get_abconf_data(self) -> dict:
@@ -72,33 +70,27 @@ class AstrBotConfigManager:
                 )
                 continue
 
-    def _load_conf_mapping(self, umo: str | MessageSession) -> ConfInfo:
-        """获取指定 umo 的配置文件 uuid, 如果不存在则返回默认配置(返回 "default")
-
-        Returns:
-            ConfInfo: 包含配置文件的 uuid, 路径和名称等信息, 是一个 dict 类型
-
-        """
-        # uuid -> { "path": str, "name": str }
-        abconf_data = self._get_abconf_data()
-
+    @staticmethod
+    def _normalize_umo(umo: str | MessageSession) -> str | None:
         if isinstance(umo, MessageSession):
-            umo = str(umo)
-        else:
-            try:
-                umo = str(MessageSession.from_str(umo))  # validate
-            except Exception:
-                return DEFAULT_CONFIG_CONF_INFO
+            return str(umo)
+        try:
+            return str(MessageSession.from_str(umo))  # validate
+        except Exception:
+            return None
 
-        conf_id = self.ucr.get_conf_id_for_umop(umo)
-        if conf_id:
-            meta = abconf_data.get(conf_id)
-            if meta and isinstance(meta, dict):
-                # the bind relation between umo and conf is defined in ucr now, so we remove "umop" here
-                meta.pop("umop", None)
-                return ConfInfo(**meta, id=conf_id)
+    def set_runtime_conf_id(self, umo: str | MessageSession, conf_id: str) -> None:
+        """保存运行时路由结果，用于按会话获取配置文件。"""
+        norm = self._normalize_umo(umo)
+        if not norm:
+            return
+        self._runtime_conf_mapping[norm] = conf_id
 
-        return DEFAULT_CONFIG_CONF_INFO
+    def _get_runtime_conf_id(self, umo: str | MessageSession) -> str | None:
+        norm = self._normalize_umo(umo)
+        if not norm:
+            return None
+        return self._runtime_conf_mapping.get(norm)
 
     def _save_conf_mapping(
         self,
@@ -125,12 +117,11 @@ class AstrBotConfigManager:
         """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
         if not umo:
             return self.confs["default"]
-        if isinstance(umo, MessageSession):
-            umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+        conf_id = self._get_runtime_conf_id(umo)
+        if not conf_id:
+            return self.confs["default"]
 
-        uuid_ = self._load_conf_mapping(umo)["id"]
-
-        conf = self.confs.get(uuid_)
+        conf = self.confs.get(conf_id)
         if not conf:
             conf = self.confs["default"]  # default MUST exists
 
@@ -143,10 +134,22 @@ class AstrBotConfigManager:
 
     def get_conf_info(self, umo: str | MessageSession) -> ConfInfo:
         """获取指定 umo 的配置文件元数据"""
-        if isinstance(umo, MessageSession):
-            umo = f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+        conf_id = self._get_runtime_conf_id(umo)
+        if not conf_id:
+            return DEFAULT_CONFIG_CONF_INFO
+        return self.get_conf_info_by_id(conf_id)
 
-        return self._load_conf_mapping(umo)
+    def get_conf_info_by_id(self, conf_id: str) -> ConfInfo:
+        """通过配置文件 ID 获取元数据，不进行路由."""
+        if conf_id == "default":
+            return DEFAULT_CONFIG_CONF_INFO
+
+        abconf_data = self._get_abconf_data()
+        meta = abconf_data.get(conf_id)
+        if meta and isinstance(meta, dict) and conf_id in self.confs:
+            return ConfInfo(**meta, id=conf_id)
+
+        return DEFAULT_CONFIG_CONF_INFO
 
     def get_conf_list(self) -> list[ConfInfo]:
         """获取所有配置文件的元数据列表"""
@@ -155,7 +158,6 @@ class AstrBotConfigManager:
         for uuid_, meta in abconf_mapping.items():
             if not isinstance(meta, dict):
                 continue
-            meta.pop("umop", None)
             conf_list.append(ConfInfo(**meta, id=uuid_))
         conf_list.append(DEFAULT_CONFIG_CONF_INFO)
         return conf_list

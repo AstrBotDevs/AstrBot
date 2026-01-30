@@ -1,66 +1,128 @@
-"""事件总线, 用于处理事件的分发和处理
-事件总线是一个异步队列, 用于接收各种消息事件, 并将其发送到Scheduler调度器进行处理
-其中包含了一个无限循环的调度函数, 用于从事件队列中获取新的事件, 并创建一个新的异步任务来执行管道调度器的处理逻辑
+"""事件总线 - 消息队列消费 + Pipeline 分发
 
-class:
-    EventBus: 事件总线, 用于处理事件的分发和处理
-
-工作流程:
-1. 维护一个异步队列, 来接受各种消息事件
-2. 无限循环的调度函数, 从事件队列中获取新的事件, 打印日志并创建一个新的异步任务来执行管道调度器的处理逻辑
+架构:
+    Platform Adapter → Queue.put_nowait(event)
+                            ↓
+    EventBus.dispatch() → 路由到对应 PipelineExecutor
+                            ↓
+                       PipelineExecutor.execute()
 """
+
+from __future__ import annotations
 
 import asyncio
 from asyncio import Queue
+from typing import TYPE_CHECKING
 
 from astrbot.core import logger
-from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.pipeline.engine.wait_registry import build_wait_key, wait_registry
+from astrbot.core.star.modality import extract_modalities
 
-from .platform import AstrMessageEvent
+if TYPE_CHECKING:
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.pipeline.engine.executor import PipelineExecutor
+    from astrbot.core.pipeline.engine.router import ChainRouter
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 class EventBus:
-    """用于处理事件的分发和处理"""
+    """事件总线 - 消息队列消费 + Pipeline 分发"""
 
     def __init__(
         self,
         event_queue: Queue,
-        pipeline_scheduler_mapping: dict[str, PipelineScheduler],
+        pipeline_executor_mapping: dict[str, PipelineExecutor],
         astrbot_config_mgr: AstrBotConfigManager,
-    ):
-        self.event_queue = event_queue  # 事件队列
-        # abconf uuid -> scheduler
-        self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
+        chain_router: ChainRouter,
+    ) -> None:
+        self.event_queue = event_queue
+        self.pipeline_executor_mapping = pipeline_executor_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
+        self.chain_router = chain_router
 
-    async def dispatch(self):
+    async def dispatch(self) -> None:
+        """消息队列消费循环"""
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            self._print_event(event, conf_info["name"])
-            scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
-            if not scheduler:
-                logger.error(
-                    f"PipelineScheduler not found for id: {conf_info['id']}, event ignored."
+
+            wait_state = await wait_registry.pop(build_wait_key(event))
+            if wait_state is not None:
+                event.message_str = event.message_str.strip()
+                event.chain_config = wait_state.chain_config
+                event.set_extra("_resume_node", wait_state.node_name)
+                event.set_extra("_resume_node_uuid", wait_state.node_uuid)
+                event.set_extra("_resume_from_wait", True)
+                config_id = wait_state.config_id or "default"
+                self.astrbot_config_mgr.set_runtime_conf_id(
+                    event.unified_msg_origin,
+                    config_id,
+                )
+                conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
+                self._print_event(event, conf_info["name"])
+                executor = self.pipeline_executor_mapping.get(config_id)
+                if executor is None:
+                    executor = self.pipeline_executor_mapping.get("default")
+                if executor is None:
+                    logger.error(
+                        "PipelineExecutor not found for config_id: "
+                        f"{config_id}, event ignored."
+                    )
+                    continue
+                asyncio.create_task(executor.execute(event))
+                continue
+
+            # 轻量路由：使用 UMO + 原始文本 + 原始模态，决定链与 config_id
+            event.message_str = event.message_str.strip()
+            modality = extract_modalities(event.get_messages())
+            chain_config = self.chain_router.route(
+                event.unified_msg_origin,
+                modality,
+                event.message_str,
+            )
+            if chain_config is None:
+                logger.debug(
+                    f"No chain matched for {event.unified_msg_origin}, event ignored."
                 )
                 continue
-            asyncio.create_task(scheduler.execute(event))
 
-    def _print_event(self, event: AstrMessageEvent, conf_name: str):
-        """用于记录事件信息
-
-        Args:
-            event (AstrMessageEvent): 事件对象
-
-        """
-        # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
-        if event.get_sender_name():
-            logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
+            event.chain_config = chain_config
+            config_id = chain_config.config_id or "default"
+            self.astrbot_config_mgr.set_runtime_conf_id(
+                event.unified_msg_origin,
+                config_id,
             )
-        # 没有发送者名称: [平台名] 发送者ID: 消息概要
+            conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
+
+            self._print_event(event, conf_info["name"])
+
+            # 获取对应的 PipelineExecutor
+            executor = self.pipeline_executor_mapping.get(config_id)
+            if executor is None:
+                executor = self.pipeline_executor_mapping.get("default")
+
+            if executor is None:
+                logger.error(
+                    f"PipelineExecutor not found for config_id: {config_id}, event ignored."
+                )
+                continue
+
+            # 分发到 Pipeline（fire-and-forget）
+            asyncio.create_task(executor.execute(event))
+
+    def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
+        """记录事件信息"""
+        sender = event.get_sender_name()
+        sender_id = event.get_sender_id()
+        platform_id = event.get_platform_id()
+        platform_name = event.get_platform_name()
+        outline = event.get_message_outline()
+
+        if sender:
+            logger.info(
+                f"[{conf_name}] [{platform_id}({platform_name})] "
+                f"{sender}/{sender_id}: {outline}"
+            )
         else:
             logger.info(
-                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
+                f"[{conf_name}] [{platform_id}({platform_name})] {sender_id}: {outline}"
             )

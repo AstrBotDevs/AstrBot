@@ -1,0 +1,40 @@
+{
+  "internal_keywords": {
+    "type": "object",
+    "items": {
+      "enable": {
+        "type": "bool",
+        "default": true
+      },
+      "extra_keywords": {
+        "type": "list",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      }
+    }
+  },
+  "baidu_aip": {
+    "type": "object",
+    "items": {
+      "enable": {
+        "type": "bool",
+        "default": false
+      },
+      "app_id": {
+        "type": "string",
+        "default": ""
+      },
+      "api_key": {
+        "type": "string",
+        "default": ""
+      },
+      "secret_key": {
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}
+

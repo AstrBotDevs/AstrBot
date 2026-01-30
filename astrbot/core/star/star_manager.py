@@ -15,6 +15,7 @@ import yaml
 from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
@@ -28,6 +29,7 @@ from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
+from .node_star import NodeStar
 from .star import star_map, star_registry
 from .star_handler import star_handlers_registry
 from .updator import PluginUpdator
@@ -56,6 +58,7 @@ class PluginManager:
         )
         """保留插件的路径。在 astrbot/builtin_stars 目录下"""
         self.conf_schema_fname = "_conf_schema.json"
+        self.node_conf_schema_fname = "_node_config_schema.json"
         self.logo_fname = "logo.png"
         """插件配置 Schema 文件名"""
         self._pm_lock = asyncio.Lock()
@@ -64,6 +67,64 @@ class PluginManager:
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
+
+    @staticmethod
+    def _schema_to_default_config(schema: dict) -> dict:
+        """Convert a schema to default config dict, matching AstrBotConfig behavior."""
+        conf: dict = {}
+
+        def _parse_schema(schema: dict, conf: dict):
+            for k, v in schema.items():
+                if v["type"] not in DEFAULT_VALUE_MAP:
+                    raise TypeError(
+                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
+                    )
+                if "default" in v:
+                    default = v["default"]
+                else:
+                    default = DEFAULT_VALUE_MAP[v["type"]]
+
+                if v["type"] == "object":
+                    conf[k] = {}
+                    _parse_schema(v["items"], conf[k])
+                elif v["type"] == "template_list":
+                    conf[k] = default
+                else:
+                    conf[k] = default
+
+        _parse_schema(schema, conf)
+        return conf
+
+    @staticmethod
+    def _is_node_plugin(metadata: StarMetadata) -> bool:
+        """Determine whether a plugin is a NodeStar plugin."""
+        if metadata.star_cls_type:
+            try:
+                return issubclass(metadata.star_cls_type, NodeStar)
+            except TypeError:
+                return False
+        return isinstance(metadata.star_cls, NodeStar)
+
+    def _load_node_schema(self, metadata: StarMetadata, plugin_dir_path: str) -> None:
+        """Load node schema for NodeStar plugins when available."""
+        if not self._is_node_plugin(metadata):
+            metadata.node_schema = None
+            return
+        node_schema_path = os.path.join(
+            plugin_dir_path,
+            self.node_conf_schema_fname,
+        )
+        if not os.path.exists(node_schema_path):
+            metadata.node_schema = None
+            return
+        try:
+            with open(node_schema_path, encoding="utf-8") as f:
+                metadata.node_schema = json.loads(f.read())
+        except Exception as e:
+            logger.warning(
+                f"插件 {plugin_dir_path} 读取节点配置 Schema 失败: {e!s}",
+            )
+            metadata.node_schema = None
 
     async def _watch_plugins_changes(self):
         """监视插件文件变化"""
@@ -230,6 +291,8 @@ class PluginManager:
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
+                plugin_type=metadata.get("type"),
+                node_config=metadata.get("node_config"),
             )
 
         return metadata
@@ -418,15 +481,15 @@ class PluginManager:
                     self.conf_schema_fname,
                 )
                 if os.path.exists(plugin_schema_path):
-                    # 加载插件配置
                     with open(plugin_schema_path, encoding="utf-8") as f:
-                        plugin_config = AstrBotConfig(
-                            config_path=os.path.join(
-                                self.plugin_config_path,
-                                f"{root_dir_name}_config.json",
-                            ),
-                            schema=json.loads(f.read()),
-                        )
+                        schema_payload = json.loads(f.read())
+                    plugin_config = AstrBotConfig(
+                        config_path=os.path.join(
+                            self.plugin_config_path,
+                            f"{root_dir_name}_config.json",
+                        ),
+                        schema=schema_payload,
+                    )
                 logo_path = os.path.join(plugin_dir_path, self.logo_fname)
 
                 if path in star_map:
@@ -445,10 +508,13 @@ class PluginManager:
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
+                            metadata.plugin_type = metadata_yaml.plugin_type
+                            metadata.node_config = metadata_yaml.node_config
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
                         )
+                    self._load_node_schema(metadata, plugin_dir_path)
                     logger.info(metadata)
                     metadata.config = plugin_config
                     if path not in inactivated_plugins:
@@ -565,6 +631,7 @@ class PluginManager:
                     metadata.module_path = path
                     star_map[path] = metadata
                     star_registry.append(metadata)
+                    self._load_node_schema(metadata, plugin_dir_path)
 
                 # 禁用/启用插件
                 if metadata.module_path in inactivated_plugins:

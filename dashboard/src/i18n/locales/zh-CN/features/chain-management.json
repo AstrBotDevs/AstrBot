@@ -1,0 +1,115 @@
+{
+  "title": "Chain 路由",
+  "chainsCount": "条",
+  "defaultTag": "默认",
+  "defaultHint": "默认 Chain 在启用时匹配所有消息，仅支持编辑节点、覆盖设置与启用状态。",
+  "search": {
+    "placeholder": "按匹配规则搜索"
+  },
+  "buttons": {
+    "create": "新建 Chain",
+    "refresh": "刷新",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "add": "添加",
+    "addNode": "添加节点",
+    "sort": "排序"
+  },
+  "table": {
+    "matchRule": "匹配规则",
+    "services": "服务",
+    "nodes": "节点",
+    "providers": "Provider",
+    "actions": "操作"
+  },
+  "sections": {
+    "providers": "Provider 覆盖",
+    "nodes": "节点配置",
+    "pluginFilter": "插件过滤"
+  },
+  "fields": {
+    "config": "配置文件",
+    "enabled": "启用",
+    "chatProvider": "聊天 Provider",
+    "sttProvider": "STT Provider",
+    "ttsProvider": "TTS Provider",
+    "selectNode": "选择节点",
+    "pluginFilterMode": "过滤模式",
+    "pluginList": "插件列表"
+  },
+  "providers": {
+    "chat": "Chat",
+    "tts": "TTS",
+    "stt": "STT",
+    "followDefault": "跟随默认"
+  },
+  "chips": {
+    "session": "会话",
+    "llm": "LLM"
+  },
+  "dialogs": {
+    "createTitle": "新建 Chain",
+    "editTitle": "编辑 Chain",
+    "deleteTitle": "删除 Chain",
+    "deleteConfirm": "确认删除该 Chain 路由？",
+    "addNodeTitle": "添加节点",
+    "nodeConfigTitle": "节点配置",
+    "sortTitle": "排序 Chain",
+    "sortHint": "拖拽调整顺序，越靠前匹配优先级越高。",
+    "sortDefaultHint": "默认 Chain 固定在最后"
+  },
+  "messages": {
+    "loadError": "加载失败",
+    "optionsError": "加载选项失败",
+    "saveSuccess": "保存成功",
+    "saveError": "保存失败",
+    "deleteSuccess": "删除成功",
+    "deleteError": "删除失败",
+    "nodeConfigEmpty": "该节点没有可配置项。",
+    "nodeConfigNeedSave": "请先保存 Chain 再编辑节点配置。",
+    "nodeConfigLoadError": "加载节点配置失败",
+    "nodeConfigSaveError": "保存节点配置失败",
+    "nodeConfigJsonError": "JSON 格式错误",
+    "nodeConfigRawHint": "未提供 Schema，请在下方编辑原始 JSON。",
+    "sortSuccess": "排序已更新",
+    "sortError": "排序更新失败",
+    "sortLoadError": "加载排序失败"
+  },
+  "warnings": {
+    "modalityMismatch": "模态不匹配",
+    "outputs": "输出",
+    "accepts": "接受"
+  },
+  "empty": {
+    "title": "暂无 Chain 路由",
+    "subtitle": "创建 Chain 以启用路由",
+    "nodes": "暂无节点",
+    "providers": "暂无 Provider"
+  },
+  "ruleEditor": {
+    "label": "匹配规则",
+    "addGroup": "添加规则组",
+    "empty": "无规则（匹配所有消息）",
+    "addCondition": "添加条件",
+    "addSubGroup": "添加子组",
+    "changeType": "切换类型",
+    "umoPlaceholder": "如 aiocqhttp:group_message:*",
+    "regexPlaceholder": "如 .*hello.*",
+    "types": {
+      "umo": "UMO 匹配",
+      "modality": "消息模态",
+      "textRegex": "文本正则"
+    },
+    "operators": {
+      "include": "包含",
+      "exclude": "不包含"
+    }
+  },
+  "pluginConfig": {
+    "blacklist": "黑名单",
+    "whitelist": "白名单",
+    "blacklistHint": "选中的插件将不会执行",
+    "whitelistHint": "只有选中的插件会执行"
+  }
+}

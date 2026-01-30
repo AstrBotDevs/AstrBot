@@ -188,6 +188,10 @@ def session_waiter(timeout: int = 30, record_history_chains: bool = False):
             *args,
             **kwargs,
         ):
+            if event.chain_config is not None:
+                raise RuntimeError(
+                    "SessionWaiter is not allowed in NodeStar context.",
+                )
             if not session_filter:
                 session_filter = DefaultSessionFilter()
             if not isinstance(session_filter, SessionFilter):

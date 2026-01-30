@@ -53,11 +53,6 @@
                             </v-list-item-title>
                         </v-list-item>
 
-                        <!-- Config Selector in Menu -->
-                        <ConfigSelector :session-id="sessionId || null" :platform-id="sessionPlatformId"
-                            :is-group="sessionIsGroup" :initial-config-id="props.configId"
-                            @config-changed="handleConfigChange" />
-
                         <!-- Streaming Toggle in Menu -->
                         <v-list-item class="styled-menu-item" rounded="md" @click="$emit('toggleStreaming')">
                             <template v-slot:prepend>
@@ -134,7 +129,6 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
-import ConfigSelector from './ConfigSelector.vue';
 import ProviderModelMenu from './ProviderModelMenu.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import type { Session } from '@/composables/useSessions';
@@ -162,14 +156,12 @@ interface Props {
     isRecording: boolean;
     sessionId?: string | null;
     currentSession?: Session | null;
-    configId?: string | null;
     replyTo?: ReplyInfo | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     sessionId: null,
     currentSession: null,
-    configId: null,
     stagedFiles: () => [],
     replyTo: null
 });
@@ -204,9 +196,6 @@ const localPrompt = computed({
     get: () => props.prompt,
     set: (value) => emit('update:prompt', value)
 });
-
-const sessionPlatformId = computed(() => props.currentSession?.platform_id || 'webchat');
-const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
     return (props.prompt && props.prompt.trim()) || props.stagedImagesUrl.length > 0 || props.stagedAudioUrl || (props.stagedFiles && props.stagedFiles.length > 0);
@@ -326,12 +315,6 @@ function handleRecordClick() {
     } else {
         emit('startRecording');
     }
-}
-
-function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
-    const runnerType = (payload.agentRunnerType || '').toLowerCase();
-    const isInternal = runnerType === 'internal' || runnerType === 'local';
-    showProviderSelector.value = isInternal;
 }
 
 function getCurrentSelection() {
