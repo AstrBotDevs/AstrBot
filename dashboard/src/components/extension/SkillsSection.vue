@@ -118,6 +118,16 @@ export default {
       }
     };
 
+    const handleApiResponse = (res, successMessage, failureMessageDefault, onSuccess) => {
+      if (res && res.data && res.data.status === "ok") {
+        showMessage(successMessage, "success");
+        if (onSuccess) onSuccess();
+      } else {
+        const msg = (res && res.data && res.data.message) || failureMessageDefault;
+        showMessage(msg, "error");
+      }
+    };
+
     const uploadSkill = async () => {
       if (!uploadFile.value) return;
       uploading.value = true;
@@ -134,14 +144,16 @@ export default {
         const res = await axios.post("/api/skills/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        if (res.data.status === "ok") {
-          showMessage(tm("skills.uploadSuccess"), "success");
-          uploadDialog.value = false;
-          uploadFile.value = null;
-          await fetchSkills();
-        } else {
-          showMessage(res.data.message || tm("skills.uploadFailed"), "error");
-        }
+        handleApiResponse(
+          res,
+          tm("skills.uploadSuccess"),
+          tm("skills.uploadFailed"),
+          async () => {
+            uploadDialog.value = false;
+            uploadFile.value = null;
+            await fetchSkills();
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.uploadFailed"), "error");
       } finally {
@@ -157,12 +169,14 @@ export default {
           name: skill.name,
           active: nextActive,
         });
-        if (res.data.status === "ok") {
-          skill.active = nextActive;
-          showMessage(tm("skills.updateSuccess"), "success");
-        } else {
-          showMessage(res.data.message || tm("skills.updateFailed"), "error");
-        }
+        handleApiResponse(
+          res,
+          tm("skills.updateSuccess"),
+          tm("skills.updateFailed"),
+          () => {
+            skill.active = nextActive;
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
@@ -182,13 +196,15 @@ export default {
         const res = await axios.post("/api/skills/delete", {
           name: skillToDelete.value.name,
         });
-        if (res.data.status === "ok") {
-          showMessage(tm("skills.deleteSuccess"), "success");
-          deleteDialog.value = false;
-          await fetchSkills();
-        } else {
-          showMessage(res.data.message || tm("skills.deleteFailed"), "error");
-        }
+        handleApiResponse(
+          res,
+          tm("skills.deleteSuccess"),
+          tm("skills.deleteFailed"),
+          async () => {
+            deleteDialog.value = false;
+            await fetchSkills();
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
