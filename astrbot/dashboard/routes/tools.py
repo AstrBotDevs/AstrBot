@@ -130,19 +130,22 @@ class ToolsRoute(Route):
             server_data = await request.json
 
             name = server_data.get("name", "")
+            old_name = server_data.get("oldName") or name
 
             if not name:
                 return Response().error("服务器名称不能为空").__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
-            if name not in config["mcpServers"]:
-                return Response().error(f"服务器 {name} 不存在").__dict__
+            if old_name not in config["mcpServers"]:
+                return Response().error(f"服务器 {old_name} 不存在").__dict__
+
+            is_rename = name != old_name
 
             # 获取活动状态
             active = server_data.get(
                 "active",
-                config["mcpServers"][name].get("active", True),
+                config["mcpServers"][old_name].get("active", True),
             )
 
             # 创建新的配置对象
@@ -153,7 +156,13 @@ class ToolsRoute(Route):
 
             # 复制所有配置字段
             for key, value in server_data.items():
-                if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
+                if key not in [
+                    "name",
+                    "active",
+                    "tools",
+                    "errlogs",
+                    "oldName",
+                ]:  # 排除特殊字段
                     if key == "mcpServers":
                         key_0 = list(server_data["mcpServers"].keys())[
                             0
@@ -165,29 +174,42 @@ class ToolsRoute(Route):
 
             # 如果只更新活动状态，保留原始配置
             if only_update_active:
-                for key, value in config["mcpServers"][name].items():
+                for key, value in config["mcpServers"][old_name].items():
                     if key != "active":  # 除了active之外的所有字段都保留
                         server_config[key] = value
 
-            config["mcpServers"][name] = server_config
+            # config["mcpServers"][name] = server_config
+            if is_rename:
+                config["mcpServers"].pop(old_name)
+                config["mcpServers"][name] = server_config
+            else:
+                config["mcpServers"][name] = server_config
 
             if self.tool_mgr.save_mcp_config(config):
                 # 处理MCP客户端状态变化
                 if active:
-                    if name in self.tool_mgr.mcp_client_dict or not only_update_active:
+                    if (
+                        old_name in self.tool_mgr.mcp_client_dict
+                        or not only_update_active
+                        or is_rename
+                    ):
                         try:
-                            await self.tool_mgr.disable_mcp_server(name, timeout=10)
+                            await self.tool_mgr.disable_mcp_server(old_name, timeout=10)
                         except TimeoutError as e:
                             return (
                                 Response()
-                                .error(f"启用前停用 MCP 服务器时 {name} 超时: {e!s}")
+                                .error(
+                                    f"启用前停用 MCP 服务器时 {old_name} 超时: {e!s}"
+                                )
                                 .__dict__
                             )
                         except Exception as e:
                             logger.error(traceback.format_exc())
                             return (
                                 Response()
-                                .error(f"启用前停用 MCP 服务器时 {name} 失败: {e!s}")
+                                .error(
+                                    f"启用前停用 MCP 服务器时 {old_name} 失败: {e!s}"
+                                )
                                 .__dict__
                             )
                     try:
@@ -208,18 +230,20 @@ class ToolsRoute(Route):
                             .__dict__
                         )
                 # 如果要停用服务器
-                elif name in self.tool_mgr.mcp_client_dict:
+                elif old_name in self.tool_mgr.mcp_client_dict:
                     try:
-                        await self.tool_mgr.disable_mcp_server(name, timeout=10)
+                        await self.tool_mgr.disable_mcp_server(old_name, timeout=10)
                     except TimeoutError:
                         return (
-                            Response().error(f"停用 MCP 服务器 {name} 超时。").__dict__
+                            Response()
+                            .error(f"停用 MCP 服务器 {old_name} 超时。")
+                            .__dict__
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {name} 失败: {e!s}")
+                            .error(f"停用 MCP 服务器 {old_name} 失败: {e!s}")
                             .__dict__
                         )
 

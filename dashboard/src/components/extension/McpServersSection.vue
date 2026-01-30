@@ -251,6 +251,7 @@ export default {
         active: true,
         tools: []
       },
+      originalServerName: '',
       save_message_snack: false,
       save_message: '',
       save_message_success: 'success'
@@ -359,6 +360,9 @@ export default {
           active: this.currentServer.active,
           ...configObj
         };
+        if (this.isEditMode && this.originalServerName) {
+          serverData.oldName = this.originalServerName;
+        }
         const endpoint = this.isEditMode ? '/api/tools/mcp/update' : '/api/tools/mcp/add';
         axios.post(endpoint, serverData)
           .then(response => {
@@ -402,6 +406,7 @@ export default {
         active: server.active,
         tools: server.tools || []
       };
+      this.originalServerName = server.name;
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
       this.isEditMode = true;
       this.showMcpServerDialog = true;
@@ -461,6 +466,7 @@ export default {
       this.serverConfigJson = '';
       this.jsonError = null;
       this.isEditMode = false;
+      this.originalServerName = '';
     },
     showSuccess(message) {
       this.save_message = message;
