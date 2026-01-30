@@ -19,6 +19,7 @@ import zhCNPlatform from './locales/zh-CN/features/platform.json';
 import zhCNConfig from './locales/zh-CN/features/config.json';
 import zhCNConfigMetadata from './locales/zh-CN/features/config-metadata.json';
 import zhCNConsole from './locales/zh-CN/features/console.json';
+import zhCNTrace from './locales/zh-CN/features/trace.json';
 import zhCNAbout from './locales/zh-CN/features/about.json';
 import zhCNSettings from './locales/zh-CN/features/settings.json';
 import zhCNAuth from './locales/zh-CN/features/auth.json';
@@ -56,6 +57,7 @@ import enUSPlatform from './locales/en-US/features/platform.json';
 import enUSConfig from './locales/en-US/features/config.json';
 import enUSConfigMetadata from './locales/en-US/features/config-metadata.json';
 import enUSConsole from './locales/en-US/features/console.json';
+import enUSTrace from './locales/en-US/features/trace.json';
 import enUSAbout from './locales/en-US/features/about.json';
 import enUSSettings from './locales/en-US/features/settings.json';
 import enUSAuth from './locales/en-US/features/auth.json';
@@ -97,6 +99,7 @@ export const translations = {
       config: zhCNConfig,
       'config-metadata': zhCNConfigMetadata,
       console: zhCNConsole,
+      trace: zhCNTrace,
       about: zhCNAbout,
       settings: zhCNSettings,
       auth: zhCNAuth,
@@ -142,6 +145,7 @@ export const translations = {
       config: enUSConfig,
       'config-metadata': enUSConfigMetadata,
       console: enUSConsole,
+      trace: enUSTrace,
       about: enUSAbout,
       settings: enUSSettings,
       auth: enUSAuth,

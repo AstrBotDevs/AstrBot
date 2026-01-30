@@ -4,6 +4,7 @@ import hashlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
+from time import time
 from typing import Any
 
 from astrbot import logger
@@ -22,6 +23,7 @@ from astrbot.core.message.message_event_result import MessageChain, MessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.trace import TraceSpan
 
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
@@ -58,6 +60,21 @@ class AstrMessageEvent(abc.ABC):
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
         self._result: MessageEventResult | None = None
         """消息事件的结果"""
+
+        self.created_at = time()
+        """事件创建时间(Unix timestamp)"""
+        self.trace = TraceSpan(
+            name="AstrMessageEvent",
+            umo=self.unified_msg_origin,
+            sender_name=self.get_sender_name(),
+            message_outline=self.get_message_outline(),
+        )
+        """用于记录事件处理的 TraceSpan 对象"""
+        self.span = self.trace
+        """事件级 TraceSpan(别名: span)"""
+
+        self.trace.record("umo", umo=self.unified_msg_origin)
+        self.trace.record("event_created", created_at=self.created_at)
 
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""

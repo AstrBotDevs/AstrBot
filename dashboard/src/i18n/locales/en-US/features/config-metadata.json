@@ -564,6 +564,30 @@
         "description": "Console Log Level",
         "hint": "Log level for console output."
       },
+      "log_file_enable": {
+        "description": "Enable File Logging",
+        "hint": "Write logs to a file in addition to the console."
+      },
+      "log_file_path": {
+        "description": "Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
+      },
+      "log_file_max_mb": {
+        "description": "Log File Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
+      "trace_log_enable": {
+        "description": "Enable Trace File Logging",
+        "hint": "Write trace events to a separate file (does not change console output)."
+      },
+      "trace_log_path": {
+        "description": "Trace Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      },
+      "trace_log_max_mb": {
+        "description": "Trace Log Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
         "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."

@@ -182,6 +182,12 @@ DEFAULT_CONFIG = {
     },
     "wake_prefix": ["/"],
     "log_level": "INFO",
+    "log_file_enable": False,
+    "log_file_path": "logs/astrbot.log",
+    "log_file_max_mb": 20,
+    "trace_log_enable": False,
+    "trace_log_path": "logs/astrbot.trace.log",
+    "trace_log_max_mb": 20,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -2321,6 +2327,18 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
+            "log_file_enable": {"type": "bool"},
+            "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
+            "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
+            "trace_log_enable": {"type": "bool"},
+            "trace_log_path": {
+                "type": "string",
+                "condition": {"trace_log_enable": True},
+            },
+            "trace_log_max_mb": {
+                "type": "int",
+                "condition": {"trace_log_enable": True},
+            },
             "t2i_strategy": {
                 "type": "string",
                 "options": ["remote", "local"],
@@ -3252,6 +3270,36 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "string",
                         "hint": "控制台输出日志的级别。",
                         "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                    },
+                    "log_file_enable": {
+                        "description": "启用文件日志",
+                        "type": "bool",
+                        "hint": "开启后会将日志写入指定文件。",
+                    },
+                    "log_file_path": {
+                        "description": "日志文件路径",
+                        "type": "string",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.log；支持绝对路径。",
+                    },
+                    "log_file_max_mb": {
+                        "description": "日志文件大小上限 (MB)",
+                        "type": "int",
+                        "hint": "超过大小后自动轮转，默认 20MB。",
+                    },
+                    "trace_log_enable": {
+                        "description": "启用 Trace 文件日志",
+                        "type": "bool",
+                        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
+                    },
+                    "trace_log_path": {
+                        "description": "Trace 日志文件路径",
+                        "type": "string",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
+                    },
+                    "trace_log_max_mb": {
+                        "description": "Trace 日志大小上限 (MB)",
+                        "type": "int",
+                        "hint": "超过大小后自动轮转，默认 20MB。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",
