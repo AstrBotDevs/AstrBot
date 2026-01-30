@@ -142,6 +142,9 @@ class ToolsRoute(Route):
 
             is_rename = name != old_name
 
+            if name in config["mcpServers"] and is_rename:
+                return Response().error(f"服务器 {name} 已存在").__dict__
+
             # 获取活动状态
             active = server_data.get(
                 "active",
