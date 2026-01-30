@@ -33,7 +33,7 @@ import colorlog
 from astrbot.core.config.default import VERSION
 
 # 日志缓存大小
-CACHED_SIZE = 200
+CACHED_SIZE = 500
 # 日志颜色配置
 log_color_config = {
     "DEBUG": "green",
