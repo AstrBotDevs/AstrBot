@@ -5,7 +5,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
 
 <template>
   <div class="trace-wrapper">
-    <div class="trace-table" ref="scrollEl">
+    <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
       <div class="trace-row trace-header">
         <div class="trace-cell time">Time</div>
         <div class="trace-cell span">Event ID</div>
@@ -42,6 +42,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill';
           <div class="trace-cell fields event-controls">
             <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
               {{ event.collapsed ? 'Expand' : 'Collapse' }}
+              <span v-if="event.hasAgentPrepare" class="agent-dot" />
             </v-btn>
           </div>
         </div>
@@ -87,12 +88,15 @@ export default {
       retryAttempts: 0,
       maxRetryAttempts: 10,
       baseRetryDelay: 1000,
-      lastEventId: null
+      lastEventId: null,
+      tableHeight: 'auto'
     };
   },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
+    this.updateTableHeight();
+    window.addEventListener('resize', this.updateTableHeight);
   },
   beforeUnmount() {
     if (this.eventSource) {
@@ -104,8 +108,19 @@ export default {
       this.retryTimer = null;
     }
     this.retryAttempts = 0;
+    window.removeEventListener('resize', this.updateTableHeight);
   },
   methods: {
+    updateTableHeight() {
+      this.$nextTick(() => {
+        const el = this.$refs.scrollEl;
+        if (!el || typeof window === 'undefined') return;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const offsetTop = el.getBoundingClientRect().top;
+        const height = Math.max(viewportHeight - offsetTop, 0);
+        this.tableHeight = `${height}px`;
+      });
+    },
     async fetchTraceHistory() {
       try {
         const res = await axios.get('/api/log-history');
@@ -205,7 +220,8 @@ export default {
             last_time: trace.time,
             collapsed: true,
             visibleCount: 20,
-            records: []
+            records: [],
+            hasAgentPrepare: trace.action === 'astr_agent_prepare'
           };
           this.eventIndex[trace.span_id] = event;
           this.events.push(event);
@@ -222,6 +238,9 @@ export default {
           timeLabel: this.formatTime(trace.time),
           key: recordKey
         });
+        if (trace.action === 'astr_agent_prepare') {
+          event.hasAgentPrepare = true;
+        }
         if (!event.first_time || trace.time < event.first_time) {
           event.first_time = trace.time;
         }
@@ -326,7 +345,7 @@ export default {
   background: transparent;
   border-radius: 0;
   padding: 0;
-  height: calc(100vh - 240px);
+  height: 100%;
   overflow-y: auto;
   color: #2b3340;
   font-family: 'Fira Code', monospace;
@@ -391,6 +410,16 @@ export default {
 .event-controls {
   display: flex;
   justify-content: flex-end;
+}
+
+.agent-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 .trace-cell.fields pre {

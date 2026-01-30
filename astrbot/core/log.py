@@ -27,10 +27,12 @@ import sys
 import time
 from asyncio import Queue
 from collections import deque
+from logging.handlers import RotatingFileHandler
 
 import colorlog
 
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 # 日志缓存大小
 CACHED_SIZE = 500
@@ -163,6 +165,9 @@ class LogManager:
     提供了获取默认日志记录器logger和设置队列处理器的方法
     """
 
+    _FILE_HANDLER_FLAG = "_astrbot_file_handler"
+    _TRACE_FILE_HANDLER_FLAG = "_astrbot_trace_file_handler"
+
     @classmethod
     def GetLogger(cls, log_name: str = "default"):
         """获取指定名称的日志记录器logger
@@ -266,3 +271,186 @@ class LogManager:
                 ),
             )
         logger.addHandler(handler)
+
+    @classmethod
+    def _default_log_path(cls) -> str:
+        return os.path.join(get_astrbot_data_path(), "logs", "astrbot.log")
+
+    @classmethod
+    def _resolve_log_path(cls, configured_path: str | None) -> str:
+        if not configured_path:
+            return cls._default_log_path()
+        if os.path.isabs(configured_path):
+            return configured_path
+        return os.path.join(get_astrbot_data_path(), configured_path)
+
+    @classmethod
+    def _get_file_handlers(cls, logger: logging.Logger) -> list[logging.Handler]:
+        return [
+            handler
+            for handler in logger.handlers
+            if getattr(handler, cls._FILE_HANDLER_FLAG, False)
+        ]
+
+    @classmethod
+    def _get_trace_file_handlers(cls, logger: logging.Logger) -> list[logging.Handler]:
+        return [
+            handler
+            for handler in logger.handlers
+            if getattr(handler, cls._TRACE_FILE_HANDLER_FLAG, False)
+        ]
+
+    @classmethod
+    def _remove_file_handlers(cls, logger: logging.Logger):
+        for handler in cls._get_file_handlers(logger):
+            logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+
+    @classmethod
+    def _remove_trace_file_handlers(cls, logger: logging.Logger):
+        for handler in cls._get_trace_file_handlers(logger):
+            logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+
+    @classmethod
+    def _add_file_handler(
+        cls,
+        logger: logging.Logger,
+        file_path: str,
+        max_mb: int | None = None,
+        backup_count: int = 3,
+        trace: bool = False,
+    ):
+        os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
+        max_bytes = 0
+        if max_mb and max_mb > 0:
+            max_bytes = max_mb * 1024 * 1024
+        if max_bytes > 0:
+            file_handler = RotatingFileHandler(
+                file_path,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+        else:
+            file_handler = logging.FileHandler(file_path, encoding="utf-8")
+        file_handler.setLevel(logger.level)
+        if trace:
+            formatter = logging.Formatter(
+                "[%(asctime)s] %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        else:
+            formatter = logging.Formatter(
+                "[%(asctime)s] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s [%(filename)s:%(lineno)d]: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        file_handler.setFormatter(formatter)
+        setattr(
+            file_handler,
+            cls._TRACE_FILE_HANDLER_FLAG if trace else cls._FILE_HANDLER_FLAG,
+            True,
+        )
+        logger.addHandler(file_handler)
+
+    @classmethod
+    def configure_logger(
+        cls,
+        logger: logging.Logger,
+        config: dict | None,
+        override_level: str | None = None,
+    ):
+        """根据配置设置日志级别和文件日志。
+
+        Args:
+            logger: 需要配置的 logger
+            config: 配置字典
+            override_level: 若提供，将覆盖配置中的日志级别
+        """
+        if not config:
+            return
+
+        level = override_level or config.get("log_level")
+        if level:
+            try:
+                logger.setLevel(level)
+            except Exception:
+                logger.setLevel(logging.INFO)
+
+        # 兼容旧版嵌套配置
+        if "log_file" in config:
+            file_conf = config.get("log_file") or {}
+            enable_file = bool(file_conf.get("enable", False))
+            file_path = file_conf.get("path")
+            max_mb = file_conf.get("max_mb")
+        else:
+            enable_file = bool(config.get("log_file_enable", False))
+            file_path = config.get("log_file_path")
+            max_mb = config.get("log_file_max_mb")
+
+        file_path = cls._resolve_log_path(file_path)
+
+        existing = cls._get_file_handlers(logger)
+        if not enable_file:
+            cls._remove_file_handlers(logger)
+            return
+
+        # 如果已有文件处理器且路径一致，则仅同步级别
+        if existing:
+            handler = existing[0]
+            base = getattr(handler, "baseFilename", "")
+            if base and os.path.abspath(base) == os.path.abspath(file_path):
+                handler.setLevel(logger.level)
+                return
+            cls._remove_file_handlers(logger)
+
+        cls._add_file_handler(logger, file_path, max_mb=max_mb)
+
+    @classmethod
+    def configure_trace_logger(cls, config: dict | None):
+        """为 trace 事件配置独立的文件日志，不向控制台输出。"""
+        if not config:
+            return
+
+        enable = bool(
+            config.get("trace_log_enable")
+            or (config.get("log_file", {}) or {}).get("trace_enable", False)
+        )
+        path = config.get("trace_log_path")
+        max_mb = config.get("trace_log_max_mb")
+        if "log_file" in config:
+            legacy = config.get("log_file") or {}
+            path = path or legacy.get("trace_path")
+            max_mb = max_mb or legacy.get("trace_max_mb")
+
+        if not enable:
+            trace_logger = logging.getLogger("astrbot.trace")
+            cls._remove_trace_file_handlers(trace_logger)
+            return
+
+        file_path = cls._resolve_log_path(path or "logs/astrbot.trace.log")
+        trace_logger = logging.getLogger("astrbot.trace")
+        trace_logger.setLevel(logging.INFO)
+        trace_logger.propagate = False
+
+        existing = cls._get_trace_file_handlers(trace_logger)
+        if existing:
+            handler = existing[0]
+            base = getattr(handler, "baseFilename", "")
+            if base and os.path.abspath(base) == os.path.abspath(file_path):
+                handler.setLevel(trace_logger.level)
+                return
+            cls._remove_trace_file_handlers(trace_logger)
+
+        cls._add_file_handler(
+            trace_logger,
+            file_path,
+            max_mb=max_mb,
+            trace=True,
+        )

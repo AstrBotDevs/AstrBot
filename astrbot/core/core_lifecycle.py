@@ -17,7 +17,7 @@ import traceback
 from asyncio import Queue
 
 from astrbot.api import logger, sp
-from astrbot.core import LogBroker
+from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
@@ -80,9 +80,13 @@ class AstrBotCoreLifecycle:
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
         if os.environ.get("TESTING", ""):
-            logger.setLevel("DEBUG")  # 测试模式下设置日志级别为 DEBUG
+            LogManager.configure_logger(
+                logger, self.astrbot_config, override_level="DEBUG"
+            )
+            LogManager.configure_trace_logger(self.astrbot_config)
         else:
-            logger.setLevel(self.astrbot_config["log_level"])  # 设置日志级别
+            LogManager.configure_logger(logger, self.astrbot_config)
+            LogManager.configure_trace_logger(self.astrbot_config)
 
         await self.db.initialize()
 
