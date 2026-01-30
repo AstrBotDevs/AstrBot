@@ -49,6 +49,7 @@
     "reply": "Reply",
     "providerConfig": "AI Configuration",
     "toolsUsed": "Tool Used",
+    "toolCallUsed": "Used {name} tool",
     "pythonCodeAnalysis": "Python Code Analysis Used"
   },
   "ipython": {

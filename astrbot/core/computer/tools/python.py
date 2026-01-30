@@ -84,7 +84,7 @@ class LocalPythonTool(FunctionTool):
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
         if context.context.event.role != "admin":
-            return "error: Permission denied. Local Python execution is only allowed for admin users. Set admins in AstrBot WebUI."
+            return "error: Permission denied. Local Python execution is only allowed for admin users. Tell user to set admins in AstrBot WebUI."
 
         sb = get_local_booter()
         try:
