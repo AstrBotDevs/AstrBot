@@ -1,7 +1,8 @@
 """
-CLI Platform Adapter - 命令行模拟器
+CLI Tester - CLI测试器
 
-用于快速测试AstrBot插件，无需连接真实的IM平台。
+用于快速测试和调试AstrBot插件，无需连接真实的IM平台。
+构建快速反馈循环，支持Vibe Coding开发模式。
 遵循Unix哲学：原子化模块、显式I/O、管道编排。
 """
 
@@ -29,10 +30,10 @@ from .cli_event import CLIMessageEvent
 
 @register_platform_adapter(
     "cli",
-    "命令行模拟器，用于快速测试插件功能，无需连接真实IM平台",
+    "CLI测试器，用于快速测试和调试插件，构建快速反馈循环",
     default_config_tmpl={
         "type": "cli",
-        "enable": True,  # 默认启用
+        "enable": False,  # 默认关闭，开发时手动启用
         "mode": "socket",  # 默认使用Socket模式
         "socket_path": "/tmp/astrbot.sock",
         "whitelist": [],  # 空白名单表示允许所有
@@ -42,9 +43,9 @@ from .cli_event import CLIMessageEvent
     support_streaming_message=False,
 )
 class CLIPlatformAdapter(Platform):
-    """CLI平台适配器
+    """CLI测试器
 
-    提供命令行交互界面，模拟消息收发流程。
+    提供命令行交互界面，用于快速测试和调试插件。
 
     数据流管道:
         用户输入 → convert_input → AstrBotMessage → handle_msg → commit_event
