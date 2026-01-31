@@ -44,7 +44,7 @@ jobs:
             !dist/**/*.md
 
       - name: Create GitHub Release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.repository == 'AstrBotDevs/AstrBot'
         uses: ncipollo/release-action@v1
         with:
           tag: release-${{ github.sha }}
