@@ -124,70 +124,34 @@
                     class="subagent-provider"
                   />
                 </v-col>
-                <v-col cols="12">
+                <v-col cols="12" md="6">
                   <v-autocomplete
-                    v-model="agent.__tool_group"
-                    :items="toolGroupOptions"
+                    v-model="agent.persona_id"
+                    :items="personaOptions"
                     item-title="title"
                     item-value="value"
-                    label="选择插件/来源"
+                    label="选择 Persona"
                     variant="outlined"
                     density="comfortable"
-                    class="subagent-tools"
-                    :loading="toolsLoading"
-                    :disabled="toolsLoading"
                     clearable
-                    @update:modelValue="onGroupChanged(agent)"
+                    :loading="personaLoading"
+                    :disabled="personaLoading"
+                    hint="SubAgent 将直接继承所选 Persona 的系统设定与工具。"
+                    persistent-hint
                   />
                 </v-col>
 
-                <v-col cols="12">
-                  <v-autocomplete
-                    v-model="agent.__tool_group_selected"
-                    :items="getToolOptionsByGroup(agent.__tool_group)"
-                    item-title="title"
-                    item-value="value"
-                    label="选择该插件下的工具（多选）"
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="agent.public_description"
+                    label="对主 LLM 的描述（用于决定是否 handoff）"
                     variant="outlined"
                     density="comfortable"
-                    class="subagent-tools"
-                    multiple
-                    chips
-                    closable-chips
-                    :menu-props="{ maxHeight: 380 }"
-                    :max-chips="8"
-                    :loading="toolsLoading"
-                    :disabled="toolsLoading || !agent.__tool_group"
-                    clearable
-                    @update:modelValue="syncGroupSelectionToAgentTools(agent)"
+                    hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
+                    persistent-hint
                   />
-
-                  <div class="text-caption text-medium-emphasis mt-1">
-                    已分配：{{ (agent.tools || []).length }} 个工具
-                  </div>
                 </v-col>
               </v-row>
-
-              <v-textarea
-                v-model="agent.public_description"
-                label="对主 LLM 的描述（用于决定是否 handoff）"
-                variant="outlined"
-                rows="3"
-                auto-grow
-                hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
-                persistent-hint
-              />
-
-              <v-textarea
-                v-model="agent.system_prompt"
-                label="SubAgent System Prompt（该 SubAgent 自己的指令）"
-                variant="outlined"
-                rows="4"
-                auto-grow
-                hint="这段只给该 SubAgent 自己作为 system prompt 使用，可以更长、更严格。"
-                persistent-hint
-                class="mt-3"
-              />
 
               <div class="mt-3">
                 <div class="text-caption text-medium-emphasis">预览：主 LLM 将看到的 handoff 工具</div>
@@ -195,14 +159,8 @@
                   <v-chip size="small" variant="outlined" color="primary">
                     transfer_to_{{ agent.name || '...' }}
                   </v-chip>
-                  <v-chip
-                    v-for="t in (agent.tools || [])"
-                    :key="t"
-                    size="small"
-                    variant="tonal"
-                    color="secondary"
-                  >
-                    {{ t }}
+                  <v-chip size="small" variant="tonal" color="secondary" v-if="agent.persona_id">
+                    Persona: {{ agent.persona_id }}
                   </v-chip>
                 </div>
               </div>
@@ -224,25 +182,13 @@ import { onMounted, ref } from 'vue'
 import axios from 'axios'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
 
-type ToolOption = { title: string; value: string }
-
-type ToolGroup = {
-  key: string
-  label: string
-  options: ToolOption[]
-}
-
 type SubAgentItem = {
   __key: string
   name: string
+  persona_id: string
   public_description: string
-  system_prompt: string
-  tools: string[]
   enabled: boolean
   provider_id?: string
-  // UI-only: current tool group selection state
-  __tool_group?: string
-  __tool_group_selected?: string[]
 }
 
 type MainMode = 'disabled' | 'unassigned_to_main' | 'handoff_only'
@@ -254,7 +200,6 @@ type SubAgentConfig = {
 
 const loading = ref(false)
 const saving = ref(false)
-const toolsLoading = ref(false)
 
 const snackbar = ref({
   show: false,
@@ -277,59 +222,8 @@ const cfg = ref<SubAgentConfig>({
   agents: []
 })
 
-
-const toolGroups = ref<ToolGroup[]>([])
-const toolGroupOptions = ref<{ title: string; value: string }[]>([])
-
-function modulePathToLabel(mp: unknown): string {
-  const raw = (mp ?? '').toString().trim()
-  if (!raw) return '其他/未归类'
-  // Typical module paths look like:
-  // - data.plugins.<plugin_name>.main
-  // - astrbot.builtin_stars.<star_name>.main
-  // - astrbot.plugins.<plugin_name>.main
-  // We strip common prefixes and the trailing ".main" for display.
-  const trimmed = raw.replace(/\.main$/, '')
-  if (trimmed.startsWith('data.plugins.')) return trimmed.replace(/^data\.plugins\./, '')
-  if (trimmed.startsWith('astrbot.builtin_stars.')) return `builtin: ${trimmed.replace(/^astrbot\.builtin_stars\./, '')}`
-  if (trimmed.startsWith('astrbot.plugins.')) return trimmed.replace(/^astrbot\.plugins\./, '')
-  if (raw.startsWith('plugins.')) return raw.replace(/^plugins\./, '')
-  if (raw.startsWith('builtin_stars.')) return `builtin: ${raw.replace(/^builtin_stars\./, '')}`
-  if (raw.startsWith('core.')) return `core: ${raw.replace(/^core\./, '')}`
-  return raw
-}
-
-function rebuildToolGroupOptions() {
-  toolGroupOptions.value = toolGroups.value.map(g => ({ title: g.label, value: g.key }))
-}
-
-function getToolOptionsByGroup(groupKey: string | undefined): ToolOption[] {
-  if (!groupKey) return []
-  return toolGroups.value.find(g => g.key === groupKey)?.options ?? []
-}
-
-function onGroupChanged(agent: SubAgentItem) {
-  // When switching groups, reflect already-assigned tools for that group.
-  const groupOptions = getToolOptionsByGroup(agent.__tool_group)
-  const allowed = new Set(groupOptions.map(o => o.value))
-  agent.__tool_group_selected = (agent.tools || []).filter(t => allowed.has(t))
-}
-
-function syncGroupSelectionToAgentTools(agent: SubAgentItem) {
-  const groupOptions = getToolOptionsByGroup(agent.__tool_group)
-  const allowed = new Set(groupOptions.map(o => o.value))
-
-  const selected = Array.isArray(agent.__tool_group_selected)
-    ? agent.__tool_group_selected
-    : []
-
-  // Replace only tools belonging to this group; keep tools from other groups intact.
-  const kept = (agent.tools || []).filter(t => !allowed.has(t))
-  const merged = [...kept, ...selected.filter(t => allowed.has(t))]
-
-  const seen = new Set<string>()
-  agent.tools = merged.filter(t => (seen.has(t) ? false : (seen.add(t), true)))
-}
+const personaOptions = ref<{ title: string; value: string }[]>([])
+const personaLoading = ref(false)
 
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
@@ -341,23 +235,19 @@ function normalizeConfig(raw: any): SubAgentConfig {
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => {
     const name = (a?.name ?? '').toString()
+    const persona_id = (a?.persona_id ?? '').toString()
     const public_description = (a?.public_description ?? '').toString()
-    const system_prompt = (a?.system_prompt ?? '').toString()
-    const tools = Array.isArray(a?.tools) ? a.tools.map((x: any) => String(x)) : []
     const enabled = a?.enabled !== false
     const provider_id = (a?.provider_id ?? undefined) as (string | undefined)
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
       name,
+      persona_id,
       public_description,
-      system_prompt,
-      tools,
       enabled
       ,
-      provider_id,
-      __tool_group: undefined,
-      __tool_group_selected: []
+      provider_id
     }
   })
 
@@ -380,66 +270,21 @@ async function loadConfig() {
   }
 }
 
-async function loadTools() {
-  toolsLoading.value = true
+async function loadPersonas() {
+  personaLoading.value = true
   try {
-    // Prefer our dedicated endpoint (includes handler_module_path)
-    const res = await axios.get('/api/subagent/available-tools')
+    const res = await axios.get('/api/persona/list')
     if (res.data.status === 'ok') {
       const list = Array.isArray(res.data.data) ? res.data.data : []
-      const groups = new Map<string, ToolOption[]>()
-      for (const t of list) {
-        if (!t?.name) continue
-        const name = String(t.name)
-        const desc = (t.description ?? '').toString().trim()
-        const mp = (t.handler_module_path ?? '').toString()
-        const key = mp || '__other__'
-        const options = groups.get(key) ?? []
-        options.push({ title: desc ? `${name} — ${desc}` : name, value: name })
-        groups.set(key, options)
-      }
-
-      toolGroups.value = Array.from(groups.entries())
-        .map(([key, options]) => ({
-          key,
-          label: modulePathToLabel(key === '__other__' ? '' : key),
-          options: options.sort((a, b) => a.value.localeCompare(b.value))
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label))
-
-      rebuildToolGroupOptions()
-    } else {
-      toast(res.data.message || '获取工具列表失败', 'error')
+      personaOptions.value = list.map((p: any) => ({
+        title: p.persona_id,
+        value: p.persona_id
+      }))
     }
-  } catch {
-    // Fallback to existing tools list endpoint
-    try {
-      const res2 = await axios.get('/api/tools/list')
-      if (res2.data.status === 'ok') {
-        const list = Array.isArray(res2.data.data) ? res2.data.data : []
-        const options = list
-          .filter((t: any) => !!t?.name)
-          .map((t: any) => {
-            const name = String(t.name)
-            const desc = (t.description ?? '').toString().trim()
-            return { title: desc ? `${name} — ${desc}` : name, value: name }
-          })
-          .sort((a: ToolOption, b: ToolOption) => a.value.localeCompare(b.value))
-
-        toolGroups.value = [
-          {
-            key: '__all__',
-            label: '全部工具',
-            options
-          }
-        ]
-        rebuildToolGroupOptions()
-      }
-    } catch {
-      toast('获取工具列表失败', 'error')
-    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || '获取 Persona 列表失败', 'error')
   } finally {
-    toolsLoading.value = false
+    personaLoading.value = false
   }
 }
 
@@ -447,13 +292,10 @@ function addAgent() {
   cfg.value.agents.push({
     __key: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
     name: '',
+    persona_id: '',
     public_description: '',
-    system_prompt: '',
-    tools: [],
     enabled: true,
-    provider_id: undefined,
-    __tool_group: undefined,
-    __tool_group_selected: []
+    provider_id: undefined
   })
 }
 
@@ -479,6 +321,10 @@ function validateBeforeSave(): boolean {
       return false
     }
     seen.add(name)
+    if (!a.persona_id) {
+      toast(`SubAgent ${name} 未选择 Persona`, 'warning')
+      return false
+    }
   }
   return true
 }
@@ -494,9 +340,8 @@ async function save() {
       main_tools_policy: mode,
       agents: cfg.value.agents.map(a => ({
         name: a.name,
+        persona_id: a.persona_id,
         public_description: a.public_description,
-        system_prompt: a.system_prompt,
-        tools: a.tools,
         enabled: a.enabled,
         provider_id: a.provider_id
       }))
@@ -516,13 +361,7 @@ async function save() {
 }
 
 async function reload() {
-  await Promise.all([loadConfig(), loadTools()])
-
-  // Initialize UI-only selections after tools load.
-  for (const a of cfg.value.agents) {
-    if (!a.__tool_group) a.__tool_group = undefined
-    if (!Array.isArray(a.__tool_group_selected)) a.__tool_group_selected = []
-  }
+  await Promise.all([loadConfig(), loadPersonas()])
 }
 
 onMounted(() => {

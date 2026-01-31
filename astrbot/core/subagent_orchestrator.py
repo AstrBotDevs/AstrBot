@@ -6,6 +6,7 @@ from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
 
@@ -16,10 +17,11 @@ class SubAgentOrchestrator:
     Execution happens via HandoffTool in FunctionToolExecutor.
     """
 
-    def __init__(self, tool_mgr: FunctionToolManager):
+    def __init__(self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager):
         self._tool_mgr = tool_mgr
+        self._persona_mgr = persona_mgr
 
-    def reload_from_config(self, cfg: dict[str, Any]) -> None:
+    async def reload_from_config(self, cfg: dict[str, Any]) -> None:
         enabled = bool(cfg.get("main_enable", False))
 
         if not enabled:
@@ -46,21 +48,44 @@ class SubAgentOrchestrator:
             if not name:
                 continue
 
+            persona_id = item.get("persona_id")
+            persona_data = None
+            if persona_id:
+                try:
+                    persona_data = await self._persona_mgr.get_persona(persona_id)
+                except StopIteration:
+                    logger.warning(
+                        "SubAgent persona %s not found, fallback to inline prompt.",
+                        persona_id,
+                    )
+
             instructions = str(item.get("system_prompt", "")).strip()
             public_description = str(item.get("public_description", "")).strip()
             provider_id = item.get("provider_id")
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
             tools = item.get("tools", [])
-            if not isinstance(tools, list):
+            begin_dialogs = None
+
+            if persona_data:
+                instructions = persona_data.system_prompt or instructions
+                begin_dialogs = persona_data.begin_dialogs
+                tools = persona_data.tools
+                if public_description == "" and persona_data.system_prompt:
+                    public_description = persona_data.system_prompt[:120]
+            if tools is None:
+                tools = None
+            elif not isinstance(tools, list):
                 tools = []
-            tools = [str(t).strip() for t in tools if str(t).strip()]
+            else:
+                tools = [str(t).strip() for t in tools if str(t).strip()]
 
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
-                tools=tools,
+                tools=tools,  # type: ignore
             )
+            agent.begin_dialogs = begin_dialogs
             # The tool description should be a short description for the main LLM,
             # while the subagent system prompt can be longer/more specific.
             handoff = HandoffTool(

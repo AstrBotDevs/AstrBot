@@ -123,7 +123,29 @@ class ProcessLLMRequest:
                         continue
                     if a.get("enabled", True) is False:
                         continue
+                    persona_tools = None
+                    persona_id = a.get("persona_id")
+                    if persona_id:
+                        persona_tools = next(
+                            (
+                                p.get("tools")
+                                for p in self.ctx.persona_manager.personas_v3
+                                if p["name"] == persona_id
+                            ),
+                            None,
+                        )
                     tools = a.get("tools", [])
+                    if persona_tools is not None:
+                        tools = persona_tools
+                    if tools is None:
+                        assigned_tools.update(
+                            [
+                                tool.name
+                                for tool in tmgr.func_list
+                                if not isinstance(tool, HandoffTool)
+                            ]
+                        )
+                        continue
                     if not isinstance(tools, list):
                         continue
                     for t in tools:

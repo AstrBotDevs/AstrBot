@@ -47,8 +47,14 @@ from ...utils import (
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    SEND_MESSAGE_TO_USER_TOOL,
     decoded_blocked,
     retrieve_knowledge_base,
+)
+from astrbot.core.tools.cron_tools import (
+    CREATE_CRON_JOB_TOOL,
+    DELETE_CRON_JOB_TOOL,
+    LIST_CRON_JOBS_TOOL,
 )
 
 
@@ -499,6 +505,44 @@ class InternalAgentSubStage(Stage):
         req.func_tool.add_tool(FILE_UPLOAD_TOOL)
         req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
         req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
+
+    def _proactive_cron_job_tools(
+        self, req: ProviderRequest, event: AstrMessageEvent
+    ) -> None:
+        """Inject cron job context and tools into the provider request for proactive scheduling."""
+
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(CREATE_CRON_JOB_TOOL)
+        req.func_tool.add_tool(DELETE_CRON_JOB_TOOL)
+        req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
+
+        cron_meta = event.get_extra("cron_job")
+        if cron_meta:
+            # The message event is triggered by a known cron job
+            if req.func_tool is None:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+
+            job_name = cron_meta.get("name", "scheduled task")
+            note = cron_meta.get("note") or cron_meta.get("description") or ""
+            req.system_prompt += (
+                f"\n[Scheduler Context] This turn is triggered automatically by cron job "
+                f'"{job_name}" (type: {cron_meta.get("type", "unknown")}). '
+                "Act proactively based on the provided note and current context. "
+                "If you want to proactively notify the user, call `send_message_to_user` with a concise message.\n"
+            )
+            if note:
+                req.system_prompt += f"[Scheduler Note]: {note}\n"
+
+        if bg := event.get_extra("background_task_result"):
+            # The message event is triggered after a background task done
+            result_text = bg.get("result") or ""
+            if req.func_tool is None:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+            if result_text:
+                req.system_prompt += f"\n[Background Task Result] {result_text}\n"
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str

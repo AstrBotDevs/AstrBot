@@ -58,6 +58,11 @@ const sidebarItem: menu[] = [
         to: '/subagent'
       },
       {
+        title: 'core.navigation.cron',
+        icon: 'mdi-clock-outline',
+        to: '/cron'
+      },
+      {
         title: 'core.navigation.conversation',
         icon: 'mdi-database',
         to: '/conversation'

@@ -10,6 +10,7 @@ from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db import BaseDatabase
@@ -65,6 +66,7 @@ class Context:
         persona_manager: PersonaManager,
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
+        cron_manager: CronJobManager,
     ):
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -86,6 +88,8 @@ class Context:
         """配置文件管理器(非webui)"""
         self.kb_manager = knowledge_base_manager
         """知识库管理器"""
+        self.cron_manager = cron_manager
+        """Cron job manager, initialized by core lifecycle."""
 
     async def llm_generate(
         self,

@@ -61,6 +61,7 @@ class SubAgentRoute(Route):
                 for a in data["agents"]:
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
+                        a.setdefault("persona_id", None)
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())

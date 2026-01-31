@@ -58,6 +58,11 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Whether the tool is active. This field is a special field for AstrBot.
     You can ignore it when integrating with other frameworks.
     """
+    is_background_task: bool = False
+    """
+    Declare this tool as a background task. Background tasks return immediately
+    with a task identifier while the real work continues asynchronously.
+    """
 
     def __repr__(self):
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"

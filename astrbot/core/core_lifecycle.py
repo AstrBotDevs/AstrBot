@@ -25,6 +25,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.cron import CronJobManager
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
@@ -57,6 +58,7 @@ class AstrBotCoreLifecycle:
         # Optional orchestrator that registers dynamic handoff tools (transfer_to_*)
         # from provider_settings.subagent_orchestrator.
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
+        self.cron_manager: CronJobManager | None = None
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -77,7 +79,7 @@ class AstrBotCoreLifecycle:
                 del os.environ["no_proxy"]
             logger.debug("HTTP proxy cleared")
 
-    def _init_or_reload_subagent_orchestrator(self) -> None:
+    async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
 
         This keeps lifecycle wiring in one place while allowing the orchestrator
@@ -87,8 +89,9 @@ class AstrBotCoreLifecycle:
             if self.subagent_orchestrator is None:
                 self.subagent_orchestrator = SubAgentOrchestrator(
                     self.provider_manager.llm_tools,
+                    self.persona_mgr,
                 )
-            self.subagent_orchestrator.reload_from_config(
+            await self.subagent_orchestrator.reload_from_config(
                 self.astrbot_config.get("subagent_orchestrator", {}),
             )
         except Exception as e:
@@ -159,6 +162,9 @@ class AstrBotCoreLifecycle:
         # 初始化知识库管理器
         self.kb_manager = KnowledgeBaseManager(self.provider_manager)
 
+        # 初始化 CronJob 管理器
+        self.cron_manager = CronJobManager(self.star_context, self.db)
+
         # 初始化提供给插件的上下文
         self.star_context = Context(
             self.event_queue,
@@ -171,6 +177,7 @@ class AstrBotCoreLifecycle:
             self.persona_mgr,
             self.astrbot_config_mgr,
             self.kb_manager,
+            self.cron_manager,
         )
 
         # 初始化插件管理器
@@ -198,7 +205,7 @@ class AstrBotCoreLifecycle:
         )
 
         # Dynamic subagents (handoff tools) from config.
-        self._init_or_reload_subagent_orchestrator()
+        await self._init_or_reload_subagent_orchestrator()
         # 记录启动时间
         self.start_time = int(time.time())
 
@@ -221,13 +228,21 @@ class AstrBotCoreLifecycle:
             self.event_bus.dispatch(),
             name="event_bus",
         )
+        cron_task = None
+        if self.cron_manager:
+            cron_task = asyncio.create_task(
+                self.cron_manager.start(),
+                name="cron_manager",
+            )
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *extra_tasks]
+        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        if cron_task:
+            tasks_.append(cron_task)
         for task in tasks_:
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
@@ -282,6 +297,9 @@ class AstrBotCoreLifecycle:
         # 请求停止所有正在运行的异步任务
         for task in self.curr_tasks:
             task.cancel()
+
+        if self.cron_manager:
+            await self.cron_manager.shutdown()
 
         for plugin in self.plugin_manager.context.get_all_stars():
             try:

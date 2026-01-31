@@ -8,6 +8,7 @@
   "toolUse": "MCP Tools",
   "config": "Config",
   "chat": "Chat",
+  "cron": "Cron Jobs",
   "extension": "Extensions",
   "conversation": "Conversations",
   "sessionManagement": "Custom Rules",

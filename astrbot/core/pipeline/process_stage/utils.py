@@ -14,6 +14,8 @@ from astrbot.core.computer.tools import (
     LocalPythonTool,
     PythonTool,
 )
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
 
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
@@ -128,6 +130,53 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         return result
 
 
+@dataclass
+class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
+    name: str = "send_message_to_user"
+    description: str = (
+        "Send a short, proactive message to the user. "
+        "Use this to deliver scheduled/background task results or important updates without waiting for a new user prompt."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "What you want to tell the user.",
+                },
+                "session": {
+                    "type": "string",
+                    "description": "Optional target session in format platform_id:message_type:session_id. Defaults to current session.",
+                },
+            },
+            "required": ["message"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        message = str(kwargs.get("message", "")).strip()
+        session = kwargs.get("session") or context.context.event.unified_msg_origin
+
+        if not message:
+            return "error: message is empty."
+
+        try:
+            target_session = (
+                MessageSession.from_str(session) if isinstance(session, str) else session
+            )
+        except Exception as e:
+            return f"error: invalid session: {e}"
+
+        await context.context.context.send_message(
+            target_session,
+            MessageChain().message(message),
+        )
+        return f"Message sent to session {target_session}"
+
+
 async def retrieve_knowledge_base(
     query: str,
     umo: str,
@@ -205,6 +254,7 @@ async def retrieve_knowledge_base(
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
+SEND_MESSAGE_TO_USER_TOOL = SendMessageToUserTool()
 
 EXECUTE_SHELL_TOOL = ExecuteShellTool()
 LOCAL_EXECUTE_SHELL_TOOL = ExecuteShellTool(is_local=True)
