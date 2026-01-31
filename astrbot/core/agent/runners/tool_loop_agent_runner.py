@@ -111,10 +111,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # See #4681
         self.tool_schema_mode = tool_schema_mode
         self._tool_schema_param_set = None
+        self._skill_like_raw_tool_set = None
         if tool_schema_mode == "skills_like":
             tool_set = self.req.func_tool
             if not tool_set:
                 return
+            self._skill_like_raw_tool_set = tool_set
             light_set = tool_set.get_light_tool_set()
             self._tool_schema_param_set = tool_set.get_param_only_tool_set()
             # MODIFIE the req.func_tool to use light tool schemas
@@ -379,7 +381,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 if not req.func_tool:
                     return
-                func_tool = req.func_tool.get_tool(func_tool_name)
+
+                if (
+                    self.tool_schema_mode == "skills_like"
+                    and self._skill_like_raw_tool_set
+                ):
+                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # so we need to get the tool from the raw tool set
+                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                else:
+                    func_tool = req.func_tool.get_tool(func_tool_name)
+
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
