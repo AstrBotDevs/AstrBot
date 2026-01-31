@@ -14,7 +14,6 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.message.components import Plain
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -24,6 +23,7 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 from ...register import register_platform_adapter
 from .cli_event import CLIMessageEvent
@@ -36,7 +36,7 @@ from .cli_event import CLIMessageEvent
         "type": "cli",
         "enable": False,  # 默认关闭，开发时手动启用
         "mode": "socket",  # 默认使用Socket模式
-        "socket_path": "/tmp/astrbot.sock",
+        "socket_path": None,  # None表示使用动态路径(temp_dir/astrbot.sock)
         "whitelist": [],  # 空白名单表示允许所有
         "use_isolated_sessions": False,  # 是否启用会话隔离（每个请求独立会话）
         "session_ttl": 30,  # 会话过期时间（秒），仅在use_isolated_sessions=True时生效，测试用30秒，生产建议1800秒（30分钟）
@@ -104,10 +104,12 @@ class CLIPlatformAdapter(Platform):
 
         # 文件I/O配置
         self.input_file = platform_config.get(
-            "input_file", "/tmp/astrbot_cli/input.txt"
+            "input_file",
+            os.path.join(get_astrbot_temp_path(), "astrbot_cli", "input.txt"),
         )
         self.output_file = platform_config.get(
-            "output_file", "/tmp/astrbot_cli/output.txt"
+            "output_file",
+            os.path.join(get_astrbot_temp_path(), "astrbot_cli", "output.txt"),
         )
         self.poll_interval = platform_config.get("poll_interval", 1.0)
 
@@ -519,11 +521,39 @@ class CLIPlatformAdapter(Platform):
                                     )
                                     image_info["error"] = str(e)
                             elif comp.file.startswith("base64://"):
-                                image_info["type"] = "base64"
-                                # 返回完整的base64数据
-                                base64_data = comp.file[9:]
-                                image_info["base64_data"] = base64_data
-                                image_info["base64_length"] = len(base64_data)
+                                # 将base64数据保存到临时文件，避免在JSON中暴露大量数据
+                                try:
+                                    import base64
+                                    import os
+                                    import tempfile
+
+                                    base64_data = comp.file[9:]
+                                    image_data = base64.b64decode(base64_data)
+
+                                    # 生成临时文件路径
+                                    temp_dir = get_astrbot_temp_path()
+                                    os.makedirs(temp_dir, exist_ok=True)
+                                    temp_file = tempfile.NamedTemporaryFile(
+                                        delete=False,
+                                        suffix=".png",
+                                        dir=temp_dir,
+                                    )
+                                    temp_file.write(image_data)
+                                    temp_file.close()
+
+                                    image_info["type"] = "file"
+                                    image_info["path"] = temp_file.name
+                                    image_info["size"] = len(image_data)
+                                    logger.debug(
+                                        f"[PROCESS] Saved base64 image to file: {temp_file.name}, size: {len(image_data)} bytes"
+                                    )
+                                except Exception as e:
+                                    logger.error(
+                                        f"[ERROR] Failed to save base64 image: {e}"
+                                    )
+                                    image_info["type"] = "base64"
+                                    image_info["error"] = str(e)
+                                    image_info["base64_length"] = len(base64_data)
                         images.append(image_info)
 
                 # 发送成功响应

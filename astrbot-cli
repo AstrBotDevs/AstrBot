@@ -100,10 +100,23 @@ def send_message(
         request_data = json.dumps(request, ensure_ascii=False).encode("utf-8")
         client_socket.sendall(request_data)
 
-        # 接收响应
-        response_data = client_socket.recv(4096)
-        response = json.loads(response_data.decode("utf-8"))
+        # 接收响应（循环接收所有数据，支持大响应如base64图片）
+        response_data = b""
+        while True:
+            chunk = client_socket.recv(4096)
+            if not chunk:
+                break
+            response_data += chunk
+            # 尝试解析JSON，如果成功说明接收完整
+            try:
+                response = json.loads(response_data.decode("utf-8"))
+                return response
+            except json.JSONDecodeError:
+                # JSON不完整，继续接收
+                continue
 
+        # 如果循环结束仍未成功解析，尝试最后一次
+        response = json.loads(response_data.decode("utf-8"))
         return response
 
     except TimeoutError:
