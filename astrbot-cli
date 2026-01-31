@@ -15,7 +15,25 @@ import sys
 import uuid
 
 
-def send_message(message: str, socket_path: str = "/tmp/astrbot.sock", timeout: float = 30.0) -> dict:
+def load_auth_token() -> str:
+    """从密钥文件加载认证token
+
+    Returns:
+        token字符串,如果文件不存在则返回空字符串
+    """
+    token_file = "/AstrBot/data/.cli_token"
+    try:
+        with open(token_file, encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+    except Exception:
+        return ""
+
+
+def send_message(
+    message: str, socket_path: str = "/tmp/astrbot.sock", timeout: float = 30.0
+) -> dict:
     """发送消息到AstrBot并获取响应
 
     Args:
@@ -26,11 +44,15 @@ def send_message(message: str, socket_path: str = "/tmp/astrbot.sock", timeout: 
     Returns:
         响应字典
     """
+    # 加载认证token
+    auth_token = load_auth_token()
+
     # 创建请求
-    request = {
-        "message": message,
-        "request_id": str(uuid.uuid4())
-    }
+    request = {"message": message, "request_id": str(uuid.uuid4())}
+
+    # 如果token存在,添加到请求中
+    if auth_token:
+        request["auth_token"] = auth_token
 
     # 连接到Unix socket
     try:
@@ -40,40 +62,31 @@ def send_message(message: str, socket_path: str = "/tmp/astrbot.sock", timeout: 
     except FileNotFoundError:
         return {
             "status": "error",
-            "error": f"Socket file not found: {socket_path}. Is AstrBot running?"
+            "error": f"Socket file not found: {socket_path}. Is AstrBot running?",
         }
     except ConnectionRefusedError:
         return {
             "status": "error",
-            "error": "Connection refused. Is AstrBot running in socket mode?"
+            "error": "Connection refused. Is AstrBot running in socket mode?",
         }
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Connection error: {e}"
-        }
+        return {"status": "error", "error": f"Connection error: {e}"}
 
     try:
         # 发送请求
-        request_data = json.dumps(request, ensure_ascii=False).encode('utf-8')
+        request_data = json.dumps(request, ensure_ascii=False).encode("utf-8")
         client_socket.sendall(request_data)
 
         # 接收响应
         response_data = client_socket.recv(4096)
-        response = json.loads(response_data.decode('utf-8'))
+        response = json.loads(response_data.decode("utf-8"))
 
         return response
 
-    except socket.timeout:
-        return {
-            "status": "error",
-            "error": "Request timeout"
-        }
+    except TimeoutError:
+        return {"status": "error", "error": "Request timeout"}
     except Exception as e:
-        return {
-            "status": "error",
-            "error": f"Communication error: {e}"
-        }
+        return {"status": "error", "error": f"Communication error: {e}"}
     finally:
         client_socket.close()
 
@@ -89,32 +102,30 @@ Examples:
   astrbot-cli "/help"
   astrbot-cli --socket /tmp/custom.sock "测试消息"
   echo "你好" | astrbot-cli
-        """
+        """,
     )
 
     parser.add_argument(
-        "message",
-        nargs="?",
-        help="Message to send (if not provided, read from stdin)"
+        "message", nargs="?", help="Message to send (if not provided, read from stdin)"
     )
 
     parser.add_argument(
-        "-s", "--socket",
+        "-s",
+        "--socket",
         default="/tmp/astrbot.sock",
-        help="Unix socket path (default: /tmp/astrbot.sock)"
+        help="Unix socket path (default: /tmp/astrbot.sock)",
     )
 
     parser.add_argument(
-        "-t", "--timeout",
+        "-t",
+        "--timeout",
         type=float,
         default=30.0,
-        help="Timeout in seconds (default: 30.0)"
+        help="Timeout in seconds (default: 30.0)",
     )
 
     parser.add_argument(
-        "-j", "--json",
-        action="store_true",
-        help="Output raw JSON response"
+        "-j", "--json", action="store_true", help="Output raw JSON response"
     )
 
     args = parser.parse_args()

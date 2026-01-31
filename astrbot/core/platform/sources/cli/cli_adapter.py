@@ -38,7 +38,7 @@ from .cli_event import CLIMessageEvent
         "socket_path": "/tmp/astrbot.sock",
         "whitelist": [],  # 空白名单表示允许所有
         "use_isolated_sessions": False,  # 是否启用会话隔离（每个请求独立会话）
-        "session_ttl": 30  # 会话过期时间（秒），仅在use_isolated_sessions=True时生效，测试用30秒，生产建议1800秒（30分钟）
+        "session_ttl": 30,  # 会话过期时间（秒），仅在use_isolated_sessions=True时生效，测试用30秒，生产建议1800秒（30分钟）
     },
     support_streaming_message=False,
 )
@@ -69,11 +69,12 @@ class CLIPlatformAdapter(Platform):
         # 尝试从独立配置文件加载CLI配置
         import json
         import os
-        config_file = platform_config.get('config_file', 'cli_config.json')
+
+        config_file = platform_config.get("config_file", "cli_config.json")
         cli_config_path = f"/AstrBot/data/{config_file}"
         if os.path.exists(cli_config_path):
             try:
-                with open(cli_config_path, 'r', encoding='utf-8') as f:
+                with open(cli_config_path, encoding="utf-8") as f:
                     cli_config = json.load(f)
                     # 使用独立配置文件中的配置覆盖传入的参数
                     if "platform_config" in cli_config:
@@ -82,9 +83,13 @@ class CLIPlatformAdapter(Platform):
                         platform_settings = cli_config["platform_settings"]
                     logger.info("[PROCESS] Loaded CLI config from %s", cli_config_path)
             except Exception as e:
-                logger.warning("[WARN] Failed to load CLI config from %s: %s", cli_config_path, e)
+                logger.warning(
+                    "[WARN] Failed to load CLI config from %s: %s", cli_config_path, e
+                )
 
-        logger.info("[ENTRY] CLIPlatformAdapter.__init__ inputs={config=%s}", platform_config)
+        logger.info(
+            "[ENTRY] CLIPlatformAdapter.__init__ inputs={config=%s}", platform_config
+        )
 
         self.settings = platform_settings
         self.session_id = "cli_session"
@@ -92,19 +97,30 @@ class CLIPlatformAdapter(Platform):
         self.user_nickname = "CLI User"
 
         # 运行模式配置
-        self.mode = platform_config.get("mode", "auto")  # "auto", "tty", "file", "socket"
+        self.mode = platform_config.get(
+            "mode", "auto"
+        )  # "auto", "tty", "file", "socket"
 
         # 文件I/O配置
-        self.input_file = platform_config.get("input_file", "/tmp/astrbot_cli/input.txt")
-        self.output_file = platform_config.get("output_file", "/tmp/astrbot_cli/output.txt")
+        self.input_file = platform_config.get(
+            "input_file", "/tmp/astrbot_cli/input.txt"
+        )
+        self.output_file = platform_config.get(
+            "output_file", "/tmp/astrbot_cli/output.txt"
+        )
         self.poll_interval = platform_config.get("poll_interval", 1.0)
 
         # Unix Socket配置
         self.socket_path = platform_config.get("socket_path", "/tmp/astrbot.sock")
 
+        # Token认证配置
+        self.auth_token = self._ensure_auth_token()
+
         # 会话隔离配置
         self.use_isolated_sessions = platform_config.get("use_isolated_sessions", False)
-        self.session_ttl = platform_config.get("session_ttl", 30)  # 默认30秒（测试），生产建议1800秒
+        self.session_ttl = platform_config.get(
+            "session_ttl", 30
+        )  # 默认30秒（测试），生产建议1800秒
 
         self.metadata = PlatformMetadata(
             name="cli",
@@ -130,6 +146,57 @@ class CLIPlatformAdapter(Platform):
         """
         logger.info("[ENTRY] CLIPlatformAdapter.run inputs={}")
         return self._run_loop()
+
+    def _ensure_auth_token(self) -> str | None:
+        """[原子模块] TokenManager: 确保认证token存在,不存在则自动生成
+
+        I/O契约:
+            Input: None
+            Output: str | None (token字符串或None)
+        """
+        import os
+        import secrets
+
+        token_file = "/AstrBot/data/.cli_token"
+
+        logger.debug("[ENTRY] _ensure_auth_token inputs={}")
+
+        try:
+            # 如果token文件已存在,直接读取
+            if os.path.exists(token_file):
+                with open(token_file, encoding="utf-8") as f:
+                    token = f.read().strip()
+
+                if token:
+                    logger.info("[SECURITY] Authentication token loaded from file")
+                    logger.debug(
+                        "[EXIT] _ensure_auth_token return={token_length=%d}", len(token)
+                    )
+                    return token
+                else:
+                    logger.warning("[SECURITY] Token file is empty, regenerating")
+
+            # 首次启动或token为空,自动生成新token
+            token = secrets.token_urlsafe(32)
+
+            # 写入文件
+            with open(token_file, "w", encoding="utf-8") as f:
+                f.write(token)
+
+            # 设置严格权限(仅所有者可读写)
+            os.chmod(token_file, 0o600)
+
+            logger.info("[SECURITY] Generated new authentication token: %s", token)
+            logger.info("[SECURITY] Token saved to: %s (permissions: 600)", token_file)
+            logger.debug(
+                "[EXIT] _ensure_auth_token return={token_length=%d}", len(token)
+            )
+            return token
+
+        except Exception as e:
+            logger.error("[ERROR] Failed to ensure token: %s", e)
+            logger.warning("[SECURITY] Authentication disabled due to token error")
+            return None
 
     async def _run_loop(self) -> None:
         """主运行循环
@@ -185,12 +252,12 @@ class CLIPlatformAdapter(Platform):
         """TTY交互模式"""
         self._running = True
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("AstrBot CLI Simulator")
-        print("="*60)
+        print("=" * 60)
         print("Type your message and press Enter to send.")
         print("Type 'exit' or 'quit' to stop.")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
         # 启动输出监听器
         output_task = asyncio.create_task(self._output_monitor("tty"))
@@ -224,7 +291,6 @@ class CLIPlatformAdapter(Platform):
     async def _run_file_mode(self) -> None:
         """文件轮询模式"""
         import os
-        import time
 
         self._running = True
 
@@ -234,10 +300,10 @@ class CLIPlatformAdapter(Platform):
 
         # 创建输入文件（如果不存在）
         if not os.path.exists(self.input_file):
-            with open(self.input_file, 'w') as f:
+            with open(self.input_file, "w") as f:
                 f.write("")
 
-        logger.info(f"[PROCESS] File mode started")
+        logger.info("[PROCESS] File mode started")
         logger.info(f"[PROCESS] Input file: {self.input_file}")
         logger.info(f"[PROCESS] Output file: {self.output_file}")
         logger.info(f"[PROCESS] Poll interval: {self.poll_interval}s")
@@ -278,7 +344,6 @@ class CLIPlatformAdapter(Platform):
         """
         import os
         import socket
-        import json
 
         self._running = True
 
@@ -340,20 +405,49 @@ class CLIPlatformAdapter(Platform):
 
             # 解析JSON请求
             try:
-                request = json.loads(data.decode('utf-8'))
-                message_text = request.get('message', '')
-                request_id = request.get('request_id', str(uuid.uuid4()))
+                request = json.loads(data.decode("utf-8"))
+                message_text = request.get("message", "")
+                request_id = request.get("request_id", str(uuid.uuid4()))
+                auth_token = request.get("auth_token", "")
 
-                logger.info(f"[PROCESS] Received socket request: {message_text[:50]}...")
+                logger.info(
+                    f"[PROCESS] Received socket request: {message_text[:50]}..."
+                )
 
             except json.JSONDecodeError as e:
                 logger.error(f"[ERROR] Invalid JSON request: {e}")
-                error_response = json.dumps({
-                    'status': 'error',
-                    'error': 'Invalid JSON format'
-                })
-                await loop.sock_sendall(client_socket, error_response.encode('utf-8'))
+                error_response = json.dumps(
+                    {"status": "error", "error": "Invalid JSON format"}
+                )
+                await loop.sock_sendall(client_socket, error_response.encode("utf-8"))
                 return
+
+            # Token验证
+            if self.auth_token:
+                if not auth_token:
+                    logger.warning("[SECURITY] Request rejected: missing auth_token")
+                    error_response = json.dumps(
+                        {"status": "error", "error": "Unauthorized: missing token"}
+                    )
+                    await loop.sock_sendall(
+                        client_socket, error_response.encode("utf-8")
+                    )
+                    return
+
+                if auth_token != self.auth_token:
+                    logger.warning(
+                        "[SECURITY] Request rejected: invalid auth_token (length=%d)",
+                        len(auth_token),
+                    )
+                    error_response = json.dumps(
+                        {"status": "error", "error": "Unauthorized: invalid token"}
+                    )
+                    await loop.sock_sendall(
+                        client_socket, error_response.encode("utf-8")
+                    )
+                    return
+
+                logger.debug("[SECURITY] Token validation passed")
 
             # 创建响应Future
             response_future = asyncio.Future()
@@ -383,6 +477,7 @@ class CLIPlatformAdapter(Platform):
 
                 # 提取图片
                 from astrbot.core.message.components import Image
+
                 images = []
                 for comp in message_chain.chain:
                     if isinstance(comp, Image):
@@ -399,14 +494,21 @@ class CLIPlatformAdapter(Platform):
                                 # 立即读取文件内容并转换为base64（避免临时文件被删除）
                                 try:
                                     import base64
-                                    with open(file_path, 'rb') as f:
+
+                                    with open(file_path, "rb") as f:
                                         image_data = f.read()
-                                        base64_data = base64.b64encode(image_data).decode('utf-8')
+                                        base64_data = base64.b64encode(
+                                            image_data
+                                        ).decode("utf-8")
                                         image_info["base64_data"] = base64_data
                                         image_info["size"] = len(image_data)
-                                        logger.debug(f"[PROCESS] Read image file: {file_path}, size: {len(image_data)} bytes")
+                                        logger.debug(
+                                            f"[PROCESS] Read image file: {file_path}, size: {len(image_data)} bytes"
+                                        )
                                 except Exception as e:
-                                    logger.error(f"[ERROR] Failed to read image file {file_path}: {e}")
+                                    logger.error(
+                                        f"[ERROR] Failed to read image file {file_path}: {e}"
+                                    )
                                     image_info["error"] = str(e)
                             elif comp.file.startswith("base64://"):
                                 image_info["type"] = "base64"
@@ -417,28 +519,34 @@ class CLIPlatformAdapter(Platform):
                         images.append(image_info)
 
                 # 发送成功响应
-                response = json.dumps({
-                    'status': 'success',
-                    'response': response_text,
-                    'images': images,
-                    'request_id': request_id
-                }, ensure_ascii=False)
+                response = json.dumps(
+                    {
+                        "status": "success",
+                        "response": response_text,
+                        "images": images,
+                        "request_id": request_id,
+                    },
+                    ensure_ascii=False,
+                )
 
-                await loop.sock_sendall(client_socket, response.encode('utf-8'))
+                await loop.sock_sendall(client_socket, response.encode("utf-8"))
                 logger.info(f"[PROCESS] Sent response for request {request_id}")
 
             except asyncio.TimeoutError:
                 logger.error(f"[ERROR] Request {request_id} timeout")
-                error_response = json.dumps({
-                    'status': 'error',
-                    'error': 'Request timeout',
-                    'request_id': request_id
-                })
-                await loop.sock_sendall(client_socket, error_response.encode('utf-8'))
+                error_response = json.dumps(
+                    {
+                        "status": "error",
+                        "error": "Request timeout",
+                        "request_id": request_id,
+                    }
+                )
+                await loop.sock_sendall(client_socket, error_response.encode("utf-8"))
 
         except Exception as e:
             logger.error(f"[ERROR] Socket client handler error: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
 
         finally:
@@ -475,17 +583,17 @@ class CLIPlatformAdapter(Platform):
                 return []
 
             # 读取文件内容
-            with open(self.input_file, 'r', encoding='utf-8') as f:
+            with open(self.input_file, encoding="utf-8") as f:
                 content = f.read().strip()
 
             if not content:
                 return []
 
             # 按行分割命令
-            commands = [line.strip() for line in content.split('\n') if line.strip()]
+            commands = [line.strip() for line in content.split("\n") if line.strip()]
 
             # 清空输入文件
-            with open(self.input_file, 'w', encoding='utf-8') as f:
+            with open(self.input_file, "w", encoding="utf-8") as f:
                 f.write("")
 
             logger.debug(f"[EXIT] _read_from_file return={len(commands)} commands")
@@ -502,7 +610,9 @@ class CLIPlatformAdapter(Platform):
             Input: str (原始文本), request_id (可选，用于会话隔离)
             Output: AstrBotMessage (标准消息对象)
         """
-        logger.debug("[ENTRY] _convert_input inputs={text=%s, request_id=%s}", text, request_id)
+        logger.debug(
+            "[ENTRY] _convert_input inputs={text=%s, request_id=%s}", text, request_id
+        )
 
         message = AstrBotMessage()
         message.self_id = "cli_bot"
@@ -512,6 +622,7 @@ class CLIPlatformAdapter(Platform):
 
         # 添加message_id属性，避免插件访问时出错
         import uuid
+
         message.message_id = str(uuid.uuid4())
 
         # 根据配置决定是否使用会话隔离
@@ -522,9 +633,12 @@ class CLIPlatformAdapter(Platform):
 
             # 记录会话创建时间（用于过期清理）
             import time
+
             if session_id not in self._session_timestamps:
                 self._session_timestamps[session_id] = time.time()
-                logger.debug(f"[PROCESS] Created isolated session: {session_id}, TTL={self.session_ttl}s")
+                logger.debug(
+                    f"[PROCESS] Created isolated session: {session_id}, TTL={self.session_ttl}s"
+                )
         else:
             # 默认模式：使用固定会话ID
             message.session_id = self.session_id
@@ -555,7 +669,9 @@ class CLIPlatformAdapter(Platform):
             output_queue=self._output_queue,
         )
 
-        logger.info("[PROCESS] Committing event to queue: session_id=%s", message.session_id)
+        logger.info(
+            "[PROCESS] Committing event to queue: session_id=%s", message.session_id
+        )
 
         # 提交到事件队列
         self.commit_event(message_event)
@@ -578,8 +694,7 @@ class CLIPlatformAdapter(Platform):
             try:
                 # 从输出队列获取响应
                 message_chain = await asyncio.wait_for(
-                    self._output_queue.get(),
-                    timeout=0.5
+                    self._output_queue.get(), timeout=0.5
                 )
 
                 # 根据模式选择输出方式
@@ -628,7 +743,7 @@ class CLIPlatformAdapter(Platform):
             output_line = f"[{timestamp}] Bot: {text}\n"
 
             # 追加到输出文件
-            with open(self.output_file, 'a', encoding='utf-8') as f:
+            with open(self.output_file, "a", encoding="utf-8") as f:
                 f.write(output_line)
 
             logger.info(f"[PROCESS] Output written to file: {self.output_file}")
@@ -674,7 +789,10 @@ class CLIPlatformAdapter(Platform):
         """
         import time
 
-        logger.info("[ENTRY] _cleanup_expired_sessions started, TTL=%s seconds", self.session_ttl)
+        logger.info(
+            "[ENTRY] _cleanup_expired_sessions started, TTL=%s seconds",
+            self.session_ttl,
+        )
 
         while self._running:
             try:
@@ -700,7 +818,9 @@ class CLIPlatformAdapter(Platform):
                     # await self.context.db.delete_platform_session(session_id)
 
                 if expired_sessions:
-                    logger.info(f"[PROCESS] Cleaned {len(expired_sessions)} expired sessions")
+                    logger.info(
+                        f"[PROCESS] Cleaned {len(expired_sessions)} expired sessions"
+                    )
 
             except Exception as e:
                 logger.error(f"[ERROR] Session cleanup error: {e}")
