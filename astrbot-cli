@@ -10,9 +10,28 @@ AstrBot CLI Tool - Unix Socket客户端
 
 import argparse
 import json
+import os
 import socket
 import sys
 import uuid
+
+
+def get_data_path() -> str:
+    """获取数据目录路径,兼容容器和非容器环境"""
+    # 优先使用环境变量
+    if root := os.environ.get("ASTRBOT_ROOT"):
+        return os.path.join(root, "data")
+    # 默认路径
+    return os.path.join(os.getcwd(), "data")
+
+
+def get_temp_path() -> str:
+    """获取临时目录路径,兼容容器和非容器环境"""
+    # 优先使用环境变量
+    if root := os.environ.get("ASTRBOT_ROOT"):
+        return os.path.join(root, "data", "temp")
+    # 默认使用系统临时目录
+    return "/tmp"
 
 
 def load_auth_token() -> str:
@@ -21,7 +40,7 @@ def load_auth_token() -> str:
     Returns:
         token字符串,如果文件不存在则返回空字符串
     """
-    token_file = "/AstrBot/data/.cli_token"
+    token_file = os.path.join(get_data_path(), ".cli_token")
     try:
         with open(token_file, encoding="utf-8") as f:
             return f.read().strip()
@@ -32,18 +51,22 @@ def load_auth_token() -> str:
 
 
 def send_message(
-    message: str, socket_path: str = "/tmp/astrbot.sock", timeout: float = 30.0
+    message: str, socket_path: str | None = None, timeout: float = 30.0
 ) -> dict:
     """发送消息到AstrBot并获取响应
 
     Args:
         message: 要发送的消息
-        socket_path: Unix socket路径
+        socket_path: Unix socket路径(默认使用临时目录下的astrbot.sock)
         timeout: 超时时间（秒）
 
     Returns:
         响应字典
     """
+    # 使用默认socket路径
+    if socket_path is None:
+        socket_path = os.path.join(get_temp_path(), "astrbot.sock")
+
     # 加载认证token
     auth_token = load_auth_token()
 
@@ -112,8 +135,8 @@ Examples:
     parser.add_argument(
         "-s",
         "--socket",
-        default="/tmp/astrbot.sock",
-        help="Unix socket path (default: /tmp/astrbot.sock)",
+        default=None,
+        help="Unix socket path (default: {temp_dir}/astrbot.sock)",
     )
 
     parser.add_argument(

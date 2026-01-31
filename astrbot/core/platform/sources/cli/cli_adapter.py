@@ -14,6 +14,7 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core.message.components import Plain
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -71,7 +72,7 @@ class CLIPlatformAdapter(Platform):
         import os
 
         config_file = platform_config.get("config_file", "cli_config.json")
-        cli_config_path = f"/AstrBot/data/{config_file}"
+        cli_config_path = os.path.join(get_astrbot_data_path(), config_file)
         if os.path.exists(cli_config_path):
             try:
                 with open(cli_config_path, encoding="utf-8") as f:
@@ -111,7 +112,9 @@ class CLIPlatformAdapter(Platform):
         self.poll_interval = platform_config.get("poll_interval", 1.0)
 
         # Unix Socket配置
-        self.socket_path = platform_config.get("socket_path", "/tmp/astrbot.sock")
+        self.socket_path = platform_config.get(
+            "socket_path", os.path.join(get_astrbot_temp_path(), "astrbot.sock")
+        )
 
         # Token认证配置
         self.auth_token = self._ensure_auth_token()
@@ -157,7 +160,7 @@ class CLIPlatformAdapter(Platform):
         import os
         import secrets
 
-        token_file = "/AstrBot/data/.cli_token"
+        token_file = os.path.join(get_astrbot_data_path(), ".cli_token")
 
         logger.debug("[ENTRY] _ensure_auth_token inputs={}")
 
@@ -355,6 +358,11 @@ class CLIPlatformAdapter(Platform):
         # 创建Unix socket
         server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server_socket.bind(self.socket_path)
+
+        # 设置严格权限(仅所有者可访问)
+        os.chmod(self.socket_path, 0o600)
+        logger.info(f"[SECURITY] Socket permissions set to 600: {self.socket_path}")
+
         server_socket.listen(5)
         server_socket.setblocking(False)
 
@@ -364,7 +372,7 @@ class CLIPlatformAdapter(Platform):
             while self._running:
                 try:
                     # 接受连接（非阻塞）
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     client_socket, _ = await loop.sock_accept(server_socket)
 
                     # 处理连接（异步）
@@ -395,7 +403,7 @@ class CLIPlatformAdapter(Platform):
         logger.debug("[ENTRY] _handle_socket_client")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
 
             # 接收请求数据
             data = await loop.sock_recv(client_socket, 4096)
@@ -563,7 +571,7 @@ class CLIPlatformAdapter(Platform):
         logger.debug("[ENTRY] _read_input inputs={}")
 
         # 使用asyncio在事件循环中运行阻塞的input()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user_input = await loop.run_in_executor(None, input, "You: ")
 
         logger.debug("[EXIT] _read_input return={input=%s}", user_input)
