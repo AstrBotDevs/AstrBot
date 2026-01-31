@@ -54,6 +54,7 @@ class EventBus:
             event (AstrMessageEvent): 事件对象
 
         """
+        event.trace.record("event_dispatch", config_name=conf_name)
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
