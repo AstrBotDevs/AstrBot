@@ -463,6 +463,7 @@ class Context:
                     _parts.append(part)
                     if part in flags and i + 1 < len(module_part):
                         _parts.append(module_part[i + 1])
+                        module_part.append("main")
                         break
                 tool.handler_module_path = ".".join(_parts)
                 module_path = tool.handler_module_path
