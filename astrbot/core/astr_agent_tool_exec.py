@@ -22,6 +22,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.message.components import Plain
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -147,6 +148,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_id: str,
         **tool_args,
     ):
+        from astrbot.core.astr_main_agent import build_main_agent, MainAgentBuildConfig
+
         # run the tool
         result_text = ""
         try:
@@ -187,7 +190,48 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             extras=extras,
             message_type=session.message_type,
         )
-        ctx.get_event_queue().put_nowait(cron_event)
+        config = MainAgentBuildConfig(tool_call_timeout=3600)
+        result = await build_main_agent(
+            event=cron_event, plugin_context=ctx, config=config
+        )
+        if not result:
+            logger.error("Failed to build main agent for cron job.")
+            return
+        runner = result.agent_runner
+        req = result.provider_request
+
+        bg = extras["background_task_result"]
+        result_text = bg["result"] or "Empty Response"
+        if req.contexts:
+            context_dump = req._print_friendly_context()
+            req.system_prompt += (
+                "\n\nBellow is you and user previous conversation history:\n"
+                f"{context_dump}"
+            )
+        req.system_prompt += (
+            "You now have a new background task result:\n"
+            f"- Task ID: {bg['task_id']}\n"
+            f"- Executed Tool: {tool.name}\n"
+            f"- Tool Args: {tool_args}\n"
+            f"- Result: {result_text}\n"
+            f"- Note: {note}\n"
+            "Please tell the user the result of the background task in your next response."
+        )
+
+        req.prompt = (
+            "You have a new background task result to report to the user."
+            " Please include the result in your next response."
+            " Using same language as previous conversation."
+        )
+
+        async for _ in runner.step_until_done(30):
+            pass
+        llm_resp = runner.get_final_llm_resp()
+        if not llm_resp:
+            logger.warning("Cron job agent got no response")
+            return
+        message_chain = MessageChain(chain=[Plain(text=llm_resp.completion_text)])
+        await ctx.send_message(session=session, message_chain=message_chain)
 
     @classmethod
     async def _execute_local(

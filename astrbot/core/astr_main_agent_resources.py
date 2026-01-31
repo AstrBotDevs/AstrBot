@@ -165,7 +165,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         try:
             target_session = (
-                MessageSession.from_str(session) if isinstance(session, str) else session
+                MessageSession.from_str(session)
+                if isinstance(session, str)
+                else session
             )
         except Exception as e:
             return f"error: invalid session: {e}"

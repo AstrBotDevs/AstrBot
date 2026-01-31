@@ -11,20 +11,27 @@ from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.components import Plain
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.core.star.context import Context
 
 
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""
 
-    def __init__(self, ctx, db: BaseDatabase):
-        self.ctx = ctx
+    def __init__(self, db: BaseDatabase):
         self.db = db
         self.scheduler = AsyncIOScheduler()
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
         self._started = False
 
-    async def start(self):
+    async def start(self, ctx: "Context"):
+        self.ctx: Context = ctx  # star context
         async with self._lock:
             if self._started:
                 return
@@ -219,19 +226,21 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        await self._dispatch_agent_event(
+        await self._woke_main_agent(
             message=note,
             session_str=session_str,
             extras=extras,
         )
 
-    async def _dispatch_agent_event(
+    async def _woke_main_agent(
         self,
         *,
         message: str,
         session_str: str,
-        extras: dict | None = None,
+        extras: dict,
     ):
+        from astrbot.core.astr_main_agent import build_main_agent, MainAgentBuildConfig
+
         try:
             session = (
                 session_str
@@ -250,7 +259,43 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        await self.ctx.get_event_queue().put(cron_event)
+        config = MainAgentBuildConfig(tool_call_timeout=3600)
+        result = await build_main_agent(
+            event=cron_event, plugin_context=self.ctx, config=config
+        )
+        if not result:
+            logger.error("Failed to build main agent for cron job.")
+            return
+        req = result.provider_request
+        runner = result.agent_runner
+
+        # finetine the messages
+        job_name = extras.get("name", "scheduled task")
+        note = extras.get("note") or extras.get("description") or ""
+        if req.contexts:
+            context_dump = req._print_friendly_context()
+            req.system_prompt += (
+                "\n\nBellow is you and user previous conversation history:\n"
+                f"{context_dump}"
+            )
+        req.system_prompt += (
+            "\n[Scheduler Context] This turn is triggered automatically by cron job "
+            f'"{job_name}" (type: {extras.get("type", "unknown")}). '
+            "Act proactively based on the provided note and current context. "
+        )
+        if note:
+            req.system_prompt += f"[Scheduler Note]: {note}\n"
+
+        req.prompt = "You are now responding to a scheduled task. Output using same language as previous conversation."
+
+        async for _ in runner.step_until_done(30):
+            pass
+        llm_resp = runner.get_final_llm_resp()
+        if not llm_resp:
+            logger.warning("Cron job agent got no response")
+            return
+        message_chain = MessageChain(chain=[Plain(text=llm_resp.completion_text)])
+        await self.ctx.send_message(session=session, message_chain=message_chain)
 
 
 __all__ = ["CronJobManager"]

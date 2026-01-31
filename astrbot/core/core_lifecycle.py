@@ -163,7 +163,7 @@ class AstrBotCoreLifecycle:
         self.kb_manager = KnowledgeBaseManager(self.provider_manager)
 
         # 初始化 CronJob 管理器
-        self.cron_manager = CronJobManager(self.star_context, self.db)
+        self.cron_manager = CronJobManager(self.db)
 
         # 初始化提供给插件的上下文
         self.star_context = Context(
@@ -231,7 +231,7 @@ class AstrBotCoreLifecycle:
         cron_task = None
         if self.cron_manager:
             cron_task = asyncio.create_task(
-                self.cron_manager.start(),
+                self.cron_manager.start(self.star_context),
                 name="cron_manager",
             )
 
