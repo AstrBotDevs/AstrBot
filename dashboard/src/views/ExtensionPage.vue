@@ -399,7 +399,7 @@ const confirmImportCollection = async () => {
 
   collectionImport.importing = true;
   try {
-    const proxy = getSelectedGitHubProxy();
+    const proxy = collectionImport.proxy;
     const payload = {
       collection: collectionImport.validatedCollection,
       import_mode: collectionImport.mode,
@@ -2800,10 +2800,10 @@ watch(
           <div class="mt-2">
             {{
               tm('collection.result.priorityApplied', {
-                count: collectionImport.result.priority_persisted
+                count: collectionImport.result.priority_persisted === true
                   ? tm('collection.result.yes')
-                  : collectionImport.result.priority_applied_in_memory
-                    ? tm('collection.result.no')
+                  : collectionImport.result.priority_applied_in_memory === true
+                    ? 'yes (in memory)'
                     : tm('collection.result.no'),
               })
             }}
