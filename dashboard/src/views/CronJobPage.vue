@@ -2,7 +2,10 @@
   <div class="cron-page">
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
-        <h2 class="text-h5 font-weight-bold">未来任务管理</h2>
+        <div class="d-flex align-center" style="gap: 8px;">
+          <h2 class="text-h5 font-weight-bold">未来任务管理</h2>
+          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>Beta</v-chip>
+        </div>
         <div class="text-body-2 text-medium-emphasis">查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。</div>
       </div>
       <div class="d-flex align-center" style="gap: 8px;">
@@ -18,14 +21,8 @@
 
         <v-alert v-if="!jobs.length && !loading" type="info" variant="tonal">暂无任务。</v-alert>
 
-        <v-data-table
-          :items="jobs"
-          :headers="headers"
-          :loading="loading"
-          item-key="job_id"
-          density="comfortable"
-          class="elevation-0"
-        >
+        <v-data-table :items="jobs" :headers="headers" :loading="loading" item-key="job_id" density="comfortable"
+          class="elevation-0">
           <template #item.name="{ item }">
             <div class="font-weight-medium">{{ item.name }}</div>
             <div class="text-caption text-medium-emphasis">{{ item.description }}</div>
@@ -42,14 +39,8 @@
           <template #item.note="{ item }">{{ item.note || '—' }}</template>
           <template #item.actions="{ item }">
             <div class="d-flex" style="gap: 8px;">
-              <v-switch
-                v-model="item.enabled"
-                inset
-                density="compact"
-                hide-details
-                color="primary"
-                @change="toggleJob(item)"
-              />
+              <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
+                @change="toggleJob(item)" />
               <v-btn size="small" variant="text" color="primary" @click="deleteJob(item)">删除</v-btn>
             </div>
           </template>
@@ -73,12 +64,12 @@ const jobs = ref<any[]>([])
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
 const headers = [
-  { title: '名称', key: 'name', minWidth: 200 },
+  { title: '名称', key: 'name', minWidth: '200px' },
   { title: '类型', key: 'type', width: 110 },
-  { title: 'Cron', key: 'cron_expression', minWidth: 160 },
-  { title: '下一次执行', key: 'next_run_time', minWidth: 160 },
-  { title: '最近执行', key: 'last_run_at', minWidth: 160 },
-  { title: '说明', key: 'note', minWidth: 220 },
+  { title: 'Cron', key: 'cron_expression', minWidth: '160px' },
+  { title: '下一次执行', key: 'next_run_time', minWidth: '160px' },
+  { title: '最近执行', key: 'last_run_at', minWidth: '160px' },
+  { title: '说明', key: 'note', minWidth: '220px' },
   { title: '操作', key: 'actions', width: 160, sortable: false }
 ]
 

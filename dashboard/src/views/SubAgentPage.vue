@@ -2,7 +2,10 @@
   <div class="subagent-page">
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
-        <h2 class="text-h5 font-weight-bold">SubAgent 编排</h2>
+        <div class="d-flex align-center" style="gap: 8px;">
+          <h2 class="text-h5 font-weight-bold">SubAgent 编排</h2>
+          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>Beta</v-chip>
+        </div>
         <div class="text-body-2 text-medium-emphasis">
           主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。
         </div>
@@ -18,16 +21,8 @@
       <v-card-text>
         <v-row>
           <v-col cols="12" md="8">
-            <v-select
-              v-model="cfg.main_mode"
-              :items="mainModes"
-              item-title="label"
-              item-value="value"
-              label="SubAgent 模式"
-              variant="outlined"
-              density="comfortable"
-              hide-details
-            />
+            <v-select v-model="cfg.main_mode" :items="mainModes" item-title="label" item-value="value"
+              label="SubAgent 模式" variant="outlined" density="comfortable" hide-details />
           </v-col>
         </v-row>
 
@@ -45,29 +40,17 @@
 
         <div class="d-flex align-center justify-space-between mt-6 mb-2">
           <div class="text-subtitle-1 font-weight-bold">SubAgents</div>
-          <v-btn
-            size="small"
-            variant="tonal"
-            color="primary"
-            @click="addAgent"
-          >
+          <v-btn size="small" variant="tonal" color="primary" @click="addAgent">
             新增 SubAgent
           </v-btn>
         </div>
 
         <v-expansion-panels variant="accordion" multiple>
-          <v-expansion-panel
-            v-for="(agent, idx) in cfg.agents"
-            :key="agent.__key"
-          >
+          <v-expansion-panel v-for="(agent, idx) in cfg.agents" :key="agent.__key">
             <v-expansion-panel-title>
               <div class="subagent-panel-title">
                 <div class="subagent-title-left">
-                  <v-chip
-                    :color="agent.enabled ? 'success' : 'grey'"
-                    size="small"
-                    variant="tonal"
-                  >
+                  <v-chip :color="agent.enabled ? 'success' : 'grey'" size="small" variant="tonal">
                     {{ agent.enabled ? '启用' : '停用' }}
                   </v-chip>
 
@@ -78,23 +61,12 @@
                 </div>
 
                 <div class="subagent-title-right">
-                  <v-switch
-                    v-model="agent.enabled"
-                    inset
-                    color="primary"
-                    hide-details
-                    class="subagent-enabled-inline"
-                    @click.stop
-                  >
+                  <v-switch v-model="agent.enabled" inset color="primary" hide-details class="subagent-enabled-inline"
+                    @click.stop>
                     <template #label>启用</template>
                   </v-switch>
 
-                  <v-btn
-                    size="small"
-                    variant="text"
-                    color="error"
-                    @click.stop="removeAgent(idx)"
-                  >
+                  <v-btn size="small" variant="text" color="error" @click.stop="removeAgent(idx)">
                     删除
                   </v-btn>
                 </div>
@@ -104,52 +76,24 @@
             <v-expansion-panel-text>
               <v-row class="subagent-grid">
                 <v-col cols="12" md="5">
-                  <v-text-field
-                    v-model="agent.name"
-                    label="Agent 名称（用于 transfer_to_{name}）"
-                    variant="outlined"
-                    density="comfortable"
-                    hint="建议使用英文小写+下划线，且全局唯一"
-                    persistent-hint
-                  />
+                  <v-text-field v-model="agent.name" label="Agent 名称（用于 transfer_to_{name}）" variant="outlined"
+                    density="comfortable" hint="建议使用英文小写+下划线，且全局唯一" persistent-hint />
                 </v-col>
                 <v-col cols="12" md="7" class="subagent-actions">
-                  <ProviderSelector
-                    v-model="agent.provider_id"
-                    provider-type="chat_completion"
-                    label="Chat Provider（可选）"
-                    hint="留空表示跟随全局默认 provider。"
-                    persistent-hint
-                    clearable
-                    class="subagent-provider"
-                  />
+                  <ProviderSelector v-model="agent.provider_id" provider-type="chat_completion"
+                    label="Chat Provider（可选）" hint="留空表示跟随全局默认 provider。" persistent-hint clearable
+                    class="subagent-provider" />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-autocomplete
-                    v-model="agent.persona_id"
-                    :items="personaOptions"
-                    item-title="title"
-                    item-value="value"
-                    label="选择 Persona"
-                    variant="outlined"
-                    density="comfortable"
-                    clearable
-                    :loading="personaLoading"
-                    :disabled="personaLoading"
-                    hint="SubAgent 将直接继承所选 Persona 的系统设定与工具。"
-                    persistent-hint
-                  />
+                  <v-autocomplete v-model="agent.persona_id" :items="personaOptions" item-title="title"
+                    item-value="value" label="选择 Persona" variant="outlined" density="comfortable" clearable
+                    :loading="personaLoading" :disabled="personaLoading" hint="SubAgent 将直接继承所选 Persona 的系统设定与工具。"
+                    persistent-hint />
                 </v-col>
 
                 <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="agent.public_description"
-                    label="对主 LLM 的描述（用于决定是否 handoff）"
-                    variant="outlined"
-                    density="comfortable"
-                    hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
-                    persistent-hint
-                  />
+                  <v-text-field v-model="agent.public_description" label="对主 LLM 的描述（用于决定是否 handoff）" variant="outlined"
+                    density="comfortable" hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。" persistent-hint />
                 </v-col>
               </v-row>
 
@@ -468,5 +412,4 @@ onMounted(() => {
 .subagent-tools .v-field__input {
   padding-right: 6px;
 }
-
 </style>
