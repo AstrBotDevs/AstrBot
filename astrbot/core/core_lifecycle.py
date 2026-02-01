@@ -55,8 +55,6 @@ class AstrBotCoreLifecycle:
         self.astrbot_config = astrbot_config  # 初始化配置
         self.db = db  # 初始化数据库
 
-        # Optional orchestrator that registers dynamic handoff tools (transfer_to_*)
-        # from provider_settings.subagent_orchestrator.
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
 
@@ -169,6 +167,9 @@ class AstrBotCoreLifecycle:
         # 初始化 CronJob 管理器
         self.cron_manager = CronJobManager(self.db)
 
+        # Dynamic subagents (handoff tools) from config.
+        await self._init_or_reload_subagent_orchestrator()
+
         # 初始化提供给插件的上下文
         self.star_context = Context(
             self.event_queue,
@@ -182,6 +183,7 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
             self.kb_manager,
             self.cron_manager,
+            self.subagent_orchestrator,
         )
 
         # 初始化插件管理器
@@ -208,8 +210,6 @@ class AstrBotCoreLifecycle:
             self.astrbot_config_mgr,
         )
 
-        # Dynamic subagents (handoff tools) from config.
-        await self._init_or_reload_subagent_orchestrator()
         # 记录启动时间
         self.start_time = int(time.time())
 

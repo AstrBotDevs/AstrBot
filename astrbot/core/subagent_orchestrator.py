@@ -5,7 +5,6 @@ from typing import Any
 from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -20,17 +19,10 @@ class SubAgentOrchestrator:
     def __init__(self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager):
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
+        self.handoffs: list[HandoffTool] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
-        enabled = bool(cfg.get("main_enable", False))
-
-        if not enabled:
-            # Ensure any previous dynamic handoff tools are cleared.
-            self._tool_mgr.sync_dynamic_handoff_tools(
-                [],
-                handler_module_path="core.subagent_orchestrator",
-            )
-            return
+        from astrbot.core.astr_agent_context import AstrAgentContext
 
         agents = cfg.get("agents", [])
         if not isinstance(agents, list):
@@ -98,10 +90,7 @@ class SubAgentOrchestrator:
 
             handoffs.append(handoff)
 
-        self._tool_mgr.sync_dynamic_handoff_tools(
-            handoffs,
-            handler_module_path="core.subagent_orchestrator",
-        )
-
         for handoff in handoffs:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")
+
+        self.handoffs = handoffs

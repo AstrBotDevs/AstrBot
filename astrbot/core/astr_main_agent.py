@@ -324,11 +324,11 @@ async def _ensure_persona_and_skills(
 
     tmgr = plugin_context.get_llm_tool_manager()
 
+    # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
-    if orch_cfg.get("main_enable", False):
-        policy = str(orch_cfg.get("main_tools_policy", "handoff_only")).strip()
-        if policy not in {"handoff_only", "unassigned_to_main"}:
-            policy = "handoff_only"
+    so = plugin_context.subagent_orchestrator
+    if orch_cfg.get("main_enable", False) and so:
+        remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
 
         assigned_tools: set[str] = set()
         agents = orch_cfg.get("agents", [])
@@ -368,22 +368,21 @@ async def _ensure_persona_and_skills(
                     if name:
                         assigned_tools.add(name)
 
-        toolset = ToolSet()
-        for tool in tmgr.func_list:
-            if isinstance(tool, HandoffTool) and tool.active:
-                toolset.add_tool(tool)
+        if req.func_tool is None:
+            toolset = ToolSet()
+        else:
+            toolset = req.func_tool
 
-        if policy == "unassigned_to_main":
-            for tool in tmgr.func_list:
-                if not tool.active:
-                    continue
-                if isinstance(tool, HandoffTool):
-                    continue
-                if tool.handler_module_path == "core.subagent_orchestrator":
-                    continue
-                if tool.name in assigned_tools:
-                    continue
-                toolset.add_tool(tool)
+        # add subagent handoff tools
+        for tool in so.handoffs:
+            toolset.add_tool(tool)
+
+        # check duplicates
+        if remove_dup:
+            names = toolset.names()
+            for tool_name in assigned_tools:
+                if tool_name in names:
+                    toolset.remove_tool(tool_name)
 
         req.func_tool = toolset
 
@@ -394,12 +393,6 @@ async def _ensure_persona_and_skills(
         ).strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
-        if policy == "unassigned_to_main":
-            req.system_prompt += (
-                "\n[Note: You may directly call the tools visible to the main LLM "
-                "if they are not assigned to any subagent; otherwise prefer delegating "
-                "to subagents via transfer_to_*.]\n"
-            )
         return
 
     # inject toolset in the persona

@@ -35,7 +35,7 @@ class SubAgentRoute(Route):
             if not isinstance(data, dict):
                 data = {
                     "main_enable": False,
-                    "main_tools_policy": "disabled",
+                    "remove_main_duplicate_tools": False,
                     "agents": [],
                 }
 
@@ -49,10 +49,7 @@ class SubAgentRoute(Route):
 
             # Ensure required keys exist.
             data.setdefault("main_enable", False)
-            if "main_tools_policy" not in data:
-                data["main_tools_policy"] = (
-                    "handoff_only" if data.get("main_enable", False) else "disabled"
-                )
+            data.setdefault("remove_main_duplicate_tools", False)
             data.setdefault("agents", [])
 
             # Backward/forward compatibility: ensure each agent contains provider_id.
@@ -83,7 +80,7 @@ class SubAgentRoute(Route):
             # Reload dynamic handoff tools if orchestrator exists
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
             if orch is not None:
-                orch.reload_from_config(data)
+                await orch.reload_from_config(data)
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:

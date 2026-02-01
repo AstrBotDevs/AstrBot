@@ -24,6 +24,7 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
     Provider,
@@ -67,6 +68,7 @@ class Context:
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
+        subagent_orchestrator: SubAgentOrchestrator | None = None,
     ):
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -90,6 +92,7 @@ class Context:
         """知识库管理器"""
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
+        self.subagent_orchestrator = subagent_orchestrator
 
     async def llm_generate(
         self,

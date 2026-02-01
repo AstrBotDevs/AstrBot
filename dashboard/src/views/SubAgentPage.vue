@@ -20,21 +20,24 @@
     <v-card class="rounded-lg" variant="flat">
       <v-card-text>
         <v-row>
-          <v-col cols="12" md="8">
-            <v-select v-model="cfg.main_mode" :items="mainModes" item-title="label" item-value="value"
-              label="SubAgent 模式" variant="outlined" density="comfortable" hide-details />
+          <v-col cols="12" md="6">
+            <v-switch v-model="cfg.main_enable" label="启用 SubAgent 编排"
+              inset color="primary" hide-details density="comfortable" />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-switch v-model="cfg.remove_main_duplicate_tools" :disabled="!cfg.main_enable"
+              label="主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）"
+              inset color="primary" hide-details density="comfortable" />
           </v-col>
         </v-row>
 
         <div class="text-caption text-medium-emphasis mt-1">
-          <div v-if="cfg.main_mode === 'disabled'">
+          <div v-if="!cfg.main_enable">
             不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。
           </div>
-          <div v-else-if="cfg.main_mode === 'unassigned_to_main'">
-            启动：SubAgent 可分派；未分配给任何 SubAgent 的工具仍挂载到主 LLM 上。
-          </div>
           <div v-else>
-            启动：仅 SubAgent；主 LLM 只保留 transfer_to_* 这类委派工具，不挂载其他工具。
+            启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。
+            若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。
           </div>
         </div>
 
@@ -135,10 +138,9 @@ type SubAgentItem = {
   provider_id?: string
 }
 
-type MainMode = 'disabled' | 'unassigned_to_main' | 'handoff_only'
-
 type SubAgentConfig = {
-  main_mode: MainMode
+  main_enable: boolean
+  remove_main_duplicate_tools: boolean
   agents: SubAgentItem[]
 }
 
@@ -155,14 +157,9 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
   snackbar.value = { show: true, message, color }
 }
 
-const mainModes: Array<{ label: string; value: MainMode }> = [
-  { label: '不启动：SubAgent 关闭（主 LLM 按 persona 挂载工具）', value: 'disabled' },
-  { label: '启动：未分配工具仍挂载到主 LLM', value: 'unassigned_to_main' },
-  { label: '启动：仅 SubAgent（主 LLM 仅 transfer_to_*）', value: 'handoff_only' }
-]
-
 const cfg = ref<SubAgentConfig>({
-  main_mode: 'disabled',
+  main_enable: false,
+  remove_main_duplicate_tools: false,
   agents: []
 })
 
@@ -171,10 +168,7 @@ const personaLoading = ref(false)
 
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
-  const policy = (raw?.main_tools_policy ?? '').toString().trim()
-  const main_mode: MainMode = !main_enable
-    ? 'disabled'
-    : (policy === 'unassigned_to_main' ? 'unassigned_to_main' : 'handoff_only')
+  const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
   const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => {
@@ -195,7 +189,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
     }
   })
 
-  return { main_mode, agents }
+  return { main_enable, remove_main_duplicate_tools, agents }
 }
 
 async function loadConfig() {
@@ -278,10 +272,9 @@ async function save() {
   saving.value = true
   try {
     // Strip UI-only fields
-    const mode = cfg.value.main_mode
     const payload = {
-      main_enable: mode !== 'disabled',
-      main_tools_policy: mode,
+      main_enable: cfg.value.main_enable,
+      remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
       agents: cfg.value.agents.map(a => ({
         name: a.name,
         persona_id: a.persona_id,
