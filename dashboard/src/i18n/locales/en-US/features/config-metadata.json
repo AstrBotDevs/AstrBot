@@ -189,7 +189,7 @@
       }
     },
     "truncate_and_compress": {
-      "hint": "https://docs.astrbot.app/en/use/context-compress.html"
+      "hint": "https://docs.astrbot.app/en/use/context-compress.html",
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
