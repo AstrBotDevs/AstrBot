@@ -165,7 +165,7 @@ class ProviderRequest:
 
                 result_parts.append(f"{role}: {''.join(msg_parts)}")
 
-        return result_parts
+        return "\n".join(result_parts)
 
     async def assemble_context(self) -> dict:
         """将请求(prompt 和 image_urls)包装成 OpenAI 的消息格式。"""
