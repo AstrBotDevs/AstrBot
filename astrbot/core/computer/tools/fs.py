@@ -182,11 +182,11 @@ class FileDownloadTool(FunctionTool):
                 except Exception as e:
                     logger.error(f"Error sending file message: {e}")
 
-            # remove
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.error(f"Error removing temp file {local_path}: {e}")
+                # remove
+                try:
+                    os.remove(local_path)
+                except Exception as e:
+                    logger.error(f"Error removing temp file {local_path}: {e}")
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
