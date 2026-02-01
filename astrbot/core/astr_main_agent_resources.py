@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 
 from pydantic import Field
@@ -9,6 +10,7 @@ from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.tools import (
     ExecuteShellTool,
     FileDownloadTool,
@@ -19,6 +21,7 @@ from astrbot.core.computer.tools import (
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.star.context import Context
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 LLM_SAFETY_MODE_SYSTEM_PROMPT = """You are running in Safe Mode.
 
@@ -198,7 +201,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                             },
                             "path": {
                                 "type": "string",
-                                "description": "File path for `image`, `record`, or `file` types.",
+                                "description": "File path for `image`, `record`, or `file` types. Both local path and sandbox path are supported.",
                             },
                             "url": {
                                 "type": "string",
@@ -216,6 +219,39 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             "required": ["messages"],
         }
     )
+
+    async def _resolve_path_from_sandbox(
+        self, context: ContextWrapper[AstrAgentContext], path: str
+    ) -> tuple[str, bool]:
+        """
+        If the path exists locally, return it directly.
+        Otherwise, check if it exists in the sandbox and download it.
+
+        bool: indicates whether the file was downloaded from sandbox.
+        """
+        if os.path.exists(path):
+            return path, False
+
+        # Try to check if the file exists in the sandbox
+        try:
+            sb = await get_booter(
+                context.context.context,
+                context.context.event.unified_msg_origin,
+            )
+            # Use shell to check if the file exists in sandbox
+            result = await sb.shell.exec(f"test -f {path} && echo '_&exists_'")
+            if "_&exists_" in json.dumps(result):
+                # Download the file from sandbox
+                name = os.path.basename(path)
+                local_path = os.path.join(get_astrbot_temp_path(), name)
+                await sb.download_file(path, local_path)
+                logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
+                return local_path, True
+        except Exception as e:
+            logger.warning(f"Failed to check/download file from sandbox: {e}")
+
+        # Return the original path (will likely fail later, but that's expected)
+        return path, False
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
@@ -236,6 +272,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
+            file_from_sandbox = False
+
             try:
                 if msg_type == "plain":
                     text = str(msg.get("text", "")).strip()
@@ -246,7 +284,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     path = msg.get("path")
                     url = msg.get("url")
                     if path:
-                        components.append(Comp.Image.fromFileSystem(path=path))
+                        (
+                            local_path,
+                            file_from_sandbox,
+                        ) = await self._resolve_path_from_sandbox(context, path)
+                        components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
                         components.append(Comp.Image.fromURL(url=url))
                     else:
@@ -255,7 +297,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     path = msg.get("path")
                     url = msg.get("url")
                     if path:
-                        components.append(Comp.Record.fromFileSystem(path=path))
+                        (
+                            local_path,
+                            file_from_sandbox,
+                        ) = await self._resolve_path_from_sandbox(context, path)
+                        components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
                         components.append(Comp.Record.fromURL(url=url))
                     else:
@@ -270,7 +316,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         or "file"
                     )
                     if path:
-                        components.append(Comp.File(name=name, file=path))
+                        (
+                            local_path,
+                            file_from_sandbox,
+                        ) = await self._resolve_path_from_sandbox(context, path)
+                        components.append(Comp.File(name=name, file=local_path))
                     elif url:
                         components.append(Comp.File(name=name, url=url))
                     else:
@@ -304,6 +354,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             target_session,
             MessageChain(chain=components),
         )
+
+        if file_from_sandbox:
+            try:
+                os.remove(local_path)
+            except Exception as e:
+                logger.error(f"Error removing temp file {local_path}: {e}")
+
         return f"Message sent to session {target_session}"
 
 
