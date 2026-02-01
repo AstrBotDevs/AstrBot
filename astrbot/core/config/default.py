@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 4,
+        "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
@@ -123,6 +123,20 @@ DEFAULT_CONFIG = {
             "shipyard_max_sessions": 10,
         },
         "skills": {"runtime": "sandbox"},
+    },
+    # SubAgent orchestrator mode:
+    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
+    # - main_enable = True: enabled; main LLM will include handoff tools and can optionally
+    #   remove tools that are duplicated on subagents via remove_main_duplicate_tools.
+    "subagent_orchestrator": {
+        "main_enable": False,
+        "remove_main_duplicate_tools": False,
+        "router_system_prompt": (
+            "You are a task router. Your job is to chat naturally, recognize user intent, "
+            "and delegate work to the most suitable subagent using transfer_to_* tools. "
+            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
+        ),
+        "agents": [],
     },
     "provider_stt_settings": {
         "enable": False,

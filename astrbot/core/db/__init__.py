@@ -13,6 +13,7 @@ from astrbot.core.db.po import (
     CommandConfig,
     CommandConflict,
     ConversationV2,
+    CronJob,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -509,6 +510,65 @@ class BaseDatabase(abc.ABC):
         platform: str | None = None,
     ) -> tuple[list[dict], int]:
         """Get paginated session conversations with joined conversation and persona details, support search and platform filter."""
+        ...
+
+    # ====
+    # Cron Job Management
+    # ====
+
+    @abc.abstractmethod
+    async def create_cron_job(
+        self,
+        name: str,
+        job_type: str,
+        cron_expression: str | None,
+        *,
+        timezone: str | None = None,
+        payload: dict | None = None,
+        description: str | None = None,
+        enabled: bool = True,
+        persistent: bool = True,
+        run_once: bool = False,
+        status: str | None = None,
+        job_id: str | None = None,
+    ) -> CronJob:
+        """Create and persist a cron job definition."""
+        ...
+
+    @abc.abstractmethod
+    async def update_cron_job(
+        self,
+        job_id: str,
+        *,
+        name: str | None = None,
+        cron_expression: str | None = None,
+        timezone: str | None = None,
+        payload: dict | None = None,
+        description: str | None = None,
+        enabled: bool | None = None,
+        persistent: bool | None = None,
+        run_once: bool | None = None,
+        status: str | None = None,
+        next_run_time: datetime.datetime | None = None,
+        last_run_at: datetime.datetime | None = None,
+        last_error: str | None = None,
+    ) -> CronJob | None:
+        """Update fields of a cron job by job_id."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_cron_job(self, job_id: str) -> None:
+        """Delete a cron job by its public job_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_cron_job(self, job_id: str) -> CronJob | None:
+        """Fetch a cron job by job_id."""
+        ...
+
+    @abc.abstractmethod
+    async def list_cron_jobs(self, job_type: str | None = None) -> list[CronJob]:
+        """List cron jobs, optionally filtered by job_type."""
         ...
 
     # ====

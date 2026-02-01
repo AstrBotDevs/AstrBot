@@ -224,6 +224,7 @@ class WecomPlatformAdapter(Platform):
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
             support_streaming_message=False,
+            support_proactive_message=False,
         )
 
     @override

@@ -12,6 +12,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
+from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
@@ -34,6 +35,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
 )
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
@@ -65,6 +67,8 @@ class Context:
         persona_manager: PersonaManager,
         astrbot_config_mgr: AstrBotConfigManager,
         knowledge_base_manager: KnowledgeBaseManager,
+        cron_manager: CronJobManager,
+        subagent_orchestrator: SubAgentOrchestrator | None = None,
     ):
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
@@ -86,6 +90,9 @@ class Context:
         """配置文件管理器(非webui)"""
         self.kb_manager = knowledge_base_manager
         """知识库管理器"""
+        self.cron_manager = cron_manager
+        """Cron job manager, initialized by core lifecycle."""
+        self.subagent_orchestrator = subagent_orchestrator
 
     async def llm_generate(
         self,
