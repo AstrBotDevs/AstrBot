@@ -1,7 +1,8 @@
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -14,8 +15,6 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -242,9 +241,9 @@ class CronJobManager:
     ):
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
-            build_main_agent,
             MainAgentBuildConfig,
             _get_session_conv,
+            build_main_agent,
         )
         from astrbot.core.astr_main_agent_resources import (
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,

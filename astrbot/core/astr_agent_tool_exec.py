@@ -1,33 +1,33 @@
 import asyncio
 import inspect
+import json
 import traceback
 import typing as T
 import uuid
-import json
 
 import mcp
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    SEND_MESSAGE_TO_USER_TOOL,
+)
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
     MessageEventResult,
 )
-from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
-    SEND_MESSAGE_TO_USER_TOOL,
-)
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -154,9 +154,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ):
         from astrbot.core.astr_main_agent import (
-            build_main_agent,
             MainAgentBuildConfig,
             _get_session_conv,
+            build_main_agent,
         )
 
         # run the tool

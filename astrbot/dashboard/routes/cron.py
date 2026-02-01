@@ -10,7 +10,9 @@ from .route import Response, Route, RouteContext
 
 
 class CronRoute(Route):
-    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle) -> None:
+    def __init__(
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+    ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.routes = [
@@ -32,7 +34,9 @@ class CronRoute(Route):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
-                return jsonify(Response().error("Cron manager not initialized").__dict__)
+                return jsonify(
+                    Response().error("Cron manager not initialized").__dict__
+                )
             job_type = request.args.get("type")
             jobs = await cron_mgr.list_jobs(job_type)
             data = [self._serialize_job(j) for j in jobs]
@@ -45,7 +49,9 @@ class CronRoute(Route):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
-                return jsonify(Response().error("Cron manager not initialized").__dict__)
+                return jsonify(
+                    Response().error("Cron manager not initialized").__dict__
+                )
 
             payload = await request.json
             if not isinstance(payload, dict):
@@ -62,7 +68,11 @@ class CronRoute(Route):
             enabled = bool(payload.get("enabled", True))
 
             if not cron_expression or not session:
-                return jsonify(Response().error("cron_expression and session are required").__dict__)
+                return jsonify(
+                    Response()
+                    .error("cron_expression and session are required")
+                    .__dict__
+                )
 
             job_payload = {
                 "session": session,
@@ -73,7 +83,9 @@ class CronRoute(Route):
 
             if job_type != "active_agent":
                 return jsonify(
-                    Response().error("Only active_agent jobs are supported now.").__dict__
+                    Response()
+                    .error("Only active_agent jobs are supported now.")
+                    .__dict__
                 )
 
             job = await cron_mgr.add_active_job(
@@ -94,7 +106,9 @@ class CronRoute(Route):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
-                return jsonify(Response().error("Cron manager not initialized").__dict__)
+                return jsonify(
+                    Response().error("Cron manager not initialized").__dict__
+                )
 
             payload = await request.json
             if not isinstance(payload, dict):
@@ -122,7 +136,9 @@ class CronRoute(Route):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
-                return jsonify(Response().error("Cron manager not initialized").__dict__)
+                return jsonify(
+                    Response().error("Cron manager not initialized").__dict__
+                )
             await cron_mgr.delete_job(job_id)
             return jsonify(Response().ok(message="deleted").__dict__)
         except Exception as e:  # noqa: BLE001

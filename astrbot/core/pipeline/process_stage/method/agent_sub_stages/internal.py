@@ -3,10 +3,16 @@
 import asyncio
 import base64
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.astr_main_agent import (
+    MainAgentBuildConfig,
+    MainAgentBuildResult,
+    build_main_agent,
+)
 from astrbot.core.message.components import File, Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -25,12 +31,6 @@ from astrbot.core.utils.session_lock import session_lock_manager
 from .....astr_agent_run_util import run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
 from ...stage import Stage
-from astrbot.core.astr_main_agent import (
-    MainAgentBuildConfig,
-    MainAgentBuildResult,
-    build_main_agent,
-)
-from dataclasses import replace
 
 
 class InternalAgentSubStage(Stage):

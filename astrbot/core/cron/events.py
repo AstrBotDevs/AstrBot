@@ -1,6 +1,7 @@
 import time
 import uuid
 from typing import Any
+
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent

@@ -26,9 +26,9 @@ from astrbot.core.astr_main_agent_resources import (
     FILE_UPLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
+    LLM_SAFETY_MODE_SYSTEM_PROMPT,
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,
-    LLM_SAFETY_MODE_SYSTEM_PROMPT,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
@@ -59,7 +59,7 @@ class MainAgentBuildConfig:
 
     tool_call_timeout: int
     """The timeout (in seconds) for a tool call.
-    When the tool call exceeds this time, 
+    When the tool call exceeds this time,
     a timeout error as a tool result will be returned.
     """
     tool_schema_mode: str = "full"
