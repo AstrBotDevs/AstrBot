@@ -104,5 +104,17 @@
     "edit": "Edit",
     "copy": "Copy",
     "noData": "No data available"
+  },
+  "clear": "Clear",
+  "palette": {
+    "clickToSelect": "Click to select color",
+    "placeholder": "#RRGGBB or color name",
+    "paste": "Paste",
+    "pasteSuccess": "Color parsed successfully",
+    "pasteInvalid": "Invalid color format",
+    "pasteFailed": "Failed to read clipboard",
+    "pickScreen": "Pick",
+    "pickSuccess": "Color picked from screen",
+    "invalidFormat": "Invalid color format"
   }
 }
