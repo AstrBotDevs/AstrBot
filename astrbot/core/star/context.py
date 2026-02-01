@@ -24,7 +24,6 @@ from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryMana
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
     Provider,
@@ -36,6 +35,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     ADAPTER_NAME_2_TYPE,
     PlatformAdapterType,
 )
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter

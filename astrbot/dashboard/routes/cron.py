@@ -76,9 +76,7 @@ class CronRoute(Route):
             run_at = payload.get("run_at")
 
             if not session:
-                return jsonify(
-                    Response().error("session is required").__dict__
-                )
+                return jsonify(Response().error("session is required").__dict__)
             if run_once and not run_at:
                 return jsonify(
                     Response().error("run_at is required when run_once=true").__dict__

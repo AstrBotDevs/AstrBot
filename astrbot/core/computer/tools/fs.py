@@ -187,7 +187,7 @@ class FileDownloadTool(FunctionTool):
                     os.remove(local_path)
                 except Exception as e:
                     logger.error(f"Error removing temp file {local_path}: {e}")
-                
+
                 return f"File downloaded successfully to {local_path} and sent to user. The file has been removed from local storage."
 
             return f"File downloaded successfully to {local_path}"

@@ -3,17 +3,17 @@
     <div class="d-flex align-center justify-space-between mb-4">
       <div>
         <div class="d-flex align-center" style="gap: 8px;">
-          <h2 class="text-h5 font-weight-bold">SubAgent 编排</h2>
-          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>Beta</v-chip>
+          <h2 class="text-h5 font-weight-bold">{{ tm('page.title') }}</h2>
+          <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>{{ tm('page.beta') }}</v-chip>
         </div>
         <div class="text-body-2 text-medium-emphasis">
-          主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。
+          {{ tm('page.subtitle') }}
         </div>
       </div>
 
       <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn variant="tonal" color="primary" :loading="loading" @click="reload">刷新</v-btn>
-        <v-btn variant="flat" color="primary" :loading="saving" @click="save">保存</v-btn>
+        <v-btn variant="tonal" color="primary" :loading="loading" @click="reload">{{ tm('actions.refresh') }}</v-btn>
+        <v-btn variant="flat" color="primary" :loading="saving" @click="save">{{ tm('actions.save') }}</v-btn>
       </div>
     </div>
 
@@ -21,30 +21,36 @@
       <v-card-text>
         <v-row>
           <v-col cols="12" md="6">
-            <v-switch v-model="cfg.main_enable" label="启用 SubAgent 编排"
-              inset color="primary" hide-details density="comfortable" />
+            <v-switch
+              v-model="cfg.main_enable"
+              :label="tm('switches.enable')"
+              inset
+              color="primary"
+              hide-details
+              density="comfortable"
+            />
           </v-col>
           <v-col cols="12" md="6">
-            <v-switch v-model="cfg.remove_main_duplicate_tools" :disabled="!cfg.main_enable"
-              label="主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）"
-              inset color="primary" hide-details density="comfortable" />
+            <v-switch
+              v-model="cfg.remove_main_duplicate_tools"
+              :disabled="!cfg.main_enable"
+              :label="tm('switches.dedupe')"
+              inset
+              color="primary"
+              hide-details
+              density="comfortable"
+            />
           </v-col>
         </v-row>
 
         <div class="text-caption text-medium-emphasis mt-1">
-          <div v-if="!cfg.main_enable">
-            不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。
-          </div>
-          <div v-else>
-            启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。
-            若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。
-          </div>
+          {{ mainStateDescription }}
         </div>
 
         <div class="d-flex align-center justify-space-between mt-6 mb-2">
-          <div class="text-subtitle-1 font-weight-bold">SubAgents</div>
+          <div class="text-subtitle-1 font-weight-bold">{{ tm('section.title') }}</div>
           <v-btn size="small" variant="tonal" color="primary" @click="addAgent">
-            新增 SubAgent
+            {{ tm('actions.add') }}
           </v-btn>
         </div>
 
@@ -54,23 +60,31 @@
               <div class="subagent-panel-title">
                 <div class="subagent-title-left">
                   <v-chip :color="agent.enabled ? 'success' : 'grey'" size="small" variant="tonal">
-                    {{ agent.enabled ? '启用' : '停用' }}
+                    {{ agent.enabled ? tm('cards.statusEnabled') : tm('cards.statusDisabled') }}
                   </v-chip>
 
                   <div class="subagent-title-text">
-                    <div class="subagent-title-name">{{ agent.name || '未命名 SubAgent' }}</div>
-                    <div class="subagent-title-sub">transfer_to_{{ agent.name || '...' }}</div>
+                    <div class="subagent-title-name">{{ agent.name || tm('cards.unnamed') }}</div>
+                    <div class="subagent-title-sub">
+                      {{ tm('cards.transferPrefix', { name: agent.name || '...' }) }}
+                    </div>
                   </div>
                 </div>
 
                 <div class="subagent-title-right">
-                  <v-switch v-model="agent.enabled" inset color="primary" hide-details class="subagent-enabled-inline"
-                    @click.stop>
-                    <template #label>启用</template>
+                  <v-switch
+                    v-model="agent.enabled"
+                    inset
+                    color="primary"
+                    hide-details
+                    class="subagent-enabled-inline"
+                    @click.stop
+                  >
+                    <template #label>{{ tm('cards.switchLabel') }}</template>
                   </v-switch>
 
                   <v-btn size="small" variant="text" color="error" @click.stop="removeAgent(idx)">
-                    删除
+                    {{ tm('actions.delete') }}
                   </v-btn>
                 </div>
               </div>
@@ -79,42 +93,69 @@
             <v-expansion-panel-text>
               <v-row class="subagent-grid">
                 <v-col cols="12" md="5">
-                  <v-text-field v-model="agent.name" label="Agent 名称（用于 transfer_to_{name}）" variant="outlined"
-                    density="comfortable" hint="建议使用英文小写+下划线，且全局唯一" persistent-hint />
+                  <v-text-field
+                    v-model="agent.name"
+                    :label="tm('form.nameLabel')"
+                    variant="outlined"
+                    density="comfortable"
+                    :hint="tm('form.nameHint')"
+                    persistent-hint
+                  />
                 </v-col>
                 <v-col cols="12" md="7" class="subagent-actions">
-                  <ProviderSelector v-model="agent.provider_id" provider-type="chat_completion"
-                    label="Chat Provider（可选）" hint="留空表示跟随全局默认 provider。" persistent-hint clearable
-                    class="subagent-provider" />
+                  <ProviderSelector
+                    v-model="agent.provider_id"
+                    provider-type="chat_completion"
+                    :label="tm('form.providerLabel')"
+                    :hint="tm('form.providerHint')"
+                    persistent-hint
+                    clearable
+                    class="subagent-provider"
+                  />
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-autocomplete v-model="agent.persona_id" :items="personaOptions" item-title="title"
-                    item-value="value" label="选择 Persona" variant="outlined" density="comfortable" clearable
-                    :loading="personaLoading" :disabled="personaLoading" hint="SubAgent 将直接继承所选 Persona 的系统设定与工具。"
-                    persistent-hint />
+                  <v-autocomplete
+                    v-model="agent.persona_id"
+                    :items="personaOptions"
+                    item-title="title"
+                    item-value="value"
+                    :label="tm('form.personaLabel')"
+                    variant="outlined"
+                    density="comfortable"
+                    clearable
+                    :loading="personaLoading"
+                    :disabled="personaLoading"
+                    :hint="tm('form.personaHint')"
+                    persistent-hint
+                  />
                 </v-col>
 
                 <v-col cols="12" md="6">
-                  <v-text-field v-model="agent.public_description" label="对主 LLM 的描述（用于决定是否 handoff）" variant="outlined"
-                    density="comfortable" hint="这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。" persistent-hint />
+                  <v-text-field
+                    v-model="agent.public_description"
+                    :label="tm('form.descriptionLabel')"
+                    variant="outlined"
+                    density="comfortable"
+                    :hint="tm('form.descriptionHint')"
+                    persistent-hint
+                  />
                 </v-col>
               </v-row>
 
               <div class="mt-3">
-                <div class="text-caption text-medium-emphasis">预览：主 LLM 将看到的 handoff 工具</div>
+                <div class="text-caption text-medium-emphasis">{{ tm('cards.previewTitle') }}</div>
                 <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap;">
                   <v-chip size="small" variant="outlined" color="primary">
-                    transfer_to_{{ agent.name || '...' }}
+                    {{ tm('cards.transferPrefix', { name: agent.name || '...' }) }}
                   </v-chip>
                   <v-chip size="small" variant="tonal" color="secondary" v-if="agent.persona_id">
-                    Persona: {{ agent.persona_id }}
+                    {{ tm('cards.personaChip', { id: agent.persona_id }) }}
                   </v-chip>
                 </div>
               </div>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
-
       </v-card-text>
     </v-card>
 
@@ -125,9 +166,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
+import { useModuleI18n } from '@/i18n/composables'
 
 type SubAgentItem = {
   __key: string
@@ -143,6 +185,8 @@ type SubAgentConfig = {
   remove_main_duplicate_tools: boolean
   agents: SubAgentItem[]
 }
+
+const { tm } = useModuleI18n('features/subagent')
 
 const loading = ref(false)
 const saving = ref(false)
@@ -166,6 +210,10 @@ const cfg = ref<SubAgentConfig>({
 const personaOptions = ref<{ title: string; value: string }[]>([])
 const personaLoading = ref(false)
 
+const mainStateDescription = computed(() =>
+  cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
+)
+
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
@@ -176,15 +224,14 @@ function normalizeConfig(raw: any): SubAgentConfig {
     const persona_id = (a?.persona_id ?? '').toString()
     const public_description = (a?.public_description ?? '').toString()
     const enabled = a?.enabled !== false
-    const provider_id = (a?.provider_id ?? undefined) as (string | undefined)
+    const provider_id = (a?.provider_id ?? undefined) as string | undefined
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
       name,
       persona_id,
       public_description,
-      enabled
-      ,
+      enabled,
       provider_id
     }
   })
@@ -199,10 +246,10 @@ async function loadConfig() {
     if (res.data.status === 'ok') {
       cfg.value = normalizeConfig(res.data.data)
     } else {
-      toast(res.data.message || '获取配置失败', 'error')
+      toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || '获取配置失败', 'error')
+    toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
   } finally {
     loading.value = false
   }
@@ -220,7 +267,7 @@ async function loadPersonas() {
       }))
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || '获取 Persona 列表失败', 'error')
+    toast(e?.response?.data?.message || tm('messages.loadPersonaFailed'), 'error')
   } finally {
     personaLoading.value = false
   }
@@ -247,20 +294,20 @@ function validateBeforeSave(): boolean {
   for (const a of cfg.value.agents) {
     const name = (a.name || '').trim()
     if (!name) {
-      toast('存在未填写名称的 SubAgent', 'warning')
+      toast(tm('messages.nameMissing'), 'warning')
       return false
     }
     if (!nameRe.test(name)) {
-      toast('SubAgent 名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头', 'warning')
+      toast(tm('messages.nameInvalid'), 'warning')
       return false
     }
     if (seen.has(name)) {
-      toast(`SubAgent 名称重复：${name}`, 'warning')
+      toast(tm('messages.nameDuplicate', { name }), 'warning')
       return false
     }
     seen.add(name)
     if (!a.persona_id) {
-      toast(`SubAgent ${name} 未选择 Persona`, 'warning')
+      toast(tm('messages.personaMissing', { name }), 'warning')
       return false
     }
   }
@@ -271,11 +318,10 @@ async function save() {
   if (!validateBeforeSave()) return
   saving.value = true
   try {
-    // Strip UI-only fields
     const payload = {
       main_enable: cfg.value.main_enable,
       remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
-      agents: cfg.value.agents.map(a => ({
+      agents: cfg.value.agents.map((a) => ({
         name: a.name,
         persona_id: a.persona_id,
         public_description: a.public_description,
@@ -286,12 +332,12 @@ async function save() {
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
-      toast(res.data.message || '保存成功', 'success')
+      toast(res.data.message || tm('messages.saveSuccess'), 'success')
     } else {
-      toast(res.data.message || '保存失败', 'error')
+      toast(res.data.message || tm('messages.saveFailed'), 'error')
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || '保存失败', 'error')
+    toast(e?.response?.data?.message || tm('messages.saveFailed'), 'error')
   } finally {
     saving.value = false
   }
