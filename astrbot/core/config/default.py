@@ -17,7 +17,90 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "lark",
 ]
 
-# 默认配置
+# 核心配置默认值（不包含 provider 和 platform 相关配置）
+CORE_DEFAULT_CONFIG = {
+    "config_version": 2,
+    "platform_settings": {
+        "unique_session": False,
+        "rate_limit": {
+            "time": 60,
+            "count": 30,
+            "strategy": "stall",  # stall, discard
+        },
+        "reply_prefix": "",
+        "forward_threshold": 1500,
+        "enable_id_white_list": True,
+        "id_whitelist": [],
+        "id_whitelist_log": True,
+        "wl_ignore_admin_on_group": True,
+        "wl_ignore_admin_on_friend": True,
+        "reply_with_mention": False,
+        "reply_with_quote": False,
+        "path_mapping": [],
+        "segmented_reply": {
+            "enable": False,
+            "only_llm_result": True,
+            "interval_method": "random",
+            "interval": "1.5,3.5",
+            "log_base": 2.6,
+            "words_count_threshold": 150,
+            "split_mode": "regex",  # regex 或 words
+            "regex": ".*?[。？！~…]+|.+$",
+            "split_words": [
+                "。",
+                "？",
+                "！",
+                "~",
+                "…",
+            ],  # 当 split_mode 为 words 时使用
+            "content_cleanup_rule": "",
+        },
+        "no_permission_reply": True,
+        "empty_mention_waiting": True,
+        "empty_mention_waiting_need_reply": True,
+        "friend_message_needs_wake_prefix": False,
+        "ignore_bot_self_message": False,
+        "ignore_at_all": False,
+    },
+    "content_safety": {
+        "also_use_in_response": False,
+        "internal_keywords": {"enable": True, "extra_keywords": []},
+        "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
+    },
+    "admins_id": ["astrbot"],
+    "t2i": False,
+    "t2i_word_threshold": 150,
+    "t2i_strategy": "remote",
+    "t2i_endpoint": "",
+    "t2i_use_file_service": False,
+    "t2i_active_template": "base",
+    "http_proxy": "",
+    "no_proxy": ["localhost", "127.0.0.1", "::1"],
+    "dashboard": {
+        "enable": True,
+        "username": "astrbot",
+        "password": "77b90590a8945a7d36c963981a307dc9",
+        "jwt_secret": "",
+        "host": "0.0.0.0",
+        "port": 6185,
+        "disable_access_log": True,
+    },
+    "wake_prefix": ["/"],
+    "log_level": "INFO",
+    "pip_install_arg": "",
+    "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
+    "timezone": "Asia/Shanghai",
+    "callback_api_base": "",
+    "default_kb_collection": "",  # 默认知识库名称, 已经过时
+    "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
+    "kb_names": [],  # 默认知识库名称列表
+    "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
+    "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
+    "kb_agentic_mode": False,
+    "disable_builtin_commands": False,
+}
+
+# 默认配置（合并所有配置，保持向后兼容）
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {

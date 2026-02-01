@@ -368,10 +368,14 @@ class AstrBotImporter:
                     if progress_callback:
                         await progress_callback("kb", 100, 100, "知识库导入完成")
 
-                # 4. 导入配置文件
+                # 4. 导入配置文件（包括拆分的配置文件）
                 if progress_callback:
                     await progress_callback("config", 0, 100, "正在导入配置文件...")
 
+                config_count = 0
+                data_path = get_astrbot_data_path()
+
+                # 导入核心配置文件
                 if "config/cmd_config.json" in zf.namelist():
                     try:
                         config_content = zf.read("config/cmd_config.json")
@@ -382,9 +386,39 @@ class AstrBotImporter:
 
                         with open(self.config_path, "wb") as f:
                             f.write(config_content)
-                        result.imported_files["config"] = 1
+                        config_count += 1
                     except Exception as e:
-                        result.add_warning(f"导入配置文件失败: {e}")
+                        result.add_warning(f"导入核心配置文件失败: {e}")
+
+                # 导入供应商配置文件
+                if "config/providers.json" in zf.namelist():
+                    try:
+                        providers_path = os.path.join(data_path, "providers.json")
+                        providers_content = zf.read("config/providers.json")
+                        # 备份现有配置
+                        if os.path.exists(providers_path):
+                            shutil.copy2(providers_path, f"{providers_path}.bak")
+                        with open(providers_path, "wb") as f:
+                            f.write(providers_content)
+                        config_count += 1
+                    except Exception as e:
+                        result.add_warning(f"导入供应商配置文件失败: {e}")
+
+                # 导入平台配置文件
+                if "config/platforms.json" in zf.namelist():
+                    try:
+                        platforms_path = os.path.join(data_path, "platforms.json")
+                        platforms_content = zf.read("config/platforms.json")
+                        # 备份现有配置
+                        if os.path.exists(platforms_path):
+                            shutil.copy2(platforms_path, f"{platforms_path}.bak")
+                        with open(platforms_path, "wb") as f:
+                            f.write(platforms_content)
+                        config_count += 1
+                    except Exception as e:
+                        result.add_warning(f"导入平台配置文件失败: {e}")
+
+                result.imported_files["config"] = config_count
 
                 if progress_callback:
                     await progress_callback("config", 100, 100, "配置文件导入完成")
