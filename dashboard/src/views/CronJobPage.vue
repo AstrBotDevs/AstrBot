@@ -6,7 +6,14 @@
           <h2 class="text-h5 font-weight-bold">未来任务管理</h2>
           <v-chip size="x-small" color="orange-darken-2" variant="tonal" label>Beta</v-chip>
         </div>
-        <div class="text-body-2 text-medium-emphasis">查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。</div>
+        <div class="text-body-2 text-medium-emphasis">
+          查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。
+          主动发送结果仅支持以下平台：
+          <span v-if="proactivePlatforms.length">
+            {{ proactivePlatforms.map((p) => `${p.display_name || p.name}(${p.id})`).join('、') }}
+          </span>
+          <span v-else>暂无支持主动消息的平台，请在平台设置中开启。</span>
+        </div>
       </div>
       <div class="d-flex align-center" style="gap: 8px;">
         <v-btn variant="tonal" color="primary" :loading="loading" @click="loadJobs">刷新</v-btn>
@@ -60,6 +67,7 @@ import axios from 'axios'
 
 const loading = ref(false)
 const jobs = ref<any[]>([])
+const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
 
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
@@ -102,6 +110,23 @@ async function loadJobs() {
   }
 }
 
+async function loadPlatforms() {
+  try {
+    const res = await axios.get('/api/platform/stats')
+    if (res.data.status === 'ok' && Array.isArray(res.data.data?.platforms)) {
+      proactivePlatforms.value = res.data.data.platforms
+        .filter((p: any) => p?.meta?.support_proactive_message)
+        .map((p: any) => ({
+          id: p?.id || p?.meta?.id || 'unknown',
+          name: p?.meta?.name || p?.type || '',
+          display_name: p?.meta?.display_name || p?.display_name
+        }))
+    }
+  } catch (e) {
+    // ignore platform fetch errors in UI; subtitle will show fallback
+  }
+}
+
 async function toggleJob(job: any) {
   try {
     const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, { enabled: job.enabled })
@@ -131,6 +156,7 @@ async function deleteJob(job: any) {
 
 onMounted(() => {
   loadJobs()
+  loadPlatforms()
 })
 </script>
 
