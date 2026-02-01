@@ -1594,6 +1594,7 @@ class SQLiteDatabase(BaseDatabase):
         description: str | None = None,
         enabled: bool = True,
         persistent: bool = True,
+        run_once: bool = False,
         status: str | None = None,
         job_id: str | None = None,
     ) -> CronJob:
@@ -1609,6 +1610,7 @@ class SQLiteDatabase(BaseDatabase):
                     description=description,
                     enabled=enabled,
                     persistent=persistent,
+                    run_once=run_once,
                     status=status or "scheduled",
                 )
                 if job_id:
@@ -1629,6 +1631,7 @@ class SQLiteDatabase(BaseDatabase):
         description: str | None | object = CRON_FIELD_NOT_SET,
         enabled: bool | None | object = CRON_FIELD_NOT_SET,
         persistent: bool | None | object = CRON_FIELD_NOT_SET,
+        run_once: bool | None | object = CRON_FIELD_NOT_SET,
         status: str | None | object = CRON_FIELD_NOT_SET,
         next_run_time: datetime | None | object = CRON_FIELD_NOT_SET,
         last_run_at: datetime | None | object = CRON_FIELD_NOT_SET,
@@ -1646,6 +1649,7 @@ class SQLiteDatabase(BaseDatabase):
                     "description": description,
                     "enabled": enabled,
                     "persistent": persistent,
+                    "run_once": run_once,
                     "status": status,
                     "next_run_time": next_run_time,
                     "last_run_at": last_run_at,

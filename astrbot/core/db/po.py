@@ -163,6 +163,7 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     payload: dict = Field(default_factory=dict, sa_type=JSON)
     enabled: bool = Field(default=True)
     persistent: bool = Field(default=True)
+    run_once: bool = Field(default=False)
     status: str = Field(default="scheduled", max_length=32)
     last_run_at: datetime | None = Field(default=None)
     next_run_time: datetime | None = Field(default=None)

@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -10,8 +11,8 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
     name: str = "create_future_task"
     description: str = (
-        "Create a future task for your future using a cron expression. "
-        "Use this when you or the user want recurring follow-up (e.g., daily report to self)."
+        "Create a future task for your future. Supports recurring cron expressions or one-time run_at datetime. "
+        "Use this when you or the user want scheduled follow-up or proactive actions."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -19,7 +20,11 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "cron_expression": {
                     "type": "string",
-                    "description": "Cron expression defining when your future agent should wake (e.g., '0 8 * * *').",
+                    "description": "Cron expression defining recurring schedule (e.g., '0 8 * * *').",
+                },
+                "run_at": {
+                    "type": "string",
+                    "description": "ISO datetime for one-time execution, e.g., 2026-02-02T08:00:00+08:00. Use with run_once=true.",
                 },
                 "note": {
                     "type": "string",
@@ -29,8 +34,12 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": "Optional label to recognize this future task.",
                 },
+                "run_once": {
+                    "type": "boolean",
+                    "description": "If true, the task will run only once and then be deleted. Use run_at to specify the time.",
+                },
             },
-            "required": ["cron_expression", "note"],
+            "required": ["note"],
         }
     )
 
@@ -42,28 +51,48 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
             return "error: cron manager is not available."
 
         cron_expression = kwargs.get("cron_expression")
+        run_at = kwargs.get("run_at")
+        run_once = bool(kwargs.get("run_once", False))
         note = str(kwargs.get("note", "")).strip()
         name = str(kwargs.get("name") or "").strip() or "active_agent_task"
 
-        if not cron_expression or not note:
-            return "error: cron_expression and note are required."
+        if not note:
+            return "error: note is required."
+        if run_once and not run_at:
+            return "error: run_at is required when run_once=true."
+        if (not run_once) and not cron_expression:
+            return "error: cron_expression is required when run_once=false."
+        if run_once and cron_expression:
+            cron_expression = None
+        run_at_dt = None
+        if run_at:
+            try:
+                run_at_dt = datetime.fromisoformat(str(run_at))
+            except Exception:
+                return "error: run_at must be ISO datetime, e.g., 2026-02-02T08:00:00+08:00"
 
         payload = {
             "session": context.context.event.unified_msg_origin,
+            "sender_id": context.context.event.get_sender_id(),
             "note": note,
+            "origin": "tool",
         }
 
         job = await cron_mgr.add_active_job(
             name=name,
-            cron_expression=str(cron_expression),
+            cron_expression=str(cron_expression) if cron_expression else None,
             payload=payload,
             description=note,
+            run_once=run_once,
+            run_at=run_at_dt,
         )
-        next_run = job.next_run_time
-        return (
-            f"Scheduled future task {job.job_id} ({job.name}) with expression '{cron_expression}'. "
-            f"You will be awakened at: {next_run}"
+        next_run = job.next_run_time or run_at_dt
+        suffix = (
+            f"one-time at {next_run}"
+            if run_once
+            else f"expression '{cron_expression}' (next {next_run})"
         )
+        return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
 
 @dataclass
@@ -125,7 +154,7 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         lines = []
         for j in jobs:
             lines.append(
-                f"{j.job_id} | {j.name} | {j.job_type} | enabled={j.enabled} | next={j.next_run_time}"
+                f"{j.job_id} | {j.name} | {j.job_type} | run_once={getattr(j, 'run_once', False)} | enabled={j.enabled} | next={j.next_run_time}"
             )
         return "\n".join(lines)
 

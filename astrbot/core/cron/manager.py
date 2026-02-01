@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
@@ -91,13 +92,18 @@ class CronJobManager:
         self,
         *,
         name: str,
-        cron_expression: str,
+        cron_expression: str | None,
         payload: dict,
         description: str | None = None,
         timezone: str | None = None,
         enabled: bool = True,
         persistent: bool = True,
+        run_once: bool = False,
+        run_at: datetime | None = None,
     ) -> CronJob:
+        # If run_once with run_at, store run_at in payload for later reference.
+        if run_once and run_at:
+            payload = {**payload, "run_at": run_at.isoformat()}
         job = await self.db.create_cron_job(
             name=name,
             job_type="active_agent",
@@ -107,6 +113,7 @@ class CronJobManager:
             description=description,
             enabled=enabled,
             persistent=persistent,
+            run_once=run_once,
         )
         if enabled:
             self._schedule_job(job)
@@ -148,7 +155,19 @@ class CronJobManager:
                         job.timezone,
                         job.job_id,
                     )
-            trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tzinfo)
+            if job.run_once:
+                run_at_str = None
+                if isinstance(job.payload, dict):
+                    run_at_str = job.payload.get("run_at")
+                run_at_str = run_at_str or job.cron_expression
+                if not run_at_str:
+                    raise ValueError("run_once job missing run_at timestamp")
+                run_at = datetime.fromisoformat(run_at_str)
+                if run_at.tzinfo is None and tzinfo is not None:
+                    run_at = run_at.replace(tzinfo=tzinfo)
+                trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
+            else:
+                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tzinfo)
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
@@ -199,6 +218,9 @@ class CronJobManager:
                 last_error=last_error,
                 next_run_time=next_run,
             )
+            if job.run_once:
+                # one-shot: remove after execution regardless of success
+                await self.delete_job(job_id)
 
     async def _run_basic_job(self, job: CronJob):
         handler = self._basic_handlers.get(job.job_id)
@@ -221,9 +243,13 @@ class CronJobManager:
                 "id": job.job_id,
                 "name": job.name,
                 "type": job.job_type,
+                "run_once": job.run_once,
                 "description": job.description,
                 "note": note,
                 "run_started_at": start_time.isoformat(),
+                "run_at": (
+                    job.payload.get("run_at") if isinstance(job.payload, dict) else None
+                ),
             },
             "cron_payload": payload,
         }
@@ -273,11 +299,13 @@ class CronJobManager:
         # judge user's role
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
+        cron_payload = extras.get("cron_payload", {}) if extras else {}
+        sender_id = cron_payload.get("sender_id")
         admin_ids = cfg.get("admins_id", [])
         if admin_ids:
-            cron_event.role = (
-                "admin" if cron_event.get_sender_id() in admin_ids else "member"
-            )
+            cron_event.role = "admin" if sender_id in admin_ids else "member"
+        if cron_payload.get("origin", "tool") == "api":
+            cron_event.role = "admin"
 
         config = MainAgentBuildConfig(
             tool_call_timeout=3600,

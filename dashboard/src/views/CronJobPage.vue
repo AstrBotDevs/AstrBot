@@ -16,6 +16,7 @@
         </div>
       </div>
       <div class="d-flex align-center" style="gap: 8px;">
+        <v-btn variant="tonal" color="primary" @click="openCreate">新建任务</v-btn>
         <v-btn variant="tonal" color="primary" :loading="loading" @click="loadJobs">刷新</v-btn>
       </div>
     </div>
@@ -35,11 +36,16 @@
             <div class="text-caption text-medium-emphasis">{{ item.description }}</div>
           </template>
           <template #item.type="{ item }">
-            <v-chip size="small" color="primary" variant="tonal">{{ item.job_type }}</v-chip>
+            <v-chip size="small" :color="item.run_once ? 'orange' : 'primary'" variant="tonal">
+              {{ item.run_once ? '一次性' : (item.job_type || 'active_agent') }}
+            </v-chip>
           </template>
           <template #item.cron_expression="{ item }">
-            <div>{{ item.cron_expression || '—' }}</div>
-            <div class="text-caption text-medium-emphasis">{{ item.timezone || 'local' }}</div>
+            <div v-if="item.run_once">{{ formatTime(item.run_at) }}</div>
+            <div v-else>
+              <div>{{ item.cron_expression || '—' }}</div>
+              <div class="text-caption text-medium-emphasis">{{ item.timezone || 'local' }}</div>
+            </div>
           </template>
           <template #item.next_run_time="{ item }">{{ formatTime(item.next_run_time) }}</template>
           <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
@@ -58,6 +64,50 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="2600">
       {{ snackbar.message }}
     </v-snackbar>
+
+    <v-dialog v-model="createDialog" max-width="560">
+      <v-card>
+        <v-card-title class="text-h6">新建任务</v-card-title>
+        <v-card-text>
+          <v-switch v-model="newJob.run_once" label="一次性任务" inset color="primary" hide-details />
+          <v-text-field v-model="newJob.name" label="任务名称" variant="outlined" density="comfortable" />
+          <v-text-field v-model="newJob.note" label="任务说明" variant="outlined" density="comfortable" />
+          <v-text-field
+            v-if="!newJob.run_once"
+            v-model="newJob.cron_expression"
+            label="Cron 表达式"
+            placeholder="0 9 * * *"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-else
+            v-model="newJob.run_at"
+            label="执行时间"
+            type="datetime-local"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="newJob.session"
+            label="目标 session (platform_id:message_type:session_id)"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-text-field
+            v-model="newJob.timezone"
+            label="时区（可选，如 Asia/Shanghai）"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-switch v-model="newJob.enabled" label="启用" inset color="primary" hide-details />
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="createDialog = false">取消</v-btn>
+          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">创建</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -68,6 +118,18 @@ import axios from 'axios'
 const loading = ref(false)
 const jobs = ref<any[]>([])
 const proactivePlatforms = ref<{ id: string; name: string; display_name?: string }[]>([])
+const createDialog = ref(false)
+const creating = ref(false)
+const newJob = ref({
+  run_once: false,
+  name: '',
+  note: '',
+  cron_expression: '',
+  run_at: '',
+  session: '',
+  timezone: '',
+  enabled: true
+})
 
 const snackbar = ref({ show: false, message: '', color: 'success' })
 
@@ -151,6 +213,60 @@ async function deleteJob(job: any) {
     }
   } catch (e: any) {
     toast(e?.response?.data?.message || '删除失败', 'error')
+  }
+}
+
+function openCreate() {
+  resetNewJob()
+  createDialog.value = true
+}
+
+function resetNewJob() {
+  newJob.value = {
+    run_once: false,
+    name: '',
+    note: '',
+    cron_expression: '',
+    run_at: '',
+    session: '',
+    timezone: '',
+    enabled: true
+  }
+}
+
+async function createJob() {
+  if (!newJob.value.session) {
+    toast('请填写 session', 'warning')
+    return
+  }
+  if (!newJob.value.note) {
+    toast('请填写说明', 'warning')
+    return
+  }
+  if (!newJob.value.run_once && !newJob.value.cron_expression) {
+    toast('请填写 Cron 表达式', 'warning')
+    return
+  }
+  if (newJob.value.run_once && !newJob.value.run_at) {
+    toast('请选择执行时间', 'warning')
+    return
+  }
+  creating.value = true
+  try {
+    const payload: any = { ...newJob.value }
+    const res = await axios.post('/api/cron/jobs', payload)
+    if (res.data.status === 'ok') {
+      toast('创建成功')
+      createDialog.value = false
+      resetNewJob()
+      await loadJobs()
+    } else {
+      toast(res.data.message || '创建失败', 'error')
+    }
+  } catch (e: any) {
+    toast(e?.response?.data?.message || '创建失败', 'error')
+  } finally {
+    creating.value = false
   }
 }
 

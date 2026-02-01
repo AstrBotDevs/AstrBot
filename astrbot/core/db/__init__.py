@@ -528,6 +528,7 @@ class BaseDatabase(abc.ABC):
         description: str | None = None,
         enabled: bool = True,
         persistent: bool = True,
+        run_once: bool = False,
         status: str | None = None,
         job_id: str | None = None,
     ) -> CronJob:
@@ -546,6 +547,7 @@ class BaseDatabase(abc.ABC):
         description: str | None = None,
         enabled: bool | None = None,
         persistent: bool | None = None,
+        run_once: bool | None = None,
         status: str | None = None,
         next_run_time: datetime.datetime | None = None,
         last_run_at: datetime.datetime | None = None,
