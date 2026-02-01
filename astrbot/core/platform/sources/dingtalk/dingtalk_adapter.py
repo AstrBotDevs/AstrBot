@@ -99,6 +99,7 @@ class DingtalkPlatformAdapter(Platform):
             description="钉钉机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
             support_streaming_message=True,
+            support_proactive_message=False,
         )
 
     async def create_message_card(

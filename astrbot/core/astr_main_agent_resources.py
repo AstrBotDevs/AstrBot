@@ -1,4 +1,5 @@
 import base64
+import os
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -172,46 +173,123 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 @dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
-    description: str = (
-        "Send a short, proactive message to the user. "
-        "Use this to deliver scheduled/background task results or important updates without waiting for a new user prompt."
-    )
+    description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
+
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "message": {
-                    "type": "string",
-                    "description": "What you want to tell the user.",
-                },
-                "image_path": {
-                    "type": "string",
-                    "description": "Optional. Send an image to the user by specifying the file path. Use an absolute path when possible; otherwise, ensure the path is relative to `data/`.",
-                },
-                "session": {
-                    "type": "string",
-                    "description": "Optional target session in format platform_id:message_type:session_id. Defaults to current session.",
+                "messages": {
+                    "type": "array",
+                    "description": "An ordered list of message components to send. `mention_user` type can be used to mention the user.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "description": (
+                                    "Component type. One of: "
+                                    "plain, image, record, file, mention_user"
+                                ),
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "Text content for `plain` type.",
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "File path for `image`, `record`, or `file` types.",
+                            },
+                            "url": {
+                                "type": "string",
+                                "description": "URL for `image`, `record`, or `file` types.",
+                            },
+                            "mention_user_id": {
+                                "type": "string",
+                                "description": "User ID to mention for `mention_user` type.",
+                            },
+                        },
+                        "required": ["type"],
+                    },
                 },
             },
+            "required": ["messages"],
         }
     )
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        message = str(kwargs.get("message", "")).strip()
-        image_path = kwargs.get("image_path")
         session = kwargs.get("session") or context.context.event.unified_msg_origin
+        messages = kwargs.get("messages")
 
-        if not message and not image_path:
-            return "error: message is empty."
+        if not isinstance(messages, list) or not messages:
+            return "error: messages parameter is empty or invalid."
 
-        comps: list[Comp.BaseMessageComponent] = []
+        components: list[Comp.BaseMessageComponent] = []
 
-        if message:
-            comps.append(Comp.Plain(text=message))
-        if image_path:
-            comps.append(Comp.Image.fromFileSystem(path=image_path))
+        for idx, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                return f"error: messages[{idx}] should be an object."
+
+            msg_type = str(msg.get("type", "")).lower()
+            if not msg_type:
+                return f"error: messages[{idx}].type is required."
+
+            try:
+                if msg_type == "plain":
+                    text = str(msg.get("text", "")).strip()
+                    if not text:
+                        return f"error: messages[{idx}].text is required for plain component."
+                    components.append(Comp.Plain(text=text))
+                elif msg_type == "image":
+                    path = msg.get("path")
+                    url = msg.get("url")
+                    if path:
+                        components.append(Comp.Image.fromFileSystem(path=path))
+                    elif url:
+                        components.append(Comp.Image.fromURL(url=url))
+                    else:
+                        return f"error: messages[{idx}] must include path or url for image component."
+                elif msg_type == "record":
+                    path = msg.get("path")
+                    url = msg.get("url")
+                    if path:
+                        components.append(Comp.Record.fromFileSystem(path=path))
+                    elif url:
+                        components.append(Comp.Record.fromURL(url=url))
+                    else:
+                        return f"error: messages[{idx}] must include path or url for record component."
+                elif msg_type == "file":
+                    path = msg.get("path")
+                    url = msg.get("url")
+                    name = (
+                        msg.get("text")
+                        or (os.path.basename(path) if path else "")
+                        or (os.path.basename(url) if url else "")
+                        or "file"
+                    )
+                    if path:
+                        components.append(Comp.File(name=name, file=path))
+                    elif url:
+                        components.append(Comp.File(name=name, url=url))
+                    else:
+                        return f"error: messages[{idx}] must include path or url for file component."
+                elif msg_type == "mention_user":
+                    mention_user_id = msg.get("mention_user_id")
+                    if not mention_user_id:
+                        return f"error: messages[{idx}].mention_user_id is required for mention_user component."
+                    components.append(
+                        Comp.At(
+                            qq=mention_user_id,
+                        ),
+                    )
+                else:
+                    return (
+                        f"error: unsupported message type '{msg_type}' at index {idx}."
+                    )
+            except Exception as exc:  # 捕获组件构造异常，避免直接抛出
+                return f"error: failed to build messages[{idx}] component: {exc}"
 
         try:
             target_session = (
@@ -224,7 +302,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         await context.context.context.send_message(
             target_session,
-            MessageChain(chain=comps),
+            MessageChain(chain=components),
         )
         return f"Message sent to session {target_session}"
 

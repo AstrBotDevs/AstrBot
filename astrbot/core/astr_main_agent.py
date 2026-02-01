@@ -33,6 +33,7 @@ from astrbot.core.astr_main_agent_resources import (
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
+    SEND_MESSAGE_TO_USER_TOOL,
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
@@ -922,6 +923,11 @@ async def build_main_agent(
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req)
+
+    if event.platform_meta.support_proactive_message:
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
