@@ -113,6 +113,9 @@ class InternalAgentSubStage(Stage):
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             sandbox_cfg=self.sandbox_cfg,
+            provider_settings=settings,
+            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
+            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
         )
 
     async def process(

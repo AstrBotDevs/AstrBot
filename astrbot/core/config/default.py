@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 4,
+        "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,

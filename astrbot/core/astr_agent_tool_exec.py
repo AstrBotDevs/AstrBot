@@ -3,6 +3,7 @@ import inspect
 import traceback
 import typing as T
 import uuid
+import json
 
 import mcp
 
@@ -20,9 +21,13 @@ from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
 )
+from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.message.components import Plain
+from astrbot.core.astr_main_agent_resources import (
+    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    SEND_MESSAGE_TO_USER_TOOL,
+)
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -148,7 +153,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         task_id: str,
         **tool_args,
     ):
-        from astrbot.core.astr_main_agent import build_main_agent, MainAgentBuildConfig
+        from astrbot.core.astr_main_agent import (
+            build_main_agent,
+            MainAgentBuildConfig,
+            _get_session_conv,
+        )
 
         # run the tool
         result_text = ""
@@ -191,47 +200,47 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         config = MainAgentBuildConfig(tool_call_timeout=3600)
-        result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config
-        )
-        if not result:
-            logger.error("Failed to build main agent for cron job.")
-            return
-        runner = result.agent_runner
-        req = result.provider_request
 
-        bg = extras["background_task_result"]
-        result_text = bg["result"] or "Empty Response"
-        if req.contexts:
+        req = ProviderRequest()
+        conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+        req.conversation = conv
+        context = json.loads(conv.history)
+        if context:
+            req.contexts = context
             context_dump = req._print_friendly_context()
+            req.contexts = []
             req.system_prompt += (
                 "\n\nBellow is you and user previous conversation history:\n"
                 f"{context_dump}"
             )
-        req.system_prompt += (
-            "You now have a new background task result:\n"
-            f"- Task ID: {bg['task_id']}\n"
-            f"- Executed Tool: {tool.name}\n"
-            f"- Tool Args: {tool_args}\n"
-            f"- Result: {result_text}\n"
-            f"- Note: {note}\n"
-            "Please tell the user the result of the background task in your next response."
-        )
 
+        bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
+        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
+            background_task_result=bg
+        )
         req.prompt = (
-            "You have a new background task result to report to the user."
-            " Please include the result in your next response."
-            " Using same language as previous conversation."
+            "Proceed according to your system instructions. "
+            "Output using same language as previous conversation."
         )
+        if not req.func_tool:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
+        result = await build_main_agent(
+            event=cron_event, plugin_context=ctx, config=config, req=req
+        )
+        if not result:
+            logger.error("Failed to build main agent for background task job.")
+            return
+
+        runner = result.agent_runner
         async for _ in runner.step_until_done(30):
+            # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
         if not llm_resp:
-            logger.warning("Cron job agent got no response")
+            logger.warning("background task agent got no response")
             return
-        message_chain = MessageChain(chain=[Plain(text=llm_resp.completion_text)])
-        await ctx.send_message(session=session, message_chain=message_chain)
 
     @classmethod
     async def _execute_local(

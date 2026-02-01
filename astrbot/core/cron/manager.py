@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo
@@ -7,12 +8,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from astrbot import logger
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.message.components import Plain
+from astrbot.core.provider.entites import ProviderRequest
 
 from typing import TYPE_CHECKING
 
@@ -239,7 +240,16 @@ class CronJobManager:
         session_str: str,
         extras: dict,
     ):
-        from astrbot.core.astr_main_agent import build_main_agent, MainAgentBuildConfig
+        """Woke the main agent to handle the cron job message."""
+        from astrbot.core.astr_main_agent import (
+            build_main_agent,
+            MainAgentBuildConfig,
+            _get_session_conv,
+        )
+        from astrbot.core.astr_main_agent_resources import (
+            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
+            SEND_MESSAGE_TO_USER_TOOL,
+        )
 
         try:
             session = (
@@ -259,43 +269,53 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
-        config = MainAgentBuildConfig(tool_call_timeout=3600)
+        config = MainAgentBuildConfig(
+            tool_call_timeout=3600,
+            llm_safety_mode=False,
+        )
+        req = ProviderRequest()
+        conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
+        req.conversation = conv
+        # finetine the messages
+        context = json.loads(conv.history)
+        if context:
+            req.contexts = context
+            context_dump = req._print_friendly_context()
+            req.contexts = []
+            req.system_prompt += (
+                "\n\nBellow is you and user previous conversation history:\n"
+                f"---\n"
+                f"{context_dump}\n"
+                f"---\n"
+            )
+        cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
+        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
+            cron_job=cron_job_str
+        )
+        req.prompt = (
+            "You are now responding to a scheduled task"
+            "Proceed according to your system instructions. "
+            "Output using same language as previous conversation."
+        )
+        if not req.func_tool:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+
         result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config
+            event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
             logger.error("Failed to build main agent for cron job.")
             return
-        req = result.provider_request
+
         runner = result.agent_runner
-
-        # finetine the messages
-        job_name = extras.get("name", "scheduled task")
-        note = extras.get("note") or extras.get("description") or ""
-        if req.contexts:
-            context_dump = req._print_friendly_context()
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
-        req.system_prompt += (
-            "\n[Scheduler Context] This turn is triggered automatically by cron job "
-            f'"{job_name}" (type: {extras.get("type", "unknown")}). '
-            "Act proactively based on the provided note and current context. "
-        )
-        if note:
-            req.system_prompt += f"[Scheduler Note]: {note}\n"
-
-        req.prompt = "You are now responding to a scheduled task. Output using same language as previous conversation."
-
         async for _ in runner.step_until_done(30):
+            # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
-        message_chain = MessageChain(chain=[Plain(text=llm_resp.completion_text)])
-        await self.ctx.send_message(session=session, message_chain=message_chain)
 
 
 __all__ = ["CronJobManager"]

@@ -8,10 +8,10 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 
 @dataclass
 class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
-    name: str = "create_cron_job"
+    name: str = "create_future_task"
     description: str = (
-        "Create a scheduled active agent task using a cron expression. "
-        "Use this when the user asks for recurring tasks (e.g., daily reports)."
+        "Create a future task for your future using a cron expression. "
+        "Use this when you or the user want recurring follow-up (e.g., daily report to self)."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -19,15 +19,15 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "cron_expression": {
                     "type": "string",
-                    "description": "Cron expression defining when to trigger (e.g., '0 8 * * *').",
+                    "description": "Cron expression defining when your future agent should wake (e.g., '0 8 * * *').",
                 },
                 "note": {
                     "type": "string",
-                    "description": "Instruction for the future agent run when the job triggers.",
+                    "description": "Detailed instructions for your future agent to execute when it wakes.",
                 },
                 "name": {
                     "type": "string",
-                    "description": "Optional job name for identification.",
+                    "description": "Optional label to recognize this future task.",
                 },
             },
             "required": ["cron_expression", "note"],
@@ -61,15 +61,15 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
         )
         next_run = job.next_run_time
         return (
-            f"Scheduled cron job {job.job_id} ({job.name}) with expression '{cron_expression}'. "
-            f"Next run: {next_run}"
+            f"Scheduled future task {job.job_id} ({job.name}) with expression '{cron_expression}'. "
+            f"Your future agent will wake at: {next_run}"
         )
 
 
 @dataclass
 class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
-    name: str = "delete_cron_job"
-    description: str = "Delete a cron job by its job_id."
+    name: str = "delete_future_task"
+    description: str = "Delete a future task (cron job) by its job_id."
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
@@ -98,8 +98,8 @@ class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
 
 @dataclass
 class ListCronJobsTool(FunctionTool[AstrAgentContext]):
-    name: str = "list_cron_jobs"
-    description: str = "List existing cron jobs for inspection."
+    name: str = "list_future_tasks"
+    description: str = "List existing future tasks (cron jobs) for inspection."
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",
