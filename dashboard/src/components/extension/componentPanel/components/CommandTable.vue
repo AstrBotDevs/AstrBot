@@ -24,6 +24,7 @@ const emit = defineEmits<{
 const commandHeaders = computed(() => [
   { title: tm('table.headers.command'), key: 'effective_command', minWidth: '100px' },
   { title: tm('table.headers.type'), key: 'type', sortable: false, width: '100px' },
+  { title: tm('table.headers.priority'), key: 'priority', sortable: true, width: '80px' },
   { title: tm('table.headers.plugin'), key: 'plugin', width: '140px' },
   { title: tm('table.headers.description'), key: 'description', sortable: false },
   { title: tm('table.headers.permission'), key: 'permission', sortable: false, width: '100px' },
@@ -133,6 +134,10 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
           <v-icon start size="14">{{ getTypeInfo(item.type).icon }}</v-icon>
           {{ getTypeInfo(item.type).text }}{{ item.is_group && item.sub_commands?.length > 0 ? `(${item.sub_commands.length})` : '' }}
         </v-chip>
+      </template>
+
+      <template v-slot:item.priority="{ item }">
+        <div class="text-body-2">{{ item.priority ?? 0 }}</div>
       </template>
 
       <template v-slot:item.plugin="{ item }">
