@@ -81,10 +81,10 @@
     </v-container>
 
     <!-- 添加/编辑 MCP 服务器对话框 -->
-    <v-dialog v-model="showMcpServerDialog" max-width="750px" persistent>
+    <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+        <v-card-title class="pa-4 pl-6">
+          <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
         </v-card-title>
 

@@ -42,10 +42,10 @@
 
     <v-dialog v-model="uploadDialog" max-width="520px" persistent>
       <v-card>
-        <v-card-title>{{ tm('skills.uploadDialogTitle') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('skills.uploadDialogTitle') }}</v-card-title>
         <v-card-text>
           <small class="text-grey">{{ tm('skills.uploadHint') }}</small>
-          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')" prepend-icon="mdi-file-zip"
+          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')" prepend-icon="mdi-folder-zip-outline"
             variant="outlined" class="mt-4" :multiple="false" />
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
