@@ -28,6 +28,11 @@ class CronRoute(Route):
         for k in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
             if isinstance(data.get(k), datetime):
                 data[k] = data[k].isoformat()
+        # expose note explicitly for UI (prefer payload.note then description)
+        payload = data.get("payload") or {}
+        data["note"] = payload.get("note") or data.get("description") or ""
+        # status is internal; hide to avoid implying one-time completion for recurring jobs
+        data.pop("status", None)
         return data
 
     async def list_jobs(self):

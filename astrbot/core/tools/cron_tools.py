@@ -62,7 +62,7 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
         next_run = job.next_run_time
         return (
             f"Scheduled future task {job.job_id} ({job.name}) with expression '{cron_expression}'. "
-            f"Your future agent will wake at: {next_run}"
+            f"You will be awakened at: {next_run}"
         )
 
 

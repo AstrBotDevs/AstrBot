@@ -3,6 +3,7 @@ import base64
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+import astrbot.core.message.components as Comp
 from astrbot.api import logger, sp
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
@@ -183,12 +184,15 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": "What you want to tell the user.",
                 },
+                "image_path": {
+                    "type": "string",
+                    "description": "Optional. Send an image to the user by specifying the file path. Use an absolute path when possible; otherwise, ensure the path is relative to `data/`.",
+                },
                 "session": {
                     "type": "string",
                     "description": "Optional target session in format platform_id:message_type:session_id. Defaults to current session.",
                 },
             },
-            "required": ["message"],
         }
     )
 
@@ -196,10 +200,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
         message = str(kwargs.get("message", "")).strip()
+        image_path = kwargs.get("image_path")
         session = kwargs.get("session") or context.context.event.unified_msg_origin
 
-        if not message:
+        if not message and not image_path:
             return "error: message is empty."
+
+        comps: list[Comp.BaseMessageComponent] = []
+
+        if message:
+            comps.append(Comp.Plain(text=message))
+        if image_path:
+            comps.append(Comp.Image.fromFileSystem(path=image_path))
 
         try:
             target_session = (
@@ -212,7 +224,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         await context.context.context.send_message(
             target_session,
-            MessageChain().message(message),
+            MessageChain(chain=comps),
         )
         return f"Message sent to session {target_session}"
 
