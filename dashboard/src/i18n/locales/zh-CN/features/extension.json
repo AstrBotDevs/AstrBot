@@ -40,6 +40,82 @@
     "updateAll": "更新全部插件",
     "deleteSource": "删除源"
   },
+  "collection": {
+    "buttons": {
+      "export": "导出插件合集",
+      "import": "导入插件合集",
+      "confirmImport": "确认导入"
+    },
+    "dialogs": {
+      "export": {
+        "title": "导出插件合集"
+      },
+      "import": {
+        "title": "导入插件合集"
+      },
+      "result": {
+        "title": "导入结果"
+      }
+    },
+    "fields": {
+      "name": "合集名称",
+      "description": "描述（可选）",
+      "includeConfigs": "包含配置",
+      "includePriority": "包含优先级",
+      "importMode": "导入模式",
+      "applyConfigs": "应用配置",
+      "overwriteExistingConfigs": "对已安装插件也应用配置（会覆盖同名项）",
+      "overwriteExistingConfigsHint": "仅在追加（add）模式生效；关闭时仅对新安装插件应用配置。",
+      "applyPriority": "应用优先级",
+      "unnamed": "未命名合集"
+    },
+    "labels": {
+      "pluginCount": "插件数量：{count}"
+    },
+    "importModes": {
+      "add": "追加",
+      "clean": "清理后导入"
+    },
+    "cleanMode": {
+      "warning": "Clean 模式将卸载 {count} 个不在此合集内、且非系统保留（reserved）的已安装插件。",
+      "confirmCheckbox": "我已知晓将卸载 {count} 个插件"
+    },
+    "preview": {
+      "loading": "正在获取导入预览...",
+      "willInstall": "将安装：{count}",
+      "willSkip": "将跳过（已存在）：{count}",
+      "willUninstall": "将卸载（clean 模式）：{count}",
+      "configsCount": "配置数量：{count}",
+      "priorityOverrides": "优先级覆盖：{value}"
+    },
+    "messages": {
+      "nameRequired": "请填写合集名称",
+      "exportSuccess": "导出成功，已开始下载",
+      "exportFailed": "导出失败",
+      "invalidJson": "JSON 格式错误",
+      "validateFailed": "验证失败",
+      "previewFailed": "预览失败",
+      "downloadBlocked": "下载可能被浏览器拦截，请允许下载或在新标签页中手动保存",
+      "readFailed": "读取文件失败",
+      "fileTooLarge": "文件过大（上限 10MB）",
+      "importFailed": "导入失败",
+      "importFinished": "导入已完成"
+    },
+    "result": {
+      "installed": "已安装：{count}",
+      "failed": "失败：{count}",
+      "skipped": "跳过：{count}",
+      "uninstalled": "已卸载：{count}",
+      "uninstallFailed": "卸载失败：{count}",
+      "reloaded": "已重载：{count}",
+      "reloadFailed": "重载失败：{count}",
+      "configsApplied": "已应用配置：{count}",
+      "exportedVersionNote": "版本字段说明：",
+      "priorityApplied": "已应用优先级：{count}",
+      "yes": "是",
+      "no": "否"
+    }
+  },
   "status": {
     "enabled": "启用",
     "disabled": "禁用",
@@ -218,7 +294,7 @@
       "uninstallPlugin": "卸载插件",
       "reloadPlugin": "重载插件",
       "togglePlugin": "插件",
-      "viewHandlers": "查看行为",
+      "viewHandlers": "查看行为 ({count})",
       "updateTo": "更新到",
       "reinstall": "重新安装"
     },

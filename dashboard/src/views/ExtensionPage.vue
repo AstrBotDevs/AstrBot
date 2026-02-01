@@ -49,7 +49,7 @@ const checkAndPromptConflicts = async () => {
   }
 };
 const handleConflictConfirm = () => {
-  activeTab.value = "commands";
+  activeTab.value = "components";
 };
 
 const fileInput = ref(null);
@@ -157,6 +157,283 @@ const debouncedMarketSearch = ref("");
 const refreshingMarket = ref(false);
 const sortBy = ref("default"); // default, stars, author, updated
 const sortOrder = ref("desc"); // desc (降序) or asc (升序)
+
+// Plugin collection import/export
+const collectionExportDialog = reactive({
+  show: false,
+  name: "",
+  description: "",
+  includeConfigs: true,
+  includePriority: true,
+  loading: false,
+});
+
+const collectionImport = reactive({
+  validating: false,
+  importing: false,
+  rawText: "",
+  validatedCollection: null,
+  preview: null,
+  previewLoading: false,
+  showConfirm: false,
+  mode: "add",
+  applyConfigs: true,
+  overwriteExistingConfigs: false,
+  applyPriority: true,
+  proxy: "",
+  result: null,
+  showResult: false,
+});
+
+const cleanModeConfirmed = ref(false);
+
+const collectionFileInput = ref(null);
+
+const safeFileName = (name) =>
+  (name || "collection")
+    .toString()
+    .trim()
+    .replace(/[\\/:*?"<>|\n\r\t]+/g, "_")
+    .slice(0, 120);
+
+const downloadJson = (filename, data) => {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    // Some environments (or browser settings) may block programmatic downloads.
+    // Fallback to opening a new tab so user can save manually.
+    toast(tm("collection.messages.downloadBlocked"), "warning");
+    window.open(url, "_blank", "noopener");
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+};
+
+const openExportCollectionDialog = () => {
+  collectionExportDialog.name = "";
+  collectionExportDialog.description = "";
+  collectionExportDialog.includeConfigs = true;
+  collectionExportDialog.includePriority = true;
+  collectionExportDialog.loading = false;
+  collectionExportDialog.show = true;
+};
+
+const exportCollection = async () => {
+  const name = (collectionExportDialog.name || "").trim();
+  if (!name) {
+    toast(tm("collection.messages.nameRequired"), "error");
+    return;
+  }
+
+  collectionExportDialog.loading = true;
+  try {
+    const res = await axios.get("/api/plugin/collection/export", {
+        params: {
+          name,
+          description: collectionExportDialog.description || undefined,
+          include_configs: collectionExportDialog.includeConfigs,
+          include_priority: collectionExportDialog.includePriority,
+        },
+      });
+
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.exportFailed"), "error");
+      return;
+    }
+
+    const collection = res.data.data;
+    downloadJson(`${safeFileName(name)}.json`, collection);
+    toast(tm("collection.messages.exportSuccess"), "success");
+    collectionExportDialog.show = false;
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.exportFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionExportDialog.loading = false;
+  }
+};
+
+const openImportFilePicker = () => {
+  if (!collectionFileInput.value) return;
+  collectionFileInput.value.value = null;
+  collectionFileInput.value.click();
+};
+
+const readSelectedCollectionFile = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.readAsText(file);
+  });
+};
+
+const refreshCollectionPreview = async () => {
+  if (!collectionImport.validatedCollection) return;
+
+  collectionImport.previewLoading = true;
+  try {
+    const previewRes = await axios.post("/api/plugin/collection/preview", {
+      collection: collectionImport.validatedCollection,
+      import_mode: collectionImport.mode,
+    });
+
+    if (previewRes.data.status === "ok") {
+      collectionImport.preview = previewRes.data.data;
+    } else {
+      toast(
+        previewRes.data.message || tm("collection.messages.previewFailed"),
+        "warning",
+      );
+    }
+  } catch (e) {
+    const errorMsg = e.response?.data?.message || e.message || String(e);
+    toast(`${tm("collection.messages.previewFailed")}: ${errorMsg}`, "warning");
+  } finally {
+    collectionImport.previewLoading = false;
+  }
+};
+
+const validateAndPreviewCollection = async (rawText) => {
+  collectionImport.validating = true;
+  collectionImport.rawText = rawText;
+  collectionImport.validatedCollection = null;
+  collectionImport.preview = null;
+  collectionImport.previewLoading = false;
+  collectionImport.showConfirm = false;
+  collectionImport.result = null;
+  collectionImport.showResult = false;
+
+  let collectionObj;
+  try {
+    collectionObj = JSON.parse(rawText);
+  } catch (e) {
+    toast(tm("collection.messages.invalidJson"), "error");
+    collectionImport.validating = false;
+    return;
+  }
+
+  try {
+    const res = await axios.post("/api/plugin/collection/validate", {
+      collection: collectionObj,
+    });
+
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.validateFailed"), "error");
+      return;
+    }
+
+    const valid = Boolean(res.data?.data?.valid);
+    if (!valid) {
+      const errors = Array.isArray(res.data?.data?.errors)
+        ? res.data.data.errors.join("; ")
+        : "";
+      toast(
+        `${tm("collection.messages.validateFailed")}${errors ? `: ${errors}` : ""}`,
+        "error",
+      );
+      return;
+    }
+
+    // Validation endpoint returns { valid: true } (not the collection).
+    // Keep the original parsed collection for preview + import.
+    collectionImport.validatedCollection = collectionObj;
+    collectionImport.mode = "add";
+    collectionImport.applyConfigs = true;
+    collectionImport.overwriteExistingConfigs = false;
+    collectionImport.applyPriority = true;
+    collectionImport.proxy = getSelectedGitHubProxy();
+
+    // Fetch preview so user can see what will happen before importing.
+    await refreshCollectionPreview();
+
+    collectionImport.showConfirm = true;
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.validateFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionImport.validating = false;
+  }
+};
+
+const onCollectionFileSelected = async (e) => {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+
+  if (file.size > 10 * 1024 * 1024) {
+    toast(tm("collection.messages.fileTooLarge"), "error");
+    return;
+  }
+
+  try {
+    const text = await readSelectedCollectionFile(file);
+    await validateAndPreviewCollection(text);
+  } catch (err) {
+    const errorMsg = err?.message || String(err);
+    toast(`${tm("collection.messages.readFailed")}: ${errorMsg}`, "error");
+  }
+};
+
+const getCollectionPluginCount = (collection) => {
+  if (!collection) return 0;
+  const plugins = collection.plugins || collection.items || [];
+  if (Array.isArray(plugins)) return plugins.length;
+  if (typeof plugins === "object" && plugins) return Object.keys(plugins).length;
+  return 0;
+};
+
+const confirmImportCollection = async () => {
+  if (!collectionImport.validatedCollection) return;
+  if (collectionImport.mode === "clean" && !cleanModeConfirmed.value) return;
+
+  collectionImport.importing = true;
+  try {
+    const proxy = getSelectedGitHubProxy();
+    const payload = {
+      collection: collectionImport.validatedCollection,
+      import_mode: collectionImport.mode,
+      apply_configs: collectionImport.applyConfigs,
+      overwrite_existing_configs: collectionImport.overwriteExistingConfigs,
+      apply_priority: collectionImport.applyPriority,
+      ...(proxy ? { proxy } : {}),
+    };
+
+    const res = await axios.post("/api/plugin/collection/import", payload);
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.importFailed"), "error");
+      return;
+    }
+
+    collectionImport.result = res.data.data;
+    collectionImport.showConfirm = false;
+    collectionImport.showResult = true;
+
+    toast(tm("collection.messages.importFinished"), "success");
+
+    try {
+      await getExtensions();
+      await checkAndPromptConflicts();
+    } catch (e) {
+      // Ignore refresh errors
+    }
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.importFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionImport.importing = false;
+  }
+};
 
 // 插件市场拼音搜索
 const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -1010,10 +1287,8 @@ onMounted(async () => {
     // For history mode (/path?param=value)
     urlParams = new URLSearchParams(window.location.search);
   }
-  console.log("URL Parameters:", urlParams.toString());
   const plugin_name = urlParams.get("open_config");
   if (plugin_name) {
-    console.log(`Opening config for plugin: ${plugin_name}`);
     openExtensionConfig(plugin_name);
   }
 
@@ -1051,6 +1326,19 @@ watch(isListView, (newVal) => {
     localStorage.setItem("pluginListViewMode", String(newVal));
   }
 });
+
+watch(
+  () => collectionImport.mode,
+  async (newMode, oldMode) => {
+    if (newMode === oldMode) return;
+    cleanModeConfirmed.value = false;
+
+    if (!collectionImport.showConfirm) return;
+    if (!collectionImport.validatedCollection) return;
+
+    await refreshCollectionPreview();
+  },
+);
 </script>
 
 <template>
@@ -1122,1012 +1410,1035 @@ watch(isListView, (newVal) => {
             </div>
           </div>
 
-          <!-- 已安装插件标签页内容 -->
-          <v-tab-item v-show="activeTab === 'installed'">
-            <v-row class="mb-4">
-              <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
-                <v-btn-group
-                  variant="outlined"
-                  density="comfortable"
-                  color="primary"
-                >
-                  <v-btn
-                    @click="isListView = false"
-                    :color="!isListView ? 'primary' : undefined"
-                    :variant="!isListView ? 'flat' : 'outlined'"
-                  >
-                    <v-icon>mdi-view-grid</v-icon>
-                  </v-btn>
-                  <v-btn
-                    @click="isListView = true"
-                    :color="isListView ? 'primary' : undefined"
-                    :variant="isListView ? 'flat' : 'outlined'"
-                  >
-                    <v-icon>mdi-view-list</v-icon>
-                  </v-btn>
-                </v-btn-group>
+          <!-- Tab content -->
+          <v-window v-model="activeTab">
+            <!-- Installed plugins tab -->
+            <v-window-item value="installed">
+             <v-row class="mb-4">
+               <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
+                 <v-btn-group
+                   variant="outlined"
+                   density="comfortable"
+                   color="primary"
+                 >
+                   <v-btn
+                     @click="isListView = false"
+                     :color="!isListView ? 'primary' : undefined"
+                     :variant="!isListView ? 'flat' : 'outlined'"
+                   >
+                     <v-icon>mdi-view-grid</v-icon>
+                   </v-btn>
+                   <v-btn
+                     @click="isListView = true"
+                     :color="isListView ? 'primary' : undefined"
+                     :variant="isListView ? 'flat' : 'outlined'"
+                   >
+                     <v-icon>mdi-view-list</v-icon>
+                   </v-btn>
+                 </v-btn-group>
 
-                <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
-                  <v-icon>{{
-                    showReserved ? "mdi-eye-off" : "mdi-eye"
-                  }}</v-icon>
-                  {{
-                    showReserved
-                      ? tm("buttons.hideSystemPlugins")
-                      : tm("buttons.showSystemPlugins")
-                  }}
-                </v-btn>
+                 <v-btn class="ml-2" variant="tonal" @click="toggleShowReserved">
+                   <v-icon>{{
+                     showReserved ? "mdi-eye-off" : "mdi-eye"
+                   }}</v-icon>
+                   {{
+                     showReserved
+                       ? tm("buttons.hideSystemPlugins")
+                       : tm("buttons.showSystemPlugins")
+                   }}
+                 </v-btn>
 
-                <v-btn
-                  class="ml-2"
-                  color="warning"
-                  variant="tonal"
-                  :disabled="updatableExtensions.length === 0"
-                  :loading="updatingAll"
-                  @click="showUpdateAllConfirm"
-                >
-                  <v-icon>mdi-update</v-icon>
-                  {{ tm("buttons.updateAll") }}
-                </v-btn>
+                 <v-btn
+                   class="ml-2"
+                   color="primary"
+                   variant="tonal"
+                   @click="openExportCollectionDialog"
+                 >
+                   <v-icon>mdi-export</v-icon>
+                   {{ tm("collection.buttons.export") }}
+                 </v-btn>
 
-                <v-btn
-                  class="ml-2"
-                  color="primary"
-                  variant="tonal"
-                  @click="dialog = true"
-                >
-                  <v-icon>mdi-plus</v-icon>
-                  {{ tm("buttons.install") }}
-                </v-btn>
+                 <v-btn
+                   class="ml-2"
+                   color="primary"
+                   variant="tonal"
+                   @click="openImportFilePicker"
+                 >
+                   <v-icon>mdi-import</v-icon>
+                   {{ tm("collection.buttons.import") }}
+                 </v-btn>
 
-                <v-col cols="12" sm="auto" class="ml-auto">
-                  <v-dialog max-width="500px" v-if="extension_data.message">
-                    <template v-slot:activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        icon
-                        size="small"
-                        color="error"
-                        class="ml-2"
-                        variant="tonal"
-                      >
-                        <v-icon>mdi-alert-circle</v-icon>
-                      </v-btn>
-                    </template>
-                    <template v-slot:default="{ isActive }">
-                      <v-card class="rounded-lg">
-                        <v-card-title class="headline d-flex align-center">
-                          <v-icon color="error" class="mr-2"
-                            >mdi-alert-circle</v-icon
-                          >
-                          {{ tm("dialogs.error.title") }}
-                        </v-card-title>
-                        <v-card-text>
-                          <p class="text-body-1">
-                            {{ extension_data.message }}
-                          </p>
-                          <p class="text-caption mt-2">
-                            {{ tm("dialogs.error.checkConsole") }}
-                          </p>
-                        </v-card-text>
-                        <v-card-actions>
-                          <v-spacer></v-spacer>
-                          <v-btn
-                            color="primary"
-                            @click="isActive.value = false"
-                            >{{ tm("buttons.close") }}</v-btn
-                          >
-                        </v-card-actions>
-                      </v-card>
-                    </template>
-                  </v-dialog>
-                </v-col>
-              </v-col>
-            </v-row>
+                 <v-btn
+                   class="ml-2"
+                   color="warning"
+                   variant="tonal"
+                   :disabled="updatableExtensions.length === 0"
+                   :loading="updatingAll"
+                   @click="showUpdateAllConfirm"
+                 >
+                   <v-icon>mdi-update</v-icon>
+                   {{ tm("buttons.updateAll") }}
+                 </v-btn>
 
-            <v-fade-transition hide-on-leave>
-              <!-- 表格视图 -->
-              <div v-if="isListView">
-                <v-card class="rounded-lg overflow-hidden elevation-1">
-                  <v-data-table
-                    :headers="pluginHeaders"
-                    :items="filteredPlugins"
-                    :loading="loading_"
-                    item-key="name"
-                    hover
-                  >
-                    <template v-slot:loader>
-                      <v-row class="py-8 d-flex align-center justify-center">
-                        <v-progress-circular
-                          indeterminate
-                          color="primary"
-                        ></v-progress-circular>
-                        <span class="ml-2">{{ tm("status.loading") }}</span>
-                      </v-row>
-                    </template>
+                 <v-btn
+                   class="ml-2"
+                   color="primary"
+                   variant="tonal"
+                   @click="dialog = true"
+                 >
+                   <v-icon>mdi-plus</v-icon>
+                   {{ tm("buttons.install") }}
+                 </v-btn>
 
-                    <template v-slot:item.name="{ item }">
-                      <div class="d-flex align-center py-2">
-                        <div
-                          v-if="item.logo"
-                          class="mr-3"
-                          style="flex-shrink: 0"
-                        >
-                          <img
-                            :src="item.logo"
-                            :alt="item.name"
-                            style="
-                              height: 40px;
-                              width: 40px;
-                              border-radius: 8px;
-                              object-fit: cover;
-                            "
-                          />
-                        </div>
-                        <div v-else class="mr-3" style="flex-shrink: 0">
-                          <img
-                            :src="defaultPluginIcon"
-                            :alt="item.name"
-                            style="
-                              height: 40px;
-                              width: 40px;
-                              border-radius: 8px;
-                              object-fit: cover;
-                            "
-                          />
-                        </div>
-                        <div>
-                          <div class="text-subtitle-1 font-weight-medium">
-                            {{
-                              item.display_name && item.display_name.length
-                                ? item.display_name
-                                : item.name
-                            }}
-                          </div>
-                          <div
-                            v-if="item.display_name && item.display_name.length"
-                            class="text-caption text-medium-emphasis mt-1"
-                          >
-                            {{ item.name }}
-                          </div>
-                          <div
-                            v-if="item.reserved"
-                            class="d-flex align-center mt-1"
-                          >
-                            <v-chip
-                              color="primary"
-                              size="x-small"
-                              class="font-weight-medium"
-                              >{{ tm("status.system") }}</v-chip
-                            >
-                          </div>
-                        </div>
-                      </div>
-                    </template>
+                 <v-col cols="12" sm="auto" class="ml-auto">
+                   <v-dialog max-width="500px" v-if="extension_data.message">
+                     <template v-slot:activator="{ props }">
+                       <v-btn
+                         v-bind="props"
+                         icon
+                         size="small"
+                         color="error"
+                         class="ml-2"
+                         variant="tonal"
+                       >
+                         <v-icon>mdi-alert-circle</v-icon>
+                       </v-btn>
+                     </template>
+                     <template v-slot:default="{ isActive }">
+                       <v-card class="rounded-lg">
+                         <v-card-title class="headline d-flex align-center">
+                           <v-icon color="error" class="mr-2"
+                             >mdi-alert-circle</v-icon
+                           >
+                           {{ tm("dialogs.error.title") }}
+                         </v-card-title>
+                         <v-card-text>
+                           <p class="text-body-1">
+                             {{ extension_data.message }}
+                           </p>
+                           <p class="text-caption mt-2">
+                             {{ tm("dialogs.error.checkConsole") }}
+                           </p>
+                         </v-card-text>
+                         <v-card-actions>
+                           <v-spacer></v-spacer>
+                           <v-btn
+                             color="primary"
+                             @click="isActive.value = false"
+                             >{{ tm("buttons.close") }}</v-btn
+                           >
+                         </v-card-actions>
+                       </v-card>
+                     </template>
+                   </v-dialog>
+                 </v-col>
+               </v-col>
+             </v-row>
 
-                    <template v-slot:item.desc="{ item }">
-                      <div
-                        class="text-body-2 text-medium-emphasis mt-2 mb-2"
-                        style="
-                          display: -webkit-box;
-                          -webkit-line-clamp: 3;
-                          line-clamp: 3;
-                          -webkit-box-orient: vertical;
-                          overflow: hidden;
-                          text-overflow: ellipsis;
-                        "
-                      >
-                        {{ item.desc }}
-                      </div>
-                    </template>
+             <v-fade-transition hide-on-leave>
+               <!-- 表格视图 -->
+               <div v-if="isListView">
+                 <v-card class="rounded-lg overflow-hidden elevation-1">
+                   <v-data-table
+                     :headers="pluginHeaders"
+                     :items="filteredPlugins"
+                     :loading="loading_"
+                     item-key="name"
+                     hover
+                   >
+                     <template v-slot:loader>
+                       <v-row class="py-8 d-flex align-center justify-center">
+                         <v-progress-circular
+                           indeterminate
+                           color="primary"
+                         ></v-progress-circular>
+                         <span class="ml-2">{{ tm("status.loading") }}</span>
+                       </v-row>
+                     </template>
 
-                    <template v-slot:item.version="{ item }">
-                      <div class="d-flex align-center">
-                        <span class="text-body-2">{{ item.version }}</span>
-                        <v-icon
-                          v-if="item.has_update"
-                          color="warning"
-                          size="small"
-                          class="ml-1"
-                          >mdi-alert</v-icon
-                        >
-                        <v-tooltip v-if="item.has_update" activator="parent">
-                          <span
-                            >{{ tm("messages.hasUpdate") }}
-                            {{ item.online_version }}</span
-                          >
-                        </v-tooltip>
-                      </div>
-                    </template>
+                     <template v-slot:item.name="{ item }">
+                       <div class="d-flex align-center py-2">
+                         <div
+                           v-if="item.logo"
+                           class="mr-3"
+                           style="flex-shrink: 0"
+                         >
+                           <img
+                             :src="item.logo"
+                             :alt="item.name"
+                             style="
+                               height: 40px;
+                               width: 40px;
+                               border-radius: 8px;
+                               object-fit: cover;
+                             "
+                           />
+                         </div>
+                         <div v-else class="mr-3" style="flex-shrink: 0">
+                           <img
+                             :src="defaultPluginIcon"
+                             :alt="item.name"
+                             style="
+                               height: 40px;
+                               width: 40px;
+                               border-radius: 8px;
+                               object-fit: cover;
+                             "
+                           />
+                         </div>
+                         <div>
+                           <div class="text-subtitle-1 font-weight-medium">
+                             {{
+                               item.display_name && item.display_name.length
+                                 ? item.display_name
+                                 : item.name
+                             }}
+                           </div>
+                           <div
+                             v-if="item.display_name && item.display_name.length"
+                             class="text-caption text-medium-emphasis mt-1"
+                           >
+                             {{ item.name }}
+                           </div>
+                           <div
+                             v-if="item.reserved"
+                             class="d-flex align-center mt-1"
+                           >
+                             <v-chip
+                               color="primary"
+                               size="x-small"
+                               class="font-weight-medium"
+                               >{{ tm("status.system") }}</v-chip
+                             >
+                           </div>
+                         </div>
+                       </div>
+                     </template>
 
-                    <template v-slot:item.author="{ item }">
-                      <div class="text-body-2">{{ item.author }}</div>
-                    </template>
+                     <template v-slot:item.desc="{ item }">
+                       <div
+                         class="text-body-2 text-medium-emphasis mt-2 mb-2"
+                         style="
+                           display: -webkit-box;
+                           -webkit-line-clamp: 3;
+                           line-clamp: 3;
+                           -webkit-box-orient: vertical;
+                           overflow: hidden;
+                           text-overflow: ellipsis;
+                         "
+                       >
+                         {{ item.desc }}
+                       </div>
+                     </template>
 
-                    <template v-slot:item.activated="{ item }">
-                      <v-chip
-                        :color="item.activated ? 'success' : 'error'"
-                        size="small"
-                        class="font-weight-medium"
-                        :variant="item.activated ? 'flat' : 'outlined'"
-                      >
-                        {{
-                          item.activated
-                            ? tm("status.enabled")
-                            : tm("status.disabled")
-                        }}
-                      </v-chip>
-                    </template>
+                     <template v-slot:item.version="{ item }">
+                       <div class="d-flex align-center">
+                         <span class="text-body-2">{{ item.version }}</span>
+                         <v-icon
+                           v-if="item.has_update"
+                           color="warning"
+                           size="small"
+                           class="ml-1"
+                           >mdi-alert</v-icon
+                         >
+                         <v-tooltip v-if="item.has_update" activator="parent">
+                           <span
+                             >{{ tm("messages.hasUpdate") }}
+                             {{ item.online_version }}</span
+                           >
+                         </v-tooltip>
+                       </div>
+                     </template>
 
-                    <template v-slot:item.actions="{ item }">
-                      <div class="d-flex align-center">
-                        <v-btn-group
-                          density="comfortable"
-                          variant="text"
-                          color="primary"
-                        >
-                          <v-btn
-                            v-if="!item.activated"
-                            icon
-                            size="small"
-                            color="success"
-                            @click="pluginOn(item)"
-                          >
-                            <v-icon>mdi-play</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.enable")
-                            }}</v-tooltip>
-                          </v-btn>
-                          <v-btn
-                            v-else
-                            icon
-                            size="small"
-                            color="error"
-                            @click="pluginOff(item)"
-                          >
-                            <v-icon>mdi-pause</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.disable")
-                            }}</v-tooltip>
-                          </v-btn>
+                     <template v-slot:item.author="{ item }">
+                       <div class="text-body-2">{{ item.author }}</div>
+                     </template>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="reloadPlugin(item.name)"
-                          >
-                            <v-icon>mdi-refresh</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.reload")
-                            }}</v-tooltip>
-                          </v-btn>
+                     <template v-slot:item.activated="{ item }">
+                       <v-chip
+                         :color="item.activated ? 'success' : 'error'"
+                         size="small"
+                         class="font-weight-medium"
+                         :variant="item.activated ? 'flat' : 'outlined'"
+                       >
+                         {{
+                           item.activated
+                             ? tm("status.enabled")
+                             : tm("status.disabled")
+                         }}
+                       </v-chip>
+                     </template>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="openExtensionConfig(item.name)"
-                          >
-                            <v-icon>mdi-cog</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.configure")
-                            }}</v-tooltip>
-                          </v-btn>
+                     <template v-slot:item.actions="{ item }">
+                       <div class="d-flex align-center">
+                         <v-btn-group
+                           density="comfortable"
+                           variant="text"
+                           color="primary"
+                         >
+                           <v-btn
+                             v-if="!item.activated"
+                             icon
+                             size="small"
+                             color="success"
+                             @click="pluginOn(item)"
+                           >
+                             <v-icon>mdi-play</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.enable")
+                             }}</v-tooltip>
+                           </v-btn>
+                           <v-btn
+                             v-else
+                             icon
+                             size="small"
+                             color="error"
+                             @click="pluginOff(item)"
+                           >
+                             <v-icon>mdi-pause</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.disable")
+                             }}</v-tooltip>
+                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="showPluginInfo(item)"
-                          >
-                            <v-icon>mdi-information</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.viewInfo")
-                            }}</v-tooltip>
-                          </v-btn>
+                           <v-btn
+                             icon
+                             size="small"
+                             @click="reloadPlugin(item.name)"
+                           >
+                             <v-icon>mdi-refresh</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.reload")
+                             }}</v-tooltip>
+                           </v-btn>
 
-                          <v-btn
-                            v-if="item.repo"
-                            icon
-                            size="small"
-                            @click="viewReadme(item)"
-                          >
-                            <v-icon>mdi-book-open-page-variant</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.viewDocs")
-                            }}</v-tooltip>
-                          </v-btn>
+                           <v-btn
+                             icon
+                             size="small"
+                             @click="openExtensionConfig(item.name)"
+                           >
+                             <v-icon>mdi-cog</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.configure")
+                             }}</v-tooltip>
+                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="updateExtension(item.name)"
-                          >
-                            <v-icon>mdi-update</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.update")
-                            }}</v-tooltip>
-                          </v-btn>
+                           <v-btn
+                             icon
+                             size="small"
+                             @click="showPluginInfo(item)"
+                           >
+                             <v-icon>mdi-information</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.viewInfo")
+                             }}</v-tooltip>
+                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            color="error"
-                            @click="uninstallExtension(item.name)"
-                            :disabled="item.reserved"
-                          >
-                            <v-icon>mdi-delete</v-icon>
-                            <v-tooltip activator="parent" location="top">{{
-                              tm("tooltips.uninstall")
-                            }}</v-tooltip>
-                          </v-btn>
-                        </v-btn-group>
-                      </div>
-                    </template>
+                           <v-btn
+                             v-if="item.repo"
+                             icon
+                             size="small"
+                             @click="viewReadme(item)"
+                           >
+                             <v-icon>mdi-book-open-page-variant</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.viewDocs")
+                             }}</v-tooltip>
+                           </v-btn>
 
-                    <template v-slot:no-data>
-                      <div class="text-center pa-8">
-                        <v-icon size="64" color="info" class="mb-4"
-                          >mdi-puzzle-outline</v-icon
-                        >
-                        <div class="text-h5 mb-2">
-                          {{ tm("empty.noPlugins") }}
-                        </div>
-                        <div class="text-body-1 mb-4">
-                          {{ tm("empty.noPluginsDesc") }}
-                        </div>
-                      </div>
-                    </template>
-                  </v-data-table>
-                </v-card>
-              </div>
+                           <v-btn
+                             icon
+                             size="small"
+                             @click="updateExtension(item.name)"
+                           >
+                             <v-icon>mdi-update</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.update")
+                             }}</v-tooltip>
+                           </v-btn>
 
-              <!-- 卡片视图 -->
-              <div v-else>
-                <v-row v-if="filteredPlugins.length === 0" class="text-center">
-                  <v-col cols="12" class="pa-2">
-                    <v-icon size="64" color="info" class="mb-4"
-                      >mdi-puzzle-outline</v-icon
-                    >
-                    <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
-                    <div class="text-body-1 mb-4">
-                      {{ tm("empty.noPluginsDesc") }}
-                    </div>
-                  </v-col>
-                </v-row>
+                           <v-btn
+                             icon
+                             size="small"
+                             color="error"
+                             @click="uninstallExtension(item.name)"
+                             :disabled="item.reserved"
+                           >
+                             <v-icon>mdi-delete</v-icon>
+                             <v-tooltip activator="parent" location="top">{{
+                               tm("tooltips.uninstall")
+                             }}</v-tooltip>
+                           </v-btn>
+                         </v-btn-group>
+                       </div>
+                     </template>
 
-                <v-row>
-                  <v-col
-                    cols="12"
-                    md="6"
-                    lg="4"
-                    v-for="extension in filteredPlugins"
-                    :key="extension.name"
-                    class="pb-2"
-                  >
-                    <ExtensionCard
-                      :extension="extension"
-                      class="rounded-lg"
-                      style="background-color: rgb(var(--v-theme-mcpCardBg))"
-                      @configure="openExtensionConfig(extension.name)"
-                      @uninstall="
-                        (ext, options) => uninstallExtension(ext.name, options)
-                      "
-                      @update="updateExtension(extension.name)"
-                      @reload="reloadPlugin(extension.name)"
-                      @toggle-activation="
-                        extension.activated
-                          ? pluginOff(extension)
-                          : pluginOn(extension)
-                      "
-                      @view-handlers="showPluginInfo(extension)"
-                      @view-readme="viewReadme(extension)"
-                      @view-changelog="viewChangelog(extension)"
-                    >
-                    </ExtensionCard>
-                  </v-col>
-                </v-row>
-              </div>
-            </v-fade-transition>
-          </v-tab-item>
+                     <template v-slot:no-data>
+                       <div class="text-center pa-8">
+                         <v-icon size="64" color="info" class="mb-4"
+                           >mdi-puzzle-outline</v-icon
+                         >
+                         <div class="text-h5 mb-2">
+                           {{ tm("empty.noPlugins") }}
+                         </div>
+                         <div class="text-body-1 mb-4">
+                           {{ tm("empty.noPluginsDesc") }}
+                         </div>
+                       </div>
+                     </template>
+                   </v-data-table>
+                 </v-card>
+               </div>
 
-          <!-- 指令面板标签页内容 -->
-          <v-tab-item v-show="activeTab === 'components'">
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <ComponentPanel :active="activeTab === 'components'" />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
+               <!-- 卡片视图 -->
+               <div v-else>
+                 <v-row v-if="filteredPlugins.length === 0" class="text-center">
+                   <v-col cols="12" class="pa-2">
+                     <v-icon size="64" color="info" class="mb-4"
+                       >mdi-puzzle-outline</v-icon
+                     >
+                     <div class="text-h5 mb-2">{{ tm("empty.noPlugins") }}</div>
+                     <div class="text-body-1 mb-4">
+                       {{ tm("empty.noPluginsDesc") }}
+                     </div>
+                   </v-col>
+                 </v-row>
 
-          <!-- 已安装的 MCP 服务器标签页内容 -->
-          <v-tab-item v-show="activeTab === 'mcp'">
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <McpServersSection />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
+                 <v-row>
+                   <v-col
+                     cols="12"
+                     md="6"
+                     lg="4"
+                     v-for="extension in filteredPlugins"
+                     :key="extension.name"
+                     class="pb-2"
+                   >
+                     <ExtensionCard
+                       :extension="extension"
+                       class="rounded-lg"
+                       style="background-color: rgb(var(--v-theme-mcpCardBg))"
+                       @configure="openExtensionConfig(extension.name)"
+                       @uninstall="
+                         (ext, options) => uninstallExtension(ext.name, options)
+                       "
+                       @update="updateExtension(extension.name)"
+                       @reload="reloadPlugin(extension.name)"
+                       @toggle-activation="
+                         extension.activated
+                           ? pluginOff(extension)
+                           : pluginOn(extension)
+                       "
+                       @view-handlers="showPluginInfo(extension)"
+                       @view-readme="viewReadme(extension)"
+                       @view-changelog="viewChangelog(extension)"
+                     >
+                     </ExtensionCard>
+                   </v-col>
+                 </v-row>
+               </div>
+             </v-fade-transition>
+           </v-window-item>
 
-          <!-- Skills 标签页内容 -->
-          <v-tab-item v-show="activeTab === 'skills'">
-            <v-card
-              class="rounded-lg"
-              variant="flat"
-              style="background-color: transparent"
-            >
-              <v-card-text class="pa-0">
-                <SkillsSection />
-              </v-card-text>
-            </v-card>
-          </v-tab-item>
+           <!-- Commands / components tab -->
+           <v-window-item value="components">
+             <v-card
+               class="rounded-lg"
+               variant="flat"
+               style="background-color: transparent"
+             >
+               <v-card-text class="pa-0">
+                 <ComponentPanel :active="activeTab === 'components'" />
+               </v-card-text>
+             </v-card>
+           </v-window-item>
 
-          <!-- 插件市场标签页内容 -->
-          <v-tab-item v-show="activeTab === 'market'">
-            <!-- 插件源管理区域 -->
-            <div class="mb-6">
-              <div
-                class="d-flex align-center pa-1 pl-2 pr-2"
-                style="
-                  background: rgb(var(--v-theme-surface-variant), 0.1);
-                  border-radius: 12px;
-                  border: 1px solid
-                    rgba(var(--v-border-color), var(--v-border-opacity));
-                "
-              >
-                <!-- 左侧：源选择 -->
-                <div
-                  class="d-flex align-center flex-grow-1"
-                  style="min-width: 0"
-                >
-                  <v-icon color="primary" class="ml-2 mr-2" size="small"
-                    >mdi-source-branch</v-icon
-                  >
-                  <span
-                    class="text-caption text-medium-emphasis text-uppercase font-weight-bold mr-2"
-                    style="letter-spacing: 0.05em; white-space: nowrap"
-                  >
-                    {{ tm("market.source") }}
-                  </span>
+           <!-- MCP tab -->
+           <v-window-item value="mcp">
+             <v-card
+               class="rounded-lg"
+               variant="flat"
+               style="background-color: transparent"
+             >
+               <v-card-text class="pa-0">
+                 <McpServersSection />
+               </v-card-text>
+             </v-card>
+           </v-window-item>
 
-                  <v-menu offset-y>
-                    <template v-slot:activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        variant="text"
-                        class="text-capitalize px-1"
-                        :ripple="false"
-                        height="32"
-                      >
-                        <span
-                          class="text-body-2 font-weight-medium text-high-emphasis text-truncate"
-                          style="max-width: 200px"
-                        >
-                          {{
-                            selectedSource
-                              ? customSources.find(
-                                  (s) => s.url === selectedSource,
-                                )?.name
-                              : tm("market.defaultSource")
-                          }}
-                        </span>
-                        <v-icon
-                          right
-                          size="small"
-                          class="ml-1 text-medium-emphasis"
-                          >mdi-chevron-down</v-icon
-                        >
-                        <v-tooltip activator="parent" location="top">{{
-                          selectedSource || tm("market.defaultOfficialSource")
-                        }}</v-tooltip>
-                      </v-btn>
-                    </template>
-                    <v-list density="compact" nav class="pa-2">
-                      <v-list-subheader
-                        class="font-weight-bold text-caption text-uppercase mb-1"
-                      >
-                        {{ tm("market.availableSources") }}
-                      </v-list-subheader>
-                      <v-list-item
-                        :value="null"
-                        @click="selectPluginSource(null)"
-                        rounded="md"
-                        color="primary"
-                        :active="selectedSource === null"
-                      >
-                        <template v-slot:prepend>
-                          <v-icon
-                            icon="mdi-shield-check"
-                            size="small"
-                            class="mr-2"
-                          ></v-icon>
-                        </template>
-                        <v-list-item-title>{{
-                          tm("market.defaultSource")
-                        }}</v-list-item-title>
-                      </v-list-item>
+           <!-- Skills tab -->
+           <v-window-item value="skills">
+             <v-card
+               class="rounded-lg"
+               variant="flat"
+               style="background-color: transparent"
+             >
+               <v-card-text class="pa-0">
+                 <SkillsSection />
+               </v-card-text>
+             </v-card>
+           </v-window-item>
 
-                      <v-divider
-                        class="my-1"
-                        v-if="customSources.length > 0"
-                      ></v-divider>
+           <!-- Market tab -->
+           <v-window-item value="market">
+             <!-- 插件源管理区域 -->
+             <div class="mb-6">
+               <div
+                 class="d-flex align-center pa-1 pl-2 pr-2"
+                 style="
+                   background: rgb(var(--v-theme-surface-variant), 0.1);
+                   border-radius: 12px;
+                   border: 1px solid
+                     rgba(var(--v-border-color), var(--v-border-opacity));
+                 "
+               >
+                 <!-- 左侧：源选择 -->
+                 <div
+                   class="d-flex align-center flex-grow-1"
+                   style="min-width: 0"
+                 >
+                   <v-icon color="primary" class="ml-2 mr-2" size="small"
+                     >mdi-source-branch</v-icon
+                   >
+                   <span
+                     class="text-caption text-medium-emphasis text-uppercase font-weight-bold mr-2"
+                     style="letter-spacing: 0.05em; white-space: nowrap"
+                   >
+                     {{ tm("market.source") }}
+                   </span>
 
-                      <v-list-item
-                        v-for="source in customSources"
-                        :key="source.url"
-                        :value="source.url"
-                        @click="selectPluginSource(source.url)"
-                        rounded="md"
-                        color="primary"
-                        :active="selectedSource === source.url"
-                      >
-                        <template v-slot:prepend>
-                          <v-icon
-                            icon="mdi-link-variant"
-                            size="small"
-                            class="mr-2"
-                          ></v-icon>
-                        </template>
-                        <v-list-item-title>{{ source.name }}</v-list-item-title>
-                        <v-list-item-subtitle class="text-caption">{{
-                          source.url
-                        }}</v-list-item-subtitle>
-                      </v-list-item>
-                    </v-list>
-                  </v-menu>
-                </div>
+                   <v-menu offset-y>
+                     <template v-slot:activator="{ props }">
+                       <v-btn
+                         v-bind="props"
+                         variant="text"
+                         class="text-capitalize px-1"
+                         :ripple="false"
+                         height="32"
+                       >
+                         <span
+                           class="text-body-2 font-weight-medium text-high-emphasis text-truncate"
+                           style="max-width: 200px"
+                         >
+                           {{
+                             selectedSource
+                               ? customSources.find(
+                                   (s) => s.url === selectedSource,
+                                 )?.name
+                               : tm("market.defaultSource")
+                           }}
+                         </span>
+                         <v-icon
+                           right
+                           size="small"
+                           class="ml-1 text-medium-emphasis"
+                           >mdi-chevron-down</v-icon
+                         >
+                         <v-tooltip activator="parent" location="top">{{
+                           selectedSource || tm("market.defaultOfficialSource")
+                         }}</v-tooltip>
+                       </v-btn>
+                     </template>
+                     <v-list density="compact" nav class="pa-2">
+                       <v-list-subheader
+                         class="font-weight-bold text-caption text-uppercase mb-1"
+                       >
+                         {{ tm("market.availableSources") }}
+                       </v-list-subheader>
+                       <v-list-item
+                         :value="null"
+                         @click="selectPluginSource(null)"
+                         rounded="md"
+                         color="primary"
+                         :active="selectedSource === null"
+                       >
+                         <template v-slot:prepend>
+                           <v-icon
+                             icon="mdi-shield-check"
+                             size="small"
+                             class="mr-2"
+                           ></v-icon>
+                         </template>
+                         <v-list-item-title>{{
+                           tm("market.defaultSource")
+                         }}</v-list-item-title>
+                       </v-list-item>
 
-                <!-- 垂直分隔线 -->
-                <div
-                  style="
-                    height: 20px;
-                    width: 1px;
-                    background-color: rgba(var(--v-border-color), 0.15);
-                    margin: 0 8px;
-                  "
-                ></div>
+                       <v-divider
+                         class="my-1"
+                         v-if="customSources.length > 0"
+                       ></v-divider>
 
-                <!--右侧：操作按钮组-->
-                <div class="d-flex align-center">
-                  <v-tooltip location="top" :text="tm('market.addSource')">
-                    <template v-slot:activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        icon="mdi-plus"
-                        size="small"
-                        variant="text"
-                        density="comfortable"
-                        color="primary"
-                        @click="addCustomSource"
-                      ></v-btn>
-                    </template>
-                  </v-tooltip>
+                       <v-list-item
+                         v-for="source in customSources"
+                         :key="source.url"
+                         :value="source.url"
+                         @click="selectPluginSource(source.url)"
+                         rounded="md"
+                         color="primary"
+                         :active="selectedSource === source.url"
+                       >
+                         <template v-slot:prepend>
+                           <v-icon
+                             icon="mdi-link-variant"
+                             size="small"
+                             class="mr-2"
+                           ></v-icon>
+                         </template>
+                         <v-list-item-title>{{ source.name }}</v-list-item-title>
+                         <v-list-item-subtitle class="text-caption">{{
+                           source.url
+                         }}</v-list-item-subtitle>
+                       </v-list-item>
+                     </v-list>
+                   </v-menu>
+                 </div>
 
-                  <template v-if="selectedSourceObj">
-                    <v-tooltip location="top" :text="tm('market.editSource')">
-                      <template v-slot:activator="{ props }">
-                        <v-btn
-                          v-bind="props"
-                          icon="mdi-pencil-outline"
-                          size="small"
-                          variant="text"
-                          density="comfortable"
-                          color="medium-emphasis"
-                          class="ml-1"
-                          @click="editCustomSource(selectedSourceObj)"
-                        ></v-btn>
-                      </template>
-                    </v-tooltip>
+                 <!-- 垂直分隔线 -->
+                 <div
+                   style="
+                     height: 20px;
+                     width: 1px;
+                     background-color: rgba(var(--v-border-color), 0.15);
+                     margin: 0 8px;
+                   "
+                 ></div>
 
-                    <v-tooltip location="top" :text="tm('market.removeSource')">
-                      <template v-slot:activator="{ props }">
-                        <v-btn
-                          v-bind="props"
-                          icon="mdi-trash-can-outline"
-                          size="small"
-                          variant="text"
-                          density="comfortable"
-                          color="error"
-                          class="ml-1"
-                          @click="removeCustomSource(selectedSourceObj)"
-                        ></v-btn>
-                      </template>
-                    </v-tooltip>
-                  </template>
-                </div>
-              </div>
-            </div>
+                 <!--right side: action buttons-->
+                 <div class="d-flex align-center">
+                   <v-tooltip location="top" :text="tm('market.addSource')">
+                     <template v-slot:activator="{ props }">
+                       <v-btn
+                         v-bind="props"
+                         icon="mdi-plus"
+                         size="small"
+                         variant="text"
+                         density="comfortable"
+                         color="primary"
+                         @click="addCustomSource"
+                       ></v-btn>
+                     </template>
+                   </v-tooltip>
 
-            <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
+                   <template v-if="selectedSourceObj">
+                     <v-tooltip location="top" :text="tm('market.editSource')">
+                       <template v-slot:activator="{ props }">
+                         <v-btn
+                           v-bind="props"
+                           icon="mdi-pencil-outline"
+                           size="small"
+                           variant="text"
+                           density="comfortable"
+                           color="medium-emphasis"
+                           class="ml-1"
+                           @click="editCustomSource(selectedSourceObj)"
+                         ></v-btn>
+                       </template>
+                     </v-tooltip>
 
-            <!-- FAB Button -->
-            <v-tooltip :text="tm('market.installPlugin')" location="left">
-              <template v-slot:activator="{ props }">
-                <button
-                  v-bind="props"
-                  type="button"
-                  class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
-                  style="
-                    position: fixed;
-                    right: 52px;
-                    bottom: 52px;
-                    z-index: 10000;
-                    border-radius: 16px;
-                  "
-                  @click="dialog = true"
-                >
-                  <span class="v-btn__overlay"></span>
-                  <span class="v-btn__underlay"></span>
-                  <span class="v-btn__content" data-no-activator="">
-                    <i
-                      class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
-                      aria-hidden="true"
-                      style="font-size: 32px"
-                    ></i>
-                  </span>
-                </button>
-              </template>
-            </v-tooltip>
+                     <v-tooltip location="top" :text="tm('market.removeSource')">
+                       <template v-slot:activator="{ props }">
+                         <v-btn
+                           v-bind="props"
+                           icon="mdi-trash-can-outline"
+                           size="small"
+                           variant="text"
+                           density="comfortable"
+                           color="error"
+                           class="ml-1"
+                           @click="removeCustomSource(selectedSourceObj)"
+                         ></v-btn>
+                       </template>
+                     </v-tooltip>
+                   </template>
+                 </div>
+               </div>
+             </div>
 
-            <div class="mt-4">
-              <div
-                class="d-flex align-center mb-2"
-                style="
-                  justify-content: space-between;
-                  flex-wrap: wrap;
-                  gap: 8px;
-                "
-              >
-                <div class="d-flex align-center" style="gap: 6px">
-                  <h2>
-                    {{ tm("market.allPlugins") }}({{
-                      filteredMarketPlugins.length
-                    }})
-                  </h2>
-                  <v-btn
-                    icon
-                    variant="text"
-                    @click="refreshPluginMarket"
-                    :loading="refreshingMarket"
-                  >
-                    <v-icon>mdi-refresh</v-icon>
-                  </v-btn>
-                </div>
+             <!-- <small style="color: var(--v-theme-secondaryText);">每个插件都是作者无偿提供的的劳动成果。如果您喜欢某个插件，请 Star！</small> -->
 
-                <div
-                  class="d-flex align-center"
-                  style="gap: 8px; flex-wrap: wrap"
-                >
-                  <v-pagination
-                    v-model="currentPage"
-                    :length="totalPages"
-                    :total-visible="5"
-                    size="small"
-                    density="comfortable"
-                  ></v-pagination>
+             <!-- FAB Button -->
+             <v-tooltip :text="tm('market.installPlugin')" location="left">
+               <template v-slot:activator="{ props }">
+                 <button
+                   v-bind="props"
+                   type="button"
+                   class="v-btn v-btn--elevated v-btn--icon v-theme--PurpleThemeDark bg-darkprimary v-btn--density-default v-btn--size-x-large v-btn--variant-elevated fab-button"
+                   style="
+                     position: fixed;
+                     right: 52px;
+                     bottom: 52px;
+                     z-index: 10000;
+                     border-radius: 16px;
+                   "
+                   @click="dialog = true"
+                 >
+                   <span class="v-btn__overlay"></span>
+                   <span class="v-btn__underlay"></span>
+                   <span class="v-btn__content" data-no-activator="">
+                     <i
+                       class="mdi-plus mdi v-icon notranslate v-theme--PurpleThemeDark v-icon--size-default"
+                       aria-hidden="true"
+                       style="font-size: 32px"
+                     ></i>
+                   </span>
+                 </button>
+               </template>
+             </v-tooltip>
 
-                  <!-- 排序选择器 -->
-                  <v-select
-                    v-model="sortBy"
-                    :items="[
-                      { title: tm('sort.default'), value: 'default' },
-                      { title: tm('sort.stars'), value: 'stars' },
-                      { title: tm('sort.author'), value: 'author' },
-                      { title: tm('sort.updated'), value: 'updated' },
-                    ]"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    style="max-width: 150px"
-                  >
-                    <template v-slot:prepend-inner>
-                      <v-icon size="small">mdi-sort</v-icon>
-                    </template>
-                  </v-select>
+             <div class="mt-4">
+               <div
+                 class="d-flex align-center mb-2"
+                 style="
+                   justify-content: space-between;
+                   flex-wrap: wrap;
+                   gap: 8px;
+                 "
+               >
+                 <div class="d-flex align-center" style="gap: 6px">
+                   <h2>
+                     {{ tm("market.allPlugins") }}({{
+                       filteredMarketPlugins.length
+                     }})
+                   </h2>
+                   <v-btn
+                     icon
+                     variant="text"
+                     @click="refreshPluginMarket"
+                     :loading="refreshingMarket"
+                   >
+                     <v-icon>mdi-refresh</v-icon>
+                   </v-btn>
+                 </div>
 
-                  <!-- 排序方向切换按钮 -->
-                  <v-btn
-                    icon
-                    v-if="sortBy !== 'default'"
-                    @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
-                    variant="text"
-                    density="compact"
-                  >
-                    <v-icon>{{
-                      sortOrder === "desc"
-                        ? "mdi-sort-descending"
-                        : "mdi-sort-ascending"
-                    }}</v-icon>
-                    <v-tooltip activator="parent" location="top">
-                      {{
-                        sortOrder === "desc"
-                          ? tm("sort.descending")
-                          : tm("sort.ascending")
-                      }}
-                    </v-tooltip>
-                  </v-btn>
-                  <!-- <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
-                    density="compact" style="margin-left: 12px" /> -->
-                </div>
-              </div>
+                 <div
+                   class="d-flex align-center"
+                   style="gap: 8px; flex-wrap: wrap"
+                 >
+                   <v-pagination
+                     v-model="currentPage"
+                     :length="totalPages"
+                     :total-visible="5"
+                     size="small"
+                     density="comfortable"
+                   ></v-pagination>
 
-              <v-row style="min-height: 26rem">
-                <v-col
-                  v-for="plugin in paginatedPlugins"
-                  :key="plugin.name"
-                  cols="12"
-                  md="6"
-                  lg="4"
-                >
-                  <v-card
-                    class="rounded-lg d-flex flex-column plugin-card"
-                    elevation="0"
-                    style="height: 12rem; position: relative"
-                  >
-                    <!-- 推荐标记 -->
-                    <v-chip
-                      v-if="plugin?.pinned"
-                      color="warning"
-                      size="x-small"
-                      label
-                      style="
-                        position: absolute;
-                        right: 8px;
-                        top: 8px;
-                        z-index: 10;
-                        height: 20px;
-                        font-weight: bold;
-                      "
-                    >
-                      🥳 推荐
-                    </v-chip>
+                   <!-- 排序选择器 -->
+                   <v-select
+                     v-model="sortBy"
+                     :items="[
+                       { title: tm('sort.default'), value: 'default' },
+                       { title: tm('sort.stars'), value: 'stars' },
+                       { title: tm('sort.author'), value: 'author' },
+                       { title: tm('sort.updated'), value: 'updated' },
+                     ]"
+                     density="compact"
+                     variant="outlined"
+                     hide-details
+                     style="max-width: 150px"
+                   >
+                     <template v-slot:prepend-inner>
+                       <v-icon size="small">mdi-sort</v-icon>
+                     </template>
+                   </v-select>
 
-                    <v-card-text
-                      style="
-                        padding: 12px;
-                        padding-bottom: 8px;
-                        display: flex;
-                        gap: 12px;
-                        width: 100%;
-                        flex: 1;
-                        overflow: hidden;
-                      "
-                    >
-                      <div style="flex-shrink: 0">
-                        <img
-                          :src="plugin?.logo || defaultPluginIcon"
-                          :alt="plugin.name"
-                          style="
-                            height: 75px;
-                            width: 75px;
-                            border-radius: 8px;
-                            object-fit: cover;
-                          "
-                        />
-                      </div>
+                   <!-- 排序方向切换按钮 -->
+                   <v-btn
+                     icon
+                     v-if="sortBy !== 'default'"
+                     @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                     variant="text"
+                     density="compact"
+                   >
+                     <v-icon>{{
+                       sortOrder === "desc"
+                         ? "mdi-sort-descending"
+                         : "mdi-sort-ascending"
+                     }}</v-icon>
+                     <v-tooltip activator="parent" location="top">
+                       {{
+                         sortOrder === "desc"
+                           ? tm("sort.descending")
+                           : tm("sort.ascending")
+                       }}
+                     </v-tooltip>
+                   </v-btn>
+                   <!-- <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
+                     density="compact" style="margin-left: 12px" /> -->
+                 </div>
+               </div>
 
-                      <div
-                        style="
-                          flex: 1;
-                          overflow: hidden;
-                          display: flex;
-                          flex-direction: column;
-                        "
-                      >
-                        <!-- Display Name -->
-                        <div
-                          class="font-weight-bold"
-                          style="
-                            margin-bottom: 4px;
-                            line-height: 1.3;
-                            font-size: 1.2rem;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                          "
-                        >
-                          <span
-                            style="overflow: hidden; text-overflow: ellipsis"
-                          >
-                            {{
-                              plugin.display_name?.length
-                                ? plugin.display_name
-                                : showPluginFullName
-                                ? plugin.name
-                                : plugin.trimmedName
-                            }}
-                          </span>
-                        </div>
+               <v-row style="min-height: 26rem">
+                 <v-col
+                   v-for="plugin in paginatedPlugins"
+                   :key="plugin.name"
+                   cols="12"
+                   md="6"
+                   lg="4"
+                 >
+                   <v-card
+                     class="rounded-lg d-flex flex-column plugin-card"
+                     elevation="0"
+                     style="height: 12rem; position: relative"
+                   >
+                     <!-- 推荐标记 -->
+                     <v-chip
+                       v-if="plugin?.pinned"
+                       color="warning"
+                       size="x-small"
+                       label
+                       style="
+                         position: absolute;
+                         right: 8px;
+                         top: 8px;
+                         z-index: 10;
+                         height: 20px;
+                         font-weight: bold;
+                       "
+                     >
+                       🥳 推荐
+                     </v-chip>
 
-                        <!-- Author with link -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 4px; margin-bottom: 6px"
-                        >
-                          <v-icon
-                            icon="mdi-account"
-                            size="x-small"
-                            style="color: rgba(var(--v-theme-on-surface), 0.5)"
-                          ></v-icon>
-                          <a
-                            v-if="plugin?.social_link"
-                            :href="plugin.social_link"
-                            target="_blank"
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              text-decoration: none;
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </a>
-                          <span
-                            v-else
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </span>
-                          <div
-                            class="d-flex align-center text-subtitle-2 ml-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-source-branch"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.version }}</span>
-                          </div>
-                        </div>
+                     <v-card-text
+                       style="
+                         padding: 12px;
+                         padding-bottom: 8px;
+                         display: flex;
+                         gap: 12px;
+                         width: 100%;
+                         flex: 1;
+                         overflow: hidden;
+                       "
+                     >
+                       <div style="flex-shrink: 0">
+                         <img
+                           :src="plugin?.logo || defaultPluginIcon"
+                           :alt="plugin.name"
+                           style="
+                             height: 75px;
+                             width: 75px;
+                             border-radius: 8px;
+                             object-fit: cover;
+                           "
+                         />
+                       </div>
 
-                        <!-- Description -->
-                        <div class="text-caption plugin-description">
-                          {{ plugin.desc }}
-                        </div>
+                       <div
+                         style="
+                           flex: 1;
+                           overflow: hidden;
+                           display: flex;
+                           flex-direction: column;
+                         "
+                       >
+                         <!-- Display Name -->
+                         <div
+                           class="font-weight-bold"
+                           style="
+                             margin-bottom: 4px;
+                             line-height: 1.3;
+                             font-size: 1.2rem;
+                             white-space: nowrap;
+                             overflow: hidden;
+                             text-overflow: ellipsis;
+                           "
+                         >
+                           <span
+                             style="overflow: hidden; text-overflow: ellipsis"
+                           >
+                             {{
+                               plugin.display_name?.length
+                                 ? plugin.display_name
+                                 : showPluginFullName
+                                 ? plugin.name
+                                 : plugin.trimmedName
+                             }}
+                           </span>
+                         </div>
 
-                        <!-- Stats: Stars & Updated & Version -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 8px; margin-top: auto"
-                        >
-                          <div
-                            v-if="plugin.stars !== undefined"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-star"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.stars }}</span>
-                          </div>
-                          <div
-                            v-if="plugin.updated_at"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-clock-outline"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{
-                              new Date(plugin.updated_at).toLocaleString()
-                            }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </v-card-text>
+                         <!-- Author with link -->
+                         <div
+                           class="d-flex align-center"
+                           style="gap: 4px; margin-bottom: 6px"
+                         >
+                           <v-icon
+                             icon="mdi-account"
+                             size="x-small"
+                             style="color: rgba(var(--v-theme-on-surface), 0.5)"
+                           ></v-icon>
+                           <a
+                             v-if="plugin?.social_link"
+                             :href="plugin.social_link"
+                             target="_blank"
+                             class="text-subtitle-2 font-weight-medium"
+                             style="
+                               text-decoration: none;
+                               color: rgb(var(--v-theme-primary));
+                               white-space: nowrap;
+                               overflow: hidden;
+                               text-overflow: ellipsis;
+                             "
+                           >
+                             {{ plugin.author }}
+                           </a>
+                           <span
+                             v-else
+                             class="text-subtitle-2 font-weight-medium"
+                             style="
+                               color: rgb(var(--v-theme-primary));
+                               white-space: nowrap;
+                               overflow: hidden;
+                               text-overflow: ellipsis;
+                             "
+                           >
+                             {{ plugin.author }}
+                           </span>
+                           <div
+                             class="d-flex align-center text-subtitle-2 ml-2"
+                             style="color: rgba(var(--v-theme-on-surface), 0.7)"
+                           >
+                             <v-icon
+                               icon="mdi-source-branch"
+                               size="x-small"
+                               style="margin-right: 2px"
+                             ></v-icon>
+                             <span>{{ plugin.version }}</span>
+                           </div>
+                         </div>
 
-                    <!-- Actions -->
-                    <v-card-actions
-                      style="gap: 6px; padding: 8px 12px; padding-top: 0"
-                    >
-                      <v-chip
-                        v-for="tag in plugin.tags?.slice(0, 2)"
-                        :key="tag"
-                        :color="tag === 'danger' ? 'error' : 'primary'"
-                        label
-                        size="x-small"
-                        style="height: 20px"
-                      >
-                        {{ tag === "danger" ? tm("tags.danger") : tag }}
-                      </v-chip>
-                      <v-menu
-                        v-if="plugin.tags && plugin.tags.length > 2"
-                        open-on-hover
-                        offset-y
-                      >
-                        <template v-slot:activator="{ props: menuProps }">
-                          <v-chip
-                            v-bind="menuProps"
-                            color="grey"
-                            label
-                            size="x-small"
-                            style="height: 20px; cursor: pointer"
-                          >
-                            +{{ plugin.tags.length - 2 }}
-                          </v-chip>
-                        </template>
-                        <v-list density="compact">
-                          <v-list-item
-                            v-for="tag in plugin.tags.slice(2)"
-                            :key="tag"
-                          >
-                            <v-chip
-                              :color="tag === 'danger' ? 'error' : 'primary'"
-                              label
-                              size="small"
-                            >
-                              {{ tag === "danger" ? tm("tags.danger") : tag }}
-                            </v-chip>
-                          </v-list-item>
-                        </v-list>
-                      </v-menu>
-                      <v-spacer></v-spacer>
-                      <v-btn
-                        v-if="plugin?.repo"
-                        color="secondary"
-                        size="x-small"
-                        variant="tonal"
-                        :href="plugin.repo"
-                        target="_blank"
-                        style="height: 24px"
-                      >
-                        <v-icon icon="mdi-github" start size="x-small"></v-icon>
-                        {{ tm("buttons.viewRepo") }}
-                      </v-btn>
-                      <v-btn
-                        v-if="!plugin?.installed"
-                        color="primary"
-                        size="x-small"
-                        @click="handleInstallPlugin(plugin)"
-                        variant="flat"
-                        style="height: 24px"
-                      >
-                        {{ tm("buttons.install") }}
-                      </v-btn>
-                      <v-chip
-                        v-else
-                        color="success"
-                        size="x-small"
-                        label
-                        style="height: 20px"
-                      >
-                        ✓ {{ tm("status.installed") }}
-                      </v-chip>
-                    </v-card-actions>
-                  </v-card>
-                </v-col>
-              </v-row>
+                         <!-- Description -->
+                         <div class="text-caption plugin-description">
+                           {{ plugin.desc }}
+                         </div>
 
-              <!-- 底部分页控件 -->
-              <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
-                <v-pagination
-                  v-model="currentPage"
-                  :length="totalPages"
-                  :total-visible="7"
-                  size="small"
-                ></v-pagination>
-              </div>
-            </div>
-          </v-tab-item>
+                         <!-- Stats: Stars & Updated & Version -->
+                         <div
+                           class="d-flex align-center"
+                           style="gap: 8px; margin-top: auto"
+                         >
+                           <div
+                             v-if="plugin.stars !== undefined"
+                             class="d-flex align-center text-subtitle-2"
+                             style="color: rgba(var(--v-theme-on-surface), 0.7)"
+                           >
+                             <v-icon
+                               icon="mdi-star"
+                               size="x-small"
+                               style="margin-right: 2px"
+                             ></v-icon>
+                             <span>{{ plugin.stars }}</span>
+                           </div>
+                           <div
+                             v-if="plugin.updated_at"
+                             class="d-flex align-center text-subtitle-2"
+                             style="color: rgba(var(--v-theme-on-surface), 0.7)"
+                           >
+                             <v-icon
+                               icon="mdi-clock-outline"
+                               size="x-small"
+                               style="margin-right: 2px"
+                             ></v-icon>
+                             <span>{{
+                               new Date(plugin.updated_at).toLocaleString()
+                             }}</span>
+                           </div>
+                         </div>
+                       </div>
+                     </v-card-text>
+
+                     <!-- Actions -->
+                     <v-card-actions
+                       style="gap: 6px; padding: 8px 12px; padding-top: 0"
+                     >
+                       <v-chip
+                         v-for="tag in plugin.tags?.slice(0, 2)"
+                         :key="tag"
+                         :color="tag === 'danger' ? 'error' : 'primary'"
+                         label
+                         size="x-small"
+                         style="height: 20px"
+                       >
+                         {{ tag === "danger" ? tm("tags.danger") : tag }}
+                       </v-chip>
+                       <v-menu
+                         v-if="plugin.tags && plugin.tags.length > 2"
+                         open-on-hover
+                         offset-y
+                       >
+                         <template v-slot:activator="{ props: menuProps }">
+                           <v-chip
+                             v-bind="menuProps"
+                             color="grey"
+                             label
+                             size="x-small"
+                             style="height: 20px; cursor: pointer"
+                           >
+                             +{{ plugin.tags.length - 2 }}
+                           </v-chip>
+                         </template>
+                         <v-list density="compact">
+                           <v-list-item
+                             v-for="tag in plugin.tags.slice(2)"
+                             :key="tag"
+                           >
+                             <v-chip
+                               :color="tag === 'danger' ? 'error' : 'primary'"
+                               label
+                               size="small"
+                             >
+                               {{ tag === "danger" ? tm("tags.danger") : tag }}
+                             </v-chip>
+                           </v-list-item>
+                         </v-list>
+                       </v-menu>
+                       <v-spacer></v-spacer>
+                       <v-btn
+                         v-if="plugin?.repo"
+                         color="secondary"
+                         size="x-small"
+                         variant="tonal"
+                         :href="plugin.repo"
+                         target="_blank"
+                         style="height: 24px"
+                       >
+                         <v-icon icon="mdi-github" start size="x-small"></v-icon>
+                         {{ tm("buttons.viewRepo") }}
+                       </v-btn>
+                       <v-btn
+                         v-if="!plugin?.installed"
+                         color="primary"
+                         size="x-small"
+                         @click="handleInstallPlugin(plugin)"
+                         variant="flat"
+                         style="height: 24px"
+                       >
+                         {{ tm("buttons.install") }}
+                       </v-btn>
+                       <v-chip
+                         v-else
+                         color="success"
+                         size="x-small"
+                         label
+                         style="height: 20px"
+                       >
+                         ✓ {{ tm("status.installed") }}
+                       </v-chip>
+                     </v-card-actions>
+                   </v-card>
+                 </v-col>
+               </v-row>
+
+               <!-- 底部分页控件 -->
+               <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
+                 <v-pagination
+                   v-model="currentPage"
+                   :length="totalPages"
+                   :total-visible="7"
+                   size="small"
+                 ></v-pagination>
+               </div>
+             </div>
+           </v-window-item>
+          </v-window>
 
           <v-row v-if="loading_">
             <v-col cols="12" class="d-flex justify-center">
@@ -2174,6 +2485,345 @@ watch(isListView, (newVal) => {
       </div>
     </v-col>
   </v-row>
+
+  <input
+    ref="collectionFileInput"
+    type="file"
+    accept="application/json,.json"
+    style="display: none"
+    @change="onCollectionFileSelected"
+  />
+
+  <v-dialog v-model="collectionExportDialog.show" max-width="560">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-export</v-icon>
+        {{ tm("collection.dialogs.export.title") }}
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="collectionExportDialog.name"
+          :label="tm('collection.fields.name')"
+          variant="outlined"
+          density="comfortable"
+          required
+        ></v-text-field>
+        <v-text-field
+          v-model="collectionExportDialog.description"
+          :label="tm('collection.fields.description')"
+          variant="outlined"
+          density="comfortable"
+        ></v-text-field>
+        <v-switch
+          v-model="collectionExportDialog.includeConfigs"
+          :label="tm('collection.fields.includeConfigs')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+        <v-switch
+          v-model="collectionExportDialog.includePriority"
+          :label="tm('collection.fields.includePriority')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionExportDialog.show = false">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="collectionExportDialog.loading"
+          @click="exportCollection"
+        >
+          {{ tm("collection.buttons.export") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="collectionImport.showConfirm" max-width="640">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-import</v-icon>
+        {{ tm("collection.dialogs.import.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="mb-2">
+          <div class="text-subtitle-1 font-weight-medium">
+            {{ collectionImport.validatedCollection?.name || tm('collection.fields.unnamed') }}
+          </div>
+          <div class="text-body-2 text-medium-emphasis" v-if="collectionImport.validatedCollection?.description">
+            {{ collectionImport.validatedCollection.description }}
+          </div>
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ tm('collection.labels.pluginCount', { count: getCollectionPluginCount(collectionImport.validatedCollection) }) }}
+          </div>
+        </div>
+
+        <v-alert
+          v-if="collectionImport.previewLoading"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          {{ tm('collection.preview.loading') }}
+        </v-alert>
+
+        <v-alert
+          v-else-if="collectionImport.preview"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          <div class="text-body-2">
+            {{ tm('collection.preview.willInstall', { count: collectionImport.preview.plugins_to_install?.length ?? 0 }) }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="(collectionImport.preview.plugins_to_install?.length ?? 0) > 0"
+          >
+            {{ collectionImport.preview.plugins_to_install.map((p) => p.name).join(', ') }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{ tm('collection.preview.willSkip', { count: collectionImport.preview.plugins_to_skip?.length ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2" v-if="collectionImport.mode === 'clean'">
+            {{ tm('collection.preview.willUninstall', { count: collectionImport.preview.plugins_to_uninstall?.length ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{ tm('collection.preview.configsCount', { count: collectionImport.preview.configs_count ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{
+              tm('collection.preview.priorityOverrides', {
+                value: collectionImport.preview.has_priority_overrides
+                  ? tm('collection.result.yes')
+                  : tm('collection.result.no'),
+              })
+            }}
+          </div>
+        </v-alert>
+
+        <v-alert
+          v-if="collectionImport.mode === 'clean' && collectionImport.preview"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          <div class="text-body-2">
+            {{
+              tm('collection.cleanMode.warning', {
+                count: collectionImport.preview.plugins_to_uninstall?.length ?? 0,
+              })
+            }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="(collectionImport.preview.plugins_to_uninstall?.length ?? 0) > 0"
+          >
+            {{ collectionImport.preview.plugins_to_uninstall.map((p) => p.name).join(', ') }}
+          </div>
+          <v-checkbox
+            v-model="cleanModeConfirmed"
+            hide-details
+            density="compact"
+            class="mt-2"
+            :label="tm('collection.cleanMode.confirmCheckbox', { count: collectionImport.preview.plugins_to_uninstall?.length ?? 0 })"
+          ></v-checkbox>
+        </v-alert>
+
+        <v-select
+          v-model="collectionImport.mode"
+          :items="[
+            { title: tm('collection.importModes.add'), value: 'add' },
+            { title: tm('collection.importModes.clean'), value: 'clean' },
+          ]"
+          :label="tm('collection.fields.importMode')"
+          variant="outlined"
+          density="comfortable"
+        ></v-select>
+
+        <v-switch
+          v-model="collectionImport.applyConfigs"
+          :label="tm('collection.fields.applyConfigs')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+
+        <div
+          v-if="collectionImport.applyConfigs"
+          class="pl-4"
+          style="border-left: 2px solid rgba(var(--v-border-color), 0.3)"
+        >
+          <v-switch
+            v-model="collectionImport.overwriteExistingConfigs"
+            :disabled="collectionImport.mode !== 'add'"
+            :label="tm('collection.fields.overwriteExistingConfigs')"
+            hide-details
+            density="comfortable"
+          ></v-switch>
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ tm('collection.fields.overwriteExistingConfigsHint') }}
+          </div>
+        </div>
+
+        <v-switch
+          v-model="collectionImport.applyPriority"
+          :label="tm('collection.fields.applyPriority')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionImport.showConfirm = false">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="collectionImport.importing"
+          :disabled="collectionImport.mode === 'clean' && !cleanModeConfirmed"
+          @click="confirmImportCollection"
+        >
+          {{ tm('collection.buttons.confirmImport') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="collectionImport.showResult" max-width="720">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-check-circle-outline</v-icon>
+        {{ tm('collection.dialogs.result.title') }}
+      </v-card-title>
+      <v-card-text>
+        <div v-if="collectionImport.result" style="white-space: pre-wrap">
+          <div>
+            {{
+              tm('collection.result.installed', {
+                count: Array.isArray(collectionImport.result.installed)
+                  ? collectionImport.result.installed.length
+                  : collectionImport.result.installed ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.installed) && collectionImport.result.installed.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.installed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.failed', {
+                count: Array.isArray(collectionImport.result.failed)
+                  ? collectionImport.result.failed.length
+                  : collectionImport.result.failed ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.failed) && collectionImport.result.failed.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.failed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.skipped', {
+                count: Array.isArray(collectionImport.result.skipped)
+                  ? collectionImport.result.skipped.length
+                  : collectionImport.result.skipped ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.skipped) && collectionImport.result.skipped.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.skipped.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.uninstalled', {
+                count: Array.isArray(collectionImport.result.uninstalled)
+                  ? collectionImport.result.uninstalled.length
+                  : collectionImport.result.uninstalled ?? 0,
+              })
+            }}
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.uninstall_failed) && collectionImport.result.uninstall_failed.length">
+            {{ tm('collection.result.uninstallFailed', { count: collectionImport.result.uninstall_failed.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.uninstall_failed.join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.configsApplied', {
+                count: collectionImport.result.configs_applied ?? 0,
+              })
+            }}
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.reloaded) && collectionImport.result.reloaded.length">
+            {{ tm('collection.result.reloaded', { count: collectionImport.result.reloaded.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.reloaded.join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.reload_failed) && collectionImport.result.reload_failed.length">
+            {{ tm('collection.result.reloadFailed', { count: collectionImport.result.reload_failed.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.reload_failed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.installed) && collectionImport.result.installed.find((p) => p.exported_version_note)">
+            {{ tm('collection.result.exportedVersionNote') }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.installed.find((p) => p.exported_version_note)?.exported_version_note }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.priorityApplied', {
+                count: collectionImport.result.priority_persisted
+                  ? tm('collection.result.yes')
+                  : collectionImport.result.priority_applied_in_memory
+                    ? tm('collection.result.no')
+                    : tm('collection.result.no'),
+              })
+            }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="collectionImport.result.priority_note"
+          >
+            {{ collectionImport.result.priority_note }}
+          </div>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionImport.showResult = false">{{
+          tm('buttons.close')
+        }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- 配置对话框 -->
   <v-dialog v-model="configDialog" max-width="900">

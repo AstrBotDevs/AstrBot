@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, inject } from "vue";
+import { ref, computed, inject, useAttrs } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+
+defineOptions({ inheritAttrs: false });
+
+const attrs = useAttrs();
 
 const props = defineProps({
   extension: {
@@ -87,6 +91,7 @@ const viewChangelog = () => {
 
 <template>
   <v-card
+    v-bind="attrs"
     class="mx-auto d-flex flex-column"
     elevation="0"
     :style="{
@@ -197,11 +202,15 @@ const viewChangelog = () => {
                 </v-list-item>
 
                 <v-list-item @click="viewHandlers">
-                  <v-list-item-title
-                    >{{ tm("card.actions.viewHandlers") }} ({{
-                      extension.handlers.length
-                    }})</v-list-item-title
-                  >
+                  <v-list-item-title>
+                    {{
+                      tm("card.actions.viewHandlers", {
+                        count: Array.isArray(extension.handlers)
+                          ? extension.handlers.length
+                          : 0,
+                      })
+                    }}
+                  </v-list-item-title>
                 </v-list-item>
 
                 <v-list-item @click="updateExtension">
