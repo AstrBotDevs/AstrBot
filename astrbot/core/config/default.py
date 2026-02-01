@@ -114,6 +114,9 @@ DEFAULT_CONFIG = {
             "provider": "moonshotai",
             "moonshotai_api_key": "",
         },
+        "proactive_capability": {
+            "add_cron_tools": True,
+        },
         "sandbox": {
             "enable": False,
             "booter": "shipyard",
@@ -2232,6 +2235,14 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
+                    "proactive_capability": {
+                        "type": "object",
+                        "items": {
+                            "add_cron_tools": {
+                                "type": "bool",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2684,6 +2695,7 @@ CONFIG_METADATA_3 = {
             "skills": {
                 "description": "Skills",
                 "type": "object",
+                "hint": "",
                 "items": {
                     "provider_settings.skills.runtime": {
                         "description": "Skill Runtime",
@@ -2698,7 +2710,24 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
+            "proactive_capability": {
+                "description": "主动型 Agent",
+                "hint": "https://docs.astrbot.app/use/proactive-agent.html",
+                "type": "object",
+                "items": {
+                    "provider_settings.proactive_capability.add_cron_tools": {
+                        "description": "启用",
+                        "type": "bool",
+                        "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务。",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
             "truncate_and_compress": {
+                "hint": "",
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {

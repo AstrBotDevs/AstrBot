@@ -94,6 +94,10 @@ class InternalAgentSubStage(Stage):
 
         self.sandbox_cfg = settings.get("sandbox", {})
 
+        # Proactive capability configuration
+        proactive_cfg = settings.get("proactive_capability", {})
+        self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
+
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
 
         self.main_agent_cfg = MainAgentBuildConfig(
@@ -113,6 +117,7 @@ class InternalAgentSubStage(Stage):
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
             sandbox_cfg=self.sandbox_cfg,
+            add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
