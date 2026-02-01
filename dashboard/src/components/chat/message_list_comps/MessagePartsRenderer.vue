@@ -331,4 +331,52 @@ const getRenderParts = (messageParts) => {
 .tool-call-chevron.rotated {
     transform: rotate(90deg);
 }
+
+
+.embedded-images {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.embedded-image {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.bot-embedded-image {
+    max-width: 55%;
+    width: auto;
+    height: auto;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.embedded-audio {
+    width: 300px;
+    margin-top: 8px;
+}
+
+.embedded-audio .audio-player {
+    width: 100%;
+    max-width: 300px;
+}
+
+/* 文件附件样式 */
+.file-attachments,
+.embedded-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.file-attachment,
+.embedded-file {
+    display: flex;
+    align-items: center;
+}
+
 </style>
