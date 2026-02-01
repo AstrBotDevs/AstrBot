@@ -44,6 +44,10 @@ class WhitelistCheckStage(Stage):
             # WebChat 豁免
             return
 
+        if event.get_platform_name() == "cli":
+            # CLI 平台豁免（用于测试）
+            return
+
         # 检查是否在白名单
         if self.wl_ignore_admin_on_group:
             if (

@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""
+AstrBot CLI Tool - Unix Socket客户端
+
+用法:
+    astrbot-cli "你好"
+    astrbot-cli "/help"
+    echo "你好" | astrbot-cli
+"""
+
+import argparse
+import json
+import os
+import socket
+import sys
+import uuid
+
+
+def get_data_path() -> str:
+    """获取数据目录路径,兼容容器和非容器环境"""
+    # 优先使用环境变量
+    if root := os.environ.get("ASTRBOT_ROOT"):
+        return os.path.join(root, "data")
+    # 默认路径
+    return os.path.join(os.getcwd(), "data")
+
+
+def get_temp_path() -> str:
+    """获取临时目录路径,兼容容器和非容器环境"""
+    # 优先使用环境变量
+    if root := os.environ.get("ASTRBOT_ROOT"):
+        return os.path.join(root, "data", "temp")
+    # 默认使用系统临时目录
+    return "/tmp"
+
+
+def load_auth_token() -> str:
+    """从密钥文件加载认证token
+
+    Returns:
+        token字符串,如果文件不存在则返回空字符串
+    """
+    token_file = os.path.join(get_data_path(), ".cli_token")
+    try:
+        with open(token_file, encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+    except Exception:
+        return ""
+
+
+def send_message(
+    message: str, socket_path: str | None = None, timeout: float = 30.0
+) -> dict:
+    """发送消息到AstrBot并获取响应
+
+    Args:
+        message: 要发送的消息
+        socket_path: Unix socket路径(默认使用临时目录下的astrbot.sock)
+        timeout: 超时时间（秒）
+
+    Returns:
+        响应字典
+    """
+    # 使用默认socket路径
+    if socket_path is None:
+        socket_path = os.path.join(get_temp_path(), "astrbot.sock")
+
+    # 加载认证token
+    auth_token = load_auth_token()
+
+    # 创建请求
+    request = {"message": message, "request_id": str(uuid.uuid4())}
+
+    # 如果token存在,添加到请求中
+    if auth_token:
+        request["auth_token"] = auth_token
+
+    # 连接到Unix socket
+    try:
+        client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client_socket.settimeout(timeout)
+        client_socket.connect(socket_path)
+    except FileNotFoundError:
+        return {
+            "status": "error",
+            "error": f"Socket file not found: {socket_path}. Is AstrBot running?",
+        }
+    except ConnectionRefusedError:
+        return {
+            "status": "error",
+            "error": "Connection refused. Is AstrBot running in socket mode?",
+        }
+    except Exception as e:
+        return {"status": "error", "error": f"Connection error: {e}"}
+
+    try:
+        # 发送请求
+        request_data = json.dumps(request, ensure_ascii=False).encode("utf-8")
+        client_socket.sendall(request_data)
+
+        # 接收响应（循环接收所有数据，支持大响应如base64图片）
+        response_data = b""
+        while True:
+            chunk = client_socket.recv(4096)
+            if not chunk:
+                break
+            response_data += chunk
+            # 尝试解析JSON，如果成功说明接收完整
+            try:
+                response = json.loads(response_data.decode("utf-8"))
+                return response
+            except json.JSONDecodeError:
+                # JSON不完整，继续接收
+                continue
+
+        # 如果循环结束仍未成功解析，尝试最后一次
+        response = json.loads(response_data.decode("utf-8"))
+        return response
+
+    except TimeoutError:
+        return {"status": "error", "error": "Request timeout"}
+    except Exception as e:
+        return {"status": "error", "error": f"Communication error: {e}"}
+    finally:
+        client_socket.close()
+
+
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(
+        description="AstrBot CLI Tool - Send messages to AstrBot via Unix Socket",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  astrbot-cli "你好"
+  astrbot-cli "/help"
+  astrbot-cli --socket /tmp/custom.sock "测试消息"
+  echo "你好" | astrbot-cli
+        """,
+    )
+
+    parser.add_argument(
+        "message", nargs="?", help="Message to send (if not provided, read from stdin)"
+    )
+
+    parser.add_argument(
+        "-s",
+        "--socket",
+        default=None,
+        help="Unix socket path (default: {temp_dir}/astrbot.sock)",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Timeout in seconds (default: 30.0)",
+    )
+
+    parser.add_argument(
+        "-j", "--json", action="store_true", help="Output raw JSON response"
+    )
+
+    args = parser.parse_args()
+
+    # 获取消息内容
+    if args.message:
+        message = args.message
+    elif not sys.stdin.isatty():
+        # 从stdin读取
+        message = sys.stdin.read().strip()
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+    if not message:
+        print("Error: Empty message", file=sys.stderr)
+        sys.exit(1)
+
+    # 发送消息
+    response = send_message(message, args.socket, args.timeout)
+
+    # 输出响应
+    if args.json:
+        # 输出原始JSON
+        print(json.dumps(response, ensure_ascii=False, indent=2))
+    else:
+        # 格式化输出
+        if response.get("status") == "success":
+            print(response.get("response", ""))
+        else:
+            error = response.get("error", "Unknown error")
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
