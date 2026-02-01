@@ -28,6 +28,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.history_saver import persist_agent_history
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -199,6 +200,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             extras=extras,
             message_type=session.message_type,
         )
+        cron_event.role = event.role
         config = MainAgentBuildConfig(tool_call_timeout=3600)
 
         req = ProviderRequest()
@@ -221,6 +223,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         req.prompt = (
             "Proceed according to your system instructions. "
             "Output using same language as previous conversation."
+            " After completing your task, summarize and output your actions and results."
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
@@ -238,6 +241,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        task_meta = extras.get("background_task_result", {})
+        summary_note = (
+            f"[BackgroundTask] {task_meta.get('tool_name', tool.name)} "
+            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+            f"Result: {task_meta.get('result') or result_text or 'no content'}"
+        )
+        if llm_resp and llm_resp.completion_text:
+            summary_note += (
+                f"I finished the task, here is the result: {llm_resp.completion_text}"
+            )
+        await persist_agent_history(
+            ctx.conversation_manager,
+            event=cron_event,
+            req=req,
+            summary_note=summary_note,
+        )
         if not llm_resp:
             logger.warning("background task agent got no response")
             return

@@ -15,6 +15,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
@@ -182,7 +183,7 @@ class CronJobManager:
             if job.job_type == "basic":
                 await self._run_basic_job(job)
             elif job.job_type == "active_agent":
-                await self._run_active_agent_job(job)
+                await self._run_active_agent_job(job, start_time=start_time)
             else:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
         except Exception as e:  # noqa: BLE001
@@ -208,7 +209,7 @@ class CronJobManager:
         if asyncio.iscoroutine(result):
             await result
 
-    async def _run_active_agent_job(self, job: CronJob):
+    async def _run_active_agent_job(self, job: CronJob, start_time: datetime):
         payload = job.payload or {}
         session_str = payload.get("session")
         if not session_str:
@@ -222,6 +223,7 @@ class CronJobManager:
                 "type": job.job_type,
                 "description": job.description,
                 "note": note,
+                "run_started_at": start_time.isoformat(),
             },
             "cron_payload": payload,
         }
@@ -268,6 +270,15 @@ class CronJobManager:
             message_type=session.message_type,
         )
 
+        # judge user's role
+        umo = cron_event.unified_msg_origin
+        cfg = self.ctx.get_config(umo=umo)
+        admin_ids = cfg.get("admins_id", [])
+        if admin_ids:
+            cron_event.role = (
+                "admin" if cron_event.get_sender_id() in admin_ids else "member"
+            )
+
         config = MainAgentBuildConfig(
             tool_call_timeout=3600,
             llm_safety_mode=False,
@@ -295,6 +306,7 @@ class CronJobManager:
             "You are now responding to a scheduled task"
             "Proceed according to your system instructions. "
             "Output using same language as previous conversation."
+            "After completing your task, summarize and output your actions and results."
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
@@ -312,6 +324,22 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
+        cron_meta = extras.get("cron_job", {}) if extras else {}
+        summary_note = (
+            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
+            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+        )
+        if llm_resp and llm_resp.role == "assistant":
+            summary_note += (
+                f"I finished this job, here is the result: {llm_resp.completion_text}"
+            )
+
+        await persist_agent_history(
+            self.ctx.conversation_manager,
+            event=cron_event,
+            req=req,
+            summary_note=summary_note,
+        )
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return

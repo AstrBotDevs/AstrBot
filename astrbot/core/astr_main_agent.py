@@ -31,9 +31,9 @@ from astrbot.core.astr_main_agent_resources import (
     LOCAL_PYTHON_TOOL,
     PYTHON_TOOL,
     SANDBOX_MODE_PROMPT,
+    SEND_MESSAGE_TO_USER_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    SEND_MESSAGE_TO_USER_TOOL,
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation

@@ -157,9 +157,7 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     )
     name: str = Field(max_length=255, nullable=False)
     description: str | None = Field(default=None, sa_type=Text)
-    job_type: str = Field(
-        max_length=32, nullable=False
-    )  # basic | active_agent
+    job_type: str = Field(max_length=32, nullable=False)  # basic | active_agent
     cron_expression: str | None = Field(default=None, max_length=255)
     timezone: str | None = Field(default=None, max_length=64)
     payload: dict = Field(default_factory=dict, sa_type=JSON)
