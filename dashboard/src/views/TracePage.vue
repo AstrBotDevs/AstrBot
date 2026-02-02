@@ -46,7 +46,7 @@ onMounted(() => {
     <div class="trace-header">
       <div class="trace-info">
         <v-icon size="small" color="info" class="mr-2">mdi-information-outline</v-icon>
-        <span class="trace-hint">当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。</span>
+        <span class="trace-hint">{{ tm('hint') }}</span>
       </div>
       <div class="trace-controls">
         <v-switch
@@ -59,7 +59,7 @@ onMounted(() => {
           @update:model-value="updateTraceSettings"
         >
           <template #label>
-            <span class="switch-label">{{ traceEnabled ? '记录中' : '已暂停' }}</span>
+            <span class="switch-label">{{ traceEnabled ? tm('recording') : tm('paused') }}</span>
           </template>
         </v-switch>
       </div>
