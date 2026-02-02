@@ -10,33 +10,8 @@ export const ColorFormat = {
 
 export type ColorFormatType = typeof ColorFormat[keyof typeof ColorFormat];
 
-/** 调色板相关的配置类型 */
-export const ConfigType = {
-  PALETTE: 'palette',
-  PALETTE_RGB: 'palette_rgb',
-  PALETTE_HSV: 'palette_hsv'
-} as const;
-
-export type PaletteConfigType = typeof ConfigType[keyof typeof ConfigType];
-
-/** 所有调色板配置类型的集合 */
-export const PALETTE_TYPES = new Set<string>([
-  ConfigType.PALETTE,
-  ConfigType.PALETTE_RGB,
-  ConfigType.PALETTE_HSV
-]);
-
-/** 检查配置类型是否为调色板类型 */
-export function isPaletteType(type: string | undefined): boolean {
-  return type !== undefined && PALETTE_TYPES.has(type);
-}
-
-/** 根据调色板配置类型获取对应的颜色格式 */
-export function getPaletteFormatFromType(type: string | undefined): ColorFormatType {
-  if (type === ConfigType.PALETTE_RGB) return ColorFormat.RGB;
-  if (type === ConfigType.PALETTE_HSV) return ColorFormat.HSV;
-  return ColorFormat.HEX;
-}
+/** 定义用于在配置元数据中识别调色盘组件的常量 */
+export const WIDGET_PALETTE = 'palette';
 
 export interface RgbColor {
   r: number;

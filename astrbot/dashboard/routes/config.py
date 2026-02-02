@@ -9,7 +9,6 @@ from quart import request
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.config_types import STRING_LIKE_TYPES
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
     CONFIG_METADATA_3,
@@ -180,7 +179,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 bool, 得到了 {type(value).__name__}",
                 )
-            elif meta["type"] in STRING_LIKE_TYPES and not isinstance(value, str):
+            elif meta["type"] in ["string", "text"] and not isinstance(value, str):
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 string, 得到了 {type(value).__name__}",
                 )

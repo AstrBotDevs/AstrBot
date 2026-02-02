@@ -154,7 +154,6 @@
 import { computed, ref, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import { useI18n } from '@/i18n/composables'
-import { ConfigType } from '@/utils/color'
 
 const props = defineProps({
   modelValue: {
@@ -186,10 +185,7 @@ const defaultValueMap = {
   text: '',
   list: [],
   object: {},
-  template_list: [],
-  [ConfigType.PALETTE]: '',
-  [ConfigType.PALETTE_RGB]: '',
-  [ConfigType.PALETTE_HSV]: ''
+  template_list: []
 }
 
 const templateOptions = computed(() => {
