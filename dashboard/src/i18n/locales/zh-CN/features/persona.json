@@ -11,7 +11,6 @@
     "save": "保存",
     "move": "移动",
     "addDialogPair": "添加对话对",
-    "export": "导出",
     "import": "导入"
   },
   "labels": {
@@ -88,7 +87,8 @@
     "toolsCount": "个工具",
     "skillsCount": "个 Skills",
     "contextMenu": {
-      "moveTo": "移动到..."
+      "moveTo": "移动到...",
+      "export": "导出"
     },
     "messages": {
       "moveSuccess": "人格移动成功",
