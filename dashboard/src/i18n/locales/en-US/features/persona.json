@@ -80,7 +80,8 @@
     "saveError": "Save failed",
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "deleteError": "Delete failed"
+    "deleteError": "Delete failed",
+    "importExists": "Persona with ID {id} already exists."
   },
   "persona": {
     "personasTitle": "Personas",
@@ -94,7 +95,8 @@
       "moveSuccess": "Persona moved successfully",
       "moveError": "Failed to move persona",
       "exportSuccess": "Exported successfully(excluding skills and tools)",
-      "importSuccess": "Imported successfully"
+      "importSuccess": "Imported successfully",
+      "importError": "Failed to import persona"
     }
   },
   "folder": {

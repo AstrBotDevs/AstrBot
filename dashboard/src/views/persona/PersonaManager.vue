@@ -569,6 +569,12 @@ export default defineComponent({
                         throw new Error(this.tm('persona.messages.importMissingFields'));
                     }
                     
+                    // 检查ID是否已存在
+                    const existingPersonas = this.currentPersonas.map(p => p.persona_id);
+                    if (existingPersonas.includes(importData.persona_id)) {
+                        throw new Error(this.tm('messages.importExists', { id: importData.persona_id }));
+                    }
+                    
                     // 执行导入
                     await this.importPersona(importData);
                     this.showSuccess(this.tm('persona.messages.importSuccess'));

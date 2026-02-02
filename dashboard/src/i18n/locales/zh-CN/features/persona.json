@@ -80,7 +80,8 @@
     "saveError": "保存失败",
     "deleteConfirm": "确定要删除人格 \"{id}\" 吗？此操作不可撤销。",
     "deleteSuccess": "删除成功",
-    "deleteError": "删除失败"
+    "deleteError": "删除失败",
+    "importExists": "人格 ID {id} 已存在"
   },
   "persona": {
     "personasTitle": "人格",
@@ -94,7 +95,8 @@
       "moveSuccess": "人格移动成功",
       "moveError": "移动人格失败",
       "exportSuccess": "导出成功(不包含 Skills 和工具)",
-      "importSuccess": "导入成功"
+      "importSuccess": "导入成功",
+      "importError": "导入失败"
     }
   },
   "folder": {
