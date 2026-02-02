@@ -28,17 +28,13 @@
 
         <v-alert v-if="!jobs.length && !loading" type="info" variant="tonal">{{ tm('table.empty') }}</v-alert>
 
-        <v-data-table
-          :items="jobs"
-          :headers="headers"
-          :loading="loading"
-          item-key="job_id"
-          density="comfortable"
-          class="elevation-0"
-        >
+        <v-data-table :items="jobs" :headers="headers" :loading="loading" item-key="job_id" density="comfortable"
+          class="elevation-0">
           <template #item.name="{ item }">
-            <div class="font-weight-medium">{{ item.name }}</div>
-            <div class="text-caption text-medium-emphasis">{{ item.description }}</div>
+            <div class="py-4">
+              <div class="font-weight-medium">{{ item.name }}</div>
+              <div class="text-caption text-medium-emphasis">{{ item.description }}</div>
+            </div>
           </template>
           <template #item.type="{ item }">
             <v-chip size="small" :color="item.run_once ? 'orange' : 'primary'" variant="tonal">
@@ -57,15 +53,10 @@
           <template #item.note="{ item }">{{ item.note || tm('table.notAvailable') }}</template>
           <template #item.actions="{ item }">
             <div class="d-flex" style="gap: 8px;">
-              <v-switch
-                v-model="item.enabled"
-                inset
-                density="compact"
-                hide-details
-                color="primary"
-                @change="toggleJob(item)"
-              />
-              <v-btn size="small" variant="text" color="primary" @click="deleteJob(item)">{{ tm('actions.delete') }}</v-btn>
+              <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
+                @change="toggleJob(item)" />
+              <v-btn size="small" variant="text" color="primary" @click="deleteJob(item)">{{ tm('actions.delete')
+                }}</v-btn>
             </div>
           </template>
         </v-data-table>
@@ -83,39 +74,19 @@
           <v-switch v-model="newJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
           <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />
           <v-text-field v-model="newJob.note" :label="tm('form.note')" variant="outlined" density="comfortable" />
-          <v-text-field
-            v-if="!newJob.run_once"
-            v-model="newJob.cron_expression"
-            :label="tm('form.cron')"
-            :placeholder="tm('form.cronPlaceholder')"
-            variant="outlined"
-            density="comfortable"
-          />
-          <v-text-field
-            v-else
-            v-model="newJob.run_at"
-            :label="tm('form.runAt')"
-            type="datetime-local"
-            variant="outlined"
-            density="comfortable"
-          />
-          <v-text-field
-            v-model="newJob.session"
-            :label="tm('form.session')"
-            variant="outlined"
-            density="comfortable"
-          />
-          <v-text-field
-            v-model="newJob.timezone"
-            :label="tm('form.timezone')"
-            variant="outlined"
-            density="comfortable"
-          />
+          <v-text-field v-if="!newJob.run_once" v-model="newJob.cron_expression" :label="tm('form.cron')"
+            :placeholder="tm('form.cronPlaceholder')" variant="outlined" density="comfortable" />
+          <v-text-field v-else v-model="newJob.run_at" :label="tm('form.runAt')" type="datetime-local"
+            variant="outlined" density="comfortable" />
+          <v-text-field v-model="newJob.session" :label="tm('form.session')" variant="outlined" density="comfortable" />
+          <v-text-field v-model="newJob.timezone" :label="tm('form.timezone')" variant="outlined"
+            density="comfortable" />
           <v-switch v-model="newJob.enabled" :label="tm('form.enabled')" inset color="primary" hide-details />
         </v-card-text>
         <v-card-actions class="justify-end">
           <v-btn variant="text" @click="createDialog = false">{{ tm('actions.cancel') }}</v-btn>
-          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">{{ tm('actions.submit') }}</v-btn>
+          <v-btn variant="tonal" color="primary" :loading="creating" @click="createJob">{{ tm('actions.submit')
+            }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
