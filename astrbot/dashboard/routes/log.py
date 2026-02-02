@@ -31,6 +31,16 @@ class LogRoute(Route):
             view_func=self.log_history,
             methods=["GET"],
         )
+        self.app.add_url_rule(
+            "/api/trace/settings",
+            view_func=self.get_trace_settings,
+            methods=["GET"],
+        )
+        self.app.add_url_rule(
+            "/api/trace/settings",
+            view_func=self.update_trace_settings,
+            methods=["POST"],
+        )
 
     async def _replay_cached_logs(
         self, last_event_id: str
@@ -106,3 +116,29 @@ class LogRoute(Route):
         except Exception as e:
             logger.error(f"获取日志历史失败: {e}")
             return Response().error(f"获取日志历史失败: {e}").__dict__
+
+    async def get_trace_settings(self):
+        """获取 Trace 设置"""
+        try:
+            trace_enable = self.config.get("trace_enable", True)
+            return Response().ok(data={"trace_enable": trace_enable}).__dict__
+        except Exception as e:
+            logger.error(f"获取 Trace 设置失败: {e}")
+            return Response().error(f"获取 Trace 设置失败: {e}").__dict__
+
+    async def update_trace_settings(self):
+        """更新 Trace 设置"""
+        try:
+            data = await request.json
+            if data is None:
+                return Response().error("请求数据为空").__dict__
+
+            trace_enable = data.get("trace_enable")
+            if trace_enable is not None:
+                self.config["trace_enable"] = bool(trace_enable)
+                self.config.save_config()
+
+            return Response().ok(message="Trace 设置已更新").__dict__
+        except Exception as e:
+            logger.error(f"更新 Trace 设置失败: {e}")
+            return Response().error(f"更新 Trace 设置失败: {e}").__dict__

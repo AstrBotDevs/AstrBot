@@ -73,9 +73,6 @@ class AstrMessageEvent(abc.ABC):
         self.span = self.trace
         """事件级 TraceSpan(别名: span)"""
 
-        self.trace.record("umo", umo=self.unified_msg_origin)
-        self.trace.record("event_created", created_at=self.created_at)
-
         self._has_send_oper = False
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
