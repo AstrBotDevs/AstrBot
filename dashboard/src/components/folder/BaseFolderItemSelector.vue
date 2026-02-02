@@ -387,7 +387,10 @@ export default defineComponent({
         },
 
         isDefaultItem(item: SelectableItem): boolean {
-            return this.defaultItem !== null && this.getItemId(item) === this.getItemId(this.defaultItem);
+            if (this.defaultItem === null) {
+                return false;
+            }
+            return this.getItemId(item) === this.getItemId(this.defaultItem);
         },
 
         handleEditItem(item: SelectableItem) {

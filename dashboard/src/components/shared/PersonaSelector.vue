@@ -107,7 +107,7 @@ const labels = computed(() => ({
   defaultItem: tm('personaSelector.defaultPersona'),
   noDescription: tm('personaSelector.noDescription'),
   createButton: tm('personaSelector.createPersona'),
-  editButton: tm('personaSelector.editPersona') || '编辑',
+  editButton: tm('personaSelector.editPersona') || 'Edit',
   confirmButton: t('core.common.confirm'),
   cancelButton: t('core.common.cancel'),
   rootFolder: tm('personaSelector.rootFolder') || '全部人格',
