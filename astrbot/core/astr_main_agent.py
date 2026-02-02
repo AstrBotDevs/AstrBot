@@ -19,7 +19,6 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
-    CHATUI_EXTRA_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
@@ -259,6 +258,8 @@ async def _ensure_persona_and_skills(
         return
 
     # get persona ID
+
+    # 1. from session service config - highest priority
     persona_id = (
         await sp.get_async(
             scope="umo",
@@ -269,14 +270,15 @@ async def _ensure_persona_and_skills(
     ).get("persona_id")
 
     if not persona_id:
-        persona_id = req.conversation.persona_id or cfg.get("default_personality")
-        if persona_id is None or persona_id != "[%None]":
-            default_persona = plugin_context.persona_manager.selected_default_persona_v3
-            if default_persona:
-                persona_id = default_persona["name"]
-                if event.get_platform_name() == "webchat":
-                    persona_id = "_chatui_default_"
-                    req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+        # 2. from conversation setting - second priority
+        persona_id = req.conversation.persona_id
+
+        if persona_id == "[%None]":
+            # explicitly set to no persona
+            pass
+        elif persona_id is None:
+            # 3. from config default persona setting - last priority
+            persona_id = cfg.get("default_personality")
 
     persona = next(
         builtins.filter(
@@ -291,6 +293,11 @@ async def _ensure_persona_and_skills(
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
+    else:
+        # special handling for webchat persona
+        if event.get_platform_name() == "webchat":
+            persona_id = "_chatui_default_"
+            req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
     skills_cfg = cfg.get("skills", {})
@@ -931,7 +938,6 @@ async def build_main_agent(
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
-        req.system_prompt += f"\n{CHATUI_EXTRA_PROMPT}\n"
 
     if req.func_tool and req.func_tool.tools:
         tool_prompt = (
