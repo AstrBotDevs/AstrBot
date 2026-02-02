@@ -93,7 +93,7 @@
     "messages": {
       "moveSuccess": "Persona moved successfully",
       "moveError": "Failed to move persona",
-      "exportSuccess": "Exported successfully"
+      "exportSuccess": "Exported successfully(excluding skills and tools)"
     }
   },
   "folder": {
