@@ -92,7 +92,8 @@
     },
     "messages": {
       "moveSuccess": "人格移动成功",
-      "moveError": "移动人格失败"
+      "moveError": "移动人格失败",
+      "exportSuccess": "导出成功"
     }
   },
   "folder": {
