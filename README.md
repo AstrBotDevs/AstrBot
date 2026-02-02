@@ -52,68 +52,83 @@ AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主�
 
 ## 快速开始
 
-#### Docker 部署(推荐 🥳)
+## 快速开始
 
-推荐使用 Docker / Docker Compose 方式部署 AstrBot。
+选择最适合您需求的部署方式：
 
-请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
+### 🚀 初学者推荐（简单快捷）
 
-#### uv 部署
-
+#### Docker 部署（最推荐）
+使用 Docker / Docker Compose 是部署 AstrBot 最简单的方式。
 ```bash
-uvx astrbot
+# 1. 下载 docker-compose.yml 文件
+wget https://raw.githubusercontent.com/AstrBotDevs/AstrBot/main/docker/docker-compose.yml
+
+# 2. 启动服务
+docker-compose up -d
+
+# 3. 访问 WebUI
+# 默认地址: http://localhost:8000
 ```
 
 #### 宝塔面板部署
-
-AstrBot 与宝塔面板合作，已上架至宝塔面板。
-
-请参阅官方文档 [宝塔面板部署](https://astrbot.app/deploy/astrbot/btpanel.html) 。
+AstrBot 与宝塔面板合作，已上架至宝塔面板应用商店。
+1. 登录宝塔面板
+2. 进入【软件商店】
+3. 搜索"AstrBot"
+4. 点击【一键部署】
 
 #### 1Panel 部署
+AstrBot 已由 1Panel 官方上架至 1Panel 应用商店。
+1. 登录 1Panel 控制台
+2. 进入【应用商店】
+3. 搜索"AstrBot"
+4. 点击【安装】
 
-AstrBot 已由 1Panel 官方上架至 1Panel 面板。
+### 🔧 进阶部署方式
 
-请参阅官方文档 [1Panel 部署](https://astrbot.app/deploy/astrbot/1panel.html) 。
+#### uv 部署（Python 用户）
+如果您熟悉 Python 环境，可以使用 uv 部署：
+```bash
+# 安装并启动 AstrBot
+uvx astrbot
+```
+
+### ☁️ 云平台部署
 
 #### 在 雨云 上部署
-
 AstrBot 已由雨云官方上架至云应用平台，可一键部署。
+[点击这里在雨云上部署](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
+### 💻 特殊平台部署
 
-#### 在 Replit 上部署
-
-社区贡献的部署方式。
-
-[![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
-
-#### Windows 一键安装器部署
-
-请参阅官方文档 [使用 Windows 一键安装器部署 AstrBot](https://astrbot.app/deploy/astrbot/windows.html) 。
+#### Windows 一键安装器
+适合 Windows 用户的图形化安装方式。
+[下载 Windows 一键安装器](https://docs.astrbot.app/deploy/astrbot/windows.html)
 
 #### CasaOS 部署
+适合 CasaOS 用户的部署方式。
+[在 CasaOS 上部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/casaos.html)
 
-社区贡献的部署方式。
+### 📋 部署方式对比
 
-请参阅官方文档 [CasaOS 部署](https://astrbot.app/deploy/astrbot/casaos.html) 。
+| 部署方式 | 优点 | 缺点 | 适用场景 |
+|----------|------|------|----------|
+| Docker | 环境隔离、部署简单 | 需要学习 Docker | 生产环境推荐 |
+| 宝塔面板 | 图形界面、操作简单 | 仅限 Linux 服务器 | 服务器运维 |
+| 1Panel | 现代化界面、功能丰富 | 较新项目 | 现代化运维 |
+| uv | 轻量级、Python 原生 | 依赖 Python 环境 | 本地开发 |
 
-#### 手动部署
+### 🛠️ 常见问题
 
-首先安装 uv：
+**Q: Docker 部署后无法访问 WebUI？**
+A: 检查防火墙设置，确保 8000 端口已开放。
 
-```bash
-pip install uv
-```
+**Q: 如何修改默认端口？**
+A: 在 docker-compose.yml 中修改端口映射配置。
 
-通过 Git Clone 安装 AstrBot：
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
+**Q: 部署后如何更新版本？**
+A: Docker 用户重新拉取镜像即可，面板用户可通过面板一键更新。
 
 ## 支持的消息平台
 
