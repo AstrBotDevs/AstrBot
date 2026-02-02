@@ -10,7 +10,9 @@
     "cancel": "Cancel",
     "save": "Save",
     "move": "Move",
-    "addDialogPair": "Add Dialog Pair"
+    "addDialogPair": "Add Dialog Pair",
+    "export": "Export",
+    "import": "Import"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",

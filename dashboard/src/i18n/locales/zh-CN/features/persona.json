@@ -10,7 +10,9 @@
     "cancel": "取消",
     "save": "保存",
     "move": "移动",
-    "addDialogPair": "添加对话对"
+    "addDialogPair": "添加对话对",
+    "export": "导出",
+    "import": "导入"
   },
   "labels": {
     "presetDialogs": "预设对话 ({count} 对)",
@@ -86,22 +88,11 @@
     "toolsCount": "个工具",
     "skillsCount": "个 Skills",
     "contextMenu": {
-      "moveTo": "移动到...",
-      "export": "导出"
+      "moveTo": "移动到..."
     },
     "messages": {
       "moveSuccess": "人格移动成功",
-      "moveError": "移动人格失败",
-      "exportSuccess": "导出成功",
-      "exportError": "导出失败",
-      "importSuccess": "导入成功",
-      "importError": "导入失败",
-      "importMissingFields": "导入数据缺少必需字段",
-      "importNetworkError": "无法连接到服务器",
-      "exportStart": "开始导出人格:",
-      "exportSuccessData": "导出成功，人格数据:",
-      "exportFailed": "导出人格失败:",
-      "importFailed": "导入人格失败:"
+      "moveError": "移动人格失败"
     }
   },
   "folder": {
