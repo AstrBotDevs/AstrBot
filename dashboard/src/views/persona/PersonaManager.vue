@@ -453,15 +453,52 @@ export default defineComponent({
             try {
                 console.log(this.tm('persona.messages.exportStart'), persona.persona_id);
                 
-                // 直接使用前端已有的 persona 数据
-                const personaData = persona;
-                console.log(this.tm('persona.messages.exportSuccessData'), personaData);
+                // 转换为新格式
+                const exportData = {
+                    version: "1.0",
+                    persona: [{
+                        name: persona.persona_id,
+                        prompt: persona.system_prompt,
+                        begin_dialogs: [] as Array<{user: string, assistant: string}>
+                    }]
+                };
+
+                // 处理对话对
+                if (persona.begin_dialogs && persona.begin_dialogs.length > 0) {
+                    const dialogs = persona.begin_dialogs;
+                    // 按顺序配对消息
+                    for (let i = 0; i < dialogs.length; i += 2) {
+                        // 获取用户消息
+                        let userMessage = '';
+                        if (i < dialogs.length) {
+                            if (typeof dialogs[i] === 'string') {
+                                userMessage = dialogs[i];
+                            } else if (typeof dialogs[i] === 'object' && dialogs[i] !== null) {
+                                userMessage = (dialogs[i] as any).user || '';
+                            }
+                        }
+                        
+                        // 获取助手消息
+                        let assistantMessage = '';
+                        if (i + 1 < dialogs.length) {
+                            if (typeof dialogs[i + 1] === 'string') {
+                                assistantMessage = dialogs[i + 1];
+                            } else if (typeof dialogs[i + 1] === 'object' && dialogs[i + 1] !== null) {
+                                assistantMessage = (dialogs[i + 1] as any).assistant || '';
+                            }
+                        }
+                        exportData.persona[0].begin_dialogs.push({
+                            user: userMessage,
+                            assistant: assistantMessage
+                        });
+                    }
+                }
                 
                 // 清理文件名中的特殊字符
-                const safeFileName = personaData.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
+                const safeFileName = persona.persona_id.replace(/[\/\\:*?"<>|]/g, '_');
                 
                 // 创建 JSON 文件并下载
-                const jsonStr = JSON.stringify(personaData, null, 2);
+                const jsonStr = JSON.stringify(exportData, null, 2);
                 const blob = new Blob([jsonStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 
