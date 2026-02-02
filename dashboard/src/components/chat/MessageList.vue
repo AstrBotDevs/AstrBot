@@ -92,6 +92,7 @@
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
                                 <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
                                     :reasoning="msg.content.reasoning" :is-dark="isDark"
+                                    class="mt-2"
                                     :initial-expanded="isReasoningExpanded(index)" />
 
                                 <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
