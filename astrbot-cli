@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-AstrBot CLI Tool - Unix Socket客户端
+AstrBot CLI Tool - 跨平台Socket客户端
+
+支持Unix Socket和TCP Socket连接
 
 用法:
     astrbot-cli "你好"
@@ -14,6 +16,7 @@ import os
 import socket
 import sys
 import uuid
+from typing import Optional
 
 
 def get_data_path() -> str:
@@ -50,22 +53,129 @@ def load_auth_token() -> str:
         return ""
 
 
+def load_connection_info(data_dir: str) -> Optional[dict]:
+    """加载连接信息
+
+    从.cli_connection文件读取Socket连接信息
+
+    Args:
+        data_dir: 数据目录路径
+
+    Returns:
+        连接信息字典，如果文件不存在则返回None
+
+    Example:
+        Unix Socket: {"type": "unix", "path": "/tmp/astrbot.sock"}
+        TCP Socket: {"type": "tcp", "host": "127.0.0.1", "port": 12345}
+    """
+    connection_file = os.path.join(data_dir, ".cli_connection")
+    try:
+        with open(connection_file, encoding="utf-8") as f:
+            connection_info = json.load(f)
+            return connection_info
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError as e:
+        print(
+            f"[ERROR] Invalid JSON in connection file: {connection_file}",
+            file=sys.stderr,
+        )
+        print(f"[ERROR] {e}", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(
+            f"[ERROR] Failed to load connection info: {e}",
+            file=sys.stderr,
+        )
+        return None
+
+
+def connect_to_server(
+    connection_info: dict, timeout: float = 30.0
+) -> socket.socket:
+    """连接到服务器
+
+    根据连接信息类型选择Unix Socket或TCP Socket连接
+
+    Args:
+        connection_info: 连接信息字典
+        timeout: 超时时间（秒）
+
+    Returns:
+        socket连接对象
+
+    Raises:
+        ValueError: 无效的连接类型
+        ConnectionError: 连接失败
+    """
+    socket_type = connection_info.get("type")
+
+    if socket_type == "unix":
+        # Unix Socket连接
+        socket_path = connection_info.get("path")
+        if not socket_path:
+            raise ValueError("Unix socket path is missing in connection info")
+
+        try:
+            client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client_socket.settimeout(timeout)
+            client_socket.connect(socket_path)
+            return client_socket
+        except FileNotFoundError:
+            raise ConnectionError(
+                f"Socket file not found: {socket_path}. Is AstrBot running?"
+            )
+        except ConnectionRefusedError:
+            raise ConnectionError(
+                "Connection refused. Is AstrBot running in socket mode?"
+            )
+        except Exception as e:
+            raise ConnectionError(f"Unix socket connection error: {e}")
+
+    elif socket_type == "tcp":
+        # TCP Socket连接
+        host = connection_info.get("host")
+        port = connection_info.get("port")
+        if not host or not port:
+            raise ValueError("TCP host or port is missing in connection info")
+
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.settimeout(timeout)
+            client_socket.connect((host, port))
+            return client_socket
+        except ConnectionRefusedError:
+            raise ConnectionError(
+                f"Connection refused to {host}:{port}. Is AstrBot running?"
+            )
+        except socket.timeout:
+            raise ConnectionError(f"Connection timeout to {host}:{port}")
+        except Exception as e:
+            raise ConnectionError(f"TCP socket connection error: {e}")
+
+    else:
+        raise ValueError(
+            f"Invalid socket type: {socket_type}. Expected 'unix' or 'tcp'"
+        )
+
+
 def send_message(
     message: str, socket_path: str | None = None, timeout: float = 30.0
 ) -> dict:
     """发送消息到AstrBot并获取响应
 
+    支持自动检测连接类型（Unix Socket或TCP Socket）
+
     Args:
         message: 要发送的消息
-        socket_path: Unix socket路径(默认使用临时目录下的astrbot.sock)
+        socket_path: Unix socket路径(仅用于向后兼容，优先使用.cli_connection)
         timeout: 超时时间（秒）
 
     Returns:
         响应字典
     """
-    # 使用默认socket路径
-    if socket_path is None:
-        socket_path = os.path.join(get_temp_path(), "astrbot.sock")
+    # [ENTRY] send_message
+    data_dir = get_data_path()
 
     # 加载认证token
     auth_token = load_auth_token()
@@ -77,30 +187,33 @@ def send_message(
     if auth_token:
         request["auth_token"] = auth_token
 
-    # 连接到Unix socket
+    # [PROCESS] 尝试加载连接信息
+    connection_info = load_connection_info(data_dir)
+
+    # 连接到服务器
     try:
-        client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        client_socket.settimeout(timeout)
-        client_socket.connect(socket_path)
-    except FileNotFoundError:
-        return {
-            "status": "error",
-            "error": f"Socket file not found: {socket_path}. Is AstrBot running?",
-        }
-    except ConnectionRefusedError:
-        return {
-            "status": "error",
-            "error": "Connection refused. Is AstrBot running in socket mode?",
-        }
+        if connection_info is not None:
+            # [PROCESS] 使用连接信息文件
+            client_socket = connect_to_server(connection_info, timeout)
+        else:
+            # [PROCESS] 向后兼容：使用默认Unix Socket路径
+            if socket_path is None:
+                socket_path = os.path.join(get_temp_path(), "astrbot.sock")
+
+            fallback_info = {"type": "unix", "path": socket_path}
+            client_socket = connect_to_server(fallback_info, timeout)
+
+    except (ValueError, ConnectionError) as e:
+        return {"status": "error", "error": str(e)}
     except Exception as e:
         return {"status": "error", "error": f"Connection error: {e}"}
 
     try:
-        # 发送请求
+        # [PROCESS] 发送请求
         request_data = json.dumps(request, ensure_ascii=False).encode("utf-8")
         client_socket.sendall(request_data)
 
-        # 接收响应（循环接收所有数据，支持大响应如base64图片）
+        # [PROCESS] 接收响应（循环接收所有数据，支持大响应如base64图片）
         response_data = b""
         while True:
             chunk = client_socket.recv(4096)
@@ -110,6 +223,7 @@ def send_message(
             # 尝试解析JSON，如果成功说明接收完整
             try:
                 response = json.loads(response_data.decode("utf-8"))
+                # [EXIT] send_message success
                 return response
             except json.JSONDecodeError:
                 # JSON不完整，继续接收
@@ -117,11 +231,14 @@ def send_message(
 
         # 如果循环结束仍未成功解析，尝试最后一次
         response = json.loads(response_data.decode("utf-8"))
+        # [EXIT] send_message success
         return response
 
     except TimeoutError:
+        # [ERROR] Request timeout
         return {"status": "error", "error": "Request timeout"}
     except Exception as e:
+        # [ERROR] Communication error
         return {"status": "error", "error": f"Communication error: {e}"}
     finally:
         client_socket.close()
@@ -130,7 +247,7 @@ def send_message(
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="AstrBot CLI Tool - Send messages to AstrBot via Unix Socket",
+        description="AstrBot CLI Tool - Send messages to AstrBot (Unix Socket or TCP Socket)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -138,6 +255,10 @@ Examples:
   astrbot-cli "/help"
   astrbot-cli --socket /tmp/custom.sock "测试消息"
   echo "你好" | astrbot-cli
+
+Connection:
+  Automatically detects connection type from .cli_connection file.
+  Falls back to default Unix Socket if file not found.
         """,
     )
 

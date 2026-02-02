@@ -27,6 +27,9 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_t
 
 from ...register import register_platform_adapter
 from .cli_event import CLIMessageEvent
+from .connection_info_writer import write_connection_info
+from .platform_detector import detect_platform
+from .socket_factory import create_socket_server
 
 
 @register_platform_adapter(
@@ -36,7 +39,10 @@ from .cli_event import CLIMessageEvent
         "type": "cli",
         "enable": False,  # 默认关闭，开发时手动启用
         "mode": "socket",  # 默认使用Socket模式
-        "socket_path": None,  # None表示使用动态路径(temp_dir/astrbot.sock)
+        "socket_type": "auto",  # Socket类型: "auto"(自动检测) | "unix" | "tcp"
+        "socket_path": None,  # Unix Socket路径，None表示使用动态路径
+        "tcp_host": "127.0.0.1",  # TCP Socket监听地址
+        "tcp_port": 0,  # TCP Socket监听端口，0表示随机端口
         "whitelist": [],  # 空白名单表示允许所有
         "use_isolated_sessions": False,  # 是否启用会话隔离（每个请求独立会话）
         "session_ttl": 30,  # 会话过期时间（秒），仅在use_isolated_sessions=True时生效，测试用30秒，生产建议1800秒（30分钟）
@@ -113,10 +119,13 @@ class CLIPlatformAdapter(Platform):
         )
         self.poll_interval = platform_config.get("poll_interval", 1.0)
 
-        # Unix Socket配置
+        # Socket配置（跨平台）
+        self.socket_type = platform_config.get("socket_type", "auto")
         self.socket_path = platform_config.get(
             "socket_path", os.path.join(get_astrbot_temp_path(), "astrbot.sock")
         )
+        self.tcp_host = platform_config.get("tcp_host", "127.0.0.1")
+        self.tcp_port = platform_config.get("tcp_port", 0)
 
         # Token认证配置
         self.auth_token = self._ensure_auth_token()
@@ -342,56 +351,63 @@ class CLIPlatformAdapter(Platform):
             logger.info("[EXIT] CLIPlatformAdapter._run_file_mode return=None")
 
     async def _run_socket_mode(self) -> None:
-        """Unix Socket服务器模式
+        """跨平台Socket服务器模式
 
         管道流程:
-            客户端连接 → 接收JSON请求 → 解析消息 → 创建事件 → 等待响应 → 返回JSON
+            平台检测 → 创建Socket服务器 → 写入连接信息 → 接受连接 → 处理请求
         """
-        import os
-        import socket
+        logger.info("[ENTRY] _run_socket_mode inputs={}")
 
         self._running = True
 
-        # 删除旧的socket文件
-        if os.path.exists(self.socket_path):
-            os.remove(self.socket_path)
-            logger.info(f"[PROCESS] Removed old socket file: {self.socket_path}")
+        # 检测平台信息
+        platform_info = detect_platform()
+        logger.info(
+            "[PROCESS] Platform detected: os=%s, python=%s, unix_socket=%s",
+            platform_info.os_type,
+            platform_info.python_version,
+            platform_info.supports_unix_socket,
+        )
 
-        # 创建Unix socket
-        server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        server_socket.bind(self.socket_path)
-
-        # 设置严格权限(仅所有者可访问)
-        os.chmod(self.socket_path, 0o600)
-        logger.info(f"[SECURITY] Socket permissions set to 600: {self.socket_path}")
-
-        server_socket.listen(5)
-        server_socket.setblocking(False)
-
-        logger.info(f"[PROCESS] Unix Socket server started: {self.socket_path}")
+        # 创建Socket服务器（工厂模式）
+        config = {
+            "socket_type": self.socket_type,
+            "socket_path": self.socket_path,
+            "tcp_host": self.tcp_host,
+            "tcp_port": self.tcp_port,
+        }
+        server = create_socket_server(platform_info, config, self.auth_token)
+        logger.info("[PROCESS] Socket server created: %s", type(server).__name__)
 
         try:
+            # 启动服务器
+            await server.start()
+            logger.info("[PROCESS] Socket server started")
+
+            # 写入连接信息供客户端读取
+            connection_info = server.get_connection_info()
+            write_connection_info(connection_info, get_astrbot_data_path())
+            logger.info("[PROCESS] Connection info written: %s", connection_info)
+
+            # 接受连接循环
             while self._running:
                 try:
-                    # 接受连接（非阻塞）
-                    loop = asyncio.get_running_loop()
-                    client_socket, _ = await loop.sock_accept(server_socket)
+                    client_socket, client_addr = await server.accept_connection()
+                    logger.debug("[PROCESS] Client connected: %s", client_addr)
 
                     # 处理连接（异步）
                     asyncio.create_task(self._handle_socket_client(client_socket))
 
                 except Exception as e:
-                    logger.error(f"[ERROR] Socket accept error: {e}")
+                    logger.error("[ERROR] Socket accept error: %s", e)
                     await asyncio.sleep(0.1)
 
         except Exception as e:
-            logger.error(f"[ERROR] Socket mode error: {e}")
+            logger.error("[ERROR] Socket mode error: %s", e)
         finally:
             self._running = False
-            server_socket.close()
-            if os.path.exists(self.socket_path):
-                os.remove(self.socket_path)
-            logger.info("[EXIT] CLIPlatformAdapter._run_socket_mode return=None")
+            await server.stop()
+            logger.info("[EXIT] _run_socket_mode return=None")
 
     async def _handle_socket_client(self, client_socket) -> None:
         """[原子模块] SocketHandler: 处理单个socket客户端连接
