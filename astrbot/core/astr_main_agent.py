@@ -295,7 +295,7 @@ async def _ensure_persona_and_skills(
             req.contexts[:0] = begin_dialogs
     else:
         # special handling for webchat persona
-        if event.get_platform_name() == "webchat":
+        if event.get_platform_name() == "webchat" and persona_id != "[%None]":
             persona_id = "_chatui_default_"
             req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
