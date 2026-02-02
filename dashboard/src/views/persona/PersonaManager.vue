@@ -541,23 +541,36 @@ export default defineComponent({
                     const text = await file.text();
                     const data = JSON.parse(text);
                     
-                    // 白名单过滤
-                    const whitelist = ['persona_id', 'system_prompt', 'begin_dialogs', 'tools', 'skills', 'folder_id'];
-                    const filteredData: any = {};
+                    let importData: any = {};
                     
-                    for (const key of whitelist) {
-                        if (key in data) {
-                            filteredData[key] = data[key];
+                    if (data.version && data.persona && Array.isArray(data.persona)) {
+                        const firstPersona = data.persona[0];
+                        importData = {
+                            persona_id: firstPersona.name,
+                            system_prompt: firstPersona.prompt,
+                            begin_dialogs: []
+                        };
+                        
+                        // 转换对话对
+                        if (firstPersona.begin_dialogs && Array.isArray(firstPersona.begin_dialogs)) {
+                            for (const dialog of firstPersona.begin_dialogs) {
+                                if (dialog.user) {
+                                    importData.begin_dialogs.push(dialog.user);
+                                }
+                                if (dialog.assistant) {
+                                    importData.begin_dialogs.push(dialog.assistant);
+                                }
+                            }
                         }
                     }
                     
                     // 验证必需字段
-                    if (!filteredData.persona_id || !filteredData.system_prompt) {
+                    if (!importData.persona_id || !importData.system_prompt) {
                         throw new Error(this.tm('persona.messages.importMissingFields'));
                     }
                     
                     // 执行导入
-                    await this.importPersona(filteredData);
+                    await this.importPersona(importData);
                     this.showSuccess(this.tm('persona.messages.importSuccess'));
                 } catch (error: any) {
                     console.error(this.tm('persona.messages.importFailed'), error);

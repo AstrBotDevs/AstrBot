@@ -93,7 +93,8 @@
     "messages": {
       "moveSuccess": "人格移动成功",
       "moveError": "移动人格失败",
-      "exportSuccess": "导出成功(不包含 Skills 和工具)"
+      "exportSuccess": "导出成功(不包含 Skills 和工具)",
+      "importSuccess": "导入成功"
     }
   },
   "folder": {
