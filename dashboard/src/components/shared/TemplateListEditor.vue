@@ -174,9 +174,6 @@ const expandedEntries = ref({})
 const safeText = (val, fallback) => (val && typeof val === 'string' ? val : fallback)
 const addButtonText = computed(() => safeText(t('core.common.templateList.addEntry'), '添加条目'))
 const emptyHintText = computed(() => safeText(t('core.common.templateList.empty'), '暂无条目，请先选择模板并添加。'))
-// Default values for each config type
-// For palette types, empty string is valid (means no color selected)
-// The PaletteEditor component handles empty values gracefully
 const defaultValueMap = {
   int: 0,
   float: 0.0,
