@@ -708,11 +708,18 @@ def _sanitize_context_by_modalities(
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """根据事件中的插件设置，过滤请求中的工具列表。
+
+    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
+    因为它们不属于任何插件，不应被插件过滤逻辑影响。
+    """
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
         for tool in req.func_tool.tools:
             mp = tool.handler_module_path
             if not mp:
+                # 保留没有 handler_module_path 的工具（如 MCP 工具）
+                new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
