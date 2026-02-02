@@ -4,7 +4,6 @@ import traceback
 from quart import request
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -60,40 +59,8 @@ class SkillsRoute(Route):
             temp_path = os.path.join(temp_dir, filename)
             await file.save(temp_path)
 
-            cfg = self.core_lifecycle.astrbot_config.get("provider_settings", {}).get(
-                "skills", {}
-            )
-            runtime = cfg.get("runtime", "local")
-            if runtime == "sandbox":
-                sandbox_enabled = (
-                    self.core_lifecycle.astrbot_config.get("provider_settings", {})
-                    .get("sandbox", {})
-                    .get("enable", False)
-                )
-                if not sandbox_enabled:
-                    return (
-                        Response()
-                        .error(
-                            "Sandbox is not enabled. Please enable sandbox before using sandbox runtime."
-                        )
-                        .__dict__
-                    )
             skill_mgr = SkillManager()
             skill_name = skill_mgr.install_skill_from_zip(temp_path, overwrite=True)
-
-            if runtime == "sandbox":
-                sb = await get_booter(self.core_lifecycle.star_context, "skills-upload")
-                remote_root = "/home/shared/skills"
-                remote_zip = f"{remote_root}/{skill_name}.zip"
-                await sb.shell.exec(f"mkdir -p {remote_root}")
-                upload_result = await sb.upload_file(temp_path, remote_zip)
-                if not upload_result.get("success", False):
-                    return (
-                        Response().error("Failed to upload skill to sandbox").__dict__
-                    )
-                await sb.shell.exec(
-                    f"unzip -o {remote_zip} -d {remote_root} && rm -f {remote_zip}"
-                )
 
             return (
                 Response()

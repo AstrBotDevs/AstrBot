@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.13.0"
+VERSION = "4.13.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 4,
+        "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
@@ -114,6 +114,9 @@ DEFAULT_CONFIG = {
             "provider": "moonshotai",
             "moonshotai_api_key": "",
         },
+        "proactive_capability": {
+            "add_cron_tools": True,
+        },
         "sandbox": {
             "enable": False,
             "booter": "shipyard",
@@ -123,6 +126,20 @@ DEFAULT_CONFIG = {
             "shipyard_max_sessions": 10,
         },
         "skills": {"runtime": "sandbox"},
+    },
+    # SubAgent orchestrator mode:
+    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
+    # - main_enable = True: enabled; main LLM will include handoff tools and can optionally
+    #   remove tools that are duplicated on subagents via remove_main_duplicate_tools.
+    "subagent_orchestrator": {
+        "main_enable": False,
+        "remove_main_duplicate_tools": False,
+        "router_system_prompt": (
+            "You are a task router. Your job is to chat naturally, recognize user intent, "
+            "and delegate work to the most suitable subagent using transfer_to_* tools. "
+            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
+        ),
+        "agents": [],
     },
     "provider_stt_settings": {
         "enable": False,
@@ -182,6 +199,12 @@ DEFAULT_CONFIG = {
     },
     "wake_prefix": ["/"],
     "log_level": "INFO",
+    "log_file_enable": False,
+    "log_file_path": "logs/astrbot.log",
+    "log_file_max_mb": 20,
+    "trace_log_enable": False,
+    "trace_log_path": "logs/astrbot.trace.log",
+    "trace_log_max_mb": 20,
     "pip_install_arg": "",
     "pypi_index_url": "https://mirrors.aliyun.com/pypi/simple/",
     "persona": [],  # deprecated
@@ -2212,6 +2235,14 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
+                    "proactive_capability": {
+                        "type": "object",
+                        "items": {
+                            "add_cron_tools": {
+                                "type": "bool",
+                            },
+                        },
+                    },
                 },
             },
             "provider_stt_settings": {
@@ -2320,6 +2351,18 @@ CONFIG_METADATA_2 = {
             "log_level": {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            },
+            "log_file_enable": {"type": "bool"},
+            "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
+            "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
+            "trace_log_enable": {"type": "bool"},
+            "trace_log_path": {
+                "type": "string",
+                "condition": {"trace_log_enable": True},
+            },
+            "trace_log_max_mb": {
+                "type": "int",
+                "condition": {"trace_log_enable": True},
             },
             "t2i_strategy": {
                 "type": "string",
@@ -2652,6 +2695,7 @@ CONFIG_METADATA_3 = {
             "skills": {
                 "description": "Skills",
                 "type": "object",
+                "hint": "",
                 "items": {
                     "provider_settings.skills.runtime": {
                         "description": "Skill Runtime",
@@ -2666,7 +2710,24 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
+            "proactive_capability": {
+                "description": "主动型 Agent",
+                "hint": "https://docs.astrbot.app/use/proactive-agent.html",
+                "type": "object",
+                "items": {
+                    "provider_settings.proactive_capability.add_cron_tools": {
+                        "description": "启用",
+                        "type": "bool",
+                        "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务。",
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
             "truncate_and_compress": {
+                "hint": "",
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {
@@ -3252,6 +3313,36 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "string",
                         "hint": "控制台输出日志的级别。",
                         "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                    },
+                    "log_file_enable": {
+                        "description": "启用文件日志",
+                        "type": "bool",
+                        "hint": "开启后会将日志写入指定文件。",
+                    },
+                    "log_file_path": {
+                        "description": "日志文件路径",
+                        "type": "string",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.log；支持绝对路径。",
+                    },
+                    "log_file_max_mb": {
+                        "description": "日志文件大小上限 (MB)",
+                        "type": "int",
+                        "hint": "超过大小后自动轮转，默认 20MB。",
+                    },
+                    "trace_log_enable": {
+                        "description": "启用 Trace 文件日志",
+                        "type": "bool",
+                        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。",
+                    },
+                    "trace_log_path": {
+                        "description": "Trace 日志文件路径",
+                        "type": "string",
+                        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。",
+                    },
+                    "trace_log_max_mb": {
+                        "description": "Trace 日志大小上限 (MB)",
+                        "type": "int",
+                        "hint": "超过大小后自动轮转，默认 20MB。",
                     },
                     "pip_install_arg": {
                         "description": "pip 安装额外参数",

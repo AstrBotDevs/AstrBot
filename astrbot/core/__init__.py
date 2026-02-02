@@ -20,6 +20,8 @@ astrbot_config = AstrBotConfig()
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")
 html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")
+LogManager.configure_logger(logger, astrbot_config)
+LogManager.configure_trace_logger(astrbot_config)
 db_helper = SQLiteDatabase(DB_PATH)
 # 简单的偏好设置存储, 这里后续应该存储到数据库中, 一些部分可以存储到配置中
 sp = SharedPreferences(db_helper=db_helper)

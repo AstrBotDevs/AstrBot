@@ -2433,7 +2433,9 @@ watch(isListView, (newVal) => {
         ></v-progress-linear>
       </div>
 
-      <div class="v-card-title text-h5">{{ tm("dialogs.install.title") }}</div>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{ tm("dialogs.install.title") }}
+      </v-card-title>
 
       <div class="v-card-text">
         <v-tabs v-model="uploadTab" color="primary">

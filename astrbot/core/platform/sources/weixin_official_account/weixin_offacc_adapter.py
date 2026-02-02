@@ -228,6 +228,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             "微信公众平台 适配器",
             id=self.config.get("id", "weixin_official_account"),
             support_streaming_message=False,
+            support_proactive_message=False,
         )
 
     @override

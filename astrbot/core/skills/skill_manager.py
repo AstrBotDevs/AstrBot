@@ -17,7 +17,8 @@ from astrbot.core.utils.astrbot_path import (
 
 SKILLS_CONFIG_FILENAME = "skills.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
-SANDBOX_SKILLS_ROOT = "/home/shared/skills"
+# SANDBOX_SKILLS_ROOT = "/home/shared/skills"
+SANDBOX_SKILLS_ROOT = "skills"
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -61,6 +62,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     # Based on openai/codex
     return (
         "## Skills\n"
+        "You have many useful skills that can help you accomplish various tasks.\n"
         "A skill is a set of local instructions stored in a `SKILL.md` file.\n"
         "### Available skills\n"
         f"{skills_block}\n"
@@ -68,21 +70,21 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "\n"
         "- Discovery: The list above shows all skills available in this session. Full instructions live in the referenced `SKILL.md`.\n"
         "- Trigger rules: Use a skill if the user names it or the task matches its description. Do not carry skills across turns unless re-mentioned\n"
-        "- Unavailable: If a skill is missing or unreadable, say so and fallback.\n"
         "### How to use a skill (progressive disclosure):\n"
-        "  1) After deciding to use a skill, open its `SKILL.md` and read only what is necessary to follow the workflow.\n"
-        "  2) Load only directly referenced files, DO NOT bulk-load everything.\n"
-        "  3) If `scripts/` exist, prefer running or patching them instead of retyping large blocks of code.\n"
-        "  4) If `assets/` or templates exist, reuse them rather than recreating everything from scratch.\n"
+        "  0) Mandatory grounding: Before using any skill, you MUST inspect its `SKILL.md` using shell tools"
+        " (e.g., `cat`, `head`, `sed`, `awk`, `grep`). Do not rely on assumptions or memory.\n"
+        "  1) Load only directly referenced files, DO NOT bulk-load everything.\n"
+        "  2) If `scripts/` exist, prefer running or patching them instead of retyping large blocks of code.\n"
+        "  3) If `assets/` or templates exist, reuse them rather than recreating everything from scratch.\n"
         "- Coordination:\n"
         "  - If multiple skills apply, choose the minimal set that covers the request and state the order in which you will use them.\n"
         "  - Announce which skill(s) you are using and why (one short line). If you skip an obvious skill, explain why.\n"
         "  - Prefer to use `astrbot_*` tools to perform skills that need to run scripts.\n"
         "- Context hygiene:\n"
-        "  - Keep context small: summarize long sections instead of pasting them, and load extra files only when necessary.\n"
         "  - Avoid deep reference chasing: unless blocked, open only files that are directly linked from `SKILL.md`.\n"
-        "  - When variants exist (frameworks, providers, domains), select only the relevant reference file(s) and note that choice.\n"
-        "- Failure handling: If a skill cannot be applied, state the issue and continue with the best alternative."
+        "- Failure handling: If a skill cannot be applied, state the issue and continue with the best alternative.\n"
+        "### Example\n"
+        "When you decided to use a skill, use shell tool to read its `SKILL.md`, e.g., `head -40 skills/code_formatter/SKILL.md`, and you can increase or decrease the number of lines as needed.\n"
     )
 
 

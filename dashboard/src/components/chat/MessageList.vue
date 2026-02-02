@@ -92,82 +92,12 @@
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
                                 <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
                                     :reasoning="msg.content.reasoning" :is-dark="isDark"
+                                    class="mt-2"
                                     :initial-expanded="isReasoningExpanded(index)" />
 
-                                <!-- 遍历 message parts (保持顺序) -->
-                                <template v-for="(part, partIndex) in msg.content.message" :key="partIndex">
-                                    <!-- iPython Tool Special Block -->
-                                    <template v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.length > 0">
-                                        <template v-for="(toolCall, tcIndex) in part.tool_calls" :key="toolCall.id">
-                                            <IPythonToolBlock v-if="isIPythonTool(toolCall)" :tool-call="toolCall" style="margin: 8px 0;"
-                                                :is-dark="isDark"
-                                                :initial-expanded="isIPythonToolExpanded(index, partIndex, tcIndex)" />
-                                        </template>
-                                    </template>
-
-                                    <!-- Regular Tool Calls Block (for non-iPython tools) -->
-                                    <div v-if="part.type === 'tool_call' && part.tool_calls && part.tool_calls.some(tc => !isIPythonTool(tc))"
-                                        class="flex flex-col gap-2">
-                                        <div class="font-medium opacity-70" style="font-size: 13px; margin-bottom: 16px;">{{ tm('actions.toolsUsed') }}</div>
-                                        <ToolCallCard v-for="(toolCall, tcIndex) in part.tool_calls.filter(tc => !isIPythonTool(tc))"
-                                            :key="toolCall.id" :tool-call="toolCall" :is-dark="isDark"
-                                            :initial-expanded="isToolCallExpanded(index, partIndex, tcIndex)" />
-                                    </div>
-
-                                    <!-- Text (Markdown) -->
-                                    <MarkdownRender v-else-if="part.type === 'plain' && part.text && part.text.trim()"
-                                        custom-id="message-list"
-                                        :custom-html-tags="['ref']"
-                                        :content="part.text" :typewriter="false" class="markdown-content"
-                                        :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
-
-                                    <!-- Image -->
-                                    <div v-else-if="part.type === 'image' && part.embedded_url" class="embedded-images">
-                                        <div class="embedded-image">
-                                            <img :src="part.embedded_url" class="bot-embedded-image"
-                                                @click="openImagePreview(part.embedded_url)" />
-                                        </div>
-                                    </div>
-
-                                    <!-- Audio -->
-                                    <div v-else-if="part.type === 'record' && part.embedded_url" class="embedded-audio">
-                                        <audio controls class="audio-player">
-                                            <source :src="part.embedded_url" type="audio/wav">
-                                            {{ t('messages.errors.browser.audioNotSupported') }}
-                                        </audio>
-                                    </div>
-
-                                    <!-- Files -->
-                                    <div v-else-if="part.type === 'file' && part.embedded_file" class="embedded-files">
-                                        <div class="embedded-file">
-                                            <a v-if="part.embedded_file.url" :href="part.embedded_file.url"
-                                                :download="part.embedded_file.filename" class="file-link"
-                                                :class="{ 'is-dark': isDark }" :style="isDark ? {
-                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                                                    color: 'var(--v-theme-secondary)'
-                                                } : {}">
-                                                <v-icon size="small" class="file-icon"
-                                                    :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
-                                            </a>
-                                            <a v-else @click="downloadFile(part.embedded_file)"
-                                                class="file-link file-link-download" :class="{ 'is-dark': isDark }"
-                                                :style="isDark ? {
-                                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                                                    color: 'var(--v-theme-secondary)'
-                                                } : {}">
-                                                <v-icon size="small" class="file-icon"
-                                                    :style="isDark ? { color: 'var(--v-theme-secondary)' } : {}">mdi-file-document-outline</v-icon>
-                                                <span class="file-name">{{ part.embedded_file.filename }}</span>
-                                                <v-icon v-if="downloadingFiles.has(part.embedded_file.attachment_id)"
-                                                    size="small" class="download-icon">mdi-loading mdi-spin</v-icon>
-                                                <v-icon v-else size="small" class="download-icon">mdi-download</v-icon>
-                                            </a>
-                                        </div>
-                                    </div>
-                                </template>
+                                <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
+                                    :current-time="currentTime" :downloading-files="downloadingFiles"
+                                    @open-image-preview="openImagePreview" @download-file="downloadFile" />
                             </template>
                         </div>
                         <div class="message-actions" v-if="!msg.content.isLoading || index === messages.length - 1">
@@ -250,14 +180,13 @@
 
 <script>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { MarkdownRender, enableKatex, enableMermaid, setCustomComponents } from 'markstream-vue'
+import { enableKatex, enableMermaid, setCustomComponents } from 'markstream-vue'
 import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
 import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
-import IPythonToolBlock from './message_list_comps/IPythonToolBlock.vue';
-import ToolCallCard from './message_list_comps/ToolCallCard.vue';
+import MessagePartsRenderer from './message_list_comps/MessagePartsRenderer.vue';
 import RefNode from './message_list_comps/RefNode.vue';
 import ActionRef from './message_list_comps/ActionRef.vue';
 
@@ -270,10 +199,8 @@ setCustomComponents('message-list', { ref: RefNode });
 export default {
     name: 'MessageList',
     components: {
-        MarkdownRender,
         ReasoningBlock,
-        IPythonToolBlock,
-        ToolCallCard,
+        MessagePartsRenderer,
         RefNode,
         ActionRef
     },
@@ -319,8 +246,6 @@ export default {
             scrollTimer: null,
             expandedReasoning: new Set(), // Track which reasoning blocks are expanded
             downloadingFiles: new Set(), // Track which files are being downloaded
-            expandedToolCalls: new Set(), // Track which tool call cards are expanded
-            expandedIPythonTools: new Set(), // Track which iPython tools are expanded
             elapsedTimeTimer: null, // Timer for updating elapsed time
             currentTime: Date.now() / 1000, // Current time for elapsed time calculation
             // 选中文本相关状态
@@ -539,23 +464,6 @@ export default {
         // Check if reasoning is expanded
         isReasoningExpanded(messageIndex) {
             return this.expandedReasoning.has(messageIndex);
-        },
-
-        // Toggle iPython tool expansion state
-        toggleIPythonTool(messageIndex, partIndex, toolCallIndex) {
-            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
-            if (this.expandedIPythonTools.has(key)) {
-                this.expandedIPythonTools.delete(key);
-            } else {
-                this.expandedIPythonTools.add(key);
-            }
-            // Force reactivity
-            this.expandedIPythonTools = new Set(this.expandedIPythonTools);
-        },
-
-        // Check if iPython tool is expanded
-        isIPythonToolExpanded(messageIndex, partIndex, toolCallIndex) {
-            return this.expandedIPythonTools.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
         },
 
         // 下载文件
@@ -821,22 +729,6 @@ export default {
             }
         },
 
-        // Tool call related methods
-        toggleToolCall(messageIndex, partIndex, toolCallIndex) {
-            const key = `${messageIndex}-${partIndex}-${toolCallIndex}`;
-            if (this.expandedToolCalls.has(key)) {
-                this.expandedToolCalls.delete(key);
-            } else {
-                this.expandedToolCalls.add(key);
-            }
-            // Force reactivity
-            this.expandedToolCalls = new Set(this.expandedToolCalls);
-        },
-
-        isToolCallExpanded(messageIndex, partIndex, toolCallIndex) {
-            return this.expandedToolCalls.has(`${messageIndex}-${partIndex}-${toolCallIndex}`);
-        },
-
         // Start timer for updating elapsed time
         startElapsedTimeTimer() {
             // Update every 12ms for sub-second precision, then every second after 1s
@@ -898,18 +790,6 @@ export default {
             }
         },
 
-        // Format tool result for display
-        formatToolResult(result) {
-            if (!result) return '';
-            // Try to parse as JSON for pretty formatting
-            try {
-                const parsed = JSON.parse(result);
-                return JSON.stringify(parsed, null, 2);
-            } catch {
-                return result;
-            }
-        },
-
         // Get input tokens (input_other + input_cached)
         getInputTokens(tokenUsage) {
             if (!tokenUsage) return 0;
@@ -941,11 +821,6 @@ export default {
             setTimeout(() => {
                 this.imagePreview.url = '';
             }, 300);
-        },
-
-        // Check if tool is iPython executor
-        isIPythonTool(toolCall) {
-            return toolCall.name === 'astrbot_execute_ipython' || toolCall.name === 'astrbot_execute_python';
         },
 
         // Open refs sidebar
@@ -1327,37 +1202,6 @@ export default {
     width: 100%;
     height: 36px;
     border-radius: 18px;
-}
-
-.embedded-images {
-    margin-top: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.embedded-image {
-    display: flex;
-    justify-content: flex-start;
-}
-
-.bot-embedded-image {
-    max-width: 55%;
-    width: auto;
-    height: auto;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.embedded-audio {
-    width: 300px;
-    margin-top: 8px;
-}
-
-.embedded-audio .audio-player {
-    width: 100%;
-    max-width: 300px;
 }
 
 /* 文件附件样式 */
