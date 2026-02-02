@@ -42,10 +42,10 @@
 
     <v-dialog v-model="uploadDialog" max-width="520px" persistent>
       <v-card>
-        <v-card-title>{{ tm('skills.uploadDialogTitle') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('skills.uploadDialogTitle') }}</v-card-title>
         <v-card-text>
           <small class="text-grey">{{ tm('skills.uploadHint') }}</small>
-          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')" prepend-icon="mdi-file-zip"
+          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')" prepend-icon="mdi-folder-zip-outline"
             variant="outlined" class="mt-4" :multiple="false" />
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
@@ -118,6 +118,16 @@ export default {
       }
     };
 
+    const handleApiResponse = (res, successMessage, failureMessageDefault, onSuccess) => {
+      if (res && res.data && res.data.status === "ok") {
+        showMessage(successMessage, "success");
+        if (onSuccess) onSuccess();
+      } else {
+        const msg = (res && res.data && res.data.message) || failureMessageDefault;
+        showMessage(msg, "error");
+      }
+    };
+
     const uploadSkill = async () => {
       if (!uploadFile.value) return;
       uploading.value = true;
@@ -131,13 +141,19 @@ export default {
           return;
         }
         formData.append("file", file);
-        await axios.post("/api/skills/upload", formData, {
+        const res = await axios.post("/api/skills/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        showMessage(tm("skills.uploadSuccess"), "success");
-        uploadDialog.value = false;
-        uploadFile.value = null;
-        await fetchSkills();
+        handleApiResponse(
+          res,
+          tm("skills.uploadSuccess"),
+          tm("skills.uploadFailed"),
+          async () => {
+            uploadDialog.value = false;
+            uploadFile.value = null;
+            await fetchSkills();
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.uploadFailed"), "error");
       } finally {
@@ -149,9 +165,18 @@ export default {
       const nextActive = !skill.active;
       itemLoading[skill.name] = true;
       try {
-        await axios.post("/api/skills/update", { name: skill.name, active: nextActive });
-        skill.active = nextActive;
-        showMessage(tm("skills.updateSuccess"), "success");
+        const res = await axios.post("/api/skills/update", {
+          name: skill.name,
+          active: nextActive,
+        });
+        handleApiResponse(
+          res,
+          tm("skills.updateSuccess"),
+          tm("skills.updateFailed"),
+          () => {
+            skill.active = nextActive;
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.updateFailed"), "error");
       } finally {
@@ -168,10 +193,18 @@ export default {
       if (!skillToDelete.value) return;
       deleting.value = true;
       try {
-        await axios.post("/api/skills/delete", { name: skillToDelete.value.name });
-        showMessage(tm("skills.deleteSuccess"), "success");
-        deleteDialog.value = false;
-        await fetchSkills();
+        const res = await axios.post("/api/skills/delete", {
+          name: skillToDelete.value.name,
+        });
+        handleApiResponse(
+          res,
+          tm("skills.deleteSuccess"),
+          tm("skills.deleteFailed"),
+          async () => {
+            deleteDialog.value = false;
+            await fetchSkills();
+          }
+        );
       } catch (err) {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {

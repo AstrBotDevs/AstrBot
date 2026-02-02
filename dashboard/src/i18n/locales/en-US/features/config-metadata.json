@@ -165,6 +165,7 @@
       }
     },
     "skills": {
+      "hint": "https://docs.astrbot.app/use/skills.html",
       "description": "Skills",
       "provider_settings": {
         "skills": {
@@ -175,7 +176,20 @@
         }
       }
     },
+    "proactive_capability": {
+      "description": "Proactive Agent",
+      "hint": "https://docs.astrbot.app/en/use/proactive-agent.html",
+      "provider_settings": {
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "Enable",
+            "hint": "When enabled, related tools will be passed to the Agent to implement proactive Agent capabilities. You can tell AstrBot what to do at a future time, and it will be triggered on schedule to execute the task, and report the result back to you."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
+      "hint": "https://docs.astrbot.app/en/use/context-compress.html",
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
@@ -563,6 +577,30 @@
       "log_level": {
         "description": "Console Log Level",
         "hint": "Log level for console output."
+      },
+      "log_file_enable": {
+        "description": "Enable File Logging",
+        "hint": "Write logs to a file in addition to the console."
+      },
+      "log_file_path": {
+        "description": "Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
+      },
+      "log_file_max_mb": {
+        "description": "Log File Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
+      "trace_log_enable": {
+        "description": "Enable Trace File Logging",
+        "hint": "Write trace events to a separate file (does not change console output)."
+      },
+      "trace_log_path": {
+        "description": "Trace Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      },
+      "trace_log_max_mb": {
+        "description": "Trace Log Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
       },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",

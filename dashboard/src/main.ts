@@ -61,6 +61,20 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+// Keep fetch() calls consistent with axios by automatically attaching the JWT.
+// Some parts of the UI use fetch directly; without this, those requests will 401.
+const _origFetch = window.fetch.bind(window);
+window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const token = localStorage.getItem('token');
+  if (!token) return _origFetch(input, init);
+
+  const headers = new Headers(init?.headers || (typeof input !== 'string' && 'headers' in input ? (input as Request).headers : undefined));
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return _origFetch(input, { ...init, headers });
+};
+
 loader.config({
   paths: {
     vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.54.0/min/vs',

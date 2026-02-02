@@ -144,7 +144,11 @@ class FileDownloadTool(FunctionTool):
                 "remote_path": {
                     "type": "string",
                     "description": "The path of the file in the sandbox to download.",
-                }
+                },
+                "also_send_to_user": {
+                    "type": "boolean",
+                    "description": "Whether to also send the downloaded file to the user via message. Defaults to true.",
+                },
             },
             "required": ["remote_path"],
         }
@@ -154,6 +158,7 @@ class FileDownloadTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         remote_path: str,
+        also_send_to_user: bool = True,
     ) -> ToolExecResult:
         sb = await get_booter(
             context.context.context,
@@ -168,19 +173,22 @@ class FileDownloadTool(FunctionTool):
             await sb.download_file(remote_path, local_path)
             logger.info(f"File {remote_path} downloaded from sandbox to {local_path}")
 
-            try:
-                name = os.path.basename(local_path)
-                await context.context.event.send(
-                    MessageChain(chain=[File(name=name, file=local_path)])
-                )
-            except Exception as e:
-                logger.error(f"Error sending file message: {e}")
+            if also_send_to_user:
+                try:
+                    name = os.path.basename(local_path)
+                    await context.context.event.send(
+                        MessageChain(chain=[File(name=name, file=local_path)])
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending file message: {e}")
 
-            # remove
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.error(f"Error removing temp file {local_path}: {e}")
+                # remove
+                try:
+                    os.remove(local_path)
+                except Exception as e:
+                    logger.error(f"Error removing temp file {local_path}: {e}")
+
+                return f"File downloaded successfully to {local_path} and sent to user. The file has been removed from local storage."
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
