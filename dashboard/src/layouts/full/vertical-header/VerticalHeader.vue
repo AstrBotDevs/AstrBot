@@ -319,7 +319,7 @@ const changeLanguage = async (langCode: string) => {
 </script>
 
 <template>
-  <v-app-bar elevation="0" height="55">
+  <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
     <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"

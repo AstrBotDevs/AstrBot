@@ -2,11 +2,11 @@
   "title": "Extension Management",
   "subtitle": "Manage and configure system extensions",
   "tabs": {
-    "installedPlugins": "Installed Plugins",
-    "installedMcpServers": "Installed MCP Servers",
+    "installedPlugins": "AstrBot Plugins",
+    "installedMcpServers": "MCP",
     "skills": "Skills",
     "handlersOperation": "Manage Handlers",
-    "market": "Extension Market"
+    "market": "AstrBot Plugin Market"
   },
   "search": {
     "placeholder": "Search extensions...",

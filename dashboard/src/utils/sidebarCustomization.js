@@ -58,7 +58,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   // 收集所有条目，按 title 建索引
   defaultItems.forEach(item => {
-    if (item.children) {
+    if (item.children && item.title === 'core.navigation.groups.more') {
       item.children.forEach(child => {
         all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);

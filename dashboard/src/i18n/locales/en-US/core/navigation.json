@@ -10,6 +10,13 @@
   "chat": "Chat",
   "cron": "Future Tasks",
   "extension": "Extensions",
+  "extensionTabs": {
+    "installed": "AstrBot Plugins",
+    "market": "Plugin Market",
+    "mcp": "MCP Servers",
+    "skills": "Skills",
+    "components": "Handlers"
+  },
   "conversation": "Conversations",
   "sessionManagement": "Custom Rules",
   "console": "Console",

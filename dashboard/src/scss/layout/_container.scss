@@ -4,6 +4,10 @@ html {
 .v-main {
   margin-right: 20px;
 }
+
+.top-header {
+  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.5);
+}
 @media (max-width: 1279px) {
   .v-main {
     margin: 0 10px;

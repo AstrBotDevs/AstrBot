@@ -15,12 +15,13 @@ import { useI18n, useModuleI18n } from "@/i18n/composables";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
 import { ref, computed, onMounted, reactive, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 const commonStore = useCommonStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/extension");
 const router = useRouter();
+const route = useRoute();
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
@@ -54,6 +55,23 @@ const handleConflictConfirm = () => {
 
 const fileInput = ref(null);
 const activeTab = ref("installed");
+const validTabs = ["installed", "market", "mcp", "skills", "components"];
+const isValidTab = (tab) => validTabs.includes(tab);
+const getLocationHash = () =>
+  typeof window !== "undefined" ? window.location.hash : "";
+const extractTabFromHash = (hash) => {
+  const lastHashIndex = (hash || "").lastIndexOf("#");
+  if (lastHashIndex === -1) return "";
+  return hash.slice(lastHashIndex + 1);
+};
+const syncTabFromHash = (hash) => {
+  const tab = extractTabFromHash(hash);
+  if (isValidTab(tab)) {
+    activeTab.value = tab;
+    return true;
+  }
+  return false;
+};
 const extension_data = reactive({
   data: [],
   message: "",
@@ -995,6 +1013,11 @@ const refreshPluginMarket = async () => {
 
 // 生命周期
 onMounted(async () => {
+  if (!syncTabFromHash(getLocationHash())) {
+    if (typeof window !== "undefined") {
+      window.location.hash = `#${activeTab.value}`;
+    }
+  }
   await getExtensions();
 
   // 加载自定义插件源
@@ -1051,6 +1074,29 @@ watch(isListView, (newVal) => {
     localStorage.setItem("pluginListViewMode", String(newVal));
   }
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    const tab = extractTabFromHash(getLocationHash());
+    if (isValidTab(tab) && tab !== activeTab.value) {
+      activeTab.value = tab;
+    }
+  },
+);
+
+watch(activeTab, (newTab) => {
+  if (!isValidTab(newTab)) return;
+  const currentTab = extractTabFromHash(getLocationHash());
+  if (currentTab === newTab) return;
+  const hash = getLocationHash();
+  const lastHashIndex = hash.lastIndexOf("#");
+  const nextHash =
+    lastHashIndex > 0 ? `${hash.slice(0, lastHashIndex)}#${newTab}` : `#${newTab}`;
+  if (typeof window !== "undefined") {
+    window.location.hash = nextHash;
+  }
+});
 </script>
 
 <template>
@@ -1067,6 +1113,10 @@ watch(isListView, (newVal) => {
                 <v-icon class="mr-2">mdi-puzzle</v-icon>
                 {{ tm("tabs.installedPlugins") }}
               </v-tab>
+              <v-tab value="market">
+                <v-icon class="mr-2">mdi-store</v-icon>
+                {{ tm("tabs.market") }}
+              </v-tab>
               <v-tab value="mcp">
                 <v-icon class="mr-2">mdi-server-network</v-icon>
                 {{ tm("tabs.installedMcpServers") }}
@@ -1074,10 +1124,6 @@ watch(isListView, (newVal) => {
               <v-tab value="skills">
                 <v-icon class="mr-2">mdi-lightning-bolt</v-icon>
                 {{ tm("tabs.skills") }}
-              </v-tab>
-              <v-tab value="market">
-                <v-icon class="mr-2">mdi-store</v-icon>
-                {{ tm("tabs.market") }}
               </v-tab>
               <v-tab value="components">
                 <v-icon class="mr-2">mdi-wrench</v-icon>

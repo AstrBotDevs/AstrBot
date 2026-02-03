@@ -40,7 +40,7 @@
       </v-row>
     </v-container>
 
-    <v-dialog v-model="uploadDialog" max-width="520px" persistent>
+    <v-dialog v-model="uploadDialog" max-width="520px">
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('skills.uploadDialogTitle') }}</v-card-title>
         <v-card-text>

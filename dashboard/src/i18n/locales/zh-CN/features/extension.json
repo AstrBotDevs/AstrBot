@@ -2,11 +2,11 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installedPlugins": "已安装的插件",
-    "installedMcpServers": "已安装的 MCP 服务器",
+    "installedPlugins": "AstrBot 插件",
+    "market": "AstrBot 插件市场", 
+    "installedMcpServers": "MCP",
     "skills": "Skills",
-    "handlersOperation": "管理行为",
-    "market": "插件市场"
+    "handlersOperation": "管理行为"
   },
   "search": {
     "placeholder": "搜索插件...",
