@@ -77,7 +77,6 @@ class Main(star.Star):
 
                     yield event.request_llm(
                         prompt=prompt,
-                        func_tool_manager=self.context.get_llm_tool_manager(),
                         session_id=event.session_id,
                         conversation=conv,
                     )

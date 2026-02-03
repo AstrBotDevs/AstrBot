@@ -22,6 +22,7 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
@@ -355,6 +356,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         prompt: str,
         func_tool_manager=None,
+        tool_set: ToolSet | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
         contexts: list | None = None,
@@ -377,7 +379,7 @@ class AstrMessageEvent(abc.ABC):
 
         contexts: 当指定 contexts 时，将会使用 contexts 作为上下文。如果同时传入了 conversation，将会忽略 conversation。
 
-        func_tool_manager: 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。
+        func_tool_manager: [Deprecated] 函数工具管理器，用于调用函数工具。用 self.context.get_llm_tool_manager() 获取。已过时，请使用 tool_set 参数代替。
 
         conversation: 可选。如果指定，将在指定的对话中进行 LLM 请求。对话的人格会被用于 LLM 请求，并且结果将会被记录到对话中。
 
@@ -393,7 +395,8 @@ class AstrMessageEvent(abc.ABC):
             prompt=prompt,
             session_id=session_id,
             image_urls=image_urls,
-            func_tool=func_tool_manager,
+            # func_tool=func_tool_manager,
+            func_tool=tool_set,
             contexts=contexts,
             system_prompt=system_prompt,
             conversation=conversation,
