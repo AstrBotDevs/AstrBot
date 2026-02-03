@@ -40,15 +40,16 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         upload_result = await booter.upload_file(zip_path, str(remote_zip))
         if not upload_result.get("success", False):
             raise RuntimeError("Failed to upload skills bundle to sandbox.")
+        # Use -n flag to never overwrite existing files, fallback to Python if unzip unavailable
         await booter.shell.exec(
-            " || ".join(
-                [
-                    f"python3 -m zipfile -e {remote_zip} {SANDBOX_SKILLS_ROOT}",
-                    f"python -m zipfile -e {remote_zip} {SANDBOX_SKILLS_ROOT}",
-                    f"unzip -o {remote_zip} -d {SANDBOX_SKILLS_ROOT}",
-                ]
-            )
-            + f" && rm -f {remote_zip}"
+            f"unzip -n {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
+            f"python3 -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
+            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
+            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\" || "
+            f"python -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
+            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
+            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\"; "
+            f"rm -f {remote_zip}"
         )
     finally:
         if os.path.exists(zip_path):
