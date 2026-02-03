@@ -25,6 +25,10 @@ from ...register import register_platform_adapter
 from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
+# 群信息缓存，避免重复 API 调用，同时修复编码问题
+# Key: group_id (str), Value: group_name (str)
+_group_name_cache: dict[str, str] = {}
+
 
 @register_platform_adapter(
     "aiocqhttp",
@@ -139,6 +143,41 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
+    async def _get_group_name(self, group_id: int) -> str:
+        """通过 API 获取群名称并缓存，修复编码问题。
+
+        修复 GitHub issue #4721：OneBot V11 消息事件中不包含 group_name 字段，
+        部分实现（如 napcat）扩展了此字段但存在编码问题，导致中文群名显示乱码。
+        通过调用 get_group_info API 获取正确编码的群名称。
+
+        Args:
+            group_id: 群号
+
+        Returns:
+            群名称，获取失败时返回 "N/A"
+        """
+        group_id_str = str(group_id)
+
+        # 优先从缓存获取
+        if group_id_str in _group_name_cache:
+            return _group_name_cache[group_id_str]
+
+        try:
+            # 调用 OneBot API 获取群信息
+            info: dict = await self.bot.call_action(
+                "get_group_info",
+                group_id=group_id,
+            )
+            group_name = info.get("group_name", "N/A")
+            # 缓存结果
+            _group_name_cache[group_id_str] = group_name
+            return group_name
+        except Exception as e:
+            logger.warning(f"Failed to get {group_id} info: {e}")
+            # 缓存失败结果，避免重复调用失败的 API
+            _group_name_cache[group_id_str] = "N/A"
+            return "N/A"
+
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
@@ -215,7 +254,8 @@ class AiocqhttpAdapter(Platform):
             abm.type = MessageType.GROUP_MESSAGE
             abm.group_id = str(event.group_id)
             abm.group = Group(str(event.group_id))
-            abm.group.group_name = event.get("group_name", "N/A")
+            # 修复 #4721: 通过 API 获取群名称，避免编码问题导致乱码
+            abm.group.group_name = await self._get_group_name(event.group_id)
         elif event["message_type"] == "private":
             abm.type = MessageType.FRIEND_MESSAGE
         abm.session_id = (
