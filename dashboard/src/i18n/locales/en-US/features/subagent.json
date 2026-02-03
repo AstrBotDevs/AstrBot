@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "SubAgent Orchestration",
-    "beta": "Beta",
+    "beta": "Experimental",
     "subtitle": "The main LLM only chats and delegates; tools live on individual SubAgents."
   },
   "actions": {

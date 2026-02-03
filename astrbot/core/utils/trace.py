@@ -50,6 +50,10 @@ class TraceSpan:
         self.started_at = time.time()
 
     def record(self, action: str, **fields: Any) -> None:
+        # Check if trace recording is enabled
+        if not astrbot_config.get("trace_enable", True):
+            return
+
         payload = {
             "type": "trace",
             "level": "TRACE",
