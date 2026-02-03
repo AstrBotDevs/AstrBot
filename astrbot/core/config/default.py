@@ -202,6 +202,7 @@ DEFAULT_CONFIG = {
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
     "log_file_max_mb": 20,
+    "trace_enable": False,
     "trace_log_enable": False,
     "trace_log_path": "logs/astrbot.trace.log",
     "trace_log_max_mb": 20,
