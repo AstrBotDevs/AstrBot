@@ -26,8 +26,12 @@ from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 # 群信息缓存，避免重复 API 调用，同时修复编码问题
-# Key: group_id (str), Value: group_name (str)
-_group_name_cache: dict[str, str] = {}
+# Key: group_id (str), Value: (group_name (str), timestamp (float), is_failed (bool))
+_group_name_cache: dict[str, tuple[str, float, bool]] = {}
+# 成功缓存有效期：1小时
+_CACHE_TTL_SUCCESS = 3600
+# 失败缓存有效期：60秒（允许临时故障恢复后重试）
+_CACHE_TTL_FAILURE = 60
 
 
 @register_platform_adapter(
@@ -157,10 +161,16 @@ class AiocqhttpAdapter(Platform):
             群名称，获取失败时返回 "N/A"
         """
         group_id_str = str(group_id)
+        now = time.time()
 
-        # 优先从缓存获取
+        # 检查缓存是否存在且未过期
         if group_id_str in _group_name_cache:
-            return _group_name_cache[group_id_str]
+            group_name, cached_time, is_failed = _group_name_cache[group_id_str]
+            ttl = _CACHE_TTL_FAILURE if is_failed else _CACHE_TTL_SUCCESS
+            if now - cached_time < ttl:
+                return group_name
+            # 缓存已过期，删除旧条目
+            del _group_name_cache[group_id_str]
 
         try:
             # 调用 OneBot API 获取群信息
@@ -169,13 +179,14 @@ class AiocqhttpAdapter(Platform):
                 group_id=group_id,
             )
             group_name = info.get("group_name", "N/A")
-            # 缓存结果
-            _group_name_cache[group_id_str] = group_name
+            # 缓存成功结果
+            _group_name_cache[group_id_str] = (group_name, now, False)
             return group_name
         except Exception as e:
-            logger.warning(f"Failed to get {group_id} info: {e}")
-            # 缓存失败结果，避免重复调用失败的 API
-            _group_name_cache[group_id_str] = "N/A"
+            # 只捕获 API 调用和网络相关的异常
+            logger.warning(f"获取群 {group_id} 信息失败: {e}")
+            # 缓存失败结果，使用较短的过期时间以便临时故障恢复后重试
+            _group_name_cache[group_id_str] = ("N/A", now, True)
             return "N/A"
 
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
