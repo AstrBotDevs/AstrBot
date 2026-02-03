@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -715,9 +716,18 @@ def _sanitize_context_by_modalities(
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """根据事件中的插件设置，过滤请求中的工具列表。
+
+    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
+    因为它们不属于任何插件，不应被插件过滤逻辑影响。
+    """
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
         for tool in req.func_tool.tools:
+            if isinstance(tool, MCPTool):
+                # 保留 MCP 工具
+                new_tool_set.add_tool(tool)
+                continue
             mp = tool.handler_module_path
             if not mp:
                 continue
