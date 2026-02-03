@@ -99,6 +99,8 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
+    computer_use_runtime: str = "local"
+    """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -248,6 +250,13 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
 
+def _resolve_computer_use_runtime(cfg: dict) -> str:
+    runtime = cfg.get("computer_use_runtime")
+    if runtime in ("none", "local", "sandbox"):
+        return runtime
+    return "local"
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -301,21 +310,11 @@ async def _ensure_persona_and_skills(
             req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
-    skills_cfg = cfg.get("skills", {})
-    sandbox_cfg = cfg.get("sandbox", {})
+    runtime = _resolve_computer_use_runtime(cfg)
     skill_manager = SkillManager()
-    runtime = skills_cfg.get("runtime", "local")
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
 
-    if runtime == "sandbox" and not sandbox_cfg.get("enable", False):
-        logger.warning(
-            "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
-        )
-        req.system_prompt += (
-            "\n[Background: User added some skills, and skills runtime is set to sandbox, "
-            "but sandbox mode is disabled. So skills will be unavailable.]\n"
-        )
-    elif skills:
+    if skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
@@ -324,12 +323,12 @@ async def _ensure_persona_and_skills(
                 skills = [skill for skill in skills if skill.name in allowed]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
-
-        runtime = skills_cfg.get("runtime", "local")
-        sandbox_enabled = sandbox_cfg.get("enable", False)
-        if runtime == "local" and not sandbox_enabled:
-            _apply_local_env_tools(req)
-
+            if runtime == "none":
+                req.system_prompt += (
+                    "User does not enabled Computer Use feature, "
+                    "So you cannot use shell or Python to perform skills. "
+                    "Ask user for permission(in AsteBot WebUI -> Config) if you need to use skills."
+                )
     tmgr = plugin_context.get_llm_tool_manager()
 
     # sub agents integration
@@ -922,8 +921,10 @@ async def build_main_agent(
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    if config.sandbox_cfg.get("enable", False):
+    if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
+    elif config.computer_use_runtime == "local":
+        _apply_local_env_tools(req)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

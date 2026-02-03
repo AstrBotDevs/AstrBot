@@ -210,7 +210,8 @@
     "deleteTitle": "Delete confirmation",
     "deleteMessage": "Are you sure you want to delete this Skill?",
     "deleteSuccess": "Deleted successfully",
-    "deleteFailed": "Delete failed"
+    "deleteFailed": "Delete failed",
+    "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled."
   },
   "card": {
     "actions": {
