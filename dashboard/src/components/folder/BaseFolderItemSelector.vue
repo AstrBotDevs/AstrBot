@@ -119,8 +119,17 @@
                                             </v-list-item-subtitle>
 
                                             <template v-slot:append>
-                                                <v-icon v-if="selectedItemId === getItemId(item)"
-                                                    color="primary" size="22">mdi-check-circle</v-icon>
+                                                <div class="d-flex align-center ga-1">
+                                                    <v-btn v-if="showEditButton && !isDefaultItem(item)"
+                                                        icon="mdi-pencil"
+                                                        size="small"
+                                                        variant="text"
+                                                        @click.stop="handleEditItem(item)"
+                                                        :title="labels.editButton || 'Edit'"
+                                                    />
+                                                    <v-icon v-if="selectedItemId === getItemId(item)"
+                                                        color="primary" size="22">mdi-check-circle</v-icon>
+                                                </div>
                                             </template>
                                         </v-list-item>
                                     </template>
@@ -197,6 +206,11 @@ export default defineComponent({
             type: Boolean,
             default: false
         },
+        // 是否显示编辑按钮
+        showEditButton: {
+            type: Boolean,
+            default: false
+        },
         // 默认项（如 "默认人格"）
         defaultItem: {
             type: Object as PropType<SelectableItem | null>,
@@ -221,7 +235,7 @@ export default defineComponent({
             default: null
         }
     },
-    emits: ['update:modelValue', 'navigate', 'create'],
+    emits: ['update:modelValue', 'navigate', 'create', 'edit'],
     data() {
         return {
             dialog: false,
@@ -370,6 +384,17 @@ export default defineComponent({
         cancelSelection() {
             this.selectedItemId = this.modelValue || '';
             this.dialog = false;
+        },
+
+        isDefaultItem(item: SelectableItem): boolean {
+            if (this.defaultItem === null) {
+                return false;
+            }
+            return this.getItemId(item) === this.getItemId(this.defaultItem);
+        },
+
+        handleEditItem(item: SelectableItem) {
+            this.$emit('edit', item);
         }
     }
 });
