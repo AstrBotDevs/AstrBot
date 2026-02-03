@@ -210,7 +210,8 @@
     "deleteTitle": "删除确认",
     "deleteMessage": "确定要删除该 Skill 吗？",
     "deleteSuccess": "删除成功",
-    "deleteFailed": "删除失败"
+    "deleteFailed": "删除失败",
+    "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。"
   },
   "card": {
     "actions": {

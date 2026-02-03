@@ -110,7 +110,15 @@ export default {
       loading.value = true;
       try {
         const res = await axios.get("/api/skills");
-        skills.value = res.data.data || [];
+        const payload = res.data?.data || [];
+        if (Array.isArray(payload)) {
+          skills.value = payload;
+        } else {
+          skills.value = payload.skills || [];
+          if (payload.computer_use_runtime === "none") {
+            showMessage(tm("skills.runtimeNoneWarning"), "warning");
+          }
+        }
       } catch (err) {
         showMessage(tm("skills.loadFailed"), "error");
       } finally {

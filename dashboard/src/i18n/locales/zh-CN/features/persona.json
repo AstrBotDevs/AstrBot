@@ -49,6 +49,7 @@
     "loadingSkills": "正在加载 Skills...",
     "allSkillsAvailable": "使用所有可用 Skills",
     "noSkillsSelected": "未选择任何 Skills",
+    "skillsRuntimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
     "createInFolder": "将在「{folder}」中创建",
     "rootFolder": "全部人格"
   },
