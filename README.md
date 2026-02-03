@@ -36,17 +36,19 @@
 
 AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
 
-<img width="1776" height="1080" alt="image" src="https://github.com/user-attachments/assets/00782c4c-4437-4d97-aabc-605e3738da5c" />
+![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
 
 ## 主要功能
 
 1. 💯 免费 & 开源。
-1. ✨ AI 大模型对话，多模态，Agent，MCP，知识库，人格设定。
+1. ✨ AI 大模型对话，多模态，Agent，MCP，Skills，知识库，人格设定，自动压缩对话。
 2. 🤖 支持接入 Dify、阿里云百炼、Coze 等智能体平台。
 2. 🌐 多平台，支持 QQ、企业微信、飞书、钉钉、微信公众号、Telegram、Slack 以及[更多](#支持的消息平台)。
 3. 📦 插件扩展，已有近 800 个插件可一键安装。
-5. 💻 WebUI 支持。
-6. 🌐 国际化（i18n）支持。
+5. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) 隔离化环境，安全地执行任何代码、调用 Shell、会话级资源复用。
+6. 💻 WebUI 支持。
+7. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
+8. 🌐 国际化（i18n）支持。
 
 ## 快速开始
 
@@ -135,8 +137,6 @@ uv run main.py
 - [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
 - [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
 - [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
-- [Bilibili 私信](https://github.com/Hina-Chat/astrbot_plugin_bilibili_adapter)
-- [wxauto](https://github.com/luosheng520qaq/wxauto-repost-onebotv11)
 
 ## 支持的模型服务
 

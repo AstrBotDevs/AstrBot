@@ -39,7 +39,7 @@ class MyEventHandler(dingtalk_stream.EventHandler):
 
 
 @register_platform_adapter(
-    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=False
+    "dingtalk", "钉钉机器人官方 API 适配器", support_streaming_message=True
 )
 class DingtalkPlatformAdapter(Platform):
     def __init__(
@@ -75,6 +75,8 @@ class DingtalkPlatformAdapter(Platform):
         )
         self.client_ = client  # 用于 websockets 的 client
         self._shutdown_event: threading.Event | None = None
+        self.card_template_id = platform_config.get("card_template_id")
+        self.card_instance_id_dict = {}
 
     def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
@@ -96,8 +98,65 @@ class DingtalkPlatformAdapter(Platform):
             name="dingtalk",
             description="钉钉机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
-            support_streaming_message=False,
+            support_streaming_message=True,
+            support_proactive_message=False,
         )
+
+    async def create_message_card(
+        self, message_id: str, incoming_message: dingtalk_stream.ChatbotMessage
+    ):
+        if not self.card_template_id:
+            return False
+
+        card_instance = dingtalk_stream.AICardReplier(self.client_, incoming_message)
+        card_data = {"content": ""}  # Initial content empty
+
+        try:
+            card_instance_id = await card_instance.async_create_and_deliver_card(
+                self.card_template_id,
+                card_data,
+            )
+            self.card_instance_id_dict[message_id] = (card_instance, card_instance_id)
+            return True
+        except Exception as e:
+            logger.error(f"创建钉钉卡片失败: {e}")
+            return False
+
+    async def send_card_message(self, message_id: str, content: str, is_final: bool):
+        if message_id not in self.card_instance_id_dict:
+            return
+
+        card_instance, card_instance_id = self.card_instance_id_dict[message_id]
+        content_key = "content"
+
+        try:
+            # 钉钉卡片流式更新
+
+            await card_instance.async_streaming(
+                card_instance_id,
+                content_key=content_key,
+                content_value=content,
+                append=False,
+                finished=is_final,
+                failed=False,
+            )
+        except Exception as e:
+            logger.error(f"发送钉钉卡片消息失败: {e}")
+            # Try to report failure
+            try:
+                await card_instance.async_streaming(
+                    card_instance_id,
+                    content_key=content_key,
+                    content_value=content,  # Keep existing content
+                    append=False,
+                    finished=True,
+                    failed=True,
+                )
+            except Exception:
+                pass
+
+        if is_final:
+            self.card_instance_id_dict.pop(message_id, None)
 
     async def convert_msg(
         self,
@@ -224,6 +283,7 @@ class DingtalkPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=abm.session_id,
             client=self.client,
+            adapter=self,
         )
 
         self._event_queue.put_nowait(event)

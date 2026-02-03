@@ -123,6 +123,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             name="qq_official_webhook",
             description="QQ 机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
+            support_proactive_message=False,
         )
 
     async def run(self) -> None:

@@ -133,7 +133,63 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent Sandbox Env(Beta)",
+      "hint": "https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "Enable Sandbox Env",
+            "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
+          },
+          "booter": {
+            "description": "Sandbox Environment Driver"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "API access address for Shipyard service."
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard Access Token",
+            "hint": "Access token for accessing Shipyard service."
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Session TTL",
+            "hint": "Session time-to-live in seconds."
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Max Sessions",
+            "hint": "Maximum number of Shipyard sessions an instance can handle."
+          }
+        }
+      }
+    },
+    "skills": {
+      "hint": "https://docs.astrbot.app/use/skills.html",
+      "description": "Skills",
+      "provider_settings": {
+        "skills": {
+          "runtime": {
+            "description": "Skill Runtime",
+            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first. In local mode, the Agent CAN FULLY ACCESS the runtime environment through Shell and Python tools, but non-admin users will be automatically prohibited from using it to ensure security."
+          }
+        }
+      }
+    },
+    "proactive_capability": {
+      "description": "Proactive Agent",
+      "hint": "https://docs.astrbot.app/en/use/proactive-agent.html",
+      "provider_settings": {
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "Enable",
+            "hint": "When enabled, related tools will be passed to the Agent to implement proactive Agent capabilities. You can tell AstrBot what to do at a future time, and it will be triggered on schedule to execute the task, and report the result back to you."
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
+      "hint": "https://docs.astrbot.app/en/use/context-compress.html",
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
@@ -172,6 +228,14 @@
         "display_reasoning_text": {
           "description": "Display Reasoning Content"
         },
+        "llm_safety_mode": {
+          "description": "Healthy Mode",
+          "hint": "Add safety guardrails to model replies."
+        },
+        "safety_mode_strategy": {
+          "description": "Healthy Mode Strategy",
+          "hint": "How to apply healthy mode."
+        },
         "identifier": {
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."
@@ -187,11 +251,23 @@
         "show_tool_use_status": {
           "description": "Output Function Call Status"
         },
+        "sanitize_context_by_modalities": {
+          "description": "Sanitize History by Modalities",
+          "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
+        },
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
         },
         "tool_call_timeout": {
           "description": "Tool Call Timeout (seconds)"
+        },
+        "tool_schema_mode": {
+          "description": "Tool Schema Mode",
+          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+          "labels": [
+            "Skills-like (two-stage)",
+            "Full schema"
+          ]
         },
         "streaming_response": {
           "description": "Streaming Output"
@@ -405,7 +481,8 @@
             "description": "Segment Only LLM Results"
           },
           "interval_method": {
-            "description": "Interval Method"
+            "description": "Interval Method",
+            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
           },
           "interval": {
             "description": "Random Interval Time",
@@ -413,13 +490,15 @@
           },
           "log_base": {
             "description": "Logarithm Base",
-            "hint": "Base for logarithmic intervals, defaults to 2.0. Value range: 1.0-10.0."
+            "hint": "Base for logarithmic intervals, defaults to 2.6. Value range: 1.0-10.0."
           },
           "words_count_threshold": {
-            "description": "Segmented Reply Word Count Threshold"
+            "description": "Segmented Reply Word Count Threshold",
+            "hint": "Segmented reply word count threshold. Only messages with less than this number of words will be segmented, and messages with more than this number of words will be sent directly (not segmented)."
           },
           "split_mode": {
             "description": "Split Mode",
+            "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
             "labels": [
               "Regex",
               "Words List"
@@ -499,6 +578,30 @@
         "description": "Console Log Level",
         "hint": "Log level for console output."
       },
+      "log_file_enable": {
+        "description": "Enable File Logging",
+        "hint": "Write logs to a file in addition to the console."
+      },
+      "log_file_path": {
+        "description": "Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
+      },
+      "log_file_max_mb": {
+        "description": "Log File Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
+      "trace_log_enable": {
+        "description": "Enable Trace File Logging",
+        "hint": "Write trace events to a separate file (does not change console output)."
+      },
+      "trace_log_path": {
+        "description": "Trace Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      },
+      "trace_log_max_mb": {
+        "description": "Trace Log Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
         "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
@@ -523,5 +626,13 @@
         "description": "Direct Connection Address List"
       }
     }
+  },
+  "help": {
+    "documentation": "Official Documentation",
+    "support": "Join Support Group",
+    "helpText": "Don't understand the configuration? See {documentation} or {support}.",
+    "helpPrefix": "Don't understand the configuration? See",
+    "helpMiddle": "or",
+    "helpSuffix": "."
   }
 }

@@ -22,7 +22,6 @@ UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] 
     "qq_official_webhook": lambda e: e.get_sender_id(),
     "lark": lambda e: f"{e.get_sender_id()}%{e.get_group_id()}",
     "misskey": lambda e: f"{e.get_session_id()}_{e.get_sender_id()}",
-    "wechatpadpro": lambda e: f"{e.get_group_id()}#{e.get_sender_id()}",
 }
 
 
@@ -166,7 +165,6 @@ class WakingCheckStage(Stage):
                 and handler.handler_module_path
                 == "astrbot.builtin_stars.builtin_commands.main"
             ):
-                logger.debug("skipping builtin command")
                 continue
 
             # filter 需满足 AND 逻辑关系

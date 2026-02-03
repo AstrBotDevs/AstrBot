@@ -13,7 +13,6 @@ from .commands import (
     SetUnsetCommands,
     SIDCommand,
     T2ICommand,
-    ToolCommands,
     TTSCommand,
 )
 
@@ -24,7 +23,6 @@ class Main(star.Star):
 
         self.help_c = HelpCommand(self.context)
         self.llm_c = LLMCommands(self.context)
-        self.tool_c = ToolCommands(self.context)
         self.plugin_c = PluginCommands(self.context)
         self.admin_c = AdminCommands(self.context)
         self.conversation_c = ConversationCommands(self.context)
@@ -46,30 +44,6 @@ class Main(star.Star):
     async def llm(self, event: AstrMessageEvent) -> None:
         """开启/关闭 LLM"""
         await self.llm_c.llm(event)
-
-    @filter.command_group("tool")
-    def tool(self) -> None:
-        """函数工具管理"""
-
-    @tool.command("ls")
-    async def tool_ls(self, event: AstrMessageEvent) -> None:
-        """查看函数工具列表"""
-        await self.tool_c.tool_ls(event)
-
-    @tool.command("on")
-    async def tool_on(self, event: AstrMessageEvent, tool_name: str) -> None:
-        """启用一个函数工具"""
-        await self.tool_c.tool_on(event, tool_name)
-
-    @tool.command("off")
-    async def tool_off(self, event: AstrMessageEvent, tool_name: str) -> None:
-        """停用一个函数工具"""
-        await self.tool_c.tool_off(event, tool_name)
-
-    @tool.command("off_all")
-    async def tool_all_off(self, event: AstrMessageEvent) -> None:
-        """停用所有函数工具"""
-        await self.tool_c.tool_all_off(event)
 
     @filter.command_group("plugin")
     def plugin(self) -> None:

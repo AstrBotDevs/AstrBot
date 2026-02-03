@@ -1,5 +1,5 @@
 import asyncio
-from typing import cast
+from typing import Any, cast
 
 import dingtalk_stream
 
@@ -16,9 +16,11 @@ class DingtalkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         client: dingtalk_stream.ChatbotHandler,
+        adapter: "Any" = None,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
+        self.adapter = adapter
 
     async def send_with_client(
         self,
@@ -83,14 +85,58 @@ class DingtalkMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
-        buffer = None
-        async for chain in generator:
+        if not self.adapter or not self.adapter.card_template_id:
+            logger.warning(
+                f"DingTalk streaming is enabled, but 'card_template_id' is not configured for platform '{self.platform_meta.id}'. Falling back to text streaming."
+            )
+            # Fallback to default behavior (buffer and send)
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
             if not buffer:
-                buffer = chain
-            else:
-                buffer.chain.extend(chain.chain)
-        if not buffer:
-            return None
-        buffer.squash_plain()
-        await self.send(buffer)
-        return await super().send_streaming(generator, use_fallback)
+                return None
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
+        # Create card
+        msg_id = self.message_obj.message_id
+        incoming_msg = self.message_obj.raw_message
+        created = await self.adapter.create_message_card(msg_id, incoming_msg)
+
+        if not created:
+            # Fallback to default behavior (buffer and send)
+            buffer = None
+            async for chain in generator:
+                if not buffer:
+                    buffer = chain
+                else:
+                    buffer.chain.extend(chain.chain)
+            if not buffer:
+                return None
+            buffer.squash_plain()
+            await self.send(buffer)
+            return await super().send_streaming(generator, use_fallback)
+
+        full_content = ""
+        seq = 0
+        try:
+            async for chain in generator:
+                for segment in chain.chain:
+                    if isinstance(segment, Comp.Plain):
+                        full_content += segment.text
+
+                seq += 1
+                if seq % 2 == 0:  # Update every 2 chunks to be more responsive than 8
+                    await self.adapter.send_card_message(
+                        msg_id, full_content, is_final=False
+                    )
+
+            await self.adapter.send_card_message(msg_id, full_content, is_final=True)
+        except Exception as e:
+            logger.error(f"DingTalk streaming error: {e}")
+            # Try to ensure final state is sent or cleaned up?
+            await self.adapter.send_card_message(msg_id, full_content, is_final=True)

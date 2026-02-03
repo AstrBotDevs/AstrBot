@@ -7,6 +7,8 @@ from typing import cast
 import jwt
 import psutil
 from flask.json.provider import DefaultJSONProvider
+from hypercorn.asyncio import serve
+from hypercorn.config import Config as HyperConfig
 from psutil._common import addr as psutil_addr
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
@@ -20,9 +22,11 @@ from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
 from .routes.backup import BackupRoute
+from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
+from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
 APP: Quart
@@ -74,7 +78,10 @@ class AstrBotDashboard:
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+        self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
+        self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
+        self.skills_route = SkillsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
         self.session_management_route = SessionManagementRoute(
@@ -83,10 +90,12 @@ class AstrBotDashboard:
             core_lifecycle,
         )
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
+        self.cron_route = CronRoute(self.context, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
+        self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -241,11 +250,22 @@ class AstrBotDashboard:
 
         logger.info(display)
 
-        return self.app.run_task(
-            host=host,
-            port=port,
-            shutdown_trigger=self.shutdown_trigger,
-        )
+        # 配置 Hypercorn
+        config = HyperConfig()
+        config.bind = [f"{host}:{port}"]
+
+        # 根据配置决定是否禁用访问日志
+        disable_access_log = self.core_lifecycle.astrbot_config.get(
+            "dashboard", {}
+        ).get("disable_access_log", True)
+        if disable_access_log:
+            config.accesslog = None
+        else:
+            # 启用访问日志，使用简洁格式
+            config.accesslog = "-"
+            config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
+
+        return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()

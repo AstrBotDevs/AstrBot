@@ -84,7 +84,9 @@ class PipelineScheduler:
         await self._process_stages(event)
 
         # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
-        if isinstance(event, (WebChatMessageEvent, WecomAIBotMessageEvent)):
+        if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
             await event.send(None)
+
+        event.trace.record("event_end")
 
         logger.debug("pipeline 执行完毕。")

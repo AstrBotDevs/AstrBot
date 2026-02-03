@@ -94,6 +94,14 @@ class Platform(abc.ABC):
     def get_stats(self) -> dict:
         """获取平台统计信息"""
         meta = self.meta()
+        meta_info = {
+            "id": meta.id,
+            "name": meta.name,
+            "display_name": meta.adapter_display_name or meta.name,
+            "description": meta.description,
+            "support_streaming_message": meta.support_streaming_message,
+            "support_proactive_message": meta.support_proactive_message,
+        }
         return {
             "id": meta.id or self.config.get("id"),
             "type": meta.name,
@@ -109,6 +117,7 @@ class Platform(abc.ABC):
             if self.last_error
             else None,
             "unified_webhook": self.unified_webhook(),
+            "meta": meta_info,
         }
 
     @abc.abstractmethod

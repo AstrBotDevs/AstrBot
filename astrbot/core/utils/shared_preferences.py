@@ -1,7 +1,10 @@
 import asyncio
 import os
 import threading
-from typing import TypeVar, overload
+from collections import defaultdict
+from typing import Any, TypeVar, overload
+
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
@@ -22,10 +25,21 @@ class SharedPreferences:
             )
         self.path = json_storage_path
         self.db_helper = db_helper
+        self.temorary_cache: dict[str, dict[str, Any]] = defaultdict(dict)
+        """automatically clear per 24 hours. Might be helpful in some cases XD"""
 
         self._sync_loop = asyncio.new_event_loop()
         t = threading.Thread(target=self._sync_loop.run_forever, daemon=True)
         t.start()
+
+        self._scheduler = BackgroundScheduler()
+        self._scheduler.add_job(
+            self._clear_temporary_cache, "interval", hours=24, id="clear_sp_temp_cache"
+        )
+        self._scheduler.start()
+
+    def _clear_temporary_cache(self):
+        self.temorary_cache.clear()
 
     async def get_async(
         self,

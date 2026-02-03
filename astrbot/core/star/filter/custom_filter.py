@@ -37,7 +37,7 @@ class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
 class CustomFilterOr(CustomFilter):
     def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
-        if not isinstance(filter1, CustomFilter):
+        if not isinstance(filter1, CustomFilter | CustomFilterAnd | CustomFilterOr):
             raise ValueError(
                 "CustomFilter lass can only operate with other CustomFilter.",
             )
@@ -51,7 +51,7 @@ class CustomFilterOr(CustomFilter):
 class CustomFilterAnd(CustomFilter):
     def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
-        if not isinstance(filter1, CustomFilter):
+        if not isinstance(filter1, CustomFilter | CustomFilterAnd | CustomFilterOr):
             raise ValueError(
                 "CustomFilter lass can only operate with other CustomFilter.",
             )

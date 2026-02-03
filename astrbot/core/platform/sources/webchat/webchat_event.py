@@ -21,7 +21,10 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _send(
-        message: MessageChain | None, session_id: str, streaming: bool = False
+        message_id: str,
+        message: MessageChain | None,
+        session_id: str,
+        streaming: bool = False,
     ) -> str | None:
         cid = session_id.split("!")[-1]
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
@@ -31,6 +34,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "type": "end",
                     "data": "",
                     "streaming": False,
+                    "message_id": message_id,
                 },  # end means this request is finished
             )
             return
@@ -45,6 +49,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": data,
                         "streaming": streaming,
                         "chain_type": message.type,
+                        "message_id": message_id,
                     },
                 )
             elif isinstance(comp, Json):
@@ -54,6 +59,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "data": json.dumps(comp.data, ensure_ascii=False),
                         "streaming": streaming,
                         "chain_type": message.type,
+                        "message_id": message_id,
                     },
                 )
             elif isinstance(comp, Image):
@@ -69,6 +75,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "type": "image",
                         "data": data,
                         "streaming": streaming,
+                        "message_id": message_id,
                     },
                 )
             elif isinstance(comp, Record):
@@ -84,6 +91,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "type": "record",
                         "data": data,
                         "streaming": streaming,
+                        "message_id": message_id,
                     },
                 )
             elif isinstance(comp, File):
@@ -94,12 +102,13 @@ class WebChatMessageEvent(AstrMessageEvent):
                 filename = f"{uuid.uuid4()!s}{ext}"
                 dest_path = os.path.join(imgs_dir, filename)
                 shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}|{original_name}"
+                data = f"[FILE]{filename}"
                 await web_chat_back_queue.put(
                     {
                         "type": "file",
                         "data": data,
                         "streaming": streaming,
+                        "message_id": message_id,
                     },
                 )
             else:
@@ -108,7 +117,8 @@ class WebChatMessageEvent(AstrMessageEvent):
         return data
 
     async def send(self, message: MessageChain | None) -> None:
-        await WebChatMessageEvent._send(message, session_id=self.session_id)
+        message_id = self.message_obj.message_id
+        await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
         await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
@@ -116,7 +126,32 @@ class WebChatMessageEvent(AstrMessageEvent):
         reasoning_content = ""
         cid = self.session_id.split("!")[-1]
         web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
+        message_id = self.message_obj.message_id
         async for chain in generator:
+            # 处理音频流（Live Mode）
+            if chain.type == "audio_chunk":
+                # 音频流数据，直接发送
+                audio_b64 = ""
+                text = None
+
+                if chain.chain and isinstance(chain.chain[0], Plain):
+                    audio_b64 = chain.chain[0].text
+
+                if len(chain.chain) > 1 and isinstance(chain.chain[1], Json):
+                    text = chain.chain[1].data.get("text")
+
+                payload = {
+                    "type": "audio_chunk",
+                    "data": audio_b64,
+                    "streaming": True,
+                    "message_id": message_id,
+                }
+                if text:
+                    payload["text"] = text
+
+                await web_chat_back_queue.put(payload)
+                continue
+
             # if chain.type == "break" and final_data:
             #     # 分割符
             #     await web_chat_back_queue.put(
@@ -130,7 +165,8 @@ class WebChatMessageEvent(AstrMessageEvent):
             #     continue
 
             r = await WebChatMessageEvent._send(
-                chain,
+                message_id=message_id,
+                message=chain,
                 session_id=self.session_id,
                 streaming=True,
             )
@@ -147,6 +183,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 "data": final_data,
                 "reasoning": reasoning_content,
                 "streaming": True,
+                "message_id": message_id,
             },
         )
         await super().send_streaming(generator, use_fallback)

@@ -86,6 +86,7 @@ class WebChatAdapter(Platform):
             name="webchat",
             description="webchat",
             id="webchat",
+            support_proactive_message=False,
         )
 
     async def send_by_session(
@@ -93,7 +94,8 @@ class WebChatAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        await WebChatMessageEvent._send(message_chain, session.session_id)
+        message_id = f"active_{str(uuid.uuid4())}"
+        await WebChatMessageEvent._send(message_id, message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
 
     async def _get_message_history(
@@ -124,17 +126,20 @@ class WebChatAdapter(Platform):
             part_type = part.get("type")
             if part_type == "plain":
                 text = part.get("text", "")
-                components.append(Plain(text))
+                components.append(Plain(text=text))
                 text_parts.append(text)
             elif part_type == "reply":
                 message_id = part.get("message_id")
                 reply_chain = []
-                reply_message_str = ""
+                reply_message_str = part.get("selected_text", "")
                 sender_id = None
                 sender_name = None
 
-                # recursively get the content of the referenced message
-                if depth < max_depth and message_id:
+                if reply_message_str:
+                    reply_chain = [Plain(text=reply_message_str)]
+
+                # recursively get the content of the referenced message, if selected_text is empty
+                if not reply_message_str and depth < max_depth and message_id:
                     history = await self._get_message_history(message_id)
                     if history and history.content:
                         reply_parts = history.content.get("message", [])
@@ -193,7 +198,7 @@ class WebChatAdapter(Platform):
 
         abm.session_id = f"webchat!{username}!{cid}"
 
-        abm.message_id = str(uuid.uuid4())
+        abm.message_id = payload.get("message_id")
 
         # 处理消息段列表
         message_parts = payload.get("message", [])
@@ -231,6 +236,7 @@ class WebChatAdapter(Platform):
         message_event.set_extra(
             "enable_streaming", payload.get("enable_streaming", True)
         )
+        message_event.set_extra("action_type", payload.get("action_type"))
 
         self.commit_event(message_event)
 

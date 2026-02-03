@@ -8,7 +8,8 @@
     "upload": "上传文件",
     "voice": "语音输入",
     "recordingPrompt": "录音中，请说话...",
-    "chatPrompt": "聊天吧!"
+    "chatPrompt": "聊天吧!",
+    "dropToUpload": "松开鼠标上传文件"
   },
   "message": {
     "user": "用户",
@@ -22,7 +23,11 @@
     "stop": "停止录音",
     "recording": "新录音",
     "processing": "处理中...",
-    "error": "录音失败"
+    "error": "录音失败",
+    "listening": "等待语音...",
+    "speaking": "正在说话",
+    "startRecording": "开始语音输入",
+    "liveMode": "实时对话"
   },
   "welcome": {
     "title": "欢迎使用 AstrBot",
@@ -42,7 +47,13 @@
     "fullscreen": "全屏模式",
     "exitFullscreen": "退出全屏",
     "reply": "引用回复",
-    "providerConfig": "AI 配置"
+    "providerConfig": "AI 配置",
+    "toolsUsed": "已使用工具",
+    "toolCallUsed": "已使用 {name} 工具",
+    "pythonCodeAnalysis": "已使用 Python 代码分析"
+  },
+  "ipython": {
+    "output": "输出"
   },
   "conversation": {
     "newConversation": "新的聊天",
@@ -70,12 +81,25 @@
     "on": "流式",
     "off": "普通"
   },
+  "config": {
+    "title": "配置文件"
+  },
   "reasoning": {
     "thinking": "思考过程"
   },
   "reply": {
     "replyTo": "引用",
     "notFound": "无法定位消息"
+  },
+  "project": {
+    "title": "项目",
+    "create": "创建项目",
+    "edit": "编辑项目",
+    "name": "项目名称",
+    "emoji": "图标 (Emoji)",
+    "description": "项目描述（可选）",
+    "noSessions": "该项目暂无对话",
+    "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
   "time": {
     "today": "今天",
@@ -88,6 +112,10 @@
     "cachedTokens": "缓存 Token",
     "duration": "耗时",
     "ttft": "首字时间"
+  },
+  "refs": {
+    "title": "引用",
+    "sources": "来源"
   },
   "connection": {
     "title": "连接状态提醒",

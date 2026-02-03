@@ -3,6 +3,7 @@
   "cancel": "取消",
   "close": "关闭",
   "copy": "复制",
+  "copied": "已复制",
   "delete": "删除",
   "edit": "编辑",
   "add": "添加",
@@ -60,6 +61,14 @@
     "empty": {
       "title": "该插件未提供文档链接或GitHub仓库地址。",
       "subtitle": "请查看插件市场或联系插件作者获取更多信息。"
+    }
+  },
+  "changelog": {
+    "title": "更新日志",
+    "loading": "正在加载更新日志...",
+    "empty": {
+      "title": "该插件未提供更新日志",
+      "subtitle": "开发者可在插件目录下添加 CHANGELOG.md 文件来提供更新日志"
     }
   },
   "editor": {

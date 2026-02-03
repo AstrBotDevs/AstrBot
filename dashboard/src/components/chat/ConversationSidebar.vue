@@ -21,11 +21,21 @@
         </div>
 
         <div style="padding: 8px; opacity: 0.6;">
-            <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId"
+            <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
                 v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-square-edit-outline">{{ tm('actions.newChat') }}</v-btn>
-            <v-btn icon="mdi-square-edit-outline" rounded="xl" @click="$emit('newChat')" :disabled="!currSessionId" 
+            <v-btn icon="mdi-square-edit-outline" rounded="xl" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId" 
                 v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
         </div>
+
+        <!-- 项目列表组件 -->
+        <ProjectList
+            v-if="!sidebarCollapsed || isMobile"
+            :projects="projects"
+            @selectProject="$emit('selectProject', $event)"
+            @createProject="$emit('createProject')"
+            @editProject="$emit('editProject', $event)"
+            @deleteProject="$emit('deleteProject', $event)"
+        />
 
         <div style="overflow-y: auto; flex-grow: 1;"
             v-if="!sidebarCollapsed || isMobile">
@@ -137,18 +147,24 @@ import type { Session } from '@/composables/useSessions';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
+import ProjectList from '@/components/chat/ProjectList.vue';
+import type { Project } from '@/components/chat/ProjectList.vue';
 
 interface Props {
     sessions: Session[];
     selectedSessions: string[];
     currSessionId: string;
+    selectedProjectId?: string | null;
     isDark: boolean;
     chatboxMode: boolean;
     isMobile: boolean;
     mobileMenuOpen: boolean;
+    projects?: Project[];
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+    projects: () => []
+});
 
 const emit = defineEmits<{
     newChat: [];
@@ -158,6 +174,10 @@ const emit = defineEmits<{
     closeMobileSidebar: [];
     toggleTheme: [];
     toggleFullscreen: [];
+    selectProject: [projectId: string];
+    createProject: [];
+    editProject: [project: Project];
+    deleteProject: [projectId: string];
 }>();
 
 const { t } = useI18n();
@@ -195,7 +215,6 @@ function handleDeleteConversation(session: Session) {
     display: flex;
     flex-direction: column;
     padding: 0;
-    border-right: 1px solid rgba(0, 0, 0, 0.04);
     height: 100%;
     max-height: 100%;
     position: relative;

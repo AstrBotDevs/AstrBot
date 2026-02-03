@@ -161,6 +161,8 @@ class TelegramPlatformAdapter(Platform):
             handler_metadata = handler_md
             if not star_map[handler_metadata.handler_module_path].activated:
                 continue
+            if not handler_metadata.enabled:
+                continue
             for event_filter in handler_metadata.event_filters:
                 cmd_info = self._extract_command_info(
                     event_filter,

@@ -133,7 +133,63 @@
         }
       }
     },
+    "sandbox": {
+      "description": "Agent 沙箱环境(Beta)",
+      "hint": "https://docs.astrbot.app/use/astrbot-agent-sandbox.html",
+      "provider_settings": {
+        "sandbox": {
+          "enable": {
+            "description": "启用沙箱环境",
+            "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。"
+          },
+          "booter": {
+            "description": "沙箱环境驱动器"
+          },
+          "shipyard_endpoint": {
+            "description": "Shipyard API Endpoint",
+            "hint": "Shipyard 服务的 API 访问地址。"
+          },
+          "shipyard_access_token": {
+            "description": "Shipyard 访问令牌",
+            "hint": "用于访问 Shipyard 服务的访问令牌。"
+          },
+          "shipyard_ttl": {
+            "description": "Shipyard Ship 存活时间(秒)",
+            "hint": "Shipyard 会话的生存时间（秒）。"
+          },
+          "shipyard_max_sessions": {
+            "description": "Shipyard Ship 会话复用上限",
+            "hint": "决定了一个实例承载的最大会话数量。"
+          }
+        }
+      }
+    },
+    "skills": {
+      "hint": "https://docs.astrbot.app/en/use/skills.html",
+      "description": "Skills",
+      "provider_settings": {
+        "skills": {
+          "runtime": {
+            "description": "Skill Runtime",
+            "hint": "选择 Skills 运行环境。使用 sandbox 前需启用沙箱；local 模式下 Agent 可通过 Shell 和 Python 功能完全访问运行环境，非管理员将被自动禁止使用以保证安全。"
+          }
+        }
+      }
+    },
+    "proactive_capability": {
+      "description": "主动型 Agent",
+      "hint": "https://docs.astrbot.app/use/proactive-agent.html",
+      "provider_settings": {
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "启用",
+            "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务，然后将结果发送给你。"
+          }
+        }
+      }
+    },
     "truncate_and_compress": {
+      "hint": "https://docs.astrbot.app/use/context-compress.html",
       "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
@@ -169,6 +225,14 @@
         "display_reasoning_text": {
           "description": "显示思考内容"
         },
+        "llm_safety_mode": {
+          "description": "健康模式",
+          "hint": "引导模型输出健康、安全、积极的内容，避免有害或敏感话题。"
+        },
+        "safety_mode_strategy": {
+          "description": "健康模式策略",
+          "hint": "选择健康模式的实现方式。"
+        },
         "identifier": {
           "description": "用户识别",
           "hint": "启用后,会在提示词前包含用户 ID 信息。"
@@ -184,11 +248,23 @@
         "show_tool_use_status": {
           "description": "输出函数调用状态"
         },
+        "sanitize_context_by_modalities": {
+          "description": "按模型能力清理历史上下文",
+          "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
+        },
         "max_agent_step": {
           "description": "工具调用轮数上限"
         },
         "tool_call_timeout": {
           "description": "工具调用超时时间(秒)"
+        },
+        "tool_schema_mode": {
+          "description": "工具调用模式",
+          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+          "labels": [
+            "Skills-like（两阶段）",
+            "Full（完整参数）"
+          ]
         },
         "streaming_response": {
           "description": "流式输出"
@@ -403,7 +479,8 @@
             "description": "仅对 LLM 结果分段"
           },
           "interval_method": {
-            "description": "间隔方法"
+            "description": "间隔方法",
+            "hint": "random 为随机时间，log 为根据消息长度计算，$y=log_<log_base>(x)$，x为字数，y的单位为秒。"
           },
           "interval": {
             "description": "随机间隔时间",
@@ -411,13 +488,15 @@
           },
           "log_base": {
             "description": "对数底数",
-            "hint": "对数间隔的底数,默认为 2.0。取值范围为 1.0-10.0。"
+            "hint": "对数间隔的底数,默认为 2.6。取值范围为 1.0-10.0。"
           },
           "words_count_threshold": {
-            "description": "分段回复字数阈值"
+            "description": "分段回复字数阈值",
+            "hint": "分段回复的字数上限。只有字数小于此值的消息才会被分段，超过此值的长消息将直接发送（不分段），默认为 150。"
           },
           "split_mode": {
             "description": "分段模式",
+            "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
             "labels": [
               "正则表达式",
               "分段词列表"
@@ -497,6 +576,30 @@
         "description": "控制台日志级别",
         "hint": "控制台输出日志的级别。"
       },
+      "log_file_enable": {
+        "description": "启用文件日志",
+        "hint": "在控制台输出的同时，将日志写入文件。"
+      },
+      "log_file_path": {
+        "description": "日志文件路径",
+        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.log；支持绝对路径。"
+      },
+      "log_file_max_mb": {
+        "description": "日志文件大小上限 (MB)",
+        "hint": "超过大小后自动轮转，默认 20MB。"
+      },
+      "trace_log_enable": {
+        "description": "启用 Trace 文件日志",
+        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"
+      },
+      "trace_log_path": {
+        "description": "Trace 日志文件路径",
+        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。"
+      },
+      "trace_log_max_mb": {
+        "description": "Trace 日志大小上限 (MB)",
+        "hint": "超过大小后自动轮转，默认 20MB。"
+      },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
         "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
@@ -521,5 +624,13 @@
         "description": "直连地址列表"
       }
     }
+  },
+  "help": {
+    "documentation": "官方文档",
+    "support": "加群询问",
+    "helpText": "不了解配置？请见 {documentation} 或 {support}。",
+    "helpPrefix": "不了解配置？请见",
+    "helpMiddle": "或",
+    "helpSuffix": "。"
   }
 }

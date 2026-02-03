@@ -1,3 +1,4 @@
+import copy
 import sys
 import time
 import traceback
@@ -14,6 +15,7 @@ from mcp.types import (
 
 from astrbot import logger
 from astrbot.core.agent.message import TextPart, ThinkPart
+from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -64,6 +66,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # customize
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
+        tool_schema_mode: str | None = "full",
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -98,6 +101,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+
+        # These two are used for tool schema mode handling
+        # We now have two modes:
+        # - "full": use full tool schema for LLM calls, default.
+        # - "skills_like": use light tool schema for LLM calls, and re-query with param-only schema when needed.
+        #   Light tool schema does not include tool parameters.
+        #   This can reduce token usage when tools have large descriptions.
+        # See #4681
+        self.tool_schema_mode = tool_schema_mode
+        self._tool_schema_param_set = None
+        self._skill_like_raw_tool_set = None
+        if tool_schema_mode == "skills_like":
+            tool_set = self.req.func_tool
+            if not tool_set:
+                return
+            self._skill_like_raw_tool_set = tool_set
+            light_set = tool_set.get_light_tool_set()
+            self._tool_schema_param_set = tool_set.get_param_only_tool_set()
+            # MODIFIE the req.func_tool to use light tool schemas
+            self.req.func_tool = light_set
 
         messages = []
         # append existing messages in the run context
@@ -227,7 +250,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
-            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
@@ -252,6 +276,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
+            if self.tool_schema_mode == "skills_like":
+                llm_resp, _ = await self._resolve_tool_exec(llm_resp)
+
             tool_call_result_blocks = []
             async for result in self._handle_function_tools(self.req, llm_resp):
                 if isinstance(result, list):
@@ -268,6 +295,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         type=ar_type,
                         data=AgentResponseData(chain=result),
                     )
+
             # 将结果添加到上下文中
             parts = []
             if llm_resp.reasoning_content or llm_resp.reasoning_signature:
@@ -277,7 +305,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         encrypted=llm_resp.reasoning_signature,
                     )
                 )
-            parts.append(TextPart(text=llm_resp.completion_text or "*No response*"))
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
             tool_calls_result = ToolCallsResult(
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_to_calls_model(),
@@ -352,7 +381,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 if not req.func_tool:
                     return
-                func_tool = req.func_tool.get_func(func_tool_name)
+
+                if (
+                    self.tool_schema_mode == "skills_like"
+                    and self._skill_like_raw_tool_set
+                ):
+                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # so we need to get the tool from the raw tool set
+                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                else:
+                    func_tool = req.func_tool.get_tool(func_tool_name)
+
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
@@ -361,7 +400,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         ToolCallMessageSegment(
                             role="tool",
                             tool_call_id=func_tool_id,
-                            content=f"error: 未找到工具 {func_tool_name}",
+                            content=f"error: Tool {func_tool_name} not found.",
                         ),
                     )
                     continue
@@ -427,7 +466,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content="返回了图片(已直接发送给用户)",
+                                    content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
                                 ),
                             )
                             yield MessageChain(type="tool_direct_result").base64_image(
@@ -452,7 +491,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     ToolCallMessageSegment(
                                         role="tool",
                                         tool_call_id=func_tool_id,
-                                        content="返回了图片(已直接发送给用户)",
+                                        content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
                                     ),
                                 )
                                 yield MessageChain(
@@ -463,16 +502,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     ToolCallMessageSegment(
                                         role="tool",
                                         tool_call_id=func_tool_id,
-                                        content="返回的数据类型不受支持",
+                                        content="The tool has returned a data type that is not supported.",
                                     ),
                                 )
 
                     elif resp is None:
                         # Tool 直接请求发送消息给用户
-                        # 这里我们将直接结束 Agent Loop。
-                        # 发送消息逻辑在 ToolExecutor 中处理了。
+                        # 这里我们将直接结束 Agent Loop
+                        # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有没有返回值或者将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
                         )
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
@@ -480,7 +519,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ToolCallMessageSegment(
                                 role="tool",
                                 tool_call_id=func_tool_id,
-                                content="*工具没有返回值或者将结果直接发送给了用户*",
+                                content="The tool has no return value, or has sent the result directly to the user.",
                             ),
                         )
                     else:
@@ -492,7 +531,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ToolCallMessageSegment(
                                 role="tool",
                                 tool_call_id=func_tool_id,
-                                content="*工具返回了不支持的类型，请告诉用户检查这个工具的定义和实现。*",
+                                content="*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
                             ),
                         )
 
@@ -530,10 +569,76 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 ],
             )
+            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
             yield tool_call_result_blocks
+
+    def _build_tool_requery_context(
+        self, tool_names: list[str]
+    ) -> list[dict[str, T.Any]]:
+        """Build contexts for re-querying LLM with param-only tool schemas."""
+        contexts: list[dict[str, T.Any]] = []
+        for msg in self.run_context.messages:
+            if hasattr(msg, "model_dump"):
+                contexts.append(msg.model_dump())  # type: ignore[call-arg]
+            elif isinstance(msg, dict):
+                contexts.append(copy.deepcopy(msg))
+        instruction = (
+            "You have decided to call tool(s): "
+            + ", ".join(tool_names)
+            + ". Now call the tool(s) with required arguments using the tool schema, "
+            "and follow the existing tool-use rules."
+        )
+        if contexts and contexts[0].get("role") == "system":
+            content = contexts[0].get("content") or ""
+            contexts[0]["content"] = f"{content}\n{instruction}"
+        else:
+            contexts.insert(0, {"role": "system", "content": instruction})
+        return contexts
+
+    def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
+        """Build a subset of tools from the given tool set based on tool names."""
+        subset = ToolSet()
+        for name in tool_names:
+            tool = tool_set.get_tool(name)
+            if tool:
+                subset.add_tool(tool)
+        return subset
+
+    async def _resolve_tool_exec(
+        self,
+        llm_resp: LLMResponse,
+    ) -> tuple[LLMResponse, ToolSet | None]:
+        """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        tool_names = llm_resp.tools_call_name
+        if not tool_names:
+            return llm_resp, self.req.func_tool
+        full_tool_set = self.req.func_tool
+        if not isinstance(full_tool_set, ToolSet):
+            return llm_resp, self.req.func_tool
+
+        subset = self._build_tool_subset(full_tool_set, tool_names)
+        if not subset.tools:
+            return llm_resp, full_tool_set
+
+        if isinstance(self._tool_schema_param_set, ToolSet):
+            param_subset = self._build_tool_subset(
+                self._tool_schema_param_set, tool_names
+            )
+            if param_subset.tools and tool_names:
+                contexts = self._build_tool_requery_context(tool_names)
+                requery_resp = await self.provider.text_chat(
+                    contexts=contexts,
+                    func_tool=param_subset,
+                    model=self.req.model,
+                    session_id=self.req.session_id,
+                )
+                if requery_resp:
+                    llm_resp = requery_resp
+
+        return llm_resp, subset
 
     def done(self) -> bool:
         """检查 Agent 是否已完成工作"""

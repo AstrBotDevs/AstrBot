@@ -150,7 +150,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
         if args:
             raise_error = args[0]
 
-    if not isinstance(custom_filter, (CustomFilterAnd, CustomFilterOr)):
+    if not isinstance(custom_filter, CustomFilterAnd | CustomFilterOr):
         custom_filter = custom_filter(raise_error)
 
     def decorator(awaitable):
@@ -402,6 +402,55 @@ def register_on_llm_response(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnLLMResponseEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_using_llm_tool(**kwargs):
+    """当调用函数工具前的事件。
+    会传入 tool 和 tool_args 参数。
+
+    Examples:
+    ```py
+    from astrbot.core.agent.tool import FunctionTool
+
+    @on_using_llm_tool()
+    async def test(self, event: AstrMessageEvent, tool: FunctionTool, tool_args: dict | None) -> None:
+        ...
+    ```
+
+    请务必接收三个参数：event, tool, tool_args
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnUsingLLMToolEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_llm_tool_respond(**kwargs):
+    """当调用函数工具后的事件。
+    会传入 tool、tool_args 和 tool 的调用结果 tool_result 参数。
+
+    Examples:
+    ```py
+    from astrbot.core.agent.tool import FunctionTool
+    from mcp.types import CallToolResult
+
+    @on_llm_tool_respond()
+    async def test(self, event: AstrMessageEvent, tool: FunctionTool, tool_args: dict | None, tool_result: CallToolResult | None) -> None:
+        ...
+    ```
+
+    请务必接收四个参数：event, tool, tool_args, tool_result
+
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnLLMToolRespondEvent, **kwargs)
         return awaitable
 
     return decorator

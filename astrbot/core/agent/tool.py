@@ -1,3 +1,4 @@
+import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from typing import Any, Generic
 
@@ -57,6 +58,11 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Whether the tool is active. This field is a special field for AstrBot.
     You can ignore it when integrating with other frameworks.
     """
+    is_background_task: bool = False
+    """
+    Declare this tool as a background task. Background tasks return immediately
+    with a task identifier while the real work continues asynchronously.
+    """
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
@@ -104,6 +110,47 @@ class ToolSet:
                 return tool
         return None
 
+    def get_light_tool_set(self) -> "ToolSet":
+        """Return a light tool set with only name/description."""
+        light_tools = []
+        for tool in self.tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            light_params = {
+                "type": "object",
+                "properties": {},
+            }
+            light_tools.append(
+                FunctionTool(
+                    name=tool.name,
+                    parameters=light_params,
+                    description=tool.description,
+                    handler=None,
+                )
+            )
+        return ToolSet(light_tools)
+
+    def get_param_only_tool_set(self) -> "ToolSet":
+        """Return a tool set with name/parameters only (no description)."""
+        param_tools = []
+        for tool in self.tools:
+            if hasattr(tool, "active") and not tool.active:
+                continue
+            params = (
+                copy.deepcopy(tool.parameters)
+                if tool.parameters
+                else {"type": "object", "properties": {}}
+            )
+            param_tools.append(
+                FunctionTool(
+                    name=tool.name,
+                    parameters=params,
+                    description="",
+                    handler=None,
+                )
+            )
+        return ToolSet(param_tools)
+
     @deprecated(reason="Use add_tool() instead", version="4.0.0")
     def add_func(
         self,
@@ -149,18 +196,15 @@ class ToolSet:
         """Convert tools to OpenAI API function calling schema format."""
         result = []
         for tool in self.tools:
-            func_def = {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                },
-            }
+            func_def = {"type": "function", "function": {"name": tool.name}}
+            if tool.description:
+                func_def["function"]["description"] = tool.description
 
-            if (
-                tool.parameters and tool.parameters.get("properties")
-            ) or not omit_empty_parameter_field:
-                func_def["function"]["parameters"] = tool.parameters
+            if tool.parameters is not None:
+                if (
+                    tool.parameters and tool.parameters.get("properties")
+                ) or not omit_empty_parameter_field:
+                    func_def["function"]["parameters"] = tool.parameters
 
             result.append(func_def)
         return result
@@ -173,11 +217,9 @@ class ToolSet:
             if tool.parameters:
                 input_schema["properties"] = tool.parameters.get("properties", {})
                 input_schema["required"] = tool.parameters.get("required", [])
-            tool_def = {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": input_schema,
-            }
+            tool_def = {"name": tool.name, "input_schema": input_schema}
+            if tool.description:
+                tool_def["description"] = tool.description
             result.append(tool_def)
         return result
 
@@ -247,10 +289,9 @@ class ToolSet:
 
         tools = []
         for tool in self.tools:
-            d: dict[str, Any] = {
-                "name": tool.name,
-                "description": tool.description,
-            }
+            d: dict[str, Any] = {"name": tool.name}
+            if tool.description:
+                d["description"] = tool.description
             if tool.parameters:
                 d["parameters"] = convert_schema(tool.parameters)
             tools.append(d)
@@ -277,6 +318,11 @@ class ToolSet:
     def names(self) -> list[str]:
         """获取所有工具的名称列表"""
         return [tool.name for tool in self.tools]
+
+    def merge(self, other: "ToolSet"):
+        """Merge another ToolSet into this one."""
+        for tool in other.tools:
+            self.add_tool(tool)
 
     def __len__(self) -> int:
         return len(self.tools)

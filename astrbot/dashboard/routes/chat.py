@@ -2,6 +2,7 @@ import asyncio
 import json
 import mimetypes
 import os
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ import quart
 from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import PlatformMessageHistory
@@ -169,7 +170,11 @@ class ChatRoute(Route):
                     parts.append({"type": "plain", "text": part.get("text", "")})
                 elif part_type == "reply":
                     parts.append(
-                        {"type": "reply", "message_id": part.get("message_id")}
+                        {
+                            "type": "reply",
+                            "message_id": part.get("message_id"),
+                            "selected_text": part.get("selected_text", ""),
+                        }
                     )
                 elif attachment_id := part.get("attachment_id"):
                     attachment = await self.db.get_attachment_by_id(attachment_id)
@@ -224,6 +229,64 @@ class ChatRoute(Route):
             "filename": os.path.basename(file_path),
         }
 
+    def _extract_web_search_refs(
+        self, accumulated_text: str, accumulated_parts: list
+    ) -> dict:
+        """从消息中提取 web_search_tavily 的引用
+
+        Args:
+            accumulated_text: 累积的文本内容
+            accumulated_parts: 累积的消息部分列表
+
+        Returns:
+            包含 used 列表的字典，记录被引用的搜索结果
+        """
+        # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
+        web_search_results = {}
+        tool_call_parts = [
+            p
+            for p in accumulated_parts
+            if p.get("type") == "tool_call" and p.get("tool_calls")
+        ]
+
+        for part in tool_call_parts:
+            for tool_call in part["tool_calls"]:
+                if tool_call.get("name") != "web_search_tavily" or not tool_call.get(
+                    "result"
+                ):
+                    continue
+                try:
+                    result_data = json.loads(tool_call["result"])
+                    for item in result_data.get("results", []):
+                        if idx := item.get("index"):
+                            web_search_results[idx] = {
+                                "url": item.get("url"),
+                                "title": item.get("title"),
+                                "snippet": item.get("snippet"),
+                            }
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        if not web_search_results:
+            return {}
+
+        # 从文本中提取所有 <ref>xxx</ref> 标签并去重
+        ref_indices = {
+            m.strip() for m in re.findall(r"<ref>(.*?)</ref>", accumulated_text)
+        }
+
+        # 构建被引用的结果列表
+        used_refs = []
+        for ref_index in ref_indices:
+            if ref_index not in web_search_results:
+                continue
+            payload = {"index": ref_index, **web_search_results[ref_index]}
+            if favicon := sp.temorary_cache.get("_ws_favicon", {}).get(payload["url"]):
+                payload["favicon"] = favicon
+            used_refs.append(payload)
+
+        return {"used": used_refs} if used_refs else {}
+
     async def _save_bot_message(
         self,
         webchat_conv_id: str,
@@ -231,6 +294,7 @@ class ChatRoute(Route):
         media_parts: list,
         reasoning: str,
         agent_stats: dict,
+        refs: dict,
     ) -> PlatformMessageHistory:
         """保存 bot 消息到历史记录，返回保存的记录"""
         bot_message_parts = []
@@ -243,6 +307,8 @@ class ChatRoute(Route):
             new_his["reasoning"] = reasoning
         if agent_stats:
             new_his["agent_stats"] = agent_stats
+        if refs:
+            new_his["refs"] = refs
 
         record = await self.platform_history_mgr.insert(
             platform_id="webchat",
@@ -295,6 +361,8 @@ class ChatRoute(Route):
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
 
+        message_id = str(uuid.uuid4())
+
         async def stream() -> AsyncGenerator[str, None]:
             client_disconnected = False
             accumulated_parts = []
@@ -302,6 +370,7 @@ class ChatRoute(Route):
             accumulated_reasoning = ""
             tool_calls = {}
             agent_stats = {}
+            refs = {}
             try:
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
@@ -316,6 +385,13 @@ class ChatRoute(Route):
                             logger.error(f"WebChat stream error: {e}")
 
                         if not result:
+                            continue
+
+                        if (
+                            "message_id" in result
+                            and result["message_id"] != message_id
+                        ):
+                            logger.warning("webchat stream message_id mismatch")
                             continue
 
                         result_text = result["data"]
@@ -416,12 +492,26 @@ class ChatRoute(Route):
                                 or chain_type == "tool_call_result"
                             ):
                                 continue
+
+                            # 提取 web_search_tavily 引用
+                            try:
+                                refs = self._extract_web_search_refs(
+                                    accumulated_text,
+                                    accumulated_parts,
+                                )
+                            except Exception as e:
+                                logger.exception(
+                                    f"Failed to extract web search refs: {e}",
+                                    exc_info=True,
+                                )
+
                             saved_record = await self._save_bot_message(
                                 webchat_conv_id,
                                 accumulated_text,
                                 accumulated_parts,
                                 accumulated_reasoning,
                                 agent_stats,
+                                refs,
                             )
                             # 发送保存的消息信息给前端
                             if saved_record and not client_disconnected:
@@ -441,6 +531,7 @@ class ChatRoute(Route):
                             accumulated_reasoning = ""
                             # tool_calls = {}
                             agent_stats = {}
+                            refs = {}
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
 
@@ -455,6 +546,7 @@ class ChatRoute(Route):
                     "selected_provider": selected_provider,
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
+                    "message_id": message_id,
                 },
             ),
         )
@@ -619,9 +711,17 @@ class ChatRoute(Route):
             page_size=100,  # 暂时返回前100个
         )
 
-        # 转换为字典格式，并添加额外信息
+        # 转换为字典格式，并添加项目信息
+        # get_platform_sessions_by_creator 现在返回 list[dict] 包含 session 和项目字段
         sessions_data = []
-        for session in sessions:
+        for item in sessions:
+            session = item["session"]
+            project_id = item["project_id"]
+
+            # 跳过属于项目的会话（在侧边栏对话列表中不显示）
+            if project_id is not None:
+                continue
+
             sessions_data.append(
                 {
                     "session_id": session.session_id,
@@ -646,6 +746,12 @@ class ChatRoute(Route):
         session = await self.db.get_platform_session_by_id(session_id)
         platform_id = session.platform_id if session else "webchat"
 
+        # 获取项目信息（如果会话属于某个项目）
+        username = g.get("username", "guest")
+        project_info = await self.db.get_project_by_session(
+            session_id=session_id, creator=username
+        )
+
         # Get platform message history using session_id
         history_ls = await self.platform_history_mgr.get(
             platform_id=platform_id,
@@ -656,16 +762,20 @@ class ChatRoute(Route):
 
         history_res = [history.model_dump() for history in history_ls]
 
-        return (
-            Response()
-            .ok(
-                data={
-                    "history": history_res,
-                    "is_running": self.running_convs.get(session_id, False),
-                },
-            )
-            .__dict__
-        )
+        response_data = {
+            "history": history_res,
+            "is_running": self.running_convs.get(session_id, False),
+        }
+
+        # 如果会话属于项目，添加项目信息
+        if project_info:
+            response_data["project"] = {
+                "project_id": project_info.project_id,
+                "title": project_info.title,
+                "emoji": project_info.emoji,
+            }
+
+        return Response().ok(data=response_data).__dict__
 
     async def update_session_display_name(self) -> dict:
         """Update a Platform session's display name."""
