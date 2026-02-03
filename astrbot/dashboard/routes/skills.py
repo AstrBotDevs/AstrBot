@@ -27,7 +27,7 @@ class SkillsRoute(Route):
             provider_settings = self.core_lifecycle.astrbot_config.get(
                 "provider_settings", {}
             )
-            runtime = provider_settings.get("computer_use_runtime")
+            runtime = provider_settings.get("computer_use_runtime", "local")
             skills = SkillManager().list_skills(
                 active_only=False, runtime=runtime, show_sandbox_path=False
             )

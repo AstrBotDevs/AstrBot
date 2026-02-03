@@ -249,14 +249,6 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
-
-def _resolve_computer_use_runtime(cfg: dict) -> str:
-    runtime = cfg.get("computer_use_runtime")
-    if runtime in ("none", "local", "sandbox"):
-        return runtime
-    return "local"
-
-
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -310,7 +302,7 @@ async def _ensure_persona_and_skills(
             req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
-    runtime = _resolve_computer_use_runtime(cfg)
+    runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
 
@@ -325,9 +317,9 @@ async def _ensure_persona_and_skills(
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
                 req.system_prompt += (
-                    "User does not enabled Computer Use feature, "
-                    "So you cannot use shell or Python to perform skills. "
-                    "Ask user for permission(in AsteBot WebUI -> Config) if you need to use skills."
+                    "User has not enabled the Computer Use feature. "
+                    "You cannot use shell or Python to perform skills. "
+                    "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
     tmgr = plugin_context.get_llm_tool_manager()
 
