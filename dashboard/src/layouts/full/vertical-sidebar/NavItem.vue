@@ -2,15 +2,33 @@
 import { useI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 const props = defineProps({ item: Object, level: Number });
 const { t } = useI18n();
 const customizer = useCustomizerStore();
+const route = useRoute();
+const router = useRouter();
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
   const indent = customizer.mini_sidebar ? '0px' : `${lvl * 24}px`;
   return { '--indent-padding': indent };
+});
+
+const handleGroupClick = () => {
+  if (!props.item || props.item.type === 'external' || !props.item.to) return;
+  router.push(props.item.to);
+};
+
+const isItemActive = computed(() => {
+  if (!props.item || props.item.type === 'external' || !props.item.to) return false;
+  if (typeof props.item.to !== 'string') return false;
+  if (props.item.to.includes('#')) {
+    const [path, hash] = props.item.to.split('#');
+    return route.path === path && route.hash === `#${hash}`;
+  }
+  return route.path === props.item.to;
 });
 </script>
 
@@ -18,7 +36,7 @@ const itemStyle = computed(() => {
   <v-list-group v-if="item.children" :value="item.title" :class="{ 'group-bordered': customizer.mini_sidebar }">
     <template v-slot:activator="{ props }">
       <v-list-item v-bind="props" rounded class="mb-1" color="secondary" :prepend-icon="item.icon"
-        :style="{ '--indent-padding': '0px' }">
+        :style="{ '--indent-padding': '0px' }" @click="handleGroupClick">
         <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
           {{ t(item.title) }}
         </v-list-item-title>
@@ -31,8 +49,9 @@ const itemStyle = computed(() => {
     </template>
   </v-list-group>
 
-  <v-list-item v-else :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''" rounded
-    class="mb-1" color="secondary" :disabled="item.disabled" :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
+  <v-list-item v-else :to="item.type === 'external' ? '' : item.to" :href="item.type === 'external' ? item.to : ''"
+    :active="isItemActive" rounded class="mb-1" color="secondary" :disabled="item.disabled"
+    :target="item.type === 'external' ? '_blank' : ''" :style="itemStyle">
     <template v-slot:prepend>
       <v-icon v-if="item.icon" :size="item.iconSize" class="hide-menu" :icon="item.icon"></v-icon>
     </template>

@@ -50,6 +50,7 @@
     "loadingSkills": "Loading skills...",
     "allSkillsAvailable": "Use all available Skills",
     "noSkillsSelected": "No skills selected",
+    "skillsRuntimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
     "createInFolder": "Will be created in \"{folder}\"",
     "rootFolder": "All Personas"
   },

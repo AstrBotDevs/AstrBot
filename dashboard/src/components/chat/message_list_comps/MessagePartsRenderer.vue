@@ -379,4 +379,38 @@ const getRenderParts = (messageParts) => {
     align-items: center;
 }
 
+
+/* 文件附件样式 */
+.file-attachments,
+.embedded-files {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.file-attachment,
+.embedded-file {
+    display: flex;
+    align-items: center;
+}
+
+.file-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: rgba(var(--v-theme-primary), 0.08);
+    border: 1px solid rgba(var(--v-theme-primary), 0.2);
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    max-width: 320px;
+}
+
+.file-link-download {
+    cursor: pointer;
+}
+
 </style>

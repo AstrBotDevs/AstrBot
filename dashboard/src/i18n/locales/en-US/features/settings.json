@@ -16,6 +16,16 @@
       "custom": "Custom"
     }
   },
+  "theme": {
+    "title": "Theme",
+    "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
+    "customize": {
+      "title": "Theme Colors",
+      "primary": "Primary Color",
+      "secondary": "Secondary Color",
+      "reset": "Reset to Default"
+    }
+  },
   "system": {
     "title": "System",
     "restart": {

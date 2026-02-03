@@ -24,14 +24,22 @@ class SkillsRoute(Route):
 
     async def get_skills(self):
         try:
-            cfg = self.core_lifecycle.astrbot_config.get("provider_settings", {}).get(
-                "skills", {}
+            provider_settings = self.core_lifecycle.astrbot_config.get(
+                "provider_settings", {}
             )
-            runtime = cfg.get("runtime", "local")
+            runtime = provider_settings.get("computer_use_runtime", "local")
             skills = SkillManager().list_skills(
                 active_only=False, runtime=runtime, show_sandbox_path=False
             )
-            return Response().ok([skill.__dict__ for skill in skills]).__dict__
+            return (
+                Response()
+                .ok(
+                    {
+                        "skills": [skill.__dict__ for skill in skills],
+                    }
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
