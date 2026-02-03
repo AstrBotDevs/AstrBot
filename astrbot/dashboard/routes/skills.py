@@ -36,7 +36,6 @@ class SkillsRoute(Route):
                 .ok(
                     {
                         "skills": [skill.__dict__ for skill in skills],
-                        "computer_use_runtime": runtime,
                     }
                 )
                 .__dict__

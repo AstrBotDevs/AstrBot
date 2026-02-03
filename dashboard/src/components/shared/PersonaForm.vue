@@ -536,9 +536,6 @@ export default {
                     } else {
                         const skills = payload.skills || [];
                         this.availableSkills = skills.filter(skill => skill.active !== false);
-                        if (payload.computer_use_runtime === 'none') {
-                            this.$emit('error', this.tm('form.skillsRuntimeNoneWarning'));
-                        }
                     }
                 } else {
                     this.$emit('error', response.data.message || 'Failed to load skills');

@@ -70,6 +70,9 @@
     <v-dialog v-model="createDialog" max-width="560">
       <v-card>
         <v-card-title class="text-h6">{{ tm('form.title') }}</v-card-title>
+        <v-card-subtitle class="text-body-2 text-medium-emphasis">
+          {{ tm('form.chatHint') }}
+        </v-card-subtitle>
         <v-card-text>
           <v-switch v-model="newJob.run_once" :label="tm('form.runOnce')" inset color="primary" hide-details />
           <v-text-field v-model="newJob.name" :label="tm('form.name')" variant="outlined" density="comfortable" />

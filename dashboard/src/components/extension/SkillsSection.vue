@@ -3,8 +3,7 @@
     <v-container fluid class="pa-0" elevation="0">
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
-          <v-btn color="success" prepend-icon="mdi-upload" class="me-2" variant="tonal"
-            @click="uploadDialog = true">
+          <v-btn color="success" prepend-icon="mdi-upload" class="me-2" variant="tonal" @click="uploadDialog = true">
             {{ tm('skills.upload') }}
           </v-btn>
           <v-btn color="primary" prepend-icon="mdi-refresh" variant="tonal" @click="fetchSkills">
@@ -12,6 +11,10 @@
           </v-btn>
         </div>
       </v-row>
+
+      <div class="px-2 pb-2">
+        <small style="color: grey;">{{ tm('skills.runtimeHint') }}</small>
+      </div>
 
       <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
 
@@ -45,8 +48,8 @@
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('skills.uploadDialogTitle') }}</v-card-title>
         <v-card-text>
           <small class="text-grey">{{ tm('skills.uploadHint') }}</small>
-          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')" prepend-icon="mdi-folder-zip-outline"
-            variant="outlined" class="mt-4" :multiple="false" />
+          <v-file-input v-model="uploadFile" accept=".zip" :label="tm('skills.selectFile')"
+            prepend-icon="mdi-folder-zip-outline" variant="outlined" class="mt-4" :multiple="false" />
         </v-card-text>
         <v-card-actions class="d-flex justify-end">
           <v-btn variant="text" @click="uploadDialog = false">{{ tm('skills.cancel') }}</v-btn>
@@ -115,9 +118,6 @@ export default {
           skills.value = payload;
         } else {
           skills.value = payload.skills || [];
-          if (payload.computer_use_runtime === "none") {
-            showMessage(tm("skills.runtimeNoneWarning"), "warning");
-          }
         }
       } catch (err) {
         showMessage(tm("skills.loadFailed"), "error");
