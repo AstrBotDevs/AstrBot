@@ -212,6 +212,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         "required": ["type"],
                     },
                 },
+                "session": {
+                    "type": "string",
+                    "description": "Target session ID in format 'platform:type:session_id'. If not specified, sends to the current session.",
+                },
             },
             "required": ["messages"],
         }
@@ -253,7 +257,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        # In global context mode, default to original UMO if session not specified
+        original_umo = context.context.event.get_extra("original_umo")
+        default_session = original_umo or context.context.event.unified_msg_origin
+        session = kwargs.get("session") or default_session
         messages = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:
