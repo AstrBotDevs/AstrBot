@@ -75,15 +75,16 @@ async def run_agent(
                         # 用来标记流式响应需要分节
                         yield MessageChain(chain=[], type="break")
 
-                    json_comp = resp.data["chain"].chain[0]
-                    if isinstance(json_comp, Json):
-                        tool_info = json_comp.data
-                    else:
-                        tool_info = None
-                    astr_event.trace.record(
-                        "agent_tool_call",
-                        tool_name=tool_info if tool_info else "unknown",
-                    )
+                    tool_info = None
+
+                    if resp.data["chain"].chain:
+                        json_comp = resp.data["chain"].chain[0]
+                        if isinstance(json_comp, Json):
+                            tool_info = json_comp.data
+                        astr_event.trace.record(
+                            "agent_tool_call",
+                            tool_name=tool_info if tool_info else "unknown",
+                        )
 
                     if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
