@@ -249,6 +249,7 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
 
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
