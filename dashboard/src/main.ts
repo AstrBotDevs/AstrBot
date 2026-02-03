@@ -30,6 +30,19 @@ setupI18n().then(() => {
   import('./stores/customizer').then(({ useCustomizerStore }) => {
     const customizer = useCustomizerStore(pinia);
     vuetify.theme.global.name.value = customizer.uiTheme;
+    const storedPrimary = localStorage.getItem('themePrimary');
+    const storedSecondary = localStorage.getItem('themeSecondary');
+    if (storedPrimary || storedSecondary) {
+      const themes = vuetify.theme.themes.value;
+      ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
+        const theme = themes[name];
+        if (!theme?.colors) return;
+        if (storedPrimary) theme.colors.primary = storedPrimary;
+        if (storedSecondary) theme.colors.secondary = storedSecondary;
+        if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
+        if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
+      });
+    }
   });
 }).catch(error => {
   console.error('❌ 新i18n系统初始化失败:', error);
@@ -49,6 +62,19 @@ setupI18n().then(() => {
   import('./stores/customizer').then(({ useCustomizerStore }) => {
     const customizer = useCustomizerStore(pinia);
     vuetify.theme.global.name.value = customizer.uiTheme;
+    const storedPrimary = localStorage.getItem('themePrimary');
+    const storedSecondary = localStorage.getItem('themeSecondary');
+    if (storedPrimary || storedSecondary) {
+      const themes = vuetify.theme.themes.value;
+      ['PurpleTheme', 'PurpleThemeDark'].forEach((name) => {
+        const theme = themes[name];
+        if (!theme?.colors) return;
+        if (storedPrimary) theme.colors.primary = storedPrimary;
+        if (storedSecondary) theme.colors.secondary = storedSecondary;
+        if (storedPrimary && theme.colors.darkprimary) theme.colors.darkprimary = storedPrimary;
+        if (storedSecondary && theme.colors.darksecondary) theme.colors.darksecondary = storedSecondary;
+      });
+    }
   });
 });
 
