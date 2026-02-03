@@ -22,6 +22,7 @@
       "name": "名称",
       "type": "类型",
       "cron": "Cron",
+      "session": "会话 ID",
       "nextRun": "下一次执行",
       "lastRun": "最近执行",
       "note": "说明",

@@ -22,6 +22,7 @@
       "name": "Name",
       "type": "Type",
       "cron": "Cron",
+      "session": "Session ID",
       "nextRun": "Next Run",
       "lastRun": "Last Run",
       "note": "Note",
