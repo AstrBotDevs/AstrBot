@@ -19,6 +19,8 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 # Constant UMO for global unified context mode
 GLOBAL_UNIFIED_CONTEXT_UMO = "global::global"
+# Key for storing original UMO in event extras when global context mode is enabled
+ORIGINAL_UMO_KEY = "original_umo"
 
 # 默认配置
 DEFAULT_CONFIG = {

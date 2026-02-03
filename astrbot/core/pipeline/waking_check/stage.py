@@ -82,12 +82,15 @@ class WakingCheckStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         # apply global unified context mode
         if self.global_unified_context_mode:
-            from astrbot.core.config.default import GLOBAL_UNIFIED_CONTEXT_UMO
+            from astrbot.core.config.default import (
+                GLOBAL_UNIFIED_CONTEXT_UMO,
+                ORIGINAL_UMO_KEY,
+            )
 
             original_umo = event.unified_msg_origin
             event.unified_msg_origin = GLOBAL_UNIFIED_CONTEXT_UMO
             # Store original UMO for reference in later stages
-            event.set_extra("original_umo", original_umo)
+            event.set_extra(ORIGINAL_UMO_KEY, original_umo)
             logger.debug(
                 f"Global unified context mode enabled. Changed UMO from {original_umo} to {GLOBAL_UNIFIED_CONTEXT_UMO}"
             )

@@ -832,13 +832,16 @@ def _get_compress_provider(
 
 def _apply_global_context_info(event: AstrMessageEvent, req: ProviderRequest) -> None:
     """Add platform and session information to user prompt when in global unified context mode."""
-    from astrbot.core.config.default import GLOBAL_UNIFIED_CONTEXT_UMO
+    from astrbot.core.config.default import (
+        GLOBAL_UNIFIED_CONTEXT_UMO,
+        ORIGINAL_UMO_KEY,
+    )
 
     if event.unified_msg_origin != GLOBAL_UNIFIED_CONTEXT_UMO:
         return
 
     # Get original UMO from extras
-    original_umo = event.get_extra("original_umo")
+    original_umo = event.get_extra(ORIGINAL_UMO_KEY)
     if not original_umo:
         return
 

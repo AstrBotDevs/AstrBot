@@ -258,7 +258,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
         # In global context mode, default to original UMO if session not specified
-        original_umo = context.context.event.get_extra("original_umo")
+        from astrbot.core.config.default import ORIGINAL_UMO_KEY
+
+        original_umo = context.context.event.get_extra(ORIGINAL_UMO_KEY)
         default_session = original_umo or context.context.event.unified_msg_origin
         session = kwargs.get("session") or default_session
         messages = kwargs.get("messages")

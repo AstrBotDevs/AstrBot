@@ -170,7 +170,9 @@ class RespondStage(Stage):
         )
 
         # Restore original UMO before sending if in global context mode
-        original_umo = event.get_extra("original_umo")
+        from astrbot.core.config.default import ORIGINAL_UMO_KEY
+
+        original_umo = event.get_extra(ORIGINAL_UMO_KEY)
         if original_umo:
             logger.debug(
                 f"Restoring original UMO before sending: {event.unified_msg_origin} -> {original_umo}"
