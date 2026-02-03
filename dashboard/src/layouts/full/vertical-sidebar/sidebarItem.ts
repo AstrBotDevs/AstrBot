@@ -36,7 +36,34 @@ const sidebarItem: menu[] = [
   {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
-    to: '/extension'
+    to: '/extension#installed',
+    children: [
+      {
+        title: 'core.navigation.extensionTabs.installed',
+        icon: 'mdi-puzzle',
+        to: '/extension#installed'
+      },
+      {
+        title: 'core.navigation.extensionTabs.market',
+        icon: 'mdi-store',
+        to: '/extension#market'
+      },
+      {
+        title: 'core.navigation.extensionTabs.mcp',
+        icon: 'mdi-server-network',
+        to: '/extension#mcp'
+      },
+      {
+        title: 'core.navigation.extensionTabs.skills',
+        icon: 'mdi-lightning-bolt',
+        to: '/extension#skills'
+      },
+      {
+        title: 'core.navigation.extensionTabs.components',
+        icon: 'mdi-wrench',
+        to: '/extension#components'
+      }
+    ]
   },
   {
     title: 'core.navigation.knowledgeBase',
@@ -44,14 +71,14 @@ const sidebarItem: menu[] = [
     to: '/knowledge-base',
   },
   {
+    title: 'core.navigation.persona',
+    icon: 'mdi-heart',
+    to: '/persona'
+  },
+  {
     title: 'core.navigation.groups.more',
     icon: 'mdi-dots-horizontal',
     children: [
-      {
-        title: 'core.navigation.persona',
-        icon: 'mdi-heart',
-        to: '/persona'
-      },
       {
         title: 'core.navigation.conversation',
         icon: 'mdi-database',
@@ -61,6 +88,16 @@ const sidebarItem: menu[] = [
         title: 'core.navigation.sessionManagement',
         icon: 'mdi-pencil-ruler',
         to: '/session-management'
+      },
+      {
+        title: 'core.navigation.cron',
+        icon: 'mdi-clock-outline',
+        to: '/cron'
+      },
+      {
+        title: 'core.navigation.subagent',
+        icon: 'mdi-vector-link',
+        to: '/subagent'
       },
       {
         title: 'core.navigation.dashboard',

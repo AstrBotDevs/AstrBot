@@ -19,3 +19,5 @@ class PlatformMetadata:
 
     support_streaming_message: bool = True
     """平台是否支持真实流式传输"""
+    support_proactive_message: bool = True
+    """平台是否支持主动消息推送（非用户触发）"""

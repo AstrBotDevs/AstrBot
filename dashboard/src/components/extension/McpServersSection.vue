@@ -81,10 +81,10 @@
     </v-container>
 
     <!-- 添加/编辑 MCP 服务器对话框 -->
-    <v-dialog v-model="showMcpServerDialog" max-width="750px" persistent>
+    <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <v-icon color="white" class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
+        <v-card-title class="pa-4 pl-6">
+          <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
         </v-card-title>
 
@@ -251,6 +251,7 @@ export default {
         active: true,
         tools: []
       },
+      originalServerName: '',
       save_message_snack: false,
       save_message: '',
       save_message_success: 'success'
@@ -359,6 +360,9 @@ export default {
           active: this.currentServer.active,
           ...configObj
         };
+        if (this.isEditMode && this.originalServerName) {
+          serverData.oldName = this.originalServerName;
+        }
         const endpoint = this.isEditMode ? '/api/tools/mcp/update' : '/api/tools/mcp/add';
         axios.post(endpoint, serverData)
           .then(response => {
@@ -402,6 +406,7 @@ export default {
         active: server.active,
         tools: server.tools || []
       };
+      this.originalServerName = server.name;
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
       this.isEditMode = true;
       this.showMcpServerDialog = true;
@@ -461,6 +466,7 @@ export default {
       this.serverConfigJson = '';
       this.jsonError = null;
       this.isEditMode = false;
+      this.originalServerName = '';
     },
     showSuccess(message) {
       this.save_message = message;

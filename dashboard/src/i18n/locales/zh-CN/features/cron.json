@@ -1,0 +1,65 @@
+{
+  "page": {
+    "title": "未来任务管理",
+    "beta": "实验性",
+    "subtitle": "查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。需要先在配置文件中启用“主动型能力”。",
+    "proactive": {
+      "supported": "主动发送结果仅支持以下您已配置的平台：{platforms}",
+      "unsupported": "暂无支持主动消息的平台，请在平台设置中开启。"
+    }
+  },
+  "actions": {
+    "create": "新建任务",
+    "refresh": "刷新",
+    "delete": "删除",
+    "cancel": "取消",
+    "submit": "创建"
+  },
+  "table": {
+    "title": "已注册任务",
+    "empty": "暂无任务。",
+    "headers": {
+      "name": "名称",
+      "type": "类型",
+      "cron": "Cron",
+      "nextRun": "下一次执行",
+      "lastRun": "最近执行",
+      "note": "说明",
+      "actions": "操作"
+    },
+    "type": {
+      "once": "一次性",
+      "recurring": "循环",
+      "activeAgent": "Active Agent",
+      "workflow": "Workflow",
+      "unknown": "{type}"
+    },
+    "timezoneLocal": "本地时区",
+    "notAvailable": "—"
+  },
+  "form": {
+    "title": "新建任务",
+    "chatHint": "你可以直接通过聊天的方式来让 AstrBot 创建未来任务，而不必在此添加。",
+    "runOnce": "一次性任务",
+    "name": "任务名称",
+    "note": "任务说明",
+    "cron": "Cron 表达式",
+    "cronPlaceholder": "0 9 * * *",
+    "runAt": "执行时间",
+    "session": "目标 session (platform_id:message_type:session_id)",
+    "timezone": "时区（可选，如 Asia/Shanghai）",
+    "enabled": "启用"
+  },
+  "messages": {
+    "loadFailed": "获取任务失败",
+    "updateFailed": "更新失败",
+    "deleteSuccess": "已删除",
+    "deleteFailed": "删除失败",
+    "sessionRequired": "请填写 session",
+    "noteRequired": "请填写说明",
+    "cronRequired": "请填写 Cron 表达式",
+    "runAtRequired": "请选择执行时间",
+    "createSuccess": "创建成功",
+    "createFailed": "创建失败"
+  }
+}

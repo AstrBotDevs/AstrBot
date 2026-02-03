@@ -1,0 +1,53 @@
+{
+  "page": {
+    "title": "SubAgent 编排",
+    "beta": "实验性",
+    "subtitle": "主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "save": "保存",
+    "add": "新增 SubAgent",
+    "delete": "删除"
+  },
+  "switches": {
+    "enable": "启用 SubAgent 编排",
+    "dedupe": "主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）"
+  },
+  "description": {
+    "disabled": "不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。",
+    "enabled": "启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。"
+  },
+  "section": {
+    "title": "SubAgents"
+  },
+  "cards": {
+    "statusEnabled": "启用",
+    "statusDisabled": "停用",
+    "unnamed": "未命名 SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "启用",
+    "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
+    "personaChip": "Persona: {id}"
+  },
+  "form": {
+    "nameLabel": "Agent 名称（用于 transfer_to_{name}）",
+    "nameHint": "建议使用英文小写+下划线，且全局唯一",
+    "providerLabel": "Chat Provider（可选）",
+    "providerHint": "留空表示跟随全局默认 provider。",
+    "personaLabel": "选择 Persona",
+    "personaHint": "SubAgent 将直接继承所选 Persona 的系统设定与工具。",
+    "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
+    "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
+  },
+  "messages": {
+    "loadConfigFailed": "获取配置失败",
+    "loadPersonaFailed": "获取 Persona 列表失败",
+    "nameMissing": "存在未填写名称的 SubAgent",
+    "nameInvalid": "SubAgent 名称不合法：仅允许英文小写字母/数字/下划线，且需以字母开头",
+    "nameDuplicate": "SubAgent 名称重复：{name}",
+    "personaMissing": "SubAgent {name} 未选择 Persona",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败"
+  }
+}

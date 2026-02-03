@@ -1,6 +1,7 @@
 /*This is for the logo*/
 .leftSidebar {
   border: 0px;
+  border-right: 1px solid rgba(var(--v-theme-borderLight), 0.45);
   box-shadow: none !important;
 }
 .listitem {
@@ -15,6 +16,9 @@
     &:hover {
       color: rgb(var(--v-theme-secondary));
     }
+  }
+  .v-list-item--density-default.v-list-item--one-line {
+    min-height: 40px;
   }
 }
 
@@ -50,7 +54,7 @@
     }
   }
   .v-list-item--density-default.v-list-item--one-line {
-    min-height: 42px;
+    min-height: 40px;
   }
   .leftPadding {
     margin-left: 4px;
@@ -112,6 +116,11 @@
         width: 100%;
         max-width: 180px;
         margin-bottom: 8px !important;
+      }
+
+      .sidebar-footer-btn {
+        justify-content: flex-start;
+        text-align: left;
       }
     }
   }

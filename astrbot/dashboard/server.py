@@ -26,6 +26,7 @@ from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
+from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
 APP: Quart
@@ -84,6 +85,7 @@ class AstrBotDashboard:
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
         self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
+        self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
         self.skills_route = SkillsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
@@ -93,6 +95,7 @@ class AstrBotDashboard:
             core_lifecycle,
         )
         self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
+        self.cron_route = CronRoute(self.context, core_lifecycle)
         self.t2i_route = T2iRoute(self.context, core_lifecycle)
         self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
         self.platform_route = PlatformRoute(self.context, core_lifecycle)

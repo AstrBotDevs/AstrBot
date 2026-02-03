@@ -569,6 +569,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 ],
             )
+            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
