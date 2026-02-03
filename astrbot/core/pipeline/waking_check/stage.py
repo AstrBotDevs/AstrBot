@@ -72,11 +72,26 @@ class WakingCheckStage(Stage):
         )
         platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
         self.unique_session = platform_settings.get("unique_session", False)
+        self.global_unified_context_mode = platform_settings.get(
+            "global_unified_context_mode", False
+        )
 
     async def process(
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        # apply global unified context mode
+        if self.global_unified_context_mode:
+            from astrbot.core.config.default import GLOBAL_UNIFIED_CONTEXT_UMO
+
+            original_umo = event.unified_msg_origin
+            event.unified_msg_origin = GLOBAL_UNIFIED_CONTEXT_UMO
+            # Store original UMO for reference in later stages
+            event.set_extra("original_umo", original_umo)
+            logger.debug(
+                f"Global unified context mode enabled. Changed UMO from {original_umo} to {GLOBAL_UNIFIED_CONTEXT_UMO}"
+            )
+
         # apply unique session
         if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)

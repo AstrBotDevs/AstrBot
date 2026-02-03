@@ -17,11 +17,15 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "lark",
 ]
 
+# Constant UMO for global unified context mode
+GLOBAL_UNIFIED_CONTEXT_UMO = "global::global"
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
     "platform_settings": {
         "unique_session": False,
+        "global_unified_context_mode": False,
         "rate_limit": {
             "time": 60,
             "count": 30,
