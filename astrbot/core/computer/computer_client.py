@@ -35,12 +35,20 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             os.remove(zip_path)
         shutil.make_archive(zip_base, "zip", skills_root)
         remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+        logger.info("Uploading skills bundle to sandbox...")
         await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
         upload_result = await booter.upload_file(zip_path, str(remote_zip))
         if not upload_result.get("success", False):
             raise RuntimeError("Failed to upload skills bundle to sandbox.")
         await booter.shell.exec(
-            f"unzip -o {remote_zip} -d {SANDBOX_SKILLS_ROOT} && rm -f {remote_zip}"
+            " || ".join(
+                [
+                    f"python3 -m zipfile -e {remote_zip} {SANDBOX_SKILLS_ROOT}",
+                    f"python -m zipfile -e {remote_zip} {SANDBOX_SKILLS_ROOT}",
+                    f"unzip -o {remote_zip} -d {SANDBOX_SKILLS_ROOT}",
+                ]
+            )
+            + f" && rm -f {remote_zip}"
         )
     finally:
         if os.path.exists(zip_path):
