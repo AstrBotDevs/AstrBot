@@ -57,9 +57,24 @@ const MainRoutes = {
       component: () => import('@/views/PersonaPage.vue')
     },
     {
+      name: 'SubAgent',
+      path: '/subagent',
+      component: () => import('@/views/SubAgentPage.vue')
+    },
+    {
+      name: 'CronJobs',
+      path: '/cron',
+      component: () => import('@/views/CronJobPage.vue')
+    },
+    {
       name: 'Console',
       path: '/console',
       component: () => import('@/views/ConsolePage.vue')
+    },
+    {
+      name: 'Trace',
+      path: '/trace',
+      component: () => import('@/views/TracePage.vue')
     },
     {
       name: 'NativeKnowledgeBase',

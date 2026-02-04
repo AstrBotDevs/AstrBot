@@ -70,6 +70,7 @@
     },
     "persona": {
       "description": "人格",
+      "hint": "赋予 AstrBot 人格。",
       "provider_settings": {
         "default_personality": {
           "description": "默认采用的人格"
@@ -78,6 +79,7 @@
     },
     "knowledgebase": {
       "description": "知识库",
+      "hint": "AstrBot 的 “外置大脑”。",
       "kb_names": {
         "description": "知识库列表",
         "hint": "支持多选"
@@ -97,6 +99,7 @@
     },
     "websearch": {
       "description": "网页搜索",
+      "hint": "让 AstrBot 能够访问互联网，获悉时讯。",
       "provider_settings": {
         "web_search": {
           "description": "启用网页搜索"
@@ -110,7 +113,7 @@
         },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
-          "hint": "参考:https://console.bce.baidu.com/iam/#/iam/apikey/list"
+          "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
         },
         "web_search_link": {
           "description": "显示来源引用"
@@ -133,15 +136,15 @@
         }
       }
     },
-    "sandbox": {
-      "description": "Agent 沙箱环境(Beta)",
-      "hint": "https://docs.astrbot.app/use/astrbot-agent-sandbox.html",
+    "agent_computer_use": {
+      "description": "使用电脑能力",
+      "hint": "让 AstrBot 访问和使用你的电脑或者隔离的沙盒环境，以执行更复杂的任务。详见: [沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)。",
       "provider_settings": {
+        "computer_use_runtime": {
+          "description": "运行环境",
+          "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+        },
         "sandbox": {
-          "enable": {
-            "description": "启用沙箱环境",
-            "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。"
-          },
           "booter": {
             "description": "沙箱环境驱动器"
           },
@@ -164,18 +167,20 @@
         }
       }
     },
-    "skills": {
-      "description": "Skills",
+    "proactive_capability": {
+      "description": "主动型能力",
+      "hint": "让 AstrBot 能够在某一时刻自动唤醒，帮你完成任务。详见: [主动型 Agent](https://docs.astrbot.app/use/proactive-agent.html)。",
       "provider_settings": {
-        "skills": {
-          "runtime": {
-            "description": "Skill Runtime",
-            "hint": "选择 Skills 运行环境。使用 sandbox 前需启用沙箱；local 模式下 Agent 可通过 Shell 和 Python 功能完全访问运行环境，非管理员将被自动禁止使用以保证安全。"
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "启用",
+            "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务，然后将结果发送给你。"
           }
         }
       }
     },
     "truncate_and_compress": {
+      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
       "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
@@ -424,7 +429,7 @@
             },
             "emojis": {
               "description": "表情列表(飞书表情枚举名)",
-              "hint": "表情枚举名参考:https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce"
+              "hint": "表情枚举名参考:[https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
             }
           }
         },
@@ -435,7 +440,7 @@
             },
             "emojis": {
               "description": "表情列表(Unicode)",
-              "hint": "Telegram 仅支持固定反应集合,参考:https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9"
+              "hint": "Telegram 仅支持固定反应集合,参考:[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
         }
@@ -562,21 +567,45 @@
         "description": "控制台日志级别",
         "hint": "控制台输出日志的级别。"
       },
+      "log_file_enable": {
+        "description": "启用文件日志",
+        "hint": "在控制台输出的同时，将日志写入文件。"
+      },
+      "log_file_path": {
+        "description": "日志文件路径",
+        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.log；支持绝对路径。"
+      },
+      "log_file_max_mb": {
+        "description": "日志文件大小上限 (MB)",
+        "hint": "超过大小后自动轮转，默认 20MB。"
+      },
+      "trace_log_enable": {
+        "description": "启用 Trace 文件日志",
+        "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"
+      },
+      "trace_log_path": {
+        "description": "Trace 日志文件路径",
+        "hint": "相对路径以 data 目录为基准，例如 logs/astrbot.trace.log；支持绝对路径。"
+      },
+      "trace_log_max_mb": {
+        "description": "Trace 日志大小上限 (MB)",
+        "hint": "超过大小后自动轮转，默认 20MB。"
+      },
       "pip_install_arg": {
         "description": "pip 安装额外参数",
         "hint": "安装插件依赖时,会使用 Python 的 pip 工具。这里可以填写额外的参数,如 `--break-system-package` 等。"
       },
       "pypi_index_url": {
         "description": "PyPI 软件仓库地址",
-        "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 https://mirrors.aliyun.com/pypi/simple/"
+        "hint": "安装 Python 依赖时请求的 PyPI 软件仓库地址。默认为 [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
       },
       "callback_api_base": {
         "description": "对外可达的回调接口地址",
-        "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 http://localhost:6185,https://example.com 等。"
+        "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
       },
       "timezone": {
         "description": "时区",
-        "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab"
+        "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
       },
       "http_proxy": {
         "description": "HTTP 代理",

@@ -110,7 +110,7 @@
         },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
-          "hint": "Reference: https://console.bce.baidu.com/iam/#/iam/apikey/list"
+          "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
         },
         "web_search_link": {
           "description": "Display Source Citations"
@@ -133,15 +133,15 @@
         }
       }
     },
-    "sandbox": {
-      "description": "Agent Sandbox Env(Beta)",
-      "hint": "https://docs.astrbot.app/en/use/astrbot-agent-sandbox.html",
+    "agent_computer_use": {
+      "description": "Agent Computer Use",
+      "hint": "Allows the AstrBot to access and use your computer or an sandbox environment to perform more complex tasks. See [Sandbox Mode](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)",
       "provider_settings": {
+        "computer_use_runtime": {
+          "description": "Computer Use Runtime",
+          "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
+        },
         "sandbox": {
-          "enable": {
-            "description": "Enable Sandbox Env",
-            "hint": "When enabled, Agent can use tools and resources in the sandbox environment, such as Python tool, Shell, etc."
-          },
           "booter": {
             "description": "Sandbox Environment Driver"
           },
@@ -164,18 +164,20 @@
         }
       }
     },
-    "skills": {
-      "description": "Skills",
+    "proactive_capability": {
+      "description": "Proactive Agent",
+      "hint": "AstrBot will wake up, run your tasks, and deliver the results to you. See [Proactive Agent](https://docs.astrbot.app/en/use/proactive-agent.html)",
       "provider_settings": {
-        "skills": {
-          "runtime": {
-            "description": "Skill Runtime",
-            "hint": "Select the runtime for Skills. Sandbox runtime requires sandbox to be enabled first. In local mode, the Agent CAN FULLY ACCESS the runtime environment through Shell and Python tools, but non-admin users will be automatically prohibited from using it to ensure security."
+        "proactive_capability": {
+          "add_cron_tools": {
+            "description": "Enable",
+            "hint": "When enabled, related tools will be passed to the Agent to implement proactive Agent capabilities. You can tell AstrBot what to do at a future time, and it will be triggered on schedule to execute the task, and report the result back to you."
           }
         }
       }
     },
     "truncate_and_compress": {
+      "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
       "description": "Context Management Strategy",
       "provider_settings": {
         "max_context_length": {
@@ -426,7 +428,7 @@
             },
             "emojis": {
               "description": "Emoji List (Lark Emoji Enum Names)",
-              "hint": "Emoji enum names reference: https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce"
+              "hint": "Emoji enum names reference: [https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)"
             }
           }
         },
@@ -437,7 +439,7 @@
             },
             "emojis": {
               "description": "Emoji List (Unicode)",
-              "hint": "Telegram only supports a fixed reaction set, reference: https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9"
+              "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
         }
@@ -564,21 +566,45 @@
         "description": "Console Log Level",
         "hint": "Log level for console output."
       },
+      "log_file_enable": {
+        "description": "Enable File Logging",
+        "hint": "Write logs to a file in addition to the console."
+      },
+      "log_file_path": {
+        "description": "Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.log; absolute paths are supported."
+      },
+      "log_file_max_mb": {
+        "description": "Log File Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
+      "trace_log_enable": {
+        "description": "Enable Trace File Logging",
+        "hint": "Write trace events to a separate file (does not change console output)."
+      },
+      "trace_log_path": {
+        "description": "Trace Log File Path",
+        "hint": "Relative paths are resolved under the data directory, e.g. logs/astrbot.trace.log; absolute paths are supported."
+      },
+      "trace_log_max_mb": {
+        "description": "Trace Log Max Size (MB)",
+        "hint": "Rotate when exceeding this size; default 20MB."
+      },
       "pip_install_arg": {
         "description": "Additional pip Installation Arguments",
         "hint": "When installing plugin dependencies, Python's pip tool will be used. Additional arguments can be provided here, such as `--break-system-package`."
       },
       "pypi_index_url": {
         "description": "PyPI Repository URL",
-        "hint": "PyPI repository URL for installing Python dependencies. Defaults to https://mirrors.aliyun.com/pypi/simple/"
+        "hint": "PyPI repository URL for installing Python dependencies. Defaults to [https://mirrors.aliyun.com/pypi/simple/](https://mirrors.aliyun.com/pypi/simple/)"
       },
       "callback_api_base": {
         "description": "Externally Accessible Callback API Address",
-        "hint": "External services may access AstrBot's backend through callback links generated by AstrBot (such as file download links). Since AstrBot cannot automatically determine the externally accessible host address in the deployment environment, this configuration item is needed to explicitly specify how external services should access AstrBot's address. Examples: http://localhost:6185, https://example.com, etc."
+        "hint": "External services may access AstrBot's backend through callback links generated by AstrBot (such as file download links). Since AstrBot cannot automatically determine the externally accessible host address in the deployment environment, this configuration item is needed to explicitly specify how external services should access AstrBot's address. Examples: [http://localhost:6185](http://localhost:6185), [https://example.com](https://example.com), etc."
       },
       "timezone": {
         "description": "Timezone",
-        "hint": "Timezone setting. Please enter an IANA timezone name, such as Asia/Shanghai. Uses system default timezone when empty. For all timezones, see: https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab"
+        "hint": "Timezone setting. Please enter an IANA timezone name, such as Asia/Shanghai. Uses system default timezone when empty. For all timezones, see: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
       },
       "http_proxy": {
         "description": "HTTP Proxy",

@@ -1,18 +1,15 @@
 <template>
-    <div class="mb-3 mt-1.5 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden w-fit"
-        :class="{ 'dark:bg-purple-900/8': isDark, 'bg-purple-50/50': !isDark }">
-        <div class="inline-flex items-center px-2 py-2 cursor-pointer select-none rounded-2xl transition-colors hover:bg-purple-50/80 dark:hover:bg-purple-900/15"
-            @click="toggleExpanded">
-            <v-icon size="small" class="mr-1.5 text-purple-600 dark:text-purple-400 transition-transform"
-                :class="{ 'rotate-90': isExpanded }">
+    <div class="reasoning-block" :class="{ 'reasoning-block--dark': isDark }">
+        <div class="reasoning-header" @click="toggleExpanded">
+            <v-icon size="small" class="reasoning-icon" :class="{ 'rotate-90': isExpanded }">
                 mdi-chevron-right
             </v-icon>
-            <span class="text-sm font-medium text-purple-600 dark:text-purple-400 tracking-wide">
+            <span class="reasoning-title">
                 {{ tm('reasoning.thinking') }}
             </span>
         </div>
-        <div v-if="isExpanded" class="px-3 border-t border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 animate-fade-in italic">
-            <MarkdownRender :content="reasoning" class="reasoning-text markdown-content text-sm leading-relaxed"
+        <div v-if="isExpanded" class="reasoning-content animate-fade-in">
+            <MarkdownRender :content="reasoning" class="reasoning-text markdown-content"
                 :typewriter="false" :is-dark="isDark" :style="isDark ? { opacity: '0.85' } : {}" />
         </div>
     </div>
@@ -47,6 +44,63 @@ const toggleExpanded = () => {
 </script>
 
 <style scoped>
+
+
+/* Reasoning 区块样式 */
+.reasoning-container {
+    margin-bottom: 12px;
+    margin-top: 6px;
+    border: 1px solid var(--v-theme-border);
+    border-radius: 20px;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.reasoning-header {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+    border-radius: 20px;
+}
+
+.reasoning-header:hover {
+    background-color: rgba(103, 58, 183, 0.08);
+}
+
+.reasoning-header.is-dark:hover {
+    background-color: rgba(103, 58, 183, 0.15);
+}
+
+.reasoning-icon {
+    margin-right: 6px;
+    color: var(--v-theme-secondary);
+    transition: transform 0.2s ease;
+}
+
+.reasoning-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--v-theme-secondary);
+    letter-spacing: 0.3px;
+}
+
+.reasoning-content {
+    padding: 0px 12px;
+    border-top: 1px solid var(--v-theme-border);
+    color: gray;
+    animation: fadeIn 0.2s ease-in-out;
+    font-style: italic;
+}
+
+.reasoning-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--v-theme-secondaryText);
+}
+
 .animate-fade-in {
     animation: fadeIn 0.2s ease-in-out;
 }
@@ -65,9 +119,4 @@ const toggleExpanded = () => {
     transform: rotate(90deg);
 }
 
-.reasoning-text {
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--v-theme-secondaryText);
-}
 </style>

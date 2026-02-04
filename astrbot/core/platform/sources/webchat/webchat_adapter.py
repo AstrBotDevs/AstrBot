@@ -86,6 +86,7 @@ class WebChatAdapter(Platform):
             name="webchat",
             description="webchat",
             id="webchat",
+            support_proactive_message=False,
         )
 
     async def send_by_session(

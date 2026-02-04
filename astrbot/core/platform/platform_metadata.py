@@ -19,3 +19,8 @@ class PlatformMetadata:
 
     support_streaming_message: bool = True
     """平台是否支持真实流式传输"""
+    support_proactive_message: bool = True
+    """平台是否支持主动消息推送（非用户触发）"""
+
+    module_path: str | None = None
+    """注册该适配器的模块路径，用于插件热重载时清理"""

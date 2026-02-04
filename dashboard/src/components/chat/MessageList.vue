@@ -92,6 +92,7 @@
                                 <!-- Reasoning Block (Collapsible) - 放在最前面 -->
                                 <ReasoningBlock v-if="msg.content.reasoning && msg.content.reasoning.trim()"
                                     :reasoning="msg.content.reasoning" :is-dark="isDark"
+                                    class="mt-2"
                                     :initial-expanded="isReasoningExpanded(index)" />
 
                                 <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
@@ -1201,37 +1202,6 @@ export default {
     width: 100%;
     height: 36px;
     border-radius: 18px;
-}
-
-.embedded-images {
-    margin-top: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.embedded-image {
-    display: flex;
-    justify-content: flex-start;
-}
-
-.bot-embedded-image {
-    max-width: 55%;
-    width: auto;
-    height: auto;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 0.2s ease;
-}
-
-.embedded-audio {
-    width: 300px;
-    margin-top: 8px;
-}
-
-.embedded-audio .audio-player {
-    width: 100%;
-    max-width: 300px;
 }
 
 /* 文件附件样式 */

@@ -16,6 +16,7 @@ from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
@@ -908,6 +909,18 @@ class PluginManager:
                 to_remove.append(func_tool)
         for func_tool in to_remove:
             llm_tools.func_list.remove(func_tool)
+
+        # Unregister platform adapters registered by this plugin
+        # module_path is like "data.plugins.my_plugin.main", extract prefix like "data.plugins.my_plugin"
+        module_prefix = ".".join(plugin_module_path.split(".")[:-1])
+        if module_prefix:
+            unregistered_adapters = unregister_platform_adapters_by_module(
+                module_prefix
+            )
+            for adapter_name in unregistered_adapters:
+                logger.info(
+                    f"移除了插件 {plugin_name} 的平台适配器 {adapter_name}",
+                )
 
         if plugin is None:
             return

@@ -1,0 +1,53 @@
+{
+  "page": {
+    "title": "SubAgent Orchestration",
+    "beta": "Experimental",
+    "subtitle": "The main LLM only chats and delegates; tools live on individual SubAgents."
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "add": "Add SubAgent",
+    "delete": "Delete"
+  },
+  "switches": {
+    "enable": "Enable SubAgent orchestration",
+    "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)"
+  },
+  "description": {
+    "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
+    "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
+  },
+  "section": {
+    "title": "SubAgents"
+  },
+  "cards": {
+    "statusEnabled": "Enabled",
+    "statusDisabled": "Disabled",
+    "unnamed": "Untitled SubAgent",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "Enable",
+    "previewTitle": "Preview: handoff tool shown to the main LLM",
+    "personaChip": "Persona: {id}"
+  },
+  "form": {
+    "nameLabel": "Agent name (used for transfer_to_{name})",
+    "nameHint": "Use lowercase letters + underscores; must be globally unique.",
+    "providerLabel": "Chat Provider (optional)",
+    "providerHint": "Leave empty to follow the global default provider.",
+    "personaLabel": "Choose Persona",
+    "personaHint": "The SubAgent inherits the selected Persona's system settings and tools.",
+    "descriptionLabel": "Description for the main LLM (used to decide handoff)",
+    "descriptionHint": "Shown to the main LLM as the transfer_to_* tool description—keep it short and clear."
+  },
+  "messages": {
+    "loadConfigFailed": "Failed to load config",
+    "loadPersonaFailed": "Failed to load persona list",
+    "nameMissing": "A SubAgent is missing a name",
+    "nameInvalid": "Invalid SubAgent name: only lowercase letters/numbers/underscores, starting with a letter",
+    "nameDuplicate": "Duplicate SubAgent name: {name}",
+    "personaMissing": "SubAgent {name} has no persona selected",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save"
+  }
+}

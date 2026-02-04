@@ -7,7 +7,6 @@ from astrbot.api.provider import LLMResponse, ProviderRequest
 from astrbot.core import logger
 
 from .long_term_memory import LongTermMemory
-from .process_llm_request import ProcessLLMRequest
 
 
 class Main(star.Star):
@@ -18,8 +17,6 @@ class Main(star.Star):
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
         except BaseException as e:
             logger.error(f"聊天增强 err: {e}")
-
-        self.proc_llm_req = ProcessLLMRequest(self.context)
 
     def ltm_enabled(self, event: AstrMessageEvent):
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
@@ -80,7 +77,6 @@ class Main(star.Star):
 
                     yield event.request_llm(
                         prompt=prompt,
-                        func_tool_manager=self.context.get_llm_tool_manager(),
                         session_id=event.session_id,
                         conversation=conv,
                     )
@@ -91,8 +87,6 @@ class Main(star.Star):
     @filter.on_llm_request()
     async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
-        await self.proc_llm_req.process_llm_request(event, req)
-
         if self.ltm and self.ltm_enabled(event):
             try:
                 await self.ltm.on_req_llm(event, req)

@@ -1,0 +1,10 @@
+{
+  "title": "追踪",
+  "autoScroll": {
+    "enabled": "自动滚动：开",
+    "disabled": "自动滚动：关"
+  },
+  "hint": "当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。",
+  "recording": "记录中",
+  "paused": "已暂停"
+}
