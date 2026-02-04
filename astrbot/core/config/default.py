@@ -105,7 +105,7 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 0,  # 0 表示禁用超时，工具可以无限期执行
         "background_task_wait_timeout": 300,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,

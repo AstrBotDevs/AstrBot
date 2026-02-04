@@ -131,12 +131,20 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             method_name=method_name,
             **tool_args,
         )
+
+        # 检查是否启用超时（0表示禁用）
+        timeout_enabled = run_context.tool_call_timeout > 0
+
         while True:
             try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=run_context.tool_call_timeout,
-                )
+                if timeout_enabled:
+                    resp = await asyncio.wait_for(
+                        anext(wrapper),
+                        timeout=run_context.tool_call_timeout,
+                    )
+                else:
+                    # 超时禁用时，直接执行不设置超时
+                    resp = await anext(wrapper)
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
                         yield resp
