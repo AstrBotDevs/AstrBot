@@ -363,7 +363,8 @@ class InternalAgentSubStage(Stage):
 
         token_usage = None
         if runner_stats:
-            token_usage = runner_stats.token_usage.total
+            # token_usage = runner_stats.token_usage.total
+            token_usage = llm_response.usage.total if llm_response.usage else None
 
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,
