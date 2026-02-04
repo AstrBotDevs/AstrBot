@@ -130,6 +130,13 @@ const changelogDialog = reactive({
   repoUrl: null,
 });
 
+// 扩展页面对话框
+const extensionPageDialog = reactive({
+  show: false,
+  html: "",
+  title: "",
+});
+
 // 新增变量支持列表视图
 // 从 localStorage 恢复显示模式，默认为 false（卡片视图）
 const getInitialListViewMode = () => {
@@ -679,6 +686,31 @@ const viewChangelog = (plugin) => {
   changelogDialog.repoUrl = plugin.repo;
   changelogDialog.show = true;
 };
+
+// 打开扩展页面
+const openExtensionPage = async (plugin) => {
+  extensionPageDialog.html = "";
+  extensionPageDialog.title = `${plugin.display_name || plugin.name} - 扩展页面`;
+  extensionPageDialog.show = true;
+  await fetchExtensionPage(plugin.name);
+};
+
+// 获取扩展页面内容
+async function fetchExtensionPage(pluginName) {
+  try {
+    const res = await axios.get(`/api/plugin/extension_page?name=${pluginName}`);
+    if (res.data.status === "ok") {
+      extensionPageDialog.html = res.data.data.html;
+      extensionPageDialog.title = res.data.data.title;
+    } else {
+      toast(res.data.message, "error");
+      extensionPageDialog.show = false;
+    }
+  } catch (err) {
+    toast("获取扩展页面失败: " + err.message, "error");
+    extensionPageDialog.show = false;
+  }
+}
 
 // 为表格视图创建一个处理安装插件的函数
 const handleInstallPlugin = async (plugin) => {
@@ -1567,6 +1599,7 @@ watch(activeTab, (newTab) => {
                       @view-handlers="showPluginInfo(extension)"
                       @view-readme="viewReadme(extension)"
                       @view-changelog="viewChangelog(extension)"
+                      @view-extension-page="openExtensionPage(extension)"
                     >
                     </ExtensionCard>
                   </v-col>
@@ -2656,6 +2689,29 @@ watch(activeTab, (newTab) => {
           tm("dialogs.forceUpdate.confirm")
         }}</v-btn>
       </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- 扩展页面对话框 -->
+  <v-dialog v-model="extensionPageDialog.show" fullscreen>
+    <v-card>
+      <v-toolbar color="primary" dark>
+        <v-btn icon @click="extensionPageDialog.show = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+        <v-toolbar-title>{{ extensionPageDialog.title }}</v-toolbar-title>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="extensionPageDialog.show = false">
+          关闭
+        </v-btn>
+      </v-toolbar>
+      <v-card-text style="padding: 0; height: calc(100vh - 64px);">
+        <iframe
+          :srcdoc="extensionPageDialog.html"
+          style="width: 100%; height: 100%; border: none;"
+          sandbox="allow-scripts allow-forms allow-same-origin"
+        ></iframe>
+      </v-card-text>
     </v-card>
   </v-dialog>
 </template>

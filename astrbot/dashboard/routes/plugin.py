@@ -56,6 +56,7 @@ class PluginRoute(Route):
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
             "/plugin/changelog": ("GET", self.get_plugin_changelog),
+            "/plugin/extension_page": ("GET", self.get_plugin_extension_page),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
         }
@@ -315,6 +316,20 @@ class PluginRoute(Route):
                 "display_name": plugin.display_name,
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
             }
+            # 检查扩展页面是否存在（固定位置：web/index.html）
+            if plugin.reserved:
+                plugin_dir = os.path.join(
+                    self.plugin_manager.reserved_plugin_path,
+                    plugin.root_dir_name or "",
+                )
+            else:
+                plugin_dir = os.path.join(
+                    self.plugin_manager.plugin_store_path,
+                    plugin.root_dir_name or "",
+                )
+            _t["extension_page"] = os.path.exists(
+                os.path.join(plugin_dir, "web", "index.html")
+            )
             # 检查是否为全空的幽灵插件
             if not any(
                 [
@@ -694,3 +709,70 @@ class PluginRoute(Route):
         except Exception as e:
             logger.error(f"/api/plugin/source/save: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
+
+    async def get_plugin_extension_page(self):
+        """获取插件的扩展页面 HTML"""
+        plugin_name = request.args.get("name")
+
+        if not plugin_name:
+            return Response().error("插件名称不能为空").__dict__
+
+        # 查找插件
+        plugin_obj = None
+        for plugin in self.plugin_manager.context.get_all_stars():
+            if plugin.name == plugin_name:
+                plugin_obj = plugin
+                break
+
+        if not plugin_obj:
+            return Response().error(f"插件 {plugin_name} 不存在").__dict__
+
+        # 构建插件目录
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name or "",
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name or "",
+            )
+
+        # 扩展页面固定位于 web/index.html
+        extension_page_path = os.path.join(plugin_dir, "web", "index.html")
+
+        if not os.path.exists(extension_page_path):
+            return Response().error(f"插件 {plugin_name} 未配置扩展页面").__dict__
+
+        try:
+            with open(extension_page_path, encoding="utf-8") as f:
+                html_content = f.read()
+
+            # 注入配置脚本
+            injected_script = f"""
+<script>
+window.ASTRBOT_CONFIG = {{
+    apiUrl: "/api/plug",
+    pluginName: "{plugin_obj.name}",
+    apiToken: localStorage.getItem("token") || ""
+}};
+</script>
+"""
+            html_content = html_content.replace("</head>", injected_script + "</head>")
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "html": html_content,
+                        "title": f"{plugin_obj.display_name or plugin_obj.name} 扩展页面",
+                    },
+                    "成功获取扩展页面",
+                )
+                .__dict__
+            )
+
+        except Exception as e:
+            logger.error(f"读取扩展页面失败: {traceback.format_exc()}")
+            return Response().error(f"读取扩展页面失败: {e}").__dict__

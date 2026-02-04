@@ -222,7 +222,8 @@
       "togglePlugin": "Extension",
       "viewHandlers": "View Handlers",
       "updateTo": "Update to",
-      "reinstall": "Reinstall"
+      "reinstall": "Reinstall",
+      "extensionPage": "Extension Page"
     },
     "status": {
       "hasUpdate": "New version available",
