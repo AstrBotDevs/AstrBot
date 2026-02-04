@@ -18,6 +18,8 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.background_tool.manager import BackgroundToolManager
+from astrbot.core.background_tool.task_state import BackgroundTask
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -164,9 +166,46 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                 )
                     yield None
             except asyncio.TimeoutError:
-                raise Exception(
-                    f"tool {tool.name} execution timeout after {run_context.tool_call_timeout} seconds.",
+                # 超时后转为后台执行
+                logger.info(
+                    f"[PROCESS] Tool {tool.name} timeout after {run_context.tool_call_timeout}s, "
+                    f"switching to background execution"
                 )
+
+                # 获取后台工具管理器
+                bg_manager = BackgroundToolManager()
+
+                # 获取事件队列用于任务完成后触发AI回调
+                event_queue = run_context.context.context.get_event_queue()
+
+                # 创建后台任务
+                session_id = event.unified_msg_origin
+                task_id = await bg_manager.submit_task(
+                    tool_name=tool.name,
+                    tool_args=tool_args,
+                    session_id=session_id,
+                    handler=awaitable,
+                    wait=False,
+                    event=event,
+                    event_queue=event_queue,
+                )
+
+                # 返回后台执行通知
+                notification = (
+                    f"Tool '{tool.name}' execution timeout after {run_context.tool_call_timeout}s. "
+                    f"Switched to background execution.\n"
+                    f"Task ID: {task_id}\n\n"
+                    f"You can use these tools to manage background tasks:\n"
+                    f"- get_tool_output(task_id): View output logs\n"
+                    f"- wait_tool_result(task_id): Wait for completion\n"
+                    f"- stop_tool(task_id): Stop execution\n"
+                    f"- list_running_tools(): List all running tasks"
+                )
+
+                yield mcp.types.CallToolResult(
+                    content=[mcp.types.TextContent(type="text", text=notification)]
+                )
+                return
             except StopAsyncIteration:
                 break
 

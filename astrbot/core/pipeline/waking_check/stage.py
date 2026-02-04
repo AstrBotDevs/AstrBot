@@ -98,6 +98,13 @@ class WakingCheckStage(Stage):
                 event.role = "admin"
                 break
 
+        # 如果事件已经被标记为唤醒（如后台任务回调），则跳过唤醒检查
+        if event.is_wake and event.is_at_or_wake_command:
+            logger.debug(
+                f"[WakingCheckStage] Event already marked as wake, skipping wake check"
+            )
+            return
+
         # 检查 wake
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()

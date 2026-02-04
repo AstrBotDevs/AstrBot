@@ -16,6 +16,9 @@ from asyncio import Queue
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.background_tool.manager import BackgroundToolManager
+from astrbot.core.message.components import Plain
+from astrbot.core.message.message_event_result import MessageChain
 
 from .platform import AstrMessageEvent
 
@@ -39,6 +42,27 @@ class EventBus:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             self._print_event(event, conf_info["name"])
+
+            # 设置中断标记，用于打断正在执行的wait_tool_result
+            try:
+                manager = BackgroundToolManager()
+                session_id = event.unified_msg_origin
+                manager.set_interrupt_flag(session_id)
+
+                # 检查是否有正在运行的后台任务，如果有则注入状态信息
+                running_tasks_status = manager.get_running_tasks_status(session_id)
+                if running_tasks_status:
+                    # 将后台任务状态信息注入到event对象中
+                    event.background_tasks_status = running_tasks_status
+                    logger.info(
+                        f"[EventBus] Injected background tasks status for session {session_id}"
+                    )
+            except Exception as e:
+                logger.error(f"[EventBus] Failed to set interrupt flag: {e}")
+
+            # 将待处理的后台任务通知注入到event中，供AI处理
+            await self._inject_notifications(event)
+
             scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
             if not scheduler:
                 logger.error(
@@ -65,3 +89,27 @@ class EventBus:
             logger.info(
                 f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
             )
+
+    async def _inject_notifications(self, event: AstrMessageEvent):
+        """将待处理的后台任务通知注入到event对象中，供AI处理"""
+        try:
+            manager = BackgroundToolManager()
+            session_id = event.unified_msg_origin
+
+            # 获取待发送通知
+            notifications = manager.get_pending_notifications(session_id)
+
+            if not notifications:
+                return
+
+            logger.info(
+                f"[EventBus] Found {len(notifications)} pending notifications for session {session_id}"
+            )
+
+            # 将通知注入到event对象中，让AI处理
+            event.pending_notifications = notifications
+            logger.info(
+                f"[EventBus] Injected {len(notifications)} notifications into event for AI processing"
+            )
+        except Exception as e:
+            logger.error(f"[EventBus] Error injecting notifications: {e}")

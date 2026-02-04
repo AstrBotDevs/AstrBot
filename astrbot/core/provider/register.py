@@ -10,6 +10,10 @@ provider_cls_map: dict[str, ProviderMetaData] = {}
 
 llm_tools = FuncCall()
 
+# 注册后台工具管理的LLM工具
+from astrbot.core.background_tool.register import register_background_tools
+register_background_tools(llm_tools)
+
 
 def register_provider_adapter(
     provider_type_name: str,
