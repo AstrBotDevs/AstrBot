@@ -55,6 +55,7 @@ class BackgroundTask:
     notification_sent: bool = False  # 通知是否已发送
     event: Any = None  # 原始事件对象，用于主动回调
     event_queue: Queue | None = None  # 事件队列，用于触发AI回调
+    is_being_waited: bool = False  # 是否有LLM正在使用wait_tool_result等待此任务
 
     @staticmethod
     def generate_id() -> str:

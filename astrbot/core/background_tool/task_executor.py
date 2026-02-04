@@ -87,15 +87,17 @@ class TaskExecutor:
                 error_msg = f"Task timed out after {timeout}s and was terminated."
                 task.fail(error_msg)
                 self._log(task.task_id, f"[TIMEOUT] {error_msg}")
-                # 生成超时通知消息
-                task.notification_message = self.notifier.build_message(task)
+                # 生成超时通知消息（包含输出日志）
+                output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
+                task.notification_message = self.notifier.build_message(task, output)
                 # 主动触发回调
                 await self._trigger_callback(task)
                 return None
 
             task.complete(result or "")
-            # 生成完成通知消息
-            task.notification_message = self.notifier.build_message(task)
+            # 生成完成通知消息（包含输出日志）
+            output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
+            task.notification_message = self.notifier.build_message(task, output)
             self._log(task.task_id, "[NOTIFICATION] Task completed, notification ready")
             # 主动触发回调
             await self._trigger_callback(task)
@@ -103,8 +105,9 @@ class TaskExecutor:
 
         except asyncio.CancelledError:
             task.cancel()
-            # 生成取消通知消息
-            task.notification_message = self.notifier.build_message(task)
+            # 生成取消通知消息（包含输出日志）
+            output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
+            task.notification_message = self.notifier.build_message(task, output)
             self._log(
                 task.task_id, "[CANCELLED] Task was cancelled, notification ready"
             )
@@ -127,8 +130,9 @@ class TaskExecutor:
                     task.task_id, "[INTERRUPTED] Wait interrupted, no callback needed"
                 )
             else:
-                # 其他错误需要生成通知消息并触发回调
-                task.notification_message = self.notifier.build_message(task)
+                # 其他错误需要生成通知消息并触发回调（包含输出日志）
+                output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
+                task.notification_message = self.notifier.build_message(task, output)
                 self._log(task.task_id, f"[ERROR] {error_msg}, notification ready")
                 # 主动触发回调
                 await self._trigger_callback(task)
@@ -142,6 +146,13 @@ class TaskExecutor:
 
         创建一个新的消息事件，内容为任务完成通知，放入EventQueue触发AI响应。
         """
+        # 如果有LLM正在使用wait_tool_result等待此任务，则不创建回调事件（避免重复回复）
+        if task.is_being_waited:
+            logger.info(
+                f"[TaskExecutor] Task {task.task_id} is being waited by LLM, skip callback to avoid duplicate response"
+            )
+            return
+
         if not task.event:
             logger.warning(
                 f"[TaskExecutor] Task {task.task_id} has no event, cannot trigger callback"

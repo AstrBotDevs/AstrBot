@@ -6,6 +6,7 @@
 from typing import Callable, Awaitable
 
 from .task_state import BackgroundTask, TaskStatus
+from .task_formatter import build_task_result
 
 
 class TaskNotifier:
@@ -25,35 +26,17 @@ class TaskNotifier:
         """
         return task.is_finished()
 
-    def build_message(self, task: BackgroundTask) -> str:
+    def build_message(self, task: BackgroundTask, output: str | None = None) -> str:
         """构建通知消息
 
         Args:
             task: 后台任务
+            output: 输出日志（可选）
 
         Returns:
-            通知消息文本
+            通知消息文本，包含完整的任务信息（状态、输出日志、结果、错误）
         """
-        status_text = {
-            TaskStatus.COMPLETED: "completed successfully",
-            TaskStatus.FAILED: "failed",
-            TaskStatus.CANCELLED: "was cancelled",
-        }.get(task.status, "finished")
-
-        lines = [
-            f"[Background Task Notification]",
-            f"Task ID: {task.task_id}",
-            f"Tool: {task.tool_name}",
-            f"Status: {status_text}",
-        ]
-
-        if task.result:
-            lines.append(f"Result: {task.result}")
-
-        if task.error:
-            lines.append(f"Error: {task.error}")
-
-        return "\n".join(lines)
+        return build_task_result(task.task_id, task, output)
 
     async def notify_completion(
         self,
