@@ -310,6 +310,8 @@ class CronJobManager:
         config = MainAgentBuildConfig(
             tool_call_timeout=3600,
             llm_safety_mode=False,
+            streaming_response=False,
+
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
