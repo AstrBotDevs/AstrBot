@@ -749,17 +749,24 @@ class PluginRoute(Route):
             with open(extension_page_path, encoding="utf-8") as f:
                 html_content = f.read()
 
-            # 注入配置脚本
-            injected_script = f"""
+            # 注入配置脚本 - 对插件名使用 json.dumps 防止 XSS，但保持 apiToken 为可执行代码
+            import json
+            safe_plugin_name = json.dumps(plugin_obj.name)
+
+            injected_script = f'''
 <script>
 window.ASTRBOT_CONFIG = {{
     apiUrl: "/api/plug",
-    pluginName: "{plugin_obj.name}",
+    pluginName: {safe_plugin_name},
     apiToken: localStorage.getItem("token") || ""
 }};
 </script>
-"""
-            html_content = html_content.replace("</head>", injected_script + "</head>")
+'''
+
+            # 使用正则表达式不区分大小写查找 </head> 标签
+            import re
+            pattern = re.compile(r'</head\s*>', re.IGNORECASE)
+            html_content = pattern.sub(injected_script + r'</head>', html_content)
 
             return (
                 Response()

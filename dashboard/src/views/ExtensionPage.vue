@@ -698,7 +698,10 @@ const openExtensionPage = async (plugin) => {
 // 获取扩展页面内容
 async function fetchExtensionPage(pluginName) {
   try {
-    const res = await axios.get(`/api/plugin/extension_page?name=${pluginName}`);
+    // 使用 encodeURIComponent 对插件名称进行 URL 编码，防止特殊字符破坏 URL
+    const res = await axios.get(
+      `/api/plugin/extension_page?name=${encodeURIComponent(pluginName)}`
+    );
     if (res.data.status === "ok") {
       extensionPageDialog.html = res.data.data.html;
       extensionPageDialog.title = res.data.data.title;
