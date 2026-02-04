@@ -246,6 +246,11 @@ class ToolSet:
 
             result = {}
 
+            # 修复：如果 type 是列表 (e.g. ["string", "null"])，取第一个有效类型
+            if "type" in schema and isinstance(schema["type"], list):
+                # 优先取不是 null 的类型，如果没有则默认为 string
+                schema["type"] = next((t for t in schema["type"] if t != "null"), "string")
+
             if "type" in schema and schema["type"] in supported_types:
                 result["type"] = schema["type"]
                 if "format" in schema and schema["format"] in supported_formats.get(
