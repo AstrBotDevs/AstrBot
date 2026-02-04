@@ -146,6 +146,7 @@ class ThirdPartyAgentSubStage(Stage):
             run_context=AgentContextWrapper(
                 context=astr_agent_ctx,
                 tool_call_timeout=60,
+                background_task_wait_timeout=300,
             ),
             agent_hooks=MAIN_AGENT_HOOKS,
             provider_config=self.prov_cfg,

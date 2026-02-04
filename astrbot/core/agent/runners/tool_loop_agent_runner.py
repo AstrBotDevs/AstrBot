@@ -138,9 +138,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+        self._wait_interrupted = False  # 等待中断标记
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
+        from astrbot.core.utils.api_request_logger import api_request_logger
+
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
@@ -149,12 +152,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
 
+        # 记录API请求
+        model_name = self.req.model or self.provider.get_model()
+        api_request_logger.log_request(
+            model=model_name,
+            messages=self.run_context.messages,
+            tools=self.req.func_tool,
+            streaming=self.streaming,
+            session_id=self.req.session_id,
+        )
+
+        request_start_time = time.time()
+
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
+            final_resp = None
             async for resp in stream:  # type: ignore
+                final_resp = resp
                 yield resp
+            # 记录流式响应结果
+            if final_resp:
+                duration_ms = (time.time() - request_start_time) * 1000
+                api_request_logger.log_response(final_resp, duration_ms=duration_ms)
         else:
-            yield await self.provider.text_chat(**payload)
+            resp = await self.provider.text_chat(**payload)
+            duration_ms = (time.time() - request_start_time) * 1000
+            api_request_logger.log_response(resp, duration_ms=duration_ms)
+            yield resp
 
     @override
     async def step(self):
@@ -545,6 +569,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
             except Exception as e:
+                from astrbot.core.background_tool import WaitInterruptedException
+
+                if isinstance(e, WaitInterruptedException):
+                    # 等待被中断，结束当前响应周期
+                    logger.info(
+                        f"Wait interrupted for task {e.task_id}, ending current response cycle"
+                    )
+                    # 设置中断标记，用于终止整个agent循环
+                    self._wait_interrupted = True
+                    # 转换到DONE状态，终止step_until_done循环
+                    self._transition_state(AgentState.DONE)
+                    return  # 直接返回，不再处理后续工具调用
+
                 logger.warning(traceback.format_exc())
                 tool_call_result_blocks.append(
                     ToolCallMessageSegment(

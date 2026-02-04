@@ -63,6 +63,9 @@ class InternalAgentSubStage(Stage):
         ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.background_task_wait_timeout: int = settings.get(
+            "background_task_wait_timeout", 300
+        )
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
@@ -572,6 +575,14 @@ class InternalAgentSubStage(Stage):
                         return
 
                     req.prompt = event.message_str[len(provider_wake_prefix) :]
+
+                    # 如果有后台任务状态信息，添加到用户消息前面
+                    if hasattr(event, "background_tasks_status"):
+                        req.prompt = (
+                            f"{event.background_tasks_status}\n\n"
+                            f"User's new message: {req.prompt}"
+                        )
+
                     # func_tool selection 现在已经转移到 astrbot/builtin_stars/astrbot 插件中进行选择。
                     # req.func_tool = self.ctx.plugin_manager.context.get_llm_tool_manager()
                     for comp in event.message_obj.message:
@@ -648,6 +659,45 @@ class InternalAgentSubStage(Stage):
                 if self.sandbox_cfg.get("enable", False):
                     self._apply_sandbox_tools(req, req.session_id)
 
+                # 处理待发送的后台任务通知
+                if (
+                    hasattr(event, "pending_notifications")
+                    and event.pending_notifications
+                ):
+                    from astrbot.core.background_tool.manager import (
+                        BackgroundToolManager,
+                    )
+
+                    notification_lines = ["[Background Task Completion Notifications]"]
+                    notification_lines.append(
+                        "The following background tasks have completed:"
+                    )
+
+                    for notif in event.pending_notifications:
+                        notification_lines.append(
+                            f"- Task {notif['task_id']} ({notif['tool_name']}): {notif['message']}"
+                        )
+
+                    notification_lines.append(
+                        "Please inform the user about these completed tasks in a natural way."
+                    )
+
+                    notification_text = "\n".join(notification_lines)
+
+                    # 添加到上下文
+                    req.contexts.append(
+                        {"role": "system", "content": notification_text}
+                    )
+
+                    # 标记通知为已发送
+                    manager = BackgroundToolManager()
+                    for notif in event.pending_notifications:
+                        manager.mark_notification_sent(notif["task_id"])
+
+                    logger.info(
+                        f"[Internal Agent] Injected {len(event.pending_notifications)} notifications into LLM context"
+                    )
+
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"
                     and not event.platform_meta.support_streaming_message
@@ -709,6 +759,7 @@ class InternalAgentSubStage(Stage):
                     run_context=AgentContextWrapper(
                         context=astr_agent_ctx,
                         tool_call_timeout=self.tool_call_timeout,
+                        background_task_wait_timeout=self.background_task_wait_timeout,
                     ),
                     tool_executor=FunctionToolExecutor(),
                     agent_hooks=MAIN_AGENT_HOOKS,
