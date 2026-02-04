@@ -132,8 +132,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             **tool_args,
         )
 
-        # 检查是否启用超时（0表示禁用）
-        timeout_enabled = run_context.tool_call_timeout > 0
+        # 后台任务管理工具不应该被转后台执行
+        background_tool_names = {
+            "wait_tool_result",
+            "get_tool_output",
+            "stop_tool",
+            "list_running_tools",
+        }
+
+        # 检查是否启用超时（0表示禁用，后台任务管理工具也禁用超时）
+        timeout_enabled = (
+            run_context.tool_call_timeout > 0 and tool.name not in background_tool_names
+        )
 
         while True:
             try:

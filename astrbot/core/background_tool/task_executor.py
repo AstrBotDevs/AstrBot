@@ -1,16 +1,34 @@
 """任务执行器
 
-在后台执行工具，捕获输出，支持取消。
+在后台执行工具，捕获输出，支持取消和超时。
 """
 
 import asyncio
+import json
+import os
 import traceback
 from typing import Any, Callable, Awaitable, AsyncGenerator
 
 from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from .task_state import BackgroundTask, TaskStatus
 from .output_buffer import OutputBuffer
 from .task_notifier import TaskNotifier
+
+
+def _get_background_task_timeout() -> int:
+    """从配置文件中读取后台任务超时时间，如果读取失败则返回默认值600秒"""
+    try:
+        config_path = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8-sig") as f:
+                config = json.load(f)
+                return config.get("provider_settings", {}).get(
+                    "background_task_wait_timeout", 600
+                )
+    except Exception:
+        pass
+    return 600
 
 
 class TaskExecutor:
@@ -47,13 +65,34 @@ class TaskExecutor:
         task.start()
         self._cancel_events[task.task_id] = asyncio.Event()
 
+        # 获取后台任务超时时间
+        timeout = _get_background_task_timeout()
+
         try:
             # 创建执行任务
             exec_coro = self._run_handler(task, handler)
             async_task = asyncio.create_task(exec_coro)
             self._running_tasks[task.task_id] = async_task
 
-            result = await async_task
+            # 使用 wait_for 添加超时控制
+            try:
+                result = await asyncio.wait_for(async_task, timeout=timeout)
+            except asyncio.TimeoutError:
+                # 超时，取消任务
+                async_task.cancel()
+                try:
+                    await async_task
+                except asyncio.CancelledError:
+                    pass
+                error_msg = f"Task timed out after {timeout}s and was terminated."
+                task.fail(error_msg)
+                self._log(task.task_id, f"[TIMEOUT] {error_msg}")
+                # 生成超时通知消息
+                task.notification_message = self.notifier.build_message(task)
+                # 主动触发回调
+                await self._trigger_callback(task)
+                return None
+
             task.complete(result or "")
             # 生成完成通知消息
             task.notification_message = self.notifier.build_message(task)

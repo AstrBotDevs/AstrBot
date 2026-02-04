@@ -248,8 +248,8 @@
           "description": "Tool Call Timeout (seconds)"
         },
         "background_task_wait_timeout": {
-          "description": "Background Task Wait Timeout (seconds)",
-          "hint": "Maximum time for LLM to wait for task completion using wait_tool_result after tool timeout"
+          "description": "Background Task Timeout (seconds)",
+          "hint": "Maximum execution time for background tasks, task will be terminated after timeout"
         },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",

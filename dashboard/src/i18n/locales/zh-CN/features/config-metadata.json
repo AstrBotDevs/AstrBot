@@ -245,8 +245,8 @@
           "description": "工具调用超时时间(秒)"
         },
         "background_task_wait_timeout": {
-          "description": "后台任务等待超时时间（秒）",
-          "hint": "工具超时转后台后，LLM使用wait_tool_result等待任务完成的最大时间"
+          "description": "后台任务超时时间（秒）",
+          "hint": "后台任务最长执行时间，超时后任务将被终止"
         },
         "tool_schema_mode": {
           "description": "工具调用模式",
