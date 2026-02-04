@@ -76,7 +76,7 @@ dev = [
 astrbot = "astrbot.cli.__main__:cli"
 
 [tool.ruff]
-exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py"]
+exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
 line-length = 88
 target-version = "py310"
 
