@@ -142,8 +142,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        from astrbot.core.utils.api_request_logger import api_request_logger
-
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
@@ -152,33 +150,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
 
-        # 记录API请求
-        model_name = self.req.model or self.provider.get_model()
-        api_request_logger.log_request(
-            model=model_name,
-            messages=self.run_context.messages,
-            tools=self.req.func_tool,
-            streaming=self.streaming,
-            session_id=self.req.session_id,
-        )
-
-        request_start_time = time.time()
-
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
-            final_resp = None
             async for resp in stream:  # type: ignore
-                final_resp = resp
                 yield resp
-            # 记录流式响应结果
-            if final_resp:
-                duration_ms = (time.time() - request_start_time) * 1000
-                api_request_logger.log_response(final_resp, duration_ms=duration_ms)
         else:
-            resp = await self.provider.text_chat(**payload)
-            duration_ms = (time.time() - request_start_time) * 1000
-            api_request_logger.log_response(resp, duration_ms=duration_ms)
-            yield resp
+            yield await self.provider.text_chat(**payload)
 
     @override
     async def step(self):
@@ -606,6 +583,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 ],
             )
+            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:

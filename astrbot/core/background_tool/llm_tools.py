@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from .manager import BackgroundToolManager
+from .task_formatter import build_task_result
 
 
 # 获取全局管理器实例
@@ -29,7 +30,7 @@ async def get_tool_output(
         lines: 返回最近N行日志，默认50行
 
     Returns:
-        工具输出日志
+        工具输出日志和最终结果
     """
     manager = _get_manager()
 
@@ -38,12 +39,7 @@ async def get_tool_output(
         return f"Error: Task {task_id} not found."
 
     output = manager.get_task_output(task_id, lines=lines)
-    status = task.status.value
-
-    if not output:
-        return f"Task {task_id} ({status}): No output yet."
-
-    return f"Task {task_id} ({status}):\n{output}"
+    return build_task_result(task_id, task, output)
 
 
 async def wait_tool_result(
@@ -83,38 +79,41 @@ async def wait_tool_result(
     logger.info(f"[wait_tool_result] Task {task_id} found, status: {task.status.value}")
 
     if task.is_finished():
-        if task.result:
-            return f"Task {task_id} completed: {task.result}"
-        elif task.error:
-            return f"Task {task_id} failed: {task.error}"
-        else:
-            return f"Task {task_id} finished with status: {task.status.value}"
+        # 任务已完成，获取输出日志并返回完整信息
+        output = manager.get_task_output(task_id, lines=50)
+        return build_task_result(task_id, task, output)
 
     # 清除之前的中断标记（开始新的等待）
     manager.clear_interrupt_flag(session_id)
 
-    # 循环等待任务完成，每秒检查一次，无超时限制
-    while True:
-        # 检查是否有中断标记（新消息到来）
-        if manager.check_interrupt_flag(session_id):
-            manager.clear_interrupt_flag(session_id)
-            logger.info(f"[wait_tool_result] Interrupted by new message")
-            # 抛出异常，结束当前LLM响应周期
-            raise WaitInterruptedException(task_id=task_id, session_id=session_id)
+    # 设置等待标记，防止任务完成时创建回调事件
+    task.is_being_waited = True
+    logger.info(f"[wait_tool_result] Set is_being_waited=True for task {task_id}")
 
-        task = manager.registry.get(task_id)
+    try:
+        # 循环等待任务完成，每秒检查一次，无超时限制
+        while True:
+            # 检查是否有中断标记（新消息到来）
+            if manager.check_interrupt_flag(session_id):
+                manager.clear_interrupt_flag(session_id)
+                logger.info(f"[wait_tool_result] Interrupted by new message")
+                # 抛出异常，结束当前LLM响应周期
+                raise WaitInterruptedException(task_id=task_id, session_id=session_id)
 
-        if task.is_finished():
-            manager.clear_interrupt_flag(session_id)
-            if task.result:
-                return f"Task {task_id} completed: {task.result}"
-            elif task.error:
-                return f"Task {task_id} failed: {task.error}"
-            else:
-                return f"Task {task_id} finished with status: {task.status.value}"
+            task = manager.registry.get(task_id)
 
-        # 等待1秒后继续检查
-        await asyncio.sleep(1)
+            if task.is_finished():
+                manager.clear_interrupt_flag(session_id)
+                # 任务完成，获取输出日志并返回完整信息
+                output = manager.get_task_output(task_id, lines=50)
+                return build_task_result(task_id, task, output)
+
+            # 等待1秒后继续检查
+            await asyncio.sleep(1)
+    finally:
+        # 无论如何都要清除等待标记
+        task.is_being_waited = False
+        logger.info(f"[wait_tool_result] Cleared is_being_waited for task {task_id}")
 
 
 async def stop_tool(
