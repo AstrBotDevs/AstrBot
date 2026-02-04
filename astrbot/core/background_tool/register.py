@@ -49,13 +49,8 @@ def register_background_tools(llm_tools: FuncCall) -> None:
                 "type": "string",
                 "description": "The ID of the background task",
             },
-            {
-                "name": "timeout",
-                "type": "number",
-                "description": "Timeout in seconds (default: 300)",
-            },
         ],
-        desc="Wait for a background tool to complete. The wait can be interrupted by new user messages.",
+        desc="Wait for a background tool to complete. The wait can be interrupted by new user messages. No timeout - waits until task finishes or is terminated.",
         handler=wait_tool_result,
     )
     logger.info("[PROCESS] Registered LLM tool: wait_tool_result")
