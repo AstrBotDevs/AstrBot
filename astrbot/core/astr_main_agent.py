@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import zoneinfo
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
 from astrbot.api import sp
@@ -51,7 +52,6 @@ from astrbot.core.tools.cron_tools import (
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
-from typing import Coroutine
 
 
 @dataclass(slots=True)
