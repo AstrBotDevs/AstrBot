@@ -69,7 +69,7 @@ dev = [
   "pytest>=8.4.1",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
-  "ruff>=0.12.8",
+  "ruff>=0.15.0",
 ]
 
 [project.scripts]
@@ -97,6 +97,7 @@ ignore = [
   "F405",
   "E501",
   "ASYNC230", # TODO: handle ASYNC230 in AstrBot
+  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
 
 [tool.pyright]
