@@ -67,8 +67,6 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
   </tr>
 </table>
 
-陪伴与能力**从来不应该是**对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人——致敬[ATRI](https://zh.wikipedia.org/zh-cn/ATRI_-My_Dear_Moments-)。
-
 ## 快速开始
 
 #### Docker 部署(推荐 🥳)
@@ -268,6 +266,6 @@ pre-commit install
 
 _私は、高性能ですから!_
 
-<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
-</div
+陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。
+
 
