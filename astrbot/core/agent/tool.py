@@ -246,20 +246,30 @@ class ToolSet:
 
             result = {}
 
-            # 修复：如果 type 是列表 (e.g. ["string", "null"])，取第一个有效类型
-            if "type" in schema and isinstance(schema["type"], list):
-                # 优先取不是 null 的类型，如果没有则默认为 string
-                schema["type"] = next((t for t in schema["type"] if t != "null"), "string")
+            # Logic refined based on PR feedback (No side effects)
+            # Get the type value without modifying the original schema dictionary
+            origin_type = schema.get("type")
+            target_type = origin_type
 
-            if "type" in schema and schema["type"] in supported_types:
-                result["type"] = schema["type"]
+            # Handle list types (e.g., ["string", "null"] from VRChat MCP)
+            if isinstance(origin_type, list):
+                # Pick the first non-null type. 
+                # If the list contains only unsupported types, it will be handled by the check below.
+                target_type = next((t for t in origin_type if t != "null"), "string")
+
+            # Check if the resolved type is supported
+            if target_type in supported_types:
+                result["type"] = target_type
                 if "format" in schema and schema["format"] in supported_formats.get(
                     result["type"],
                     set(),
                 ):
                     result["format"] = schema["format"]
             else:
+                # Fallback for unsupported types (or if target_type was invalid)
                 result["type"] = "null"
+
+            # ============================================================
 
             support_fields = {
                 "title",
@@ -289,7 +299,7 @@ class ToolSet:
                 result["items"] = convert_schema(schema["items"])
 
             return result
-
+            
         tools = []
         for tool in self.tools:
             d: dict[str, Any] = {"name": tool.name}
