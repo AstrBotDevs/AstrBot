@@ -106,7 +106,7 @@ DEFAULT_CONFIG = {
         "reachability_check": False,
         "max_agent_step": 30,
         "tool_call_timeout": 15,  # 工具调用超时时间（秒），超时后自动转后台执行
-        "background_task_wait_timeout": 300,
+        "background_task_wait_timeout": 600,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
