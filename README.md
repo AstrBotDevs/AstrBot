@@ -85,7 +85,7 @@ uv tool install astrbot
 
 ```bash
 # windows & macos
-# 推荐使用uv tool install
+# 推荐使用 uv tool install
 
 # linux
 # debain系，暂不支持
