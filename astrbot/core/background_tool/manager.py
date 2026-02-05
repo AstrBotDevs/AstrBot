@@ -122,6 +122,7 @@ class BackgroundToolManager:
             event=event,
             event_queue=event_queue,
         )
+        task.init_completion_event()
 
         from astrbot import logger
 
@@ -129,6 +130,7 @@ class BackgroundToolManager:
             f"[BackgroundToolManager] Creating task {task.task_id} for tool {tool_name}, session {session_id}"
         )
 
+        task.init_completion_event()
         self.registry.register(task)
         logger.info(
             f"[BackgroundToolManager] Task {task.task_id} registered successfully"

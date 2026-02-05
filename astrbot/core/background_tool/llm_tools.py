@@ -57,9 +57,6 @@ async def wait_tool_result(
 
     Raises:
         WaitInterruptedException: 当被用户新消息中断时抛出
-
-    Note:
-        等待期间可被用户新消息打断，无超时限制（后台任务本身有超时控制）
     """
     import asyncio
 
@@ -73,47 +70,39 @@ async def wait_tool_result(
 
     task = manager.registry.get(task_id)
     if task is None:
-        logger.warning(f"[wait_tool_result] Task {task_id} not found in registry")
         return f"Error: Task {task_id} not found."
 
-    logger.info(f"[wait_tool_result] Task {task_id} found, status: {task.status.value}")
-
     if task.is_finished():
-        # 任务已完成，获取输出日志并返回完整信息
         output = manager.get_task_output(task_id, lines=50)
         return build_task_result(task_id, task, output)
 
-    # 清除之前的中断标记（开始新的等待）
     manager.clear_interrupt_flag(session_id)
-
-    # 设置等待标记，防止任务完成时创建回调事件
     task.is_being_waited = True
-    logger.info(f"[wait_tool_result] Set is_being_waited=True for task {task_id}")
+    logger.info(f"[wait_tool_result] Using event-driven wait for task {task_id}")
 
     try:
-        # 循环等待任务完成，每秒检查一次，无超时限制
         while True:
-            # 检查是否有中断标记（新消息到来）
+            # 检查中断标记
             if manager.check_interrupt_flag(session_id):
                 manager.clear_interrupt_flag(session_id)
-                logger.info(f"[wait_tool_result] Interrupted by new message")
-                # 抛出异常，结束当前LLM响应周期
                 raise WaitInterruptedException(task_id=task_id, session_id=session_id)
 
-            task = manager.registry.get(task_id)
-
-            if task.is_finished():
-                manager.clear_interrupt_flag(session_id)
-                # 任务完成，获取输出日志并返回完整信息
-                output = manager.get_task_output(task_id, lines=50)
-                return build_task_result(task_id, task, output)
-
-            # 等待1秒后继续检查
-            await asyncio.sleep(1)
+            # 使用事件等待，超时0.5秒后检查中断
+            if task.completion_event:
+                try:
+                    await asyncio.wait_for(task.completion_event.wait(), timeout=0.5)
+                    break  # 事件触发，任务完成
+                except asyncio.TimeoutError:
+                    pass  # 继续循环检查中断
+            else:
+                await asyncio.sleep(0.5)
+                if task.is_finished():
+                    break
     finally:
-        # 无论如何都要清除等待标记
         task.is_being_waited = False
-        logger.info(f"[wait_tool_result] Cleared is_being_waited for task {task_id}")
+
+    output = manager.get_task_output(task_id, lines=50)
+    return build_task_result(task_id, task, output)
 
 
 async def stop_tool(

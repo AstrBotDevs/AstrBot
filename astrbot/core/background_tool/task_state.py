@@ -5,7 +5,7 @@
 
 import time
 import uuid
-from asyncio import Queue
+from asyncio import Queue, Event
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -56,6 +56,7 @@ class BackgroundTask:
     event: Any = None  # 原始事件对象，用于主动回调
     event_queue: Queue | None = None  # 事件队列，用于触发AI回调
     is_being_waited: bool = False  # 是否有LLM正在使用wait_tool_result等待此任务
+    completion_event: Event | None = None  # 任务完成信号
 
     @staticmethod
     def generate_id() -> str:
@@ -111,3 +112,16 @@ class BackgroundTask:
             "error": self.error,
             "output_log_count": len(self.output_log),
         }
+
+    def _signal_completion(self) -> None:
+        """触发完成信号"""
+        if self.completion_event is not None:
+            self.completion_event.set()
+
+    def init_completion_event(self) -> None:
+        """初始化完成事件"""
+        import asyncio
+        try:
+            self.completion_event = asyncio.Event()
+        except RuntimeError:
+            pass
