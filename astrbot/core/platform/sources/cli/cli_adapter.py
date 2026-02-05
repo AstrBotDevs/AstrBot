@@ -147,6 +147,7 @@ class CLIPlatformAdapter(Platform):
             output_queue=self._output_queue,
             event_committer=self.commit_event,
             use_isolated_sessions=self.config.use_isolated_sessions,
+            data_path=get_astrbot_data_path(),
         )
 
         self._handler = SocketModeHandler(

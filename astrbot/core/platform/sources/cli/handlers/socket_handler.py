@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import os
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -43,6 +44,7 @@ class SocketClientHandler:
         output_queue: asyncio.Queue,
         event_committer: Callable[["CLIMessageEvent"], None],
         use_isolated_sessions: bool = False,
+        data_path: str | None = None,
     ):
         """初始化Socket客户端处理器"""
         self.token_manager = token_manager
@@ -52,6 +54,7 @@ class SocketClientHandler:
         self.output_queue = output_queue
         self.event_committer = event_committer
         self.use_isolated_sessions = use_isolated_sessions
+        self.data_path = data_path or os.path.join(os.getcwd(), "data")
 
     async def handle(self, client_socket) -> None:
         """处理单个客户端连接"""
@@ -73,11 +76,10 @@ class SocketClientHandler:
                 )
                 return
 
-            message_text = request.get("message", "")
             request_id = request.get("request_id", str(uuid.uuid4()))
             auth_token = request.get("auth_token", "")
 
-            # Token验证
+            # Token验证（所有请求都需要token）
             if not self.token_manager.validate(auth_token):
                 error_msg = (
                     "Unauthorized: missing token"
@@ -91,8 +93,15 @@ class SocketClientHandler:
                 )
                 return
 
-            # 处理消息
-            response = await self._process_message(message_text, request_id)
+            # 处理请求
+            if action == "get_logs":
+                # 获取日志
+                response = await self._get_logs(request, request_id)
+            else:
+                # 处理消息
+                message_text = request.get("message", "")
+                response = await self._process_message(message_text, request_id)
+
             await self._send_response(loop, client_socket, response)
 
         except Exception as e:
@@ -179,6 +188,80 @@ class SocketClientHandler:
             ):
                 message_event._response_delay_task.cancel()
             return ResponseBuilder.build_error("Request timeout", request_id, "TIMEOUT")
+
+    async def _get_logs(self, request: dict, request_id: str) -> str:
+        """获取日志
+
+        Args:
+            request: 请求字典，支持参数:
+                - lines: 返回最近N行日志（默认100）
+                - level: 过滤日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+                - pattern: 过滤包含指定字符串的日志
+            request_id: 请求ID
+
+        Returns:
+            JSON格式的响应字符串
+        """
+        try:
+            # 获取参数
+            lines = min(request.get("lines", 100), 1000)  # 最多1000行
+            level_filter = request.get("level", "").upper()
+            pattern = request.get("pattern", "")
+
+            # 日志文件路径
+            log_path = os.path.join(self.data_path, "logs", "astrbot.log")
+
+            if not os.path.exists(log_path):
+                return ResponseBuilder.build_success(
+                    "", request_id, message="Log file not found"
+                )
+
+            # 读取日志文件（从末尾开始）
+            logs = []
+            try:
+                with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                    # 读取所有行
+                    all_lines = f.readlines()
+
+                # 从末尾开始筛选
+                for line in reversed(all_lines):
+                    # 跳过空行
+                    if not line.strip():
+                        continue
+
+                    # 级别过滤
+                    if level_filter and level_filter not in line:
+                        continue
+
+                    # 模式过滤
+                    if pattern and pattern not in line:
+                        continue
+
+                    logs.append(line.rstrip())
+
+                    if len(logs) >= lines:
+                        break
+
+            except OSError as e:
+                logger.warning("Failed to read log file: %s", e)
+                return ResponseBuilder.build_error(
+                    f"Failed to read log file: {e}", request_id
+                )
+
+            # 反转回来（使时间顺序正确）
+            logs.reverse()
+
+            # 构建响应
+            log_text = "\n".join(logs)
+            return ResponseBuilder.build_success(
+                log_text, request_id, message=f"Retrieved {len(logs)} log lines"
+            )
+
+        except Exception as e:
+            logger.exception("Error getting logs")
+            return ResponseBuilder.build_error(
+                f"Error getting logs: {e}", request_id
+            )
 
 
 class SocketModeHandler(IHandler):
