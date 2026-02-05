@@ -138,6 +138,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+        self._wait_interrupted = False  # 等待中断标记
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
@@ -213,8 +214,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if not llm_response.is_chunk and llm_response.usage:
                 # only count the token usage of the final response for computation purpose
                 self.stats.token_usage += llm_response.usage
-                if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
             break  # got final response
 
         if not llm_resp_result:
@@ -547,6 +546,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
             except Exception as e:
+                from astrbot.core.background_tool import WaitInterruptedException
+
+                if isinstance(e, WaitInterruptedException):
+                    # 等待被中断，结束当前响应周期
+                    logger.info(
+                        f"Wait interrupted for task {e.task_id}, ending current response cycle"
+                    )
+                    # 设置中断标记，用于终止整个agent循环
+                    self._wait_interrupted = True
+                    # 转换到DONE状态，终止step_until_done循环
+                    self._transition_state(AgentState.DONE)
+                    return  # 直接返回，不再处理后续工具调用
+
                 logger.warning(traceback.format_exc())
                 tool_call_result_blocks.append(
                     ToolCallMessageSegment(

@@ -1,4 +1,5 @@
 from astrbot.core import logger
+from astrbot.core.background_tool.register import register_background_tools
 
 from .entities import ProviderMetaData, ProviderType
 from .func_tool_manager import FuncCall
@@ -9,6 +10,9 @@ provider_cls_map: dict[str, ProviderMetaData] = {}
 """维护了 Provider 类型名称和 ProviderMetadata 的映射"""
 
 llm_tools = FuncCall()
+
+# 注册后台工具管理的LLM工具
+register_background_tools(llm_tools)
 
 
 def register_provider_adapter(

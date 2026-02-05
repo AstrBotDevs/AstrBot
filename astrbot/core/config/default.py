@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.14.4"
+VERSION = "4.13.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -91,7 +91,7 @@ DEFAULT_CONFIG = {
             "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "4. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 6,
+        "llm_compress_keep_recent": 4,
         "llm_compress_provider_id": "",
         "max_context_length": -1,
         "dequeue_context_length": 1,
@@ -105,7 +105,8 @@ DEFAULT_CONFIG = {
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
-        "tool_call_timeout": 60,
+        "tool_call_timeout": 15,  # 工具调用超时时间（秒），超时后自动转后台执行
+        "background_task_wait_timeout": 600,
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
@@ -114,31 +115,15 @@ DEFAULT_CONFIG = {
             "provider": "moonshotai",
             "moonshotai_api_key": "",
         },
-        "proactive_capability": {
-            "add_cron_tools": True,
-        },
-        "computer_use_runtime": "local",
         "sandbox": {
+            "enable": False,
             "booter": "shipyard",
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
         },
-    },
-    # SubAgent orchestrator mode:
-    # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
-    # - main_enable = True: enabled; main LLM will include handoff tools and can optionally
-    #   remove tools that are duplicated on subagents via remove_main_duplicate_tools.
-    "subagent_orchestrator": {
-        "main_enable": False,
-        "remove_main_duplicate_tools": False,
-        "router_system_prompt": (
-            "You are a task router. Your job is to chat naturally, recognize user intent, "
-            "and delegate work to the most suitable subagent using transfer_to_* tools. "
-            "Do not try to use domain tools yourself. If no subagent fits, respond directly."
-        ),
-        "agents": [],
+        "skills": {"runtime": "sandbox"},
     },
     "provider_stt_settings": {
         "enable": False,
@@ -201,7 +186,6 @@ DEFAULT_CONFIG = {
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
     "log_file_max_mb": 20,
-    "trace_enable": False,
     "trace_log_enable": False,
     "trace_log_path": "logs/astrbot.trace.log",
     "trace_log_max_mb": 20,
@@ -2207,6 +2191,9 @@ CONFIG_METADATA_2 = {
                     "tool_call_timeout": {
                         "type": "int",
                     },
+                    "background_task_wait_timeout": {
+                        "type": "int",
+                    },
                     "tool_schema_mode": {
                         "type": "string",
                     },
@@ -2224,11 +2211,14 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
-                    "proactive_capability": {
+                    "skills": {
                         "type": "object",
                         "items": {
-                            "add_cron_tools": {
+                            "enable": {
                                 "type": "bool",
+                            },
+                            "runtime": {
+                                "type": "string",
                             },
                         },
                     },
@@ -2504,7 +2494,6 @@ CONFIG_METADATA_3 = {
             },
             "persona": {
                 "description": "人格",
-                "hint": "",
                 "type": "object",
                 "items": {
                     "provider_settings.default_personality": {
@@ -2520,7 +2509,6 @@ CONFIG_METADATA_3 = {
             },
             "knowledgebase": {
                 "description": "知识库",
-                "hint": "",
                 "type": "object",
                 "items": {
                     "kb_names": {
@@ -2553,7 +2541,6 @@ CONFIG_METADATA_3 = {
             },
             "websearch": {
                 "description": "网页搜索",
-                "hint": "",
                 "type": "object",
                 "items": {
                     "provider_settings.web_search": {
@@ -2564,9 +2551,6 @@ CONFIG_METADATA_3 = {
                         "description": "网页搜索提供商",
                         "type": "string",
                         "options": ["default", "tavily", "baidu_ai_search"],
-                        "condition": {
-                            "provider_settings.web_search": True,
-                        },
                     },
                     "provider_settings.websearch_tavily_key": {
                         "description": "Tavily API Key",
@@ -2575,7 +2559,6 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "tavily",
-                            "provider_settings.web_search": True,
                         },
                     },
                     "provider_settings.websearch_baidu_app_builder_key": {
@@ -2589,73 +2572,6 @@ CONFIG_METADATA_3 = {
                     "provider_settings.web_search_link": {
                         "description": "显示来源引用",
                         "type": "bool",
-                        "condition": {
-                            "provider_settings.web_search": True,
-                        },
-                    },
-                },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
-            },
-            "agent_computer_use": {
-                "description": "Agent Computer Use",
-                "hint": "",
-                "type": "object",
-                "items": {
-                    "provider_settings.computer_use_runtime": {
-                        "description": "Computer Use Runtime",
-                        "type": "string",
-                        "options": ["none", "local", "sandbox"],
-                        "labels": ["无", "本地", "沙箱"],
-                        "hint": "选择 Computer Use 运行环境。",
-                    },
-                    "provider_settings.sandbox.booter": {
-                        "description": "沙箱环境驱动器",
-                        "type": "string",
-                        "options": ["shipyard"],
-                        "labels": ["Shipyard"],
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_endpoint": {
-                        "description": "Shipyard API Endpoint",
-                        "type": "string",
-                        "hint": "Shipyard 服务的 API 访问地址。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                        "_special": "check_shipyard_connection",
-                    },
-                    "provider_settings.sandbox.shipyard_access_token": {
-                        "description": "Shipyard Access Token",
-                        "type": "string",
-                        "hint": "用于访问 Shipyard 服务的访问令牌。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_ttl": {
-                        "description": "Shipyard Session TTL",
-                        "type": "int",
-                        "hint": "Shipyard 会话的生存时间（秒）。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_max_sessions": {
-                        "description": "Shipyard Max Sessions",
-                        "type": "int",
-                        "hint": "Shipyard 最大会话数量。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
                     },
                 },
                 "condition": {
@@ -2693,15 +2609,78 @@ CONFIG_METADATA_3 = {
             #         "provider_settings.enable": True,
             #     },
             # },
-            "proactive_capability": {
-                "description": "主动型 Agent",
-                "hint": "https://docs.astrbot.app/use/proactive-agent.html",
+            "sandbox": {
+                "description": "Agent 沙箱环境",
+                "hint": "",
                 "type": "object",
                 "items": {
-                    "provider_settings.proactive_capability.add_cron_tools": {
-                        "description": "启用",
+                    "provider_settings.sandbox.enable": {
+                        "description": "启用沙箱环境",
                         "type": "bool",
-                        "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务。",
+                        "hint": "启用后，Agent 可以使用沙箱环境中的工具和资源，如 Python 代码执行、Shell 等。",
+                    },
+                    "provider_settings.sandbox.booter": {
+                        "description": "沙箱环境驱动器",
+                        "type": "string",
+                        "options": ["shipyard"],
+                        "labels": ["Shipyard"],
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_endpoint": {
+                        "description": "Shipyard API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                        "_special": "check_shipyard_connection",
+                    },
+                    "provider_settings.sandbox.shipyard_access_token": {
+                        "description": "Shipyard Access Token",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard 服务的访问令牌。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_ttl": {
+                        "description": "Shipyard Session TTL",
+                        "type": "int",
+                        "hint": "Shipyard 会话的生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_max_sessions": {
+                        "description": "Shipyard Max Sessions",
+                        "type": "int",
+                        "hint": "Shipyard 最大会话数量。",
+                        "condition": {
+                            "provider_settings.sandbox.enable": True,
+                            "provider_settings.sandbox.booter": "shipyard",
+                        },
+                    },
+                },
+                "condition": {
+                    "provider_settings.agent_runner_type": "local",
+                    "provider_settings.enable": True,
+                },
+            },
+            "skills": {
+                "description": "Skills",
+                "type": "object",
+                "items": {
+                    "provider_settings.skills.runtime": {
+                        "description": "Skill Runtime",
+                        "type": "string",
+                        "options": ["local", "sandbox"],
+                        "labels": ["本地", "沙箱"],
+                        "hint": "选择 Skills 运行环境。使用沙箱时需先启用沙箱环境。",
                     },
                 },
                 "condition": {
@@ -2710,7 +2689,6 @@ CONFIG_METADATA_3 = {
                 },
             },
             "truncate_and_compress": {
-                "hint": "",
                 "description": "上下文管理策略",
                 "type": "object",
                 "items": {
@@ -2856,6 +2834,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.background_task_wait_timeout": {
+                        "description": "后台任务等待超时时间（秒）",
+                        "type": "int",
+                        "hint": "工具超时转后台后，LLM使用wait_tool_result等待任务完成的最大时间",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
