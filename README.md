@@ -88,13 +88,12 @@ uv tool install astrbot
 # 推荐使用uv tool install
 
 # Linux
-# Debian系，暂不支持
-# Arch系，可通过AUR安装
+# Debian 系，暂不支持
+# Arch 系，可通过 AUR 安装
 yay -S astrbot-git
-# 或者使用paru
+# 或者使用 paru
 paru -S astrbot-git
 
-```
 
 #### 宝塔面板部署
 
