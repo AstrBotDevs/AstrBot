@@ -216,7 +216,7 @@ class SocketClientHandler:
                 return json.dumps({
                     "status": "success",
                     "response": "",
-                    "message": "Log file not found",
+                    "message": "日志文件未找到。请在配置中启用 log_file_enable 来记录日志到文件。",
                     "request_id": request_id,
                 }, ensure_ascii=False)
 
