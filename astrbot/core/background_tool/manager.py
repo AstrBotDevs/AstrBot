@@ -4,7 +4,10 @@
 """
 
 import asyncio
+import threading
 from typing import Any, Callable, Awaitable, AsyncGenerator
+
+from astrbot.core.tool_execution.domain.config import DEFAULT_CONFIG
 
 from .task_state import BackgroundTask, TaskStatus
 from .task_registry import TaskRegistry
@@ -20,22 +23,22 @@ class BackgroundToolManager:
     """
 
     _instance = None
-
-    # 清理配置
-    CLEANUP_INTERVAL_SECONDS = 600  # 每10分钟清理一次
-    TASK_MAX_AGE_SECONDS = 3600  # 已完成任务保留1小时
+    _init_lock = threading.Lock()
 
     def __new__(cls):
-        """单例模式"""
+        """单例模式（线程安全）"""
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
         if self._initialized:
             return
 
+        self._config = DEFAULT_CONFIG
         self.registry = TaskRegistry()
         self.output_buffer = OutputBuffer()
         self.executor = TaskExecutor(output_buffer=self.output_buffer)
@@ -64,17 +67,33 @@ class BackgroundToolManager:
 
         while True:
             try:
-                await asyncio.sleep(self.CLEANUP_INTERVAL_SECONDS)
+                await asyncio.sleep(self._config.cleanup_interval_seconds)
 
+                # 清理已完成的旧任务
                 removed_count = self.registry.cleanup_finished_tasks(
-                    max_age_seconds=self.TASK_MAX_AGE_SECONDS
+                    max_age_seconds=self._config.task_max_age_seconds
                 )
 
-                if removed_count > 0:
+                # 同步清理OutputBuffer中的孤立缓冲区
+                valid_task_ids = set(self.registry._tasks.keys())
+                buffer_cleaned = self.output_buffer.cleanup_old_buffers(valid_task_ids)
+
+                # 清理孤立的中断标记（没有活跃任务的会话）
+                active_sessions = set(
+                    task.session_id for task in self.registry._tasks.values()
+                )
+                stale_flags = [
+                    sid for sid in self._interrupt_flags if sid not in active_sessions
+                ]
+                for sid in stale_flags:
+                    self._interrupt_flags.pop(sid, None)
+
+                if removed_count > 0 or buffer_cleaned > 0 or stale_flags:
                     stats = self.registry.count_by_status()
                     logger.info(
-                        f"[BackgroundToolManager] Cleaned up {removed_count} finished tasks, "
-                        f"remaining: {self.registry.count()} tasks ({stats})"
+                        f"[BackgroundToolManager] Cleaned up {removed_count} tasks, "
+                        f"{buffer_cleaned} buffers, {len(stale_flags)} flags, "
+                        f"remaining: {self.registry.count()} ({stats})"
                     )
             except asyncio.CancelledError:
                 logger.info("[BackgroundToolManager] Cleanup task cancelled")

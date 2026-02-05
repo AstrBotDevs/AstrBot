@@ -73,17 +73,20 @@ class BackgroundTask:
         self.status = TaskStatus.COMPLETED
         self.result = result
         self.completed_at = time.time()
+        self._signal_completion()
 
     def fail(self, error: str) -> None:
         """标记任务失败"""
         self.status = TaskStatus.FAILED
         self.error = error
         self.completed_at = time.time()
+        self._signal_completion()
 
     def cancel(self) -> None:
         """标记任务取消"""
         self.status = TaskStatus.CANCELLED
         self.completed_at = time.time()
+        self._signal_completion()
 
     def append_output(self, line: str) -> None:
         """追加输出日志"""
@@ -117,6 +120,18 @@ class BackgroundTask:
         """触发完成信号"""
         if self.completion_event is not None:
             self.completion_event.set()
+
+    def release_references(self) -> None:
+        """释放大对象引用，防止内存泄露
+
+        任务完成后，不再需要event和event_queue引用，
+        释放它们以允许垃圾回收。
+        应在所有回调完成后调用。
+        """
+        self.event = None
+        self.event_queue = None
+        self.completion_event = None
+        self.output_log.clear()  # 日志已保存到OutputBuffer
 
     def init_completion_event(self) -> None:
         """初始化完成事件"""

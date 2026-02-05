@@ -6,6 +6,8 @@ from .task_registry import TaskRegistry
 from .output_buffer import OutputBuffer
 from .task_executor import TaskExecutor
 from .task_notifier import TaskNotifier
+from .callback_event_builder import CallbackEventBuilder
+from .callback_publisher import CallbackPublisher
 from .manager import BackgroundToolManager
 
 
@@ -29,6 +31,8 @@ __all__ = [
     "OutputBuffer",
     "TaskExecutor",
     "TaskNotifier",
+    "CallbackEventBuilder",
+    "CallbackPublisher",
     "BackgroundToolManager",
     "WaitInterruptedException",
 ]

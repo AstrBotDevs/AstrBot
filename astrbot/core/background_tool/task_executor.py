@@ -11,24 +11,57 @@ from typing import Any, Callable, Awaitable, AsyncGenerator
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.tool_execution.utils.sanitizer import sanitize_for_log
 from .task_state import BackgroundTask, TaskStatus
 from .output_buffer import OutputBuffer
 from .task_notifier import TaskNotifier
+from .callback_publisher import CallbackPublisher
 
 
 def _get_background_task_timeout() -> int:
-    """从配置文件中读取后台任务超时时间，如果读取失败则返回默认值600秒"""
-    try:
-        config_path = os.path.join(get_astrbot_data_path(), "cmd_config.json")
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8-sig") as f:
-                config = json.load(f)
-                return config.get("provider_settings", {}).get(
-                    "background_task_wait_timeout", 600
-                )
-    except Exception:
-        pass
-    return 600
+    """从配置文件中读取后台任务超时时间，如果读取失败则返回默认值600秒
+
+    使用模块级缓存避免每次执行都读取配置文件。
+    """
+    return _ConfigCache.get_timeout()
+
+
+class _ConfigCache:
+    """配置缓存
+
+    缓存配置值，避免频繁读取配置文件。
+    """
+    _timeout: int | None = None
+    _last_load: float = 0
+    _cache_ttl: float = 60.0  # 缓存有效期60秒
+
+    @classmethod
+    def get_timeout(cls) -> int:
+        """获取超时配置，带缓存"""
+        import time
+        current_time = time.time()
+
+        # 检查缓存是否过期
+        if cls._timeout is not None and (current_time - cls._last_load) < cls._cache_ttl:
+            return cls._timeout
+
+        # 重新加载配置
+        try:
+            config_path = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8-sig") as f:
+                    config = json.load(f)
+                    cls._timeout = config.get("provider_settings", {}).get(
+                        "background_task_wait_timeout", 600
+                    )
+                    cls._last_load = current_time
+                    return cls._timeout
+        except Exception:
+            pass
+
+        cls._timeout = 600
+        cls._last_load = current_time
+        return cls._timeout
 
 
 class TaskExecutor:
@@ -37,14 +70,20 @@ class TaskExecutor:
     管理后台任务的执行、取消和状态跟踪。
     """
 
-    def __init__(self, output_buffer: OutputBuffer):
+    def __init__(
+        self,
+        output_buffer: OutputBuffer,
+        callback_publisher: CallbackPublisher | None = None,
+    ):
         """初始化任务执行器
 
         Args:
             output_buffer: 输出缓冲区
+            callback_publisher: 回调发布器，默认创建新实例
         """
         self.output_buffer = output_buffer
         self.notifier = TaskNotifier()
+        self.callback_publisher = callback_publisher or CallbackPublisher()
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
 
@@ -91,7 +130,7 @@ class TaskExecutor:
                 output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
                 task.notification_message = self.notifier.build_message(task, output)
                 # 主动触发回调
-                await self._trigger_callback(task)
+                await self.callback_publisher.publish(task)
                 return None
 
             task.complete(result or "")
@@ -100,7 +139,7 @@ class TaskExecutor:
             task.notification_message = self.notifier.build_message(task, output)
             self._log(task.task_id, "[NOTIFICATION] Task completed, notification ready")
             # 主动触发回调
-            await self._trigger_callback(task)
+            await self.callback_publisher.publish(task)
             return result
 
         except asyncio.CancelledError:
@@ -112,7 +151,7 @@ class TaskExecutor:
                 task.task_id, "[CANCELLED] Task was cancelled, notification ready"
             )
             # 主动触发回调
-            await self._trigger_callback(task)
+            await self.callback_publisher.publish(task)
             return None
 
         except Exception as e:
@@ -121,8 +160,13 @@ class TaskExecutor:
 
             is_wait_interrupted = isinstance(e, WaitInterruptedException)
 
-            error_msg = f"{e}\n{traceback.format_exc()}"
-            task.fail(error_msg)
+            # 用户可见的错误信息（不含敏感堆栈）
+            user_error_msg = f"Task failed: {type(e).__name__}: {e}"
+            # 仅在 DEBUG 日志中记录完整堆栈
+            debug_error_msg = f"{e}\n{traceback.format_exc()}"
+            logger.debug(f"[BackgroundTask:{task.task_id}] Full traceback: {debug_error_msg}")
+
+            task.fail(user_error_msg)
 
             if is_wait_interrupted:
                 # wait_tool_result 被中断是正常行为，不需要通知用户
@@ -133,148 +177,14 @@ class TaskExecutor:
                 # 其他错误需要生成通知消息并触发回调（包含输出日志）
                 output = "\n".join(self.output_buffer.get_recent(task.task_id, n=50))
                 task.notification_message = self.notifier.build_message(task, output)
-                self._log(task.task_id, f"[ERROR] {error_msg}, notification ready")
+                self._log(task.task_id, f"[ERROR] {user_error_msg}, notification ready")
                 # 主动触发回调
-                await self._trigger_callback(task)
+                await self.callback_publisher.publish(task)
             return None
 
         finally:
             self._cleanup(task.task_id)
-
-    async def _trigger_callback(self, task: BackgroundTask) -> None:
-        """主动触发任务完成回调
-
-        创建一个新的消息事件，内容为任务完成通知，放入EventQueue触发AI响应。
-        """
-        # 如果有LLM正在使用wait_tool_result等待此任务，则不创建回调事件（避免重复回复）
-        if task.is_being_waited:
-            logger.info(
-                f"[TaskExecutor] Task {task.task_id} is being waited by LLM, skip callback to avoid duplicate response"
-            )
-            return
-
-        if not task.event:
-            logger.warning(
-                f"[TaskExecutor] Task {task.task_id} has no event, cannot trigger callback"
-            )
-            return
-
-        if not task.event_queue:
-            logger.warning(
-                f"[TaskExecutor] Task {task.task_id} has no event_queue, cannot trigger AI callback"
-            )
-            return
-
-        if not task.notification_message:
-            logger.warning(
-                f"[TaskExecutor] Task {task.task_id} has no notification message"
-            )
-            return
-
-        try:
-            import copy
-
-            from astrbot.core.message.components import Plain
-            from astrbot.core.platform.astrbot_message import (
-                AstrBotMessage,
-                MessageMember,
-            )
-            from astrbot.core.platform.message_type import MessageType
-
-            # 构建通知消息内容
-            from .task_state import TaskStatus
-
-            if task.status == TaskStatus.COMPLETED:
-                status = "completed successfully"
-            elif task.status == TaskStatus.FAILED:
-                status = "failed"
-            else:
-                status = "was cancelled"
-
-            # 构建给AI的通知消息
-            notification_text = (
-                f"[Background Task Callback]\n"
-                f"Task ID: {task.task_id}\n"
-                f"Tool: {task.tool_name}\n"
-                f"Status: {status}\n"
-            )
-
-            if task.result:
-                notification_text += f"Result: {task.result}\n"
-
-            if task.error:
-                # 只显示错误的前500字符
-                error_preview = task.error[:500]
-                if len(task.error) > 500:
-                    error_preview += "..."
-                notification_text += f"Error: {error_preview}\n"
-
-            notification_text += "\nPlease inform the user about this task completion and provide any relevant details."
-
-            # 克隆原始事件的关键属性，创建新的消息对象
-            original_event = task.event
-
-            # 创建新的消息对象
-            new_message_obj = AstrBotMessage()
-            new_message_obj.type = original_event.message_obj.type
-            new_message_obj.self_id = original_event.message_obj.self_id
-            new_message_obj.session_id = original_event.message_obj.session_id
-            new_message_obj.message_id = f"bg_task_{task.task_id}"
-            new_message_obj.group = original_event.message_obj.group
-            new_message_obj.sender = original_event.message_obj.sender
-            new_message_obj.message = [Plain(notification_text)]
-            new_message_obj.message_str = notification_text
-            new_message_obj.raw_message = None
-            new_message_obj.timestamp = int(__import__("time").time())
-
-            # 创建新的事件对象（使用相同类型的事件）
-            # 通过深拷贝原始事件来创建新实例，保留平台特定属性（如 bot）
-            new_event = copy.copy(original_event)
-            new_event.message_str = notification_text
-            new_event.message_obj = new_message_obj
-            # 重置关键状态，避免被认为已处理
-            new_event._result = None
-            new_event._has_send_oper = False
-            new_event._extras = {}
-            # 重新初始化 trace
-            from astrbot.core.utils.trace import TraceSpan
-
-            new_event.trace = TraceSpan(
-                name="BackgroundTaskCallback",
-                umo=new_event.unified_msg_origin,
-                sender_name=new_event.get_sender_name(),
-                message_outline=f"[Background Task {task.task_id}]",
-            )
-            new_event.span = new_event.trace
-
-            # 标记这是一个后台任务回调事件
-            new_event.is_wake = True
-            new_event.is_at_or_wake_command = True
-
-            # 添加标记，表明这是后台任务回调
-            new_event.set_extra("is_background_task_callback", True)
-            new_event.set_extra("background_task_id", task.task_id)
-
-            logger.info(
-                f"[TaskExecutor] Task {task.task_id} creating callback event, "
-                f"is_wake={new_event.is_wake}, is_at_or_wake_command={new_event.is_at_or_wake_command}"
-            )
-
-            # 将新事件放入队列
-            task.event_queue.put_nowait(new_event)
-
-            # 标记通知已发送
-            task.notification_sent = True
-
-            logger.info(
-                f"[TaskExecutor] Task {task.task_id} callback event queued for AI processing"
-            )
-
-        except Exception as e:
-            logger.error(f"[TaskExecutor] Failed to trigger callback: {e}")
-            import traceback
-
-            logger.error(traceback.format_exc())
+            task.release_references()  # 释放大对象引用，防止内存泄露
 
     async def _run_handler(
         self,
@@ -283,7 +193,8 @@ class TaskExecutor:
     ) -> str | None:
         """运行处理函数"""
         self._log(task.task_id, f"[START] Executing {task.tool_name}")
-        self._log(task.task_id, f"[ARGS] {task.tool_args}")
+        # 使用脱敏后的参数，防止敏感信息泄露
+        self._log(task.task_id, f"[ARGS] {sanitize_for_log(task.tool_args)}")
 
         try:
             # 构建调用参数，如果有event则传递

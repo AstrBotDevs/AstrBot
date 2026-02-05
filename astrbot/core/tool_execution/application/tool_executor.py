@@ -15,6 +15,7 @@ from astrbot.core.tool_execution.interfaces import (
     IResultProcessor,
     ITimeoutHandler,
     ITimeoutStrategy,
+    IToolInvoker,
 )
 
 
@@ -27,11 +28,13 @@ class ToolExecutor:
         result_processor: IResultProcessor = None,
         timeout_strategy: ITimeoutStrategy = None,
         timeout_handler: ITimeoutHandler = None,
+        tool_invoker: IToolInvoker = None,
     ):
         self._method_resolver = method_resolver
         self._result_processor = result_processor
         self._timeout_strategy = timeout_strategy
         self._timeout_handler = timeout_handler
+        self._tool_invoker = tool_invoker
 
     @property
     def method_resolver(self) -> IMethodResolver:
@@ -73,6 +76,16 @@ class ToolExecutor:
             self._timeout_handler = BackgroundHandler()
         return self._timeout_handler
 
+    @property
+    def tool_invoker(self) -> IToolInvoker:
+        if self._tool_invoker is None:
+            from astrbot.core.tool_execution.infrastructure.invoker import (
+                LLMToolInvoker,
+            )
+
+            self._tool_invoker = LLMToolInvoker()
+        return self._tool_invoker
+
     async def execute(
         self, tool: Any, run_context: Any, **tool_args
     ) -> AsyncGenerator[mcp.types.CallToolResult, None]:
@@ -96,10 +109,9 @@ class ToolExecutor:
         self, tool, run_context, handler, method_name, timeout_enabled, **tool_args
     ) -> AsyncGenerator[mcp.types.CallToolResult, None]:
         """带超时控制的执行"""
-        from astrbot.core.astr_agent_tool_exec import call_local_llm_tool
         from astrbot.core.tool_execution.infrastructure.handler import ResultProcessor
 
-        wrapper = call_local_llm_tool(
+        wrapper = self.tool_invoker.invoke(
             context=run_context,
             handler=handler,
             method_name=method_name,

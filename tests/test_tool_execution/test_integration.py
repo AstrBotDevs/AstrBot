@@ -539,3 +539,341 @@ class TestErrorHandling:
 
         error = MethodResolutionError("test error")
         assert str(error) == "test error"
+
+
+class TestBackgroundToolConfig:
+    """配置模块单元测试"""
+
+    def test_default_config_values(self):
+        """测试默认配置值"""
+        from astrbot.core.tool_execution.domain.config import (
+            DEFAULT_CONFIG,
+            BackgroundToolConfig,
+        )
+
+        assert DEFAULT_CONFIG.cleanup_interval_seconds == 600
+        assert DEFAULT_CONFIG.task_max_age_seconds == 3600
+        assert DEFAULT_CONFIG.default_timeout_seconds == 600
+        assert DEFAULT_CONFIG.error_preview_max_length == 500
+        assert DEFAULT_CONFIG.default_output_lines == 50
+
+    def test_config_immutability(self):
+        """测试配置不可变性"""
+        from astrbot.core.tool_execution.domain.config import BackgroundToolConfig
+
+        config = BackgroundToolConfig()
+        try:
+            config.cleanup_interval_seconds = 100
+            assert False, "Should raise FrozenInstanceError"
+        except Exception:
+            pass  # Expected
+
+
+class TestCallbackEventBuilder:
+    """回调事件构建器单元测试"""
+
+    def test_build_notification_text(self):
+        """测试通知文本构建"""
+        from astrbot.core.background_tool import (
+            BackgroundTask,
+            TaskStatus,
+            CallbackEventBuilder,
+        )
+
+        task = BackgroundTask(
+            task_id="test_001",
+            tool_name="test_tool",
+            tool_args={},
+            session_id="session_001",
+        )
+        task.status = TaskStatus.COMPLETED
+        task.result = "success"
+
+        builder = CallbackEventBuilder()
+        text = builder.build_notification_text(task)
+
+        assert "test_001" in text
+        assert "test_tool" in text
+        assert "completed successfully" in text
+        assert "success" in text
+
+    def test_error_preview_truncation(self):
+        """测试错误预览截断"""
+        from astrbot.core.background_tool import (
+            BackgroundTask,
+            TaskStatus,
+            CallbackEventBuilder,
+        )
+        from astrbot.core.tool_execution.domain.config import BackgroundToolConfig
+
+        task = BackgroundTask(
+            task_id="test_002",
+            tool_name="test_tool",
+            tool_args={},
+            session_id="session_001",
+        )
+        task.status = TaskStatus.FAILED
+        task.error = "x" * 1000  # 超过500字符
+
+        config = BackgroundToolConfig(error_preview_max_length=100)
+        builder = CallbackEventBuilder(config=config)
+        text = builder.build_notification_text(task)
+
+        assert "..." in text
+        assert len(text) < 1000  # 应该被截断
+
+
+class TestCallbackPublisher:
+    """回调发布器单元测试"""
+
+    def test_should_publish_when_being_waited(self):
+        """测试等待中的任务不应发布"""
+        from astrbot.core.background_tool import (
+            BackgroundTask,
+            CallbackPublisher,
+        )
+
+        task = BackgroundTask(
+            task_id="test_003",
+            tool_name="test_tool",
+            tool_args={},
+            session_id="session_001",
+        )
+        task.is_being_waited = True
+
+        publisher = CallbackPublisher()
+        assert publisher.should_publish(task) is False
+
+    def test_should_publish_without_event(self):
+        """测试无事件的任务不应发布"""
+        from astrbot.core.background_tool import (
+            BackgroundTask,
+            CallbackPublisher,
+        )
+
+        task = BackgroundTask(
+            task_id="test_004",
+            tool_name="test_tool",
+            tool_args={},
+            session_id="session_001",
+        )
+        task.event = None
+
+        publisher = CallbackPublisher()
+        assert publisher.should_publish(task) is False
+
+
+class TestSanitizer:
+    """日志脱敏工具单元测试"""
+
+    def test_sanitize_sensitive_key(self):
+        """测试敏感键名脱敏"""
+        from astrbot.core.tool_execution.utils.sanitizer import sanitize_params
+
+        params = {
+            "username": "test_user",
+            "password": "secret123",
+            "api_key": "sk-1234567890",
+        }
+        result = sanitize_params(params)
+
+        assert result["username"] == "test_user"
+        assert result["password"] == "***REDACTED***"
+        assert result["api_key"] == "***REDACTED***"
+
+    def test_sanitize_sensitive_value_pattern(self):
+        """测试敏感值模式脱敏"""
+        from astrbot.core.tool_execution.utils.sanitizer import sanitize_params
+
+        params = {
+            "header": "Bearer eyJhbGciOiJIUzI1NiJ9",
+            "config": "api_key=sk-1234567890abcdefghij",
+        }
+        result = sanitize_params(params)
+
+        assert "***REDACTED***" in result["header"]
+        assert "***REDACTED***" in result["config"]
+
+    def test_sanitize_nested_dict(self):
+        """测试嵌套字典脱敏"""
+        from astrbot.core.tool_execution.utils.sanitizer import sanitize_params
+
+        params = {
+            "outer": {
+                "token": "secret",
+                "name": "test",
+            }
+        }
+        result = sanitize_params(params)
+
+        assert result["outer"]["token"] == "***REDACTED***"
+        assert result["outer"]["name"] == "test"
+
+    def test_sanitize_truncation(self):
+        """测试长值截断"""
+        from astrbot.core.tool_execution.utils.sanitizer import sanitize_params
+
+        params = {"long_text": "x" * 200}
+        result = sanitize_params(params, max_value_length=100)
+
+        assert len(result["long_text"]) < 200
+        assert "truncated" in result["long_text"]
+
+
+class TestRWLock:
+    """读写锁单元测试"""
+
+    def test_read_lock_allows_concurrent_reads(self):
+        """测试读锁允许并发读取"""
+        from astrbot.core.tool_execution.utils.rwlock import RWLock
+        import threading
+
+        lock = RWLock()
+        read_count = [0]
+        max_concurrent = [0]
+
+        def reader():
+            with lock.read():
+                read_count[0] += 1
+                max_concurrent[0] = max(max_concurrent[0], read_count[0])
+                import time
+                time.sleep(0.01)
+                read_count[0] -= 1
+
+        threads = [threading.Thread(target=reader) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # 多个读取者应该能够并发
+        assert max_concurrent[0] > 1
+
+    def test_write_lock_exclusive(self):
+        """测试写锁独占"""
+        from astrbot.core.tool_execution.utils.rwlock import RWLock
+
+        lock = RWLock()
+        data = {"value": 0}
+
+        def writer():
+            with lock.write():
+                current = data["value"]
+                import time
+                time.sleep(0.01)
+                data["value"] = current + 1
+
+        import threading
+        threads = [threading.Thread(target=writer) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # 写入应该是原子的
+        assert data["value"] == 5
+
+
+class TestValidators:
+    """输入验证工具单元测试"""
+
+    def test_valid_task_id(self):
+        """测试有效的任务ID"""
+        from astrbot.core.tool_execution.utils.validators import validate_task_id
+
+        assert validate_task_id("task_001") == "task_001"
+        assert validate_task_id("abc-123-def") == "abc-123-def"
+
+    def test_invalid_task_id_type(self):
+        """测试无效的任务ID类型"""
+        from astrbot.core.tool_execution.utils.validators import (
+            validate_task_id,
+            ValidationError,
+        )
+
+        try:
+            validate_task_id(123)
+            assert False, "Should raise ValidationError"
+        except ValidationError as e:
+            assert "must be string" in str(e)
+
+    def test_invalid_task_id_format(self):
+        """测试无效的任务ID格式"""
+        from astrbot.core.tool_execution.utils.validators import (
+            validate_task_id,
+            ValidationError,
+        )
+
+        try:
+            validate_task_id("task@#$%")
+            assert False, "Should raise ValidationError"
+        except ValidationError as e:
+            assert "Invalid task_id format" in str(e)
+
+    def test_valid_session_id(self):
+        """测试有效的会话ID"""
+        from astrbot.core.tool_execution.utils.validators import validate_session_id
+
+        assert validate_session_id("session_001") == "session_001"
+        assert validate_session_id("user:group:123") == "user:group:123"
+
+    def test_session_id_dangerous_chars(self):
+        """测试会话ID危险字符"""
+        from astrbot.core.tool_execution.utils.validators import (
+            validate_session_id,
+            ValidationError,
+        )
+
+        try:
+            validate_session_id("session\x00inject")
+            assert False, "Should raise ValidationError"
+        except ValidationError as e:
+            assert "invalid characters" in str(e)
+
+    def test_validate_positive_int(self):
+        """测试正整数验证"""
+        from astrbot.core.tool_execution.utils.validators import (
+            validate_positive_int,
+            ValidationError,
+        )
+
+        assert validate_positive_int(10, "count") == 10
+
+        try:
+            validate_positive_int(-1, "count")
+            assert False, "Should raise ValidationError"
+        except ValidationError:
+            pass
+
+        try:
+            validate_positive_int(99999, "count", max_value=100)
+            assert False, "Should raise ValidationError"
+        except ValidationError:
+            pass
+
+
+class TestConfigCache:
+    """配置缓存单元测试"""
+
+    def test_cache_reuse(self):
+        """测试缓存重用"""
+        from astrbot.core.background_tool.task_executor import _ConfigCache
+        import time
+
+        # 重置缓存
+        _ConfigCache._timeout = None
+        _ConfigCache._last_load = 0
+
+        # 首次加载
+        result1 = _ConfigCache.get_timeout()
+        first_load_time = _ConfigCache._last_load
+
+        # 立即再次获取应该使用缓存
+        time.sleep(0.01)
+        result2 = _ConfigCache.get_timeout()
+        second_load_time = _ConfigCache._last_load
+
+        # 加载时间应该相同（使用了缓存）
+        assert first_load_time == second_load_time
+        assert result1 == result2
+

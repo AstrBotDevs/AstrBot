@@ -168,3 +168,27 @@ class ICallbackEventBuilder(ABC):
             新的事件对象
         """
         ...
+
+
+class IToolInvoker(ABC):
+    """工具调用器接口
+
+    抽象LLM工具调用逻辑，避免应用层直接依赖具体实现。
+    """
+
+    @abstractmethod
+    def invoke(
+        self, context: Any, handler: Callable, method_name: str, **kwargs
+    ) -> Any:
+        """调用工具
+
+        Args:
+            context: 运行上下文
+            handler: 处理函数
+            method_name: 方法名称
+            **kwargs: 工具参数
+
+        Returns:
+            异步生成器
+        """
+        ...
