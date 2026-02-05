@@ -58,8 +58,7 @@ class CommandDispatcher:
         """收到 ProviderRequest 时立即执行 Agent 并发送结果"""
         if not self._agent_executor:
             return
-        async for _ in self._agent_executor.process(event):
-            pass
+        await self._agent_executor.run(event)
         await self._send_service.send(event)
 
     async def match(

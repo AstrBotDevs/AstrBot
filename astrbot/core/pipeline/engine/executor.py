@@ -80,9 +80,7 @@ class PipelineExecutor:
         """执行 Pipeline"""
         try:
             # 预处理
-            should_continue = await self.preprocessor.preprocess(
-                event, self.pipeline_ctx
-            )
+            should_continue = await self.preprocessor.preprocess(event)
             if not should_continue:
                 return
 

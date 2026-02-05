@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-
 from astrbot.core import logger
 from astrbot.core.pipeline.agent.internal import InternalAgentExecutor
 from astrbot.core.pipeline.agent.third_party import ThirdPartyAgentExecutor
+from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -32,12 +31,12 @@ class AgentExecutor:
             self.executor = ThirdPartyAgentExecutor()
         await self.executor.initialize(ctx)
 
-    async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
+    async def run(self, event: AstrMessageEvent) -> AgentRunOutcome:
+        outcome = AgentRunOutcome()
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug(
                 "This pipeline does not enable AI capability, skip processing."
             )
-            return
+            return outcome
 
-        async for resp in self.executor.process(event, self.prov_wake_prefix):
-            yield resp
+        return await self.executor.run(event, self.prov_wake_prefix)

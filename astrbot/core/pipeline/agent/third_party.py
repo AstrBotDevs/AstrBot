@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -75,15 +76,16 @@ class ThirdPartyAgentExecutor:
             "unsupported_streaming_strategy"
         ]
 
-    async def process(
+    async def run(
         self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+    ) -> AgentRunOutcome:
+        outcome = AgentRunOutcome()
         req: ProviderRequest | None = None
 
         if provider_wake_prefix and not event.message_str.startswith(
             provider_wake_prefix
         ):
-            return
+            return outcome
 
         self.prov_cfg: dict = next(
             (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
@@ -91,12 +93,12 @@ class ThirdPartyAgentExecutor:
         )
         if not self.prov_id:
             logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
-            return
+            return outcome
         if not self.prov_cfg:
             logger.error(
                 f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
             )
-            return
+            return outcome
 
         # make provider request
         req = ProviderRequest()
@@ -108,11 +110,11 @@ class ThirdPartyAgentExecutor:
                 req.image_urls.append(image_path)
 
         if not req.prompt and not req.image_urls:
-            return
+            return outcome
 
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-            return
+            return outcome
 
         if self.runner_type == "dify":
             runner = DifyAgentRunner[AstrAgentContext]()
@@ -149,42 +151,47 @@ class ThirdPartyAgentExecutor:
             provider_config=self.prov_cfg,
             streaming=streaming_response,
         )
+        outcome.handled = True
 
         if streaming_response and not stream_to_general:
             # 流式响应
+            async def wrapped_stream():
+                async for chunk in run_third_party_agent(
+                    runner,
+                    stream_to_general=False,
+                ):
+                    yield chunk
+
+                asyncio.create_task(
+                    Metric.upload(
+                        llm_tick=1,
+                        model_name=self.runner_type,
+                        provider_type=self.runner_type,
+                    ),
+                )
+
             event.set_result(
                 MessageEventResult()
                 .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                .set_async_stream(
-                    run_third_party_agent(
-                        runner,
-                        stream_to_general=False,
-                    ),
-                ),
+                .set_async_stream(wrapped_stream()),
             )
-            yield
-            if runner.done():
-                final_resp = runner.get_final_llm_resp()
-                if final_resp and final_resp.result_chain:
-                    event.set_result(
-                        MessageEventResult(
-                            chain=final_resp.result_chain.chain or [],
-                            result_content_type=ResultContentType.STREAMING_FINISH,
-                        ),
-                    )
+            outcome.streaming = True
+            outcome.result = event.get_result()
+            outcome.stopped = event.is_stopped()
+            return outcome
         else:
             # 非流式响应或转换为普通响应
             async for _ in run_third_party_agent(
                 runner,
                 stream_to_general=stream_to_general,
             ):
-                yield
+                pass
 
             final_resp = runner.get_final_llm_resp()
 
             if not final_resp or not final_resp.result_chain:
                 logger.warning("Agent Runner 未返回最终结果。")
-                return
+                return outcome
 
             event.set_result(
                 MessageEventResult(
@@ -192,7 +199,6 @@ class ThirdPartyAgentExecutor:
                     result_content_type=ResultContentType.LLM_RESULT,
                 ),
             )
-            yield
 
         asyncio.create_task(
             Metric.upload(
@@ -201,3 +207,7 @@ class ThirdPartyAgentExecutor:
                 provider_type=self.runner_type,
             ),
         )
+
+        outcome.result = event.get_result()
+        outcome.stopped = event.is_stopped()
+        return outcome

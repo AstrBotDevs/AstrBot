@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from astrbot.core import logger
-from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.star.node_star import NodeResult, NodeStar
 
 
@@ -44,25 +43,11 @@ class AgentNode(NodeStar):
             logger.warning("AgentExecutor missing in event services.")
             return NodeResult.CONTINUE
 
-        # 执行 Agent 并收集结果
-        latest_result = None
-        async for _ in agent_executor.process(event):
-            result = event.get_result()
-            if not result:
-                continue
+        outcome = await agent_executor.run(event)
+        if outcome.result:
+            event.set_result(outcome.result)
 
-            if result.result_content_type == ResultContentType.STREAMING_RESULT:
-                # 流式结果，不清空，让后续节点处理
-                continue
-
-            latest_result = result
-
-        # 最终结果：优先使用 event 中的结果，否则使用收集到的结果
-        final_result = event.get_result() or latest_result
-        if final_result:
-            event.set_result(final_result)
-
-        if event.is_stopped():
+        if outcome.stopped or event.is_stopped():
             return NodeResult.STOP
 
         return NodeResult.CONTINUE

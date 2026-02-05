@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import logger
@@ -20,6 +19,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest
@@ -108,9 +108,10 @@ class InternalAgentExecutor:
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
         )
 
-    async def process(
+    async def run(
         self, event: AstrMessageEvent, provider_wake_prefix: str
-    ) -> AsyncGenerator[None, None]:
+    ) -> AgentRunOutcome:
+        outcome = AgentRunOutcome()
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -128,7 +129,7 @@ class InternalAgentExecutor:
                 and not has_media_content
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
-                return
+                return outcome
 
             logger.debug("ready to request llm provider")
 
@@ -151,12 +152,13 @@ class InternalAgentExecutor:
                 )
 
                 if build_result is None:
-                    return
+                    return outcome
 
                 agent_runner = build_result.agent_runner
                 req = build_result.provider_request
                 provider = build_result.provider
                 reset_coro = build_result.reset_coro
+                outcome.handled = True
 
                 api_base = provider.provider_config.get("api_base", "")
                 for host in decoded_blocked:
@@ -166,7 +168,7 @@ class InternalAgentExecutor:
                             "Please use another ai provider.",
                             api_base,
                         )
-                        return
+                        return outcome
 
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"
@@ -174,9 +176,8 @@ class InternalAgentExecutor:
                 )
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
-                    return
+                    return outcome
 
-                # apply reset
                 if reset_coro:
                     await reset_coro
 
@@ -247,10 +248,12 @@ class InternalAgentExecutor:
                         .set_result_content_type(ResultContentType.STREAMING_RESULT)
                         .set_async_stream(wrapped_stream()),
                     )
-                    yield
-                    return
+                    outcome.streaming = True
+                    outcome.result = event.get_result()
+                    outcome.stopped = event.is_stopped()
+                    return outcome
 
-                elif streaming_response and not stream_to_general:
+                if streaming_response and not stream_to_general:
 
                     async def wrapped_stream():
                         async for chunk in run_agent(
@@ -290,18 +293,24 @@ class InternalAgentExecutor:
                         .set_result_content_type(ResultContentType.STREAMING_RESULT)
                         .set_async_stream(wrapped_stream()),
                     )
-                    yield
-                    return
+                    outcome.streaming = True
+                    outcome.result = event.get_result()
+                    outcome.stopped = event.is_stopped()
+                    return outcome
 
-                else:
-                    async for _ in run_agent(
-                        agent_runner,
-                        self.max_step,
-                        self.show_tool_use,
-                        stream_to_general,
-                        show_reasoning=self.show_reasoning,
-                    ):
-                        yield
+                latest_result: MessageEventResult | None = None
+                async for _ in run_agent(
+                    agent_runner,
+                    self.max_step,
+                    self.show_tool_use,
+                    stream_to_general,
+                    show_reasoning=self.show_reasoning,
+                ):
+                    result = event.get_result()
+                    if result:
+                        latest_result = result
+                if latest_result:
+                    event.set_result(latest_result)
 
                 final_resp = agent_runner.get_final_llm_resp()
 
@@ -335,6 +344,10 @@ class InternalAgentExecutor:
                     f"Error occurred while processing agent request: {e}"
                 )
             )
+
+        outcome.result = event.get_result()
+        outcome.stopped = event.is_stopped()
+        return outcome
 
     async def _save_to_history(
         self,
