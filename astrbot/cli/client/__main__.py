@@ -353,18 +353,31 @@ def get_logs(
 def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(
-        description="AstrBot CLI Client - Send messages to AstrBot CLI Platform (Unix Socket or TCP Socket)",
+        description="AstrBot CLI Client - 与 CLI Platform 通信的客户端工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  astr "你好"
-  astr "/help"
-  astr --socket /tmp/custom.sock "测试消息"
-  echo "你好" | astr
+使用示例:
 
-Connection:
-  Automatically detects connection type from .cli_connection file.
-  Falls back to default Unix Socket if file not found.
+  发送消息:
+    astr "你好"                    # 发送消息给 AstrBot
+    astr "/help"                   # 查看内置帮助
+    echo "你好" | astr             # 从标准输入读取
+
+  获取日志:
+    astr --log                     # 获取最近 100 行日志
+    astr --log --lines 50          # 获取最近 50 行
+    astr --log --level ERROR       # 只显示 ERROR 级别
+    astr --log --pattern "CLI"     # 只显示包含 "CLI" 的日志
+    astr --log --json              # 以 JSON 格式输出日志
+
+  高级选项:
+    astr -j "测试"                 # 输出原始 JSON 响应
+    astr -t 60 "长时间任务"        # 设置超时时间为 60 秒
+
+连接说明:
+  - 自动从 data/.cli_connection 文件检测连接类型（Unix Socket 或 TCP）
+  - Token 自动从 data/.cli_token 文件读取
+  - 必须在 AstrBot 根目录下运行，或设置 ASTRBOT_ROOT 环境变量
         """,
     )
 
