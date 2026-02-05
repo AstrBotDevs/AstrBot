@@ -89,6 +89,15 @@ class TelegramPlatformAdapter(Platform):
 
         self.scheduler = AsyncIOScheduler()
 
+        # Media group handling
+        self.media_group_cache: dict[str, list] = {}
+        self.media_group_timeout = self.config.get(
+            "telegram_media_group_timeout", 2.5
+        )  # seconds
+        self.media_group_max_wait = self.config.get(
+            "telegram_media_group_max_wait", 10.0
+        )  # max seconds
+
     @override
     async def send_by_session(
         self,
@@ -225,6 +234,13 @@ class TelegramPlatformAdapter(Platform):
 
     async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.debug(f"Telegram message: {update.message}")
+
+        # Handle media group messages
+        if update.message and update.message.media_group_id:
+            await self.handle_media_group_message(update, context)
+            return
+
+        # Handle regular messages
         abm = await self.convert_message(update, context)
         if abm:
             await self.handle_msg(abm)
@@ -398,6 +414,112 @@ class TelegramPlatformAdapter(Platform):
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
 
         return message
+
+    async def handle_media_group_message(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Handle messages that are part of a media group (album).
+
+        Caches incoming messages and schedules delayed processing to collect all
+        media items before sending to the pipeline.
+        """
+        media_group_id = update.message.media_group_id
+        if not media_group_id:
+            return
+
+        # Initialize cache for this media group if needed
+        if media_group_id not in self.media_group_cache:
+            self.media_group_cache[media_group_id] = []
+            logger.debug(f"创建媒体组缓存: {media_group_id}")
+
+        # Add this message to the cache
+        self.media_group_cache[media_group_id].append((update, context))
+        logger.debug(
+            f"添加消息到媒体组 {media_group_id}, "
+            f"当前共 {len(self.media_group_cache[media_group_id])} 条"
+        )
+
+        # Cancel any existing scheduled job for this media group
+        job_id = f"media_group_{media_group_id}"
+        existing_jobs = self.scheduler.get_jobs()
+        for job in existing_jobs:
+            if job.id == job_id:
+                job.remove()
+                logger.debug(f"取消媒体组 {media_group_id} 的旧任务")
+
+        # Schedule processing after timeout (debounced)
+        from datetime import datetime, timedelta
+
+        self.scheduler.add_job(
+            self.process_media_group,
+            "date",
+            run_date=datetime.now() + timedelta(seconds=self.media_group_timeout),
+            args=[media_group_id],
+            id=job_id,
+            replace_existing=True,
+        )
+        logger.debug(
+            f"已安排媒体组 {media_group_id} 在 {self.media_group_timeout} 秒后处理"
+        )
+
+    async def process_media_group(self, media_group_id: str):
+        """Process a complete media group by merging all collected messages.
+
+        Args:
+            media_group_id: The unique identifier for this media group
+        """
+        if media_group_id not in self.media_group_cache:
+            logger.warning(f"媒体组 {media_group_id} 未在缓存中找到")
+            return
+
+        updates_and_contexts = self.media_group_cache.pop(media_group_id)
+        if not updates_and_contexts:
+            logger.warning(f"媒体组 {media_group_id} 为空")
+            return
+
+        logger.info(
+            f"正在处理媒体组 {media_group_id}，共 {len(updates_and_contexts)} 项"
+        )
+
+        # Use the first update to create the base message
+        first_update, first_context = updates_and_contexts[0]
+        abm = await self.convert_message(first_update, first_context)
+
+        if not abm:
+            logger.warning(f"转换媒体组 {media_group_id} 的第一条消息失败")
+            return
+
+        # Add additional media from remaining updates
+        for update, _context in updates_and_contexts[1:]:
+            if not update.message:
+                continue
+
+            # Add photos
+            if update.message.photo:
+                photo = update.message.photo[-1]
+                file = await photo.get_file()
+                abm.message.append(Comp.Image(file=file.file_path, url=file.file_path))
+                logger.debug(f"添加图片到媒体组: {file.file_path}")
+
+            # Add videos
+            elif update.message.video:
+                file = await update.message.video.get_file()
+                if file.file_path:
+                    abm.message.append(
+                        Comp.Video(file=file.file_path, path=file.file_path)
+                    )
+                    logger.debug(f"添加视频到媒体组: {file.file_path}")
+
+            # Add documents
+            elif update.message.document:
+                file = await update.message.document.get_file()
+                file_name = update.message.document.file_name or uuid.uuid4().hex
+                if file.file_path:
+                    abm.message.append(Comp.File(file=file.file_path, name=file_name))
+                    logger.debug(f"添加文档到媒体组: {file_name}")
+
+        # Process the merged message
+        await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage):
         message_event = TelegramPlatformEvent(
