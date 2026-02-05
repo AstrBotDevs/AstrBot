@@ -9,7 +9,6 @@ import psutil
 from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
-from psutil._common import addr as psutil_addr
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
@@ -168,7 +167,7 @@ class AstrBotDashboard:
         """获取占用端口的进程详细信息"""
         try:
             for conn in psutil.net_connections(kind="inet"):
-                if cast(psutil_addr, conn.laddr).port == port:
+                if conn.laddr and conn.laddr.port == port:
                     try:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息
@@ -197,29 +196,45 @@ class AstrBotDashboard:
 
     def run(self):
         ip_addr = []
-        if p := os.environ.get("DASHBOARD_PORT"):
-            port = p
-        else:
-            port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
-        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
-        enable = self.core_lifecycle.astrbot_config["dashboard"].get("enable", True)
+        conf = self.core_lifecycle.astrbot_config["dashboard"]
+        port = os.environ.get("DASHBOARD_PORT") or conf.get("port", 6185)
+        host = os.environ.get("DASHBOARD_HOST") or conf.get("host", "::")
+        enable = os.environ.get("DASHBOARD_ENABLE") or conf.get("enable", True)
 
         if not enable:
             logger.info("WebUI 已被禁用")
             return None
 
-        logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
+        display_host = f"[{host}]" if ":" in host and "[" not in host else host
+        logger.info(f"正在启动 WebUI, 监听地址: http://{display_host}:{port}")
 
-        if host == "0.0.0.0":
+        if host == "::" or host == "0.0.0.0":
             logger.info(
                 "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
             )
 
         if host not in ["localhost", "127.0.0.1"]:
-            try:
-                ip_addr = get_local_ip_addresses()
-            except Exception as _:
-                pass
+            if host == "::" or host == "0.0.0.0":
+                try:
+                    ip_addr = get_local_ip_addresses()
+                    # 尝试获取 IPv6 地址
+                    import socket
+
+                    try:
+                        for res in socket.getaddrinfo(
+                            socket.gethostname(), None, socket.AF_INET6
+                        ):
+                            ip: str = str(res[4][0])
+                            if (
+                                ip not in ip_addr
+                                and not ip.startswith("fe80")
+                                and ip != "::1"
+                            ):
+                                ip_addr.append(ip)
+                    except Exception:
+                        pass
+                except Exception as _:
+                    pass
         if isinstance(port, str):
             port = int(port)
 
@@ -239,7 +254,12 @@ class AstrBotDashboard:
         parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
         parts.append(f"   ➜  本地: http://localhost:{port}\n")
         for ip in ip_addr:
-            parts.append(f"   ➜  网络: http://{ip}:{port}\n")
+            display_ip = f"[{ip}]" if ":" in ip else ip
+            parts.append(f"   ➜  网络: http://{display_ip}:{port}\n")
+
+        if any(":" in ip and not ip.startswith(("fe80", "::1")) for ip in ip_addr):
+            parts.append("   ➜  提示: 检测到公网 IPv6 地址，已开启 IPv6 支持。\n")
+
         parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
         display = "".join(parts)
 
@@ -252,7 +272,10 @@ class AstrBotDashboard:
 
         # 配置 Hypercorn
         config = HyperConfig()
-        config.bind = [f"{host}:{port}"]
+        if ":" in host and "[" not in host:
+            config.bind = [f"[{host}]:{port}"]
+        else:
+            config.bind = [f"{host}:{port}"]
 
         # 根据配置决定是否禁用访问日志
         disable_access_log = self.core_lifecycle.astrbot_config.get(
