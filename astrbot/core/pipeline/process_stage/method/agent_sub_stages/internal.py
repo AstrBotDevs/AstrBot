@@ -92,6 +92,7 @@ class InternalAgentSubStage(Stage):
             "safety_mode_strategy", "system_prompt"
         )
 
+        self.computer_use_runtime = settings.get("computer_use_runtime")
         self.sandbox_cfg = settings.get("sandbox", {})
 
         # Proactive capability configuration
@@ -116,6 +117,7 @@ class InternalAgentSubStage(Stage):
             dequeue_context_length=self.dequeue_context_length,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
+            computer_use_runtime=self.computer_use_runtime,
             sandbox_cfg=self.sandbox_cfg,
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
@@ -162,6 +164,7 @@ class InternalAgentSubStage(Stage):
                     event=event,
                     plugin_context=self.ctx.plugin_manager.context,
                     config=build_cfg,
+                    apply_reset=False,
                 )
 
                 if build_result is None:
@@ -170,6 +173,7 @@ class InternalAgentSubStage(Stage):
                 agent_runner = build_result.agent_runner
                 req = build_result.provider_request
                 provider = build_result.provider
+                reset_coro = build_result.reset_coro
 
                 api_base = provider.provider_config.get("api_base", "")
                 for host in decoded_blocked:
@@ -187,6 +191,10 @@ class InternalAgentSubStage(Stage):
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                     return
+
+                # apply reset
+                if reset_coro:
+                    await reset_coro
 
                 action_type = event.get_extra("action_type")
 
@@ -355,7 +363,8 @@ class InternalAgentSubStage(Stage):
 
         token_usage = None
         if runner_stats:
-            token_usage = runner_stats.token_usage.total
+            # token_usage = runner_stats.token_usage.total
+            token_usage = llm_response.usage.total if llm_response.usage else None
 
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,

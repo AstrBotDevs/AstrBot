@@ -10,7 +10,18 @@ const { tm } = useModuleI18n('features/console');
   <div style="height: 100%;">
     <div
       style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
-      <h4>{{ tm('title') }}</h4>
+      <div>
+        <h4>{{ tm('title') }}</h4>
+        <v-alert
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-2"
+          style="max-width: 600px;"
+        >
+          {{ tm('debugHint.text') }}
+        </v-alert>
+      </div>
       <div class="d-flex align-center">
         <v-switch
           v-model="autoScrollEnabled"

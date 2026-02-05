@@ -8,6 +8,7 @@
     :items-loading="itemsLoading"
     :labels="labels"
     :show-create-button="true"
+    :show-edit-button="true"
     :default-item="defaultPersona"
     item-id-field="persona_id"
     item-name-field="persona_id"
@@ -15,15 +16,16 @@
     :display-value-formatter="formatDisplayValue"
     @navigate="handleNavigate"
     @create="openCreatePersona"
+    @edit="openEditPersona"
   />
 
-  <!-- 创建人格对话框 -->
+  <!-- 创建/编辑人格对话框 -->
   <PersonaForm
-    v-model="showCreateDialog"
-    :editing-persona="undefined"
+    v-model="showPersonaDialog"
+    :editing-persona="editingPersona ?? undefined"
     :current-folder-id="currentFolderId ?? undefined"
     :current-folder-name="currentFolderName ?? undefined"
-    @saved="handlePersonaCreated"
+    @saved="handlePersonaSaved"
     @error="handleError" />
 </template>
 
@@ -62,7 +64,8 @@ const folderTree = ref<FolderTreeNode[]>([])
 const currentPersonas = ref<Persona[]>([])
 const treeLoading = ref(false)
 const itemsLoading = ref(false)
-const showCreateDialog = ref(false)
+const showPersonaDialog = ref(false)
+const editingPersona = ref<Persona | null>(null)
 const currentFolderId = ref<string | null>(null)
 
 // 默认人格
@@ -104,6 +107,7 @@ const labels = computed(() => ({
   defaultItem: tm('personaSelector.defaultPersona'),
   noDescription: tm('personaSelector.noDescription'),
   createButton: tm('personaSelector.createPersona'),
+  editButton: tm('personaSelector.editPersona') || 'Edit',
   confirmButton: t('core.common.confirm'),
   cancelButton: t('core.common.cancel'),
   rootFolder: tm('personaSelector.rootFolder') || '全部人格',
@@ -171,13 +175,21 @@ async function handleNavigate(folderId: string | null) {
 
 // 打开创建人格对话框
 function openCreatePersona() {
-  showCreateDialog.value = true
+  editingPersona.value = null
+  showPersonaDialog.value = true
 }
 
-// 人格创建成功
-async function handlePersonaCreated(message: string) {
-  console.log('人格创建成功:', message)
-  showCreateDialog.value = false
+// 打开编辑人格对话框
+function openEditPersona(persona: Persona) {
+  editingPersona.value = persona
+  showPersonaDialog.value = true
+}
+
+// 人格保存成功（创建或编辑）
+async function handlePersonaSaved(message: string) {
+  console.log('人格保存成功:', message)
+  showPersonaDialog.value = false
+  editingPersona.value = null
   // 刷新当前文件夹的人格列表
   await loadPersonasInFolder(currentFolderId.value)
 }

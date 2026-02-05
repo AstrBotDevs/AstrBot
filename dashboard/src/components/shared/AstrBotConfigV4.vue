@@ -1,4 +1,5 @@
 <script setup>
+import MarkdownIt from 'markdown-it'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
@@ -24,10 +25,21 @@ const props = defineProps({
 const { t } = useI18n()
 const { tm, getRaw } = useModuleI18n('features/config-metadata')
 
+const hintMarkdown = new MarkdownIt({
+  linkify: true,
+  breaks: true
+})
+
 // 翻译器函数 - 如果是国际化键则翻译，否则原样返回
 const translateIfKey = (value) => {
   if (!value || typeof value !== 'string') return value
   return tm(value)
+}
+
+const renderHint = (value) => {
+  const text = translateIfKey(value)
+  if (!text) return ''
+  return hintMarkdown.renderInline(text)
 }
 
 // 处理labels翻译 - labels可以是数组或国际化键
@@ -185,7 +197,7 @@ function getSpecialSubtype(value) {
       </v-list-item-title>
       <v-list-item-subtitle class="config-hint">
         <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-        {{ translateIfKey(metadata[metadataKey]?.hint) }}
+        <span v-html="renderHint(metadata[metadataKey]?.hint)"></span>
       </v-list-item-subtitle>
     </v-card-text>
 
@@ -205,7 +217,7 @@ function getSpecialSubtype(value) {
 
                 <v-list-item-subtitle class="property-hint">
                   <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                  {{ translateIfKey(itemMeta?.hint) }}
+                  <span v-html="renderHint(itemMeta?.hint)"></span>
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>
@@ -291,6 +303,12 @@ function getSpecialSubtype(value) {
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.config-hint :deep(a),
+.property-hint :deep(a) {
+  color: var(--v-theme-primary);
+  text-decoration: underline;
 }
 
 .metadata-key,

@@ -34,7 +34,7 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主流即时通讯软件，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建生产可用的 AI 应用。
+AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack、等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
 ![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
 
@@ -49,6 +49,23 @@ AstrBot 是一个开源的一站式 Agent 聊天机器人平台，可接入主�
 6. 💻 WebUI 支持。
 7. 🌈 Web ChatUI 支持，ChatUI 内置代理沙盒、网页搜索等。
 8. 🌐 国际化（i18n）支持。
+
+<br>
+
+<table align="center">
+  <tr align="center">
+    <th>💙 角色扮演 & 情感陪伴</th>
+    <th>✨ 主动式 Agent</th>
+    <th>🚀 通用 Agentic 能力</th>
+    <th>🧩 900+ 社区插件</th>
+  </tr>
+  <tr>
+    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
+    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
+  </tr>
+</table>
 
 ## 快速开始
 
@@ -249,6 +266,6 @@ pre-commit install
 
 _私は、高性能ですから!_
 
-<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
-</div
+陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。
+
 

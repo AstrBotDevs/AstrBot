@@ -39,7 +39,7 @@ class CustomFilterOr(CustomFilter):
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter.",
+                "CustomFilter class can only operate with other CustomFilter.",
             )
         self.filter1 = filter1
         self.filter2 = filter2

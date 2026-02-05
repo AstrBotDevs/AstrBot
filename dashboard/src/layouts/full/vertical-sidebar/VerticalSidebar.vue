@@ -253,16 +253,19 @@ function openChangelogDialog() {
         </template>
       </v-list>
       <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
-        <v-btn style="margin-bottom: 8px;" size="small" variant="tonal" color="primary" to="/settings">
-          🔧 {{ t('core.navigation.settings') }}
+        <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
+          {{ t('core.navigation.settings') }}
         </v-btn>
-        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openChangelogDialog">
-          📝 {{ t('core.navigation.changelog') }}
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
+          @click="openChangelogDialog">
+          {{ t('core.navigation.changelog') }}
         </v-btn>
-        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="toggleIframe">
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
+          @click="toggleIframe">
           {{ t('core.navigation.documentation') }}
         </v-btn>
-        <v-btn style="margin-bottom: 8px;" size="small" variant="plain" @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
+          @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
           {{ t('core.navigation.github') }}
            <v-chip
             v-if="starCount"
