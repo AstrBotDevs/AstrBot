@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y curl gnupg \
 RUN python -m pip install uv \
     && echo "3.11" > .python-version
 RUN uv pip install -r requirements.txt --no-cache-dir --system
-RUN uv pip install socksio uv pilk --no-cache-dir --system
+RUN uv pip install edge_tts socksio uv pilk --no-cache-dir --system
 
 EXPOSE 6185
 
