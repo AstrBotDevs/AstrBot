@@ -184,6 +184,45 @@ class InternalAgentSubStage(Stage):
                         )
                         return
 
+                # 处理待发送的后台任务通知
+                if (
+                    hasattr(event, "pending_notifications")
+                    and event.pending_notifications
+                ):
+                    from astrbot.core.background_tool.manager import (
+                        BackgroundToolManager,
+                    )
+
+                    notification_lines = ["[Background Task Completion Notifications]"]
+                    notification_lines.append(
+                        "The following background tasks have completed:"
+                    )
+
+                    for notif in event.pending_notifications:
+                        notification_lines.append(
+                            f"- Task {notif['task_id']} ({notif['tool_name']}): {notif['message']}"
+                        )
+
+                    notification_lines.append(
+                        "Please inform the user about these completed tasks in a natural way."
+                    )
+
+                    notification_text = "\n".join(notification_lines)
+
+                    # 添加到上下文
+                    req.contexts.append(
+                        {"role": "system", "content": notification_text}
+                    )
+
+                    # 标记通知为已发送
+                    manager = BackgroundToolManager()
+                    for notif in event.pending_notifications:
+                        manager.mark_notification_sent(notif["task_id"])
+
+                    logger.info(
+                        f"[Internal Agent] Injected {len(event.pending_notifications)} notifications into LLM context"
+                    )
+
                 stream_to_general = (
                     self.unsupported_streaming_strategy == "turn_off"
                     and not event.platform_meta.support_streaming_message
