@@ -84,17 +84,16 @@ uv tool install astrbot
 #### 系统包管理器安装
 
 ```bash
-# windows & macos
-# 推荐使用 uv tool install
+# Windows & macOS
+# 推荐使用uv tool install
 
-# linux
-# debain系，暂不支持
-# arch系，可通过aur安装
+# Linux
+# Debian 系，暂不支持
+# Arch 系，可通过 AUR 安装
 yay -S astrbot-git
-# 或者使用paru
+# 或者使用 paru
 paru -S astrbot-git
 
-```
 
 #### 宝塔面板部署
 
