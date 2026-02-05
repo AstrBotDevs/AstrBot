@@ -90,13 +90,14 @@ class TelegramPlatformAdapter(Platform):
         self.scheduler = AsyncIOScheduler()
 
         # Media group handling
-        self.media_group_cache: dict[str, list] = {}
+        # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
+        self.media_group_cache: dict[str, dict] = {}
         self.media_group_timeout = self.config.get(
             "telegram_media_group_timeout", 2.5
-        )  # seconds
+        )  # seconds - debounce delay between messages
         self.media_group_max_wait = self.config.get(
             "telegram_media_group_max_wait", 10.0
-        )  # max seconds
+        )  # max seconds - hard cap to prevent indefinite delay
 
     @override
     async def send_by_session(
@@ -421,45 +422,56 @@ class TelegramPlatformAdapter(Platform):
         """Handle messages that are part of a media group (album).
 
         Caches incoming messages and schedules delayed processing to collect all
-        media items before sending to the pipeline.
+        media items before sending to the pipeline. Uses debounce mechanism with
+        a hard cap (max_wait) to prevent indefinite delay.
         """
+        from datetime import datetime, timedelta
+
         media_group_id = update.message.media_group_id
         if not media_group_id:
             return
 
         # Initialize cache for this media group if needed
         if media_group_id not in self.media_group_cache:
-            self.media_group_cache[media_group_id] = []
+            self.media_group_cache[media_group_id] = {
+                "created_at": datetime.now(),
+                "items": [],
+            }
             logger.debug(f"创建媒体组缓存: {media_group_id}")
 
         # Add this message to the cache
-        self.media_group_cache[media_group_id].append((update, context))
+        entry = self.media_group_cache[media_group_id]
+        entry["items"].append((update, context))
         logger.debug(
             f"添加消息到媒体组 {media_group_id}, "
-            f"当前共 {len(self.media_group_cache[media_group_id])} 条"
+            f"当前共 {len(entry['items'])} 条"
         )
 
-        # Cancel any existing scheduled job for this media group
+        # Calculate delay: if already waited too long, process immediately;
+        # otherwise use normal debounce timeout
+        elapsed = (datetime.now() - entry["created_at"]).total_seconds()
+        if elapsed >= self.media_group_max_wait:
+            delay = 0
+            logger.debug(
+                f"媒体组 {media_group_id} 已达到最大等待时间 "
+                f"({elapsed:.1f}s >= {self.media_group_max_wait}s)，立即处理"
+            )
+        else:
+            delay = self.media_group_timeout
+            logger.debug(
+                f"已安排媒体组 {media_group_id} 在 {delay} 秒后处理 "
+                f"(已等待 {elapsed:.1f}s)"
+            )
+
+        # Schedule/reschedule processing (replace_existing=True handles debounce)
         job_id = f"media_group_{media_group_id}"
-        existing_jobs = self.scheduler.get_jobs()
-        for job in existing_jobs:
-            if job.id == job_id:
-                job.remove()
-                logger.debug(f"取消媒体组 {media_group_id} 的旧任务")
-
-        # Schedule processing after timeout (debounced)
-        from datetime import datetime, timedelta
-
         self.scheduler.add_job(
             self.process_media_group,
             "date",
-            run_date=datetime.now() + timedelta(seconds=self.media_group_timeout),
+            run_date=datetime.now() + timedelta(seconds=delay),
             args=[media_group_id],
             id=job_id,
             replace_existing=True,
-        )
-        logger.debug(
-            f"已安排媒体组 {media_group_id} 在 {self.media_group_timeout} 秒后处理"
         )
 
     async def process_media_group(self, media_group_id: str):
@@ -472,7 +484,8 @@ class TelegramPlatformAdapter(Platform):
             logger.warning(f"媒体组 {media_group_id} 未在缓存中找到")
             return
 
-        updates_and_contexts = self.media_group_cache.pop(media_group_id)
+        entry = self.media_group_cache.pop(media_group_id)
+        updates_and_contexts = entry["items"]
         if not updates_and_contexts:
             logger.warning(f"媒体组 {media_group_id} 为空")
             return
@@ -481,7 +494,7 @@ class TelegramPlatformAdapter(Platform):
             f"正在处理媒体组 {media_group_id}，共 {len(updates_and_contexts)} 项"
         )
 
-        # Use the first update to create the base message
+        # Use the first update to create the base message (with reply, caption, etc.)
         first_update, first_context = updates_and_contexts[0]
         abm = await self.convert_message(first_update, first_context)
 
@@ -489,34 +502,18 @@ class TelegramPlatformAdapter(Platform):
             logger.warning(f"转换媒体组 {media_group_id} 的第一条消息失败")
             return
 
-        # Add additional media from remaining updates
-        for update, _context in updates_and_contexts[1:]:
-            if not update.message:
+        # Add additional media from remaining updates by reusing convert_message
+        for update, context in updates_and_contexts[1:]:
+            # Convert the message but skip reply chains (get_reply=False)
+            extra = await self.convert_message(update, context, get_reply=False)
+            if not extra:
                 continue
 
-            # Add photos
-            if update.message.photo:
-                photo = update.message.photo[-1]
-                file = await photo.get_file()
-                abm.message.append(Comp.Image(file=file.file_path, url=file.file_path))
-                logger.debug(f"添加图片到媒体组: {file.file_path}")
-
-            # Add videos
-            elif update.message.video:
-                file = await update.message.video.get_file()
-                if file.file_path:
-                    abm.message.append(
-                        Comp.Video(file=file.file_path, path=file.file_path)
-                    )
-                    logger.debug(f"添加视频到媒体组: {file.file_path}")
-
-            # Add documents
-            elif update.message.document:
-                file = await update.message.document.get_file()
-                file_name = update.message.document.file_name or uuid.uuid4().hex
-                if file.file_path:
-                    abm.message.append(Comp.File(file=file.file_path, name=file_name))
-                    logger.debug(f"添加文档到媒体组: {file_name}")
+            # Merge only the message components (keep base session/meta from first)
+            abm.message.extend(extra.message)
+            logger.debug(
+                f"添加 {len(extra.message)} 个组件到媒体组 {media_group_id}"
+            )
 
         # Process the merged message
         await self.handle_msg(abm)
