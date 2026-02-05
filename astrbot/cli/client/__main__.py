@@ -389,7 +389,9 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "message", nargs="?", help="Message to send (if not provided, read from stdin)"
+        "message",
+        nargs=argparse.REMAINDER,
+        help="Message to send (if not provided, read from stdin)",
     )
 
     parser.add_argument(
@@ -445,7 +447,8 @@ def main() -> None:
         # 处理消息发送
         # 获取消息内容
         if args.message:
-            message = args.message
+            # REMAINDER 模式下 args.message 是列表，用空格连接
+            message = " ".join(args.message)
         elif not sys.stdin.isatty():
             # 从stdin读取
             message = sys.stdin.read().strip()
