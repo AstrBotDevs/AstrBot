@@ -9,7 +9,7 @@ import psutil
 from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
-from psutil._common import addr as psutil_addr
+from psutil._common import addr as psutil_addr  # type: ignore[attr-defined]
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
