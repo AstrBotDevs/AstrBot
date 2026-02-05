@@ -35,6 +35,7 @@ from .routes.t2i import T2iRoute
 
 APP: Quart
 
+
 class AstrBotDashboard:
     """AstrBot Web Dashboard"""
 
@@ -57,6 +58,8 @@ class AstrBotDashboard:
         self.config = core_lifecycle.astrbot_config
         self.shutdown_event = shutdown_event
 
+        self.enable_webui = self._check_webui_enabled()
+
         self._init_paths(webui_dir)
         self._init_app()
         self.context = RouteContext(self.config, self.app)
@@ -69,6 +72,13 @@ class AstrBotDashboard:
     # 初始化阶段
     # ------------------------------------------------------------------
 
+    def _check_webui_enabled(self) -> bool:
+        cfg = self.config.get("dashboard", {})
+        _env = os.environ.get("DASHBOARD_ENABLE")
+        if _env is not None:
+            return _env.lower() in ("true", "1", "yes")
+        return cfg.get("enable", True)
+
     def _init_paths(self, webui_dir: str | None):
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
@@ -78,12 +88,28 @@ class AstrBotDashboard:
             )
 
     def _init_app(self):
-        self.app = Quart(
-            "dashboard",
-            static_folder=self.data_path,
-            static_url_path="/",
-        )
-        APP = self.app 
+        if self.enable_webui:
+            self.app = Quart(
+                "dashboard",
+                static_folder=self.data_path,
+                static_url_path="/",
+            )
+        else:
+            # 禁用 WebUI 时不提供静态文件服务
+            self.app = Quart("dashboard")
+
+            # 添加根路径提示
+            @self.app.route("/")
+            async def index():
+                return jsonify(
+                    {
+                        "message": "AstrBot WebUI has been detached.",
+                        "status": "API Server Running",
+                        "version": VERSION,
+                    }
+                )
+
+        APP = self.app
         self.app = cors(
             self.app, allow_origin="*", allow_methods="*", allow_headers="*"
         )
@@ -245,29 +271,28 @@ class AstrBotDashboard:
         port: int = int(_port)
         _host = os.environ.get("DASHBOARD_HOST") or cfg.get("host", "::")
         host: str = _host.strip("[]")
-        _env = os.environ.get("DASHBOARD_ENABLE")
-        enable = (
-            _env.lower() in ("true", "1", "yes")
-            if _env is not None
-            else cfg.get("enable", True)
-        )
-
-        if not enable:
-            logger.info("WebUI 已被禁用")
-            return None
 
         display_host = f"[{host}]" if ":" in host else host
-        logger.info(
-            "正在启动 WebUI, 监听地址: http://%s:%s",
-            display_host,
-            port,
-        )
+
+        if self.enable_webui:
+            logger.info(
+                "正在启动 WebUI + API, 监听地址: http://%s:%s",
+                display_host,
+                port,
+            )
+        else:
+            logger.info(
+                "正在启动 API Server (WebUI 已分离), 监听地址: http://%s:%s",
+                display_host,
+                port,
+            )
 
         if self.check_port_in_use("127.0.0.1", port):
             info = self.get_process_using_port(port)
             raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
-        self._print_access_urls(host, port)
+        if self.enable_webui:
+            self._print_access_urls(host, port)
 
         config = HyperConfig()
         binds: list[str] = [self._build_bind(host, port)]
