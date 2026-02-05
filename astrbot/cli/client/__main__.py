@@ -350,6 +350,43 @@ def get_logs(
         client_socket.close()
 
 
+def format_response(response: dict) -> str:
+    """格式化响应输出
+
+    处理：
+    1. 分段回复（每行一句）
+    2. 图片占位符
+
+    Args:
+        response: 响应字典
+
+    Returns:
+        格式化后的字符串
+    """
+    if response.get("status") != "success":
+        return ""
+
+    # 获取文本响应
+    text = response.get("response", "")
+
+    # 获取图片数量
+    images = response.get("images", [])
+    image_count = len(images)
+
+    # 处理分段：按换行符分割，然后每行单独输出
+    lines = text.split("\n")
+
+    # 如果有图片，在末尾添加图片占位符
+    if image_count > 0:
+        if image_count == 1:
+            lines.append("[图片]")
+        else:
+            lines.append(f"[{image_count}张图片]")
+
+    # 用换行符连接所有行
+    return "\n".join(lines)
+
+
 def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -385,6 +422,12 @@ def main() -> None:
   - 自动从 data/.cli_connection 文件检测连接类型（Unix Socket 或 TCP）
   - Token 自动从 data/.cli_token 文件读取
   - 必须在 AstrBot 根目录下运行，或设置 ASTRBOT_ROOT 环境变量
+
+输出说明:
+  - 默认模式下，图片以 [图片] 占位符显示，不返回实际图片内容
+  - 分段回复会自动分行显示
+  - 如需完整信息（包括图片 URL/base64），请使用 -j 参数输出 JSON
+  - 如需查看详细日志，请使用 --log 参数
         """,
     )
 
@@ -469,7 +512,9 @@ def main() -> None:
     else:
         # 格式化输出
         if response.get("status") == "success":
-            print(response.get("response", ""))
+            # 使用格式化函数处理响应
+            formatted = format_response(response)
+            print(formatted)
         else:
             error = response.get("error", "Unknown error")
             print(f"Error: {error}", file=sys.stderr)

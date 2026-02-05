@@ -78,6 +78,7 @@ class SocketClientHandler:
 
             request_id = request.get("request_id", str(uuid.uuid4()))
             auth_token = request.get("auth_token", "")
+            action = request.get("action", "")
 
             # Token验证（所有请求都需要token）
             if not self.token_manager.validate(auth_token):
@@ -212,9 +213,12 @@ class SocketClientHandler:
             log_path = os.path.join(self.data_path, "logs", "astrbot.log")
 
             if not os.path.exists(log_path):
-                return ResponseBuilder.build_success(
-                    "", request_id, message="Log file not found"
-                )
+                return json.dumps({
+                    "status": "success",
+                    "response": "",
+                    "message": "Log file not found",
+                    "request_id": request_id,
+                }, ensure_ascii=False)
 
             # 读取日志文件（从末尾开始）
             logs = []
@@ -253,9 +257,12 @@ class SocketClientHandler:
 
             # 构建响应
             log_text = "\n".join(logs)
-            return ResponseBuilder.build_success(
-                log_text, request_id, message=f"Retrieved {len(logs)} log lines"
-            )
+            return json.dumps({
+                "status": "success",
+                "response": log_text,
+                "message": f"Retrieved {len(logs)} log lines",
+                "request_id": request_id,
+            }, ensure_ascii=False)
 
         except Exception as e:
             logger.exception("Error getting logs")
