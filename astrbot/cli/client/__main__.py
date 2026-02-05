@@ -42,19 +42,30 @@ if sys.platform == "win32":
 
 
 def get_data_path() -> str:
-    """获取数据目录路径（复制自 astrbot.core.utils.astrbot_path.get_astrbot_data_path）
+    """获取数据目录路径
 
     优先级：
     1. 环境变量 ASTRBOT_ROOT
-    2. 当前工作目录
+    2. 源码安装目录（通过 __file__ 获取）
+    3. 当前工作目录
     """
-    # 获取根目录
+    # 优先使用环境变量
     if root := os.environ.get("ASTRBOT_ROOT"):
-        root_path = os.path.realpath(root)
-    else:
-        root_path = os.path.realpath(os.getcwd())
+        return os.path.join(root, "data")
 
-    return os.path.join(root_path, "data")
+    # 获取源码安装目录（__main__.py 在 astrbot/cli/client/）
+    # 向上 3 级到达根目录
+    source_root = os.path.realpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../..")
+    )
+    data_dir = os.path.join(source_root, "data")
+
+    # 如果源码目录下存在 data 目录，使用它
+    if os.path.exists(data_dir):
+        return data_dir
+
+    # 回退到当前工作目录
+    return os.path.join(os.path.realpath(os.getcwd()), "data")
 
 
 def get_temp_path() -> str:
