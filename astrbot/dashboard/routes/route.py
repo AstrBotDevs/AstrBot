@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
-from quart import Quart
+from quart import Quart, jsonify
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -57,3 +57,6 @@ class Response:
         self.data = data
         self.message = message
         return self
+
+    def to_json(self):
+        return jsonify(asdict(self))

@@ -47,7 +47,7 @@ class SlackAdapter(Platform):
         self.signing_secret = platform_config.get("signing_secret")
         self.connection_mode = platform_config.get("slack_connection_mode", "socket")
         self.unified_webhook_mode = platform_config.get("unified_webhook_mode", False)
-        self.webhook_host = platform_config.get("slack_webhook_host", "0.0.0.0")
+        self.webhook_host = platform_config.get("slack_webhook_host", "::")
         self.webhook_port = platform_config.get("slack_webhook_port", 3000)
         self.webhook_path = platform_config.get(
             "slack_webhook_path",
