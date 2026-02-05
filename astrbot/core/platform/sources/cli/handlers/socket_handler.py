@@ -212,18 +212,21 @@ class SocketClientHandler:
             # 日志文件路径
             log_path = os.path.join(self.data_path, "logs", "astrbot.log")
 
-            if not os.path.exists(log_path):
-                return json.dumps({
-                    "status": "success",
-                    "response": "",
-                    "message": "日志文件未找到。请在配置中启用 log_file_enable 来记录日志到文件。",
-                    "request_id": request_id,
-                }, ensure_ascii=False)
+            if not os.path.exists(log_path):  # noqa: ASYNC240
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "response": "",
+                        "message": "日志文件未找到。请在配置中启用 log_file_enable 来记录日志到文件。",
+                        "request_id": request_id,
+                    },
+                    ensure_ascii=False,
+                )
 
             # 读取日志文件（从末尾开始）
             logs = []
             try:
-                with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(log_path, encoding="utf-8", errors="ignore") as f:
                     # 读取所有行
                     all_lines = f.readlines()
 
@@ -257,18 +260,19 @@ class SocketClientHandler:
 
             # 构建响应
             log_text = "\n".join(logs)
-            return json.dumps({
-                "status": "success",
-                "response": log_text,
-                "message": f"Retrieved {len(logs)} log lines",
-                "request_id": request_id,
-            }, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "response": log_text,
+                    "message": f"Retrieved {len(logs)} log lines",
+                    "request_id": request_id,
+                },
+                ensure_ascii=False,
+            )
 
         except Exception as e:
             logger.exception("Error getting logs")
-            return ResponseBuilder.build_error(
-                f"Error getting logs: {e}", request_id
-            )
+            return ResponseBuilder.build_error(f"Error getting logs: {e}", request_id)
 
 
 class SocketModeHandler(IHandler):

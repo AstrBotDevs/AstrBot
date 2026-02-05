@@ -24,14 +24,13 @@ for handler in root.handlers[:]:
     if isinstance(handler, logging.StreamHandler):
         root.removeHandler(handler)
 
-import argparse
-import io
-import json
-import os
-import socket
-import sys
-import uuid
-from typing import Optional
+import argparse  # noqa: E402
+import io  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+import socket  # noqa: E402
+import sys  # noqa: E402
+import uuid  # noqa: E402
 
 # 仅使用标准库导入，不导入astrbot框架
 # Windows UTF-8 输出支持
@@ -82,7 +81,7 @@ def load_auth_token() -> str:
         return ""
 
 
-def load_connection_info(data_dir: str) -> Optional[dict]:
+def load_connection_info(data_dir: str) -> dict | None:
     """加载连接信息
 
     从.cli_connection文件读取Socket连接信息
@@ -175,7 +174,7 @@ def connect_to_server(connection_info: dict, timeout: float = 30.0) -> socket.so
             raise ConnectionError(
                 f"Connection refused to {host}:{port}. Is AstrBot running?"
             )
-        except socket.timeout:
+        except TimeoutError:
             raise ConnectionError(f"Connection timeout to {host}:{port}")
         except Exception as e:
             raise ConnectionError(f"TCP socket connection error: {e}")
@@ -485,7 +484,9 @@ def main() -> None:
 
     # 处理日志请求
     if args.log:
-        response = get_logs(args.socket, args.timeout, args.lines, args.level, args.pattern)
+        response = get_logs(
+            args.socket, args.timeout, args.lines, args.level, args.pattern
+        )
     else:
         # 处理消息发送
         # 获取消息内容
