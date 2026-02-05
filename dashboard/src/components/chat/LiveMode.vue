@@ -342,7 +342,9 @@ function connectWebSocket(): Promise<void> {
       } else if (apiBase.startsWith("http://")) {
         wsBase = apiBase.replace("http://", "ws://");
       } else {
-        wsBase = "ws://" + apiBase;
+        const protocol =
+          window.location.protocol === "https:" ? "wss://" : "ws://";
+        wsBase = protocol + apiBase;
       }
       wsBase = wsBase.replace(/\/+$/, "");
     } else {

@@ -110,8 +110,18 @@ class AstrBotDashboard:
                 )
 
         APP = self.app
+
+        dashboard_cfg = self.config.get("dashboard", {})
+        cors_cfg = dashboard_cfg.get("cors", {})
+        allow_origin = cors_cfg.get("allow_origins", "*")
+        allow_methods = cors_cfg.get("allow_methods", "*")
+        allow_headers = cors_cfg.get("allow_headers", "*")
+
         self.app = cors(
-            self.app, allow_origin="*", allow_methods="*", allow_headers="*"
+            self.app,
+            allow_origin=allow_origin,
+            allow_methods=allow_methods,
+            allow_headers=allow_headers,
         )
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
@@ -329,9 +339,6 @@ class AstrBotDashboard:
                 if ip.is_loopback:
                     continue
 
-                # 再次过滤掉 fe80（第一次过滤在get_local_ip_addresses）
-                if ip.is_link_local:
-                    continue
                 if ip.version == 6:
                     display_url = f"http://[{ip}]:{port}"
                 else:

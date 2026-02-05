@@ -231,7 +231,8 @@ def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
                 # 过滤掉 IPv6 的 link-local 地址（fe80:...）
                 # 用这个不如用::1
                 ip = ip_address(addr.address.split("%")[0])  # 处理带 zone index 的情况
-                network_ips.append(ip)
+                if not ip.is_link_local:
+                    network_ips.append(ip)
 
     return network_ips
 
