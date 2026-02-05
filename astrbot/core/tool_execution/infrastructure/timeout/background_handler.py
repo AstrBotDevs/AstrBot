@@ -4,6 +4,7 @@
 """
 
 from typing import Any
+
 import mcp.types
 
 from astrbot.core.tool_execution.interfaces import ITimeoutHandler

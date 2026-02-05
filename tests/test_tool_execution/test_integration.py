@@ -400,3 +400,142 @@ class TestDomainConfig:
         assert "stop_tool" in BACKGROUND_TOOL_NAMES
         assert "list_running_tools" in BACKGROUND_TOOL_NAMES
         assert len(BACKGROUND_TOOL_NAMES) == 4
+
+
+class TestMethodResolverAdvanced:
+    """方法解析器高级测试"""
+
+    def test_resolve_with_run_method(self):
+        """测试run方法解析"""
+        from astrbot.core.tool_execution.infrastructure.handler import MethodResolver
+
+        class MockTool:
+            handler = None
+            name = "test"
+
+            def run(self, event):
+                return "run result"
+
+        resolver = MethodResolver()
+        handler, method = resolver.resolve(MockTool())
+        assert method == "run"
+
+    def test_resolve_failure_no_handler(self):
+        """测试无handler时抛出异常"""
+        from astrbot.core.tool_execution.infrastructure.handler import MethodResolver
+        from astrbot.core.tool_execution.errors import MethodResolutionError
+
+        class MockTool:
+            handler = None
+            name = "test"
+
+        resolver = MethodResolver()
+        try:
+            resolver.resolve(MockTool())
+            assert False, "Should raise MethodResolutionError"
+        except MethodResolutionError:
+            pass
+
+
+class TestTimeoutStrategyAdvanced:
+    """超时策略高级测试"""
+
+    @pytest.mark.asyncio
+    async def test_standard_timeout_strategy_success(self):
+        """测试标准超时策略成功执行"""
+        from astrbot.core.tool_execution.infrastructure.timeout import TimeoutStrategy
+
+        async def quick_task():
+            return "done"
+
+        strategy = TimeoutStrategy()
+        result = await strategy.execute(quick_task(), 5.0)
+        assert result == "done"
+
+    @pytest.mark.asyncio
+    async def test_standard_timeout_strategy_timeout(self):
+        """测试标准超时策略超时"""
+        from astrbot.core.tool_execution.infrastructure.timeout import TimeoutStrategy
+
+        async def slow_task():
+            await asyncio.sleep(10)
+            return "done"
+
+        strategy = TimeoutStrategy()
+        try:
+            await strategy.execute(slow_task(), 0.1)
+            assert False, "Should raise TimeoutError"
+        except asyncio.TimeoutError:
+            pass
+
+
+class TestEventDrivenWait:
+    """事件驱动等待测试"""
+
+    @pytest.mark.asyncio
+    async def test_task_completion_signal(self):
+        """测试任务完成信号触发"""
+        from astrbot.core.background_tool import BackgroundTask
+
+        task = BackgroundTask(
+            task_id="signal_test",
+            tool_name="test",
+            tool_args={},
+            session_id="s1",
+        )
+        task.init_completion_event()
+
+        assert task.completion_event is not None
+
+        # 模拟任务完成
+        task.complete("done")
+        task._signal_completion()
+
+        # 验证信号已设置
+        assert task.completion_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_task_without_completion_event(self):
+        """测试无完成事件的任务回退到轮询"""
+        from astrbot.core.background_tool import BackgroundTask
+
+        task = BackgroundTask(
+            task_id="no_event_test",
+            tool_name="test",
+            tool_args={},
+            session_id="s1",
+        )
+        # 不初始化 completion_event
+        task.complete("done")
+
+        # 应该正常完成，is_finished 返回 True
+        assert task.is_finished()
+        assert task.completion_event is None
+
+
+class TestErrorHandling:
+    """错误处理测试"""
+
+    def test_parameter_validation_error_unexpected_arg(self):
+        """测试意外参数触发验证错误"""
+        from astrbot.core.tool_execution.infrastructure.handler import (
+            ParameterValidator,
+        )
+        from astrbot.core.tool_execution.errors import ParameterValidationError
+
+        def handler(event, name: str):
+            pass
+
+        validator = ParameterValidator()
+        try:
+            validator.validate(handler, {"unexpected": "value"})
+            assert False, "Should raise ParameterValidationError"
+        except ParameterValidationError as e:
+            assert "Parameter mismatch" in str(e)
+
+    def test_method_resolution_error(self):
+        """测试方法解析错误"""
+        from astrbot.core.tool_execution.errors import MethodResolutionError
+
+        error = MethodResolutionError("test error")
+        assert str(error) == "test error"

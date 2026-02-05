@@ -3,7 +3,7 @@
 import asyncio
 import functools
 import time
-from typing import Callable
+from collections.abc import Callable
 
 
 def log_execution(func: Callable) -> Callable:

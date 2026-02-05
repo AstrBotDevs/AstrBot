@@ -3,10 +3,11 @@
 从工具对象中解析出可调用的方法。
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from astrbot.core.tool_execution.interfaces import IMethodResolver
 from astrbot.core.tool_execution.errors import MethodResolutionError
+from astrbot.core.tool_execution.interfaces import IMethodResolver
 
 
 class MethodResolver(IMethodResolver):

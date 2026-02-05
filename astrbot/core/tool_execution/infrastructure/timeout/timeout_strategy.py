@@ -4,7 +4,8 @@
 """
 
 import asyncio
-from typing import Any, Coroutine
+from collections.abc import Coroutine
+from typing import Any
 
 from astrbot.core.tool_execution.interfaces import ITimeoutStrategy
 

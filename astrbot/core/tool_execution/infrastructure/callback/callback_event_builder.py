@@ -1,6 +1,7 @@
 """回调事件构建器"""
 
 from typing import Any
+
 from astrbot.core.tool_execution.interfaces import ICallbackEventBuilder
 
 

@@ -4,7 +4,8 @@
 """
 
 import asyncio
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import mcp.types
 
@@ -12,8 +13,8 @@ from astrbot.core.tool_execution.domain.config import BACKGROUND_TOOL_NAMES
 from astrbot.core.tool_execution.interfaces import (
     IMethodResolver,
     IResultProcessor,
-    ITimeoutStrategy,
     ITimeoutHandler,
+    ITimeoutStrategy,
 )
 
 

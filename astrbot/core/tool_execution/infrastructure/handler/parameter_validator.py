@@ -4,10 +4,10 @@
 """
 
 import inspect
-from typing import Any, Callable
+from collections.abc import Callable
 
-from astrbot.core.tool_execution.interfaces import IParameterValidator
 from astrbot.core.tool_execution.errors import ParameterValidationError
+from astrbot.core.tool_execution.interfaces import IParameterValidator
 
 
 class ParameterValidator(IParameterValidator):

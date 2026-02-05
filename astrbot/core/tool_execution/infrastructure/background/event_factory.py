@@ -4,7 +4,6 @@
 """
 
 import copy
-import time
 from typing import Any
 
 from astrbot.core.tool_execution.interfaces import ICallbackEventBuilder
