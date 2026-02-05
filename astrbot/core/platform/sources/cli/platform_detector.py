@@ -104,12 +104,16 @@ def _check_windows_unix_socket_support(python_version: tuple[int, int, int]) -> 
         - Python 3.9+
         - Windows 10 build 17063+
 
+    Uses actual socket creation test as primary method (most reliable).
+
     Args:
         python_version: Python version tuple
 
     Returns:
         True if Unix Socket is supported, False otherwise
     """
+    import socket
+
     start_time = time.time()
     logger.debug(
         f"[ENTRY] _check_windows_unix_socket_support inputs={{python_version={python_version}}}"
@@ -126,55 +130,43 @@ def _check_windows_unix_socket_support(python_version: tuple[int, int, int]) -> 
         )
         return False
 
-    # Check Windows build version
+    # 方法1：实际尝试创建 Unix Socket（最可靠）
+    try:
+        if hasattr(socket, "AF_UNIX"):
+            test_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            test_sock.close()
+            logger.debug("[PROCESS] Unix Socket creation test passed")
+            duration_ms = (time.time() - start_time) * 1000
+            logger.debug(
+                f"[EXIT] _check_windows_unix_socket_support return=True time_ms={duration_ms:.2f}"
+            )
+            return True
+    except (OSError, AttributeError) as e:
+        logger.debug(f"[PROCESS] Unix Socket creation test failed: {e}")
+
+    # 方法2：检查 Windows 版本号（备选，仅用于日志）
     try:
         win_ver = platform.win32_ver()
         logger.debug(f"[PROCESS] platform.win32_ver() returned: {win_ver}")
 
-        # win_ver returns: (release, version, csd, ptype)
-        # version format: "10.0.19041"
         version_str = win_ver[1]
-
-        if not version_str:
-            logger.warning("[PROCESS] Unable to determine Windows build version")
-            duration_ms = (time.time() - start_time) * 1000
-            logger.debug(
-                f"[EXIT] _check_windows_unix_socket_support return=False time_ms={duration_ms:.2f}"
-            )
-            return False
-
-        # Parse build number from version string
-        # Format: "major.minor.build"
-        parts = version_str.split(".")
-        if len(parts) >= 3:
-            build = int(parts[2])
-            logger.debug(f"[PROCESS] Windows build number: {build}")
-
-            # Unix Socket support requires build 17063+
-            if build >= 17063:
-                logger.debug(f"[PROCESS] Build {build} >= 17063, Unix Socket supported")
-                supports = True
-            else:
-                logger.debug(
-                    f"[PROCESS] Build {build} < 17063, Unix Socket not supported"
-                )
-                supports = False
-        else:
-            logger.warning(
-                f"[PROCESS] Unable to parse build number from version: {version_str}"
-            )
-            supports = False
-
+        if version_str:
+            parts = version_str.split(".")
+            if len(parts) >= 3:
+                build = int(parts[2])
+                logger.debug(f"[PROCESS] Windows build number: {build}")
+                if build >= 17063:
+                    logger.debug(
+                        f"[PROCESS] Build {build} >= 17063, but socket test failed"
+                    )
     except Exception as e:
-        logger.error(f"[ERROR] Failed to check Windows version: {e}", exc_info=True)
-        supports = False
+        logger.debug(f"[PROCESS] Failed to check Windows version: {e}")
 
     duration_ms = (time.time() - start_time) * 1000
     logger.debug(
-        f"[EXIT] _check_windows_unix_socket_support return={supports} time_ms={duration_ms:.2f}"
+        f"[EXIT] _check_windows_unix_socket_support return=False time_ms={duration_ms:.2f}"
     )
-
-    return supports
+    return False
 
 
 def _check_unix_socket_support(

@@ -11,12 +11,19 @@ AstrBot CLI Tool - 跨平台Socket客户端
 """
 
 import argparse
+import io
 import json
 import os
 import socket
 import sys
 import uuid
 from typing import Optional
+
+# Windows UTF-8 输出支持
+if sys.platform == "win32":
+    # 设置stdout/stderr为UTF-8编码
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
 def get_data_path() -> str:
@@ -90,9 +97,7 @@ def load_connection_info(data_dir: str) -> Optional[dict]:
         return None
 
 
-def connect_to_server(
-    connection_info: dict, timeout: float = 30.0
-) -> socket.socket:
+def connect_to_server(connection_info: dict, timeout: float = 30.0) -> socket.socket:
     """连接到服务器
 
     根据连接信息类型选择Unix Socket或TCP Socket连接
