@@ -34,7 +34,6 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
@@ -49,7 +48,6 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
-from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
 
@@ -76,12 +74,6 @@ class MainAgentBuildConfig:
     kb_agentic_mode: bool = False
     """Whether to use agentic mode for knowledge base retrieval.
     This will inject the knowledge base query tool into the main agent's toolset to allow dynamic querying."""
-    file_extract_enabled: bool = False
-    """Whether to enable file content extraction for uploaded files."""
-    file_extract_prov: str = "moonshotai"
-    """The file extraction provider."""
-    file_extract_msh_api_key: str = ""
-    """The API key for Moonshot AI file extraction provider."""
     context_limit_reached_strategy: str = "truncate_by_turns"
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
@@ -155,82 +147,21 @@ async def _get_session_conv(
     return conversation
 
 
-async def _apply_kb(
+def _apply_kb(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
-        if req.prompt is None:
-            return
-        try:
-            kb_result = await retrieve_knowledge_base(
-                query=req.prompt,
-                umo=event.unified_msg_origin,
-                context=plugin_context,
-            )
-            if not kb_result:
-                return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while retrieving knowledge base: %s", exc)
+        # Non-agentic mode: read from KnowledgeBaseNode injected context
+        kb_result = event.get_extra("kb_context")
+        if kb_result and req.system_prompt is not None:
+            req.system_prompt += f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
     else:
+        # Agentic mode: add knowledge base query tool
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
-
-
-async def _apply_file_extract(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    config: MainAgentBuildConfig,
-) -> None:
-    file_paths = []
-    file_names = []
-    for comp in event.message_obj.message:
-        if isinstance(comp, File):
-            file_paths.append(await comp.get_file())
-            file_names.append(comp.name)
-        elif isinstance(comp, Reply) and comp.chain:
-            for reply_comp in comp.chain:
-                if isinstance(reply_comp, File):
-                    file_paths.append(await reply_comp.get_file())
-                    file_names.append(reply_comp.name)
-    if not file_paths:
-        return
-    if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
-    if config.file_extract_prov == "moonshotai":
-        if not config.file_extract_msh_api_key:
-            logger.error("Moonshot AI API key for file extract is not set")
-            return
-        file_contents = await asyncio.gather(
-            *[
-                extract_file_moonshotai(
-                    file_path,
-                    config.file_extract_msh_api_key,
-                )
-                for file_path in file_paths
-            ]
-        )
-    else:
-        logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
-        return
-
-    for file_content, file_name in zip(file_contents, file_names):
-        req.contexts.append(
-            {
-                "role": "system",
-                "content": (
-                    "File Extract Results of user uploaded files:\n"
-                    f"{file_content}\nFile Name: {file_name or 'Unknown'}"
-                ),
-            },
-        )
 
 
 def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
@@ -888,12 +819,6 @@ async def build_main_agent(
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
 
-    if config.file_extract_enabled:
-        try:
-            await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
-
     if not req.prompt and not req.image_urls:
         if not event.get_group_id() and req.extra_user_content_parts:
             req.prompt = "<attachment>"
@@ -902,7 +827,7 @@ async def build_main_agent(
 
     await _decorate_llm_request(event, req, plugin_context, config)
 
-    await _apply_kb(event, req, plugin_context, config)
+    _apply_kb(event, req, config)
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin

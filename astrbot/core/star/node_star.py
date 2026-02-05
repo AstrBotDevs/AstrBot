@@ -35,10 +35,12 @@ if TYPE_CHECKING:
 class NodeResult(Enum):
     """Node 执行结果，控制 Pipeline 流程"""
 
-    CONTINUE = "continue"  # 继续执行下一个 Node
-    SKIP = "skip"  # 跳过后续 Node，直接进入发送
-    STOP = "stop"  # 终止整个 Pipeline（不发送）
-    WAIT = "wait"  # 暂停链路，等待下一条消息再从当前 Node 恢复
+    CONTINUE = "continue"
+    """继续执行下一个 Node"""
+    STOP = "stop"
+    """停止链路处理"""
+    WAIT = "wait"
+    """暂停链路，等待下一条消息再从当前Node恢复"""
 
 
 class NodeStar(Star):

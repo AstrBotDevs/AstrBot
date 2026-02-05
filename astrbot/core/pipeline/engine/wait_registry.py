@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
-from .chain_config import ChainConfig
+if TYPE_CHECKING:
+    from .chain_config import ChainConfig
 
 
 @dataclass
@@ -14,6 +16,16 @@ class WaitState:
     node_name: str
     node_uuid: str | None = None
     config_id: str | None = None
+
+    def is_valid(self, current_chain_config: ChainConfig | None) -> bool:
+        """检查 WaitState 是否仍然有效"""
+        if current_chain_config is None:
+            return False
+
+        if current_chain_config != self.chain_config:
+            return False
+
+        return True
 
 
 def build_wait_key(event: AstrMessageEvent) -> str:

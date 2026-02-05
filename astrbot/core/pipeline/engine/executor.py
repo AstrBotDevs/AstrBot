@@ -96,10 +96,7 @@ class PipelineExecutor:
             resume_node_uuid = event.get_extra("_resume_node_uuid")
 
             if resume_node or resume_node_uuid:
-                if (
-                    await self._run_system_mechanisms(event)
-                    == NodeResult.STOP
-                ):
+                if await self._run_system_mechanisms(event) == NodeResult.STOP:
                     if event.get_result():
                         await self.send_service.send(event)
                     return
@@ -148,10 +145,7 @@ class PipelineExecutor:
                 return
 
             # 系统机制检查（限流、权限）
-            if (
-                await self._run_system_mechanisms(event)
-                == NodeResult.STOP
-            ):
+            if await self._run_system_mechanisms(event) == NodeResult.STOP:
                 if event.get_result():
                     await self.send_service.send(event)
                 return

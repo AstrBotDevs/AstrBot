@@ -1,15 +1,3 @@
-"""Chain 执行器 — 执行 NodeStar 节点链
-
-职责：
-1. 按 ChainConfig 中的 nodes 顺序执行节点
-2. 处理 NodeResult（CONTINUE, SKIP, STOP, WAIT）
-
-不负责：
-- 命令分发（CommandDispatcher）
-- 唤醒检测（Executor）
-- 系统机制（限流、权限等）
-"""
-
 from __future__ import annotations
 
 import traceback
@@ -54,7 +42,7 @@ class ChainExecutor:
 
     @staticmethod
     async def execute(
-            event: AstrMessageEvent,
+        event: AstrMessageEvent,
         chain_config: ChainConfig,
         send_service: SendService,
         agent_executor: AgentExecutor,
@@ -165,7 +153,6 @@ class ChainExecutor:
             # 处理结果
             if event.is_stopped():
                 event.set_extra("_node_stop_event", True)
-                result.should_send = event.get_result() is not None
                 break
             if node_result == NodeResult.WAIT:
                 wait_key = build_wait_key(event)
@@ -181,11 +168,12 @@ class ChainExecutor:
                 result.should_send = False
                 break
             elif node_result == NodeResult.STOP:
-                result.should_send = event.get_result() is not None
-                break
-            elif node_result == NodeResult.SKIP:
                 break
             # CONTINUE: 继续下一个节点
+
+        # 发送与否由 result 是否存在决定（WAIT 除外）
+        if result.should_send:
+            result.should_send = event.get_result() is not None
 
         return result
 

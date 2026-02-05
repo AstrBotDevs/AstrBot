@@ -226,9 +226,7 @@ class SendService:
         event.clear_result()
 
     @staticmethod
-    async def _trigger_decorate_hook(
-            event: AstrMessageEvent, is_stream: bool
-    ) -> bool:
+    async def _trigger_decorate_hook(event: AstrMessageEvent, is_stream: bool) -> bool:
         if is_stream:
             logger.warning(
                 "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作",
@@ -398,7 +396,7 @@ class SendService:
 
     @staticmethod
     def _add_at_mention(
-            chain: list[BaseMessageComponent], event: AstrMessageEvent
+        chain: list[BaseMessageComponent], event: AstrMessageEvent
     ) -> list[BaseMessageComponent]:
         """添加 @提及"""
         chain.insert(0, At(qq=event.get_sender_id(), name=event.get_sender_name()))
@@ -408,7 +406,7 @@ class SendService:
 
     @staticmethod
     def _add_quote_reply(
-            chain: list[BaseMessageComponent], event: AstrMessageEvent
+        chain: list[BaseMessageComponent], event: AstrMessageEvent
     ) -> list[BaseMessageComponent]:
         """添加引用回复"""
         if not any(isinstance(item, File) for item in chain):
@@ -426,7 +424,7 @@ class SendService:
 
     @staticmethod
     def _wrap_forward(
-            event: AstrMessageEvent, chain: list[BaseMessageComponent]
+        event: AstrMessageEvent, chain: list[BaseMessageComponent]
     ) -> list[BaseMessageComponent]:
         """合并转发包装"""
         if event.get_platform_name() != "aiocqhttp":
@@ -465,7 +463,7 @@ class SendService:
 
     @staticmethod
     def _extract_comp(
-            raw_chain: list[BaseMessageComponent],
+        raw_chain: list[BaseMessageComponent],
         extract_types: set[ComponentType],
         modify_raw_chain: bool = True,
     ) -> list[BaseMessageComponent]:

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 
 class CommandDispatcher:
-
     def __init__(
         self,
         config: AstrBotConfig,
@@ -233,7 +232,7 @@ class CommandDispatcher:
 
     @staticmethod
     async def _handle_permission_denied(
-            event: AstrMessageEvent,
+        event: AstrMessageEvent,
         handler: StarHandlerMetadata,
     ) -> None:
         """处理权限不足"""

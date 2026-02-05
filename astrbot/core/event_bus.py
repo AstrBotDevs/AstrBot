@@ -48,6 +48,50 @@ class EventBus:
             wait_state = await wait_registry.pop(build_wait_key(event))
             if wait_state is not None:
                 event.message_str = event.message_str.strip()
+
+                current_chain_config = self.chain_router.get_by_chain_id(
+                    wait_state.chain_config.chain_id
+                )
+
+                if not wait_state.is_valid(current_chain_config):
+                    logger.debug(
+                        f"WaitState invalidated for {event.unified_msg_origin}, "
+                        "falling back to normal routing."
+                    )
+                    modality = extract_modalities(event.get_messages())
+                    routed_chain_config = self.chain_router.route(
+                        event.unified_msg_origin,
+                        modality,
+                        event.message_str,
+                    )
+                    if routed_chain_config is None:
+                        logger.debug(
+                            f"No chain matched for {event.unified_msg_origin}, "
+                            "event ignored."
+                        )
+                        continue
+
+                    event.chain_config = routed_chain_config
+                    config_id = routed_chain_config.config_id or "default"
+                    self.astrbot_config_mgr.set_runtime_conf_id(
+                        event.unified_msg_origin,
+                        config_id,
+                    )
+                    conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
+                    self._print_event(event, conf_info["name"])
+
+                    executor = self.pipeline_executor_mapping.get(config_id)
+                    if executor is None:
+                        executor = self.pipeline_executor_mapping.get("default")
+                    if executor is None:
+                        logger.error(
+                            f"PipelineExecutor not found for config_id: {config_id}, "
+                            "event ignored."
+                        )
+                        continue
+                    asyncio.create_task(executor.execute(event))
+                    continue
+
                 event.chain_config = wait_state.chain_config
                 event.set_extra("_resume_node", wait_state.node_name)
                 event.set_extra("_resume_node_uuid", wait_state.node_uuid)
@@ -71,7 +115,6 @@ class EventBus:
                 asyncio.create_task(executor.execute(event))
                 continue
 
-            # 轻量路由：使用 UMO + 原始文本 + 原始模态，决定链与 config_id
             event.message_str = event.message_str.strip()
             modality = extract_modalities(event.get_messages())
             chain_config = self.chain_router.route(
@@ -95,7 +138,6 @@ class EventBus:
 
             self._print_event(event, conf_info["name"])
 
-            # 获取对应的 PipelineExecutor
             executor = self.pipeline_executor_mapping.get(config_id)
             if executor is None:
                 executor = self.pipeline_executor_mapping.get("default")
