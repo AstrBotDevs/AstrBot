@@ -59,4 +59,5 @@ class Response:
         return self
 
     def to_json(self):
-        return jsonify(asdict(self))
+        # Return a plain dict so callers can safely wrap with jsonify()
+        return asdict(self)
