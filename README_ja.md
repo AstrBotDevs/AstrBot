@@ -61,7 +61,22 @@ Docker / Docker Compose を使用した AstrBot のデプロイを推奨しま�
 #### uv デプロイ
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+```
+
+#### システムパッケージマネージャーでのインストール
+
+```bash
+# windows & macos
+# uv tool install の使用を推奨します
+
+# linux
+# debian系、現在未対応
+# arch系、AUR経由でインストール可能
+yay -S astrbot-git
+# または paru を使用
+paru -S astrbot-git
+
 ```
 
 #### 宝塔パネルデプロイ

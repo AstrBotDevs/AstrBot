@@ -61,7 +61,22 @@ Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker]
 #### Déploiement uv
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+```
+
+#### Installation via le gestionnaire de paquets du système
+
+```bash
+# windows & macos
+# Recommandé d'utiliser uv tool install
+
+# linux
+# basé sur debian, pas encore supporté
+# basé sur arch, peut être installé via AUR
+yay -S astrbot-git
+# ou utiliser paru
+paru -S astrbot-git
+
 ```
 
 #### Déploiement BT-Panel

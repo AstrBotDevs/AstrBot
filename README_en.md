@@ -63,7 +63,22 @@ Please refer to the official documentation: [Deploy AstrBot with Docker](https:/
 #### uv Deployment
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+```
+
+#### System Package Manager Installation
+
+```bash
+# windows & macos
+# Recommended to use uv tool install
+
+# linux
+# debian-based, not supported yet
+# arch-based, can be installed via AUR
+yay -S astrbot-git
+# or use paru
+paru -S astrbot-git
+
 ```
 
 #### BT-Panel Deployment
