@@ -77,12 +77,12 @@ class CommandRoute(Route):
 
     async def update_permission(self):
         from astrbot.api import sp
-        from astrbot.core.star.star_handler import star_handlers_registry
-        from astrbot.core.star.star import star_map
         from astrbot.core.star.filter.permission import (
-            PermissionTypeFilter,
             PermissionType,
+            PermissionTypeFilter,
         )
+        from astrbot.core.star.star import star_map
+        from astrbot.core.star.star_handler import star_handlers_registry
 
         data = await request.get_json()
         handler_full_name = data.get("handler_full_name")
