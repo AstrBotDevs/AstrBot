@@ -20,10 +20,29 @@ const theme = useTheme();
 const serverConfigDialog = ref(false);
 const apiUrl = ref(apiStore.apiBaseUrl);
 
+const showAddPreset = ref(false);
+const newPresetName = ref("");
+const newPresetUrl = ref("");
+
 function saveApiUrl() {
   apiStore.setApiBaseUrl(apiUrl.value);
   serverConfigDialog.value = false;
   window.location.reload();
+}
+
+function savePreset() {
+  if (!newPresetName.value || !newPresetUrl.value) return;
+  apiStore.addPreset({
+    name: newPresetName.value,
+    url: newPresetUrl.value,
+  });
+  showAddPreset.value = false;
+  newPresetName.value = "";
+  newPresetUrl.value = "";
+}
+
+function isCustomPreset(name: string) {
+  return apiStore.customPresets.some((p) => p.name === name);
 }
 
 // 主题切换函数
@@ -136,12 +155,60 @@ onMounted(() => {
           </div>
 
           <div
-            v-if="apiStore.presets && apiStore.presets.length > 0"
+            v-if="
+              (apiStore.presets && apiStore.presets.length > 0) ||
+              apiStore.customPresets
+            "
             class="mb-4"
           >
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ t("serverConfig.presetLabel") }}
+            <div class="d-flex justify-space-between align-center mb-2">
+              <div class="text-caption text-medium-emphasis">
+                {{ t("serverConfig.presetLabel") }}
+              </div>
+              <v-btn
+                size="x-small"
+                variant="text"
+                icon
+                @click="showAddPreset = !showAddPreset"
+              >
+                <v-icon>mdi-plus</v-icon>
+              </v-btn>
             </div>
+
+            <v-expand-transition>
+              <div
+                v-if="showAddPreset"
+                class="mb-2 pa-2 bg-grey-lighten-4 rounded border"
+              >
+                <v-text-field
+                  v-model="newPresetName"
+                  label="Name"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  variant="outlined"
+                  bg-color="white"
+                ></v-text-field>
+                <v-text-field
+                  v-model="newPresetUrl"
+                  label="URL"
+                  density="compact"
+                  hide-details
+                  class="mb-2"
+                  variant="outlined"
+                  bg-color="white"
+                ></v-text-field>
+                <v-btn
+                  size="small"
+                  block
+                  color="primary"
+                  variant="flat"
+                  @click="savePreset"
+                  >Add Preset</v-btn
+                >
+              </div>
+            </v-expand-transition>
+
             <v-chip-group column>
               <v-chip
                 v-for="preset in apiStore.presets"
@@ -150,6 +217,8 @@ onMounted(() => {
                 @click="apiUrl = preset.url"
                 :variant="apiUrl === preset.url ? 'flat' : 'tonal'"
                 :color="apiUrl === preset.url ? 'primary' : undefined"
+                :closable="isCustomPreset(preset.name)"
+                @click:close="apiStore.removePreset(preset.name)"
               >
                 {{ preset.name }}
               </v-chip>

@@ -5,6 +5,9 @@ class StaticFileRoute(Route):
     def __init__(self, context: RouteContext) -> None:
         super().__init__(context)
 
+        if "index" in self.app.view_functions:
+            return
+
         index_ = [
             "/",
             "/auth/login",
