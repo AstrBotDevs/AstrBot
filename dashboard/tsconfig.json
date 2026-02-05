@@ -5,14 +5,15 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
     },
-    "allowJs": true
+    "allowJs": true,
+    "lib": ["ESNext", "DOM"],
   },
 
   "references": [
     {
-      "path": "./tsconfig.vite-config.json"
-    }
-  ]
+      "path": "./tsconfig.vite-config.json",
+    },
+  ],
 }
