@@ -84,12 +84,12 @@ uv tool install astrbot
 #### 系统包管理器安装
 
 ```bash
-# windows & macos
+# Windows & Macos
 # 推荐使用uv tool install
 
-# linux
-# debain系，暂不支持
-# arch系，可通过aur安装
+# Linux
+# Debian系，暂不支持
+# Arch系，可通过AUR安装
 yay -S astrbot-git
 # 或者使用paru
 paru -S astrbot-git
