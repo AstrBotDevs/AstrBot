@@ -173,7 +173,7 @@ class AstrBotDashboard:
 
     @staticmethod
     def _unauthorized(msg: str):
-        r = jsonify(Response().error(msg).__dict__)
+        r = jsonify(Response().error(msg).to_json())
         r.status_code = 401
         return r
 
@@ -184,13 +184,13 @@ class AstrBotDashboard:
     async def srv_plug_route(self, subpath: str, *args, **kwargs):
         handler = self._plugin_route_map.get((f"/{subpath}", request.method))
         if not handler:
-            return jsonify(Response().error("未找到该路由").__dict__)
+            return jsonify(Response().error("未找到该路由").to_json())
 
         try:
             return await handler(*args, **kwargs)
         except Exception:
             logger.exception("插件 Web API 执行异常")
-            return jsonify(Response().error("插件执行失败").__dict__)
+            return jsonify(Response().error("插件执行失败").to_json())
 
     # ------------------------------------------------------------------
     # 网络 / 端口
@@ -255,7 +255,7 @@ class AstrBotDashboard:
         self._print_access_urls(host, port)
 
         config = HyperConfig()
-        binds = [self._build_bind(host, port)]
+        binds: list[str] = [self._build_bind(host, port)]
         # 参考：https://github.com/pgjones/hypercorn/issues/85
         if host == "::" and platform.system() in ("Windows", "Darwin"):
             binds.append(self._build_bind("0.0.0.0", port))
@@ -277,8 +277,8 @@ class AstrBotDashboard:
         except ValueError:
             return f"{host}:{port}"
 
-    def _print_access_urls(self, host: str, port: int):
-        local_ips = get_local_ip_addresses()
+    def _print_access_urls(self, host: str, port: int) -> None:
+        local_ips: list[IPv4Address | IPv6Address] = get_local_ip_addresses()
 
         parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动\n\n"]
 
@@ -302,6 +302,6 @@ class AstrBotDashboard:
         parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
         logger.info("".join(parts))
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
         logger.info("AstrBot WebUI 已经被优雅地关闭")
