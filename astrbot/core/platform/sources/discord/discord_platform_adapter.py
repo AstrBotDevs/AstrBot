@@ -444,9 +444,20 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 指令 '{cmd_name}' defer 失败: {e}")
 
             # 2. 构建 AstrBotMessage
+            channel = ctx.channel
             abm = AstrBotMessage()
-            abm.type = self._get_message_type(ctx.channel, ctx.guild_id)
-            abm.group_id = self._get_channel_id(ctx.channel)
+            if channel is not None:
+                abm.type = self._get_message_type(channel, ctx.guild_id)
+                abm.group_id = self._get_channel_id(channel)
+            else:
+                # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
+                abm.type = (
+                    MessageType.GROUP_MESSAGE
+                    if ctx.guild_id is not None
+                    else MessageType.FRIEND_MESSAGE
+                )
+                abm.group_id = str(ctx.channel_id)
+
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
                 user_id=str(ctx.author.id),

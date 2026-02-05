@@ -4,6 +4,7 @@ import asyncio
 import os
 import traceback
 import uuid
+from typing import Any
 
 import aiofiles
 from quart import request
@@ -75,7 +76,7 @@ class KnowledgeBaseRoute(Route):
         }
 
     def _set_task_result(
-        self, task_id: str, status: str, result: any = None, error: str | None = None
+        self, task_id: str, status: str, result: Any = None, error: str | None = None
     ) -> None:
         self.upload_tasks[task_id] = {
             "status": status,

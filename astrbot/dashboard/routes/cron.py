@@ -23,7 +23,7 @@ class CronRoute(Route):
         ]
         self.register_routes()
 
-    def _serialize_job(self, job):
+    def _serialize_job(self, job) -> dict:
         data = job.model_dump() if hasattr(job, "model_dump") else job.__dict__
         for k in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
             if isinstance(data.get(k), datetime):
