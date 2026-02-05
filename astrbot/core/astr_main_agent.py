@@ -9,6 +9,7 @@ import os
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
+from typing import Any
 
 from astrbot.api import sp
 from astrbot.core import logger
@@ -157,21 +158,15 @@ async def _get_session_conv(
     if not conversation:
         raise RuntimeError("无法创建新的对话。")
     # 如果已有对话但 user_name 或 avatar 为空，更新它们
-    need_update = False
+    updates: dict[str, Any] = {}
     if conversation.user_name is None and user_name:
-        need_update = True
+        updates["user_name"] = user_name
     if conversation.avatar is None and avatar:
-        need_update = True
-    if need_update:
-        await conv_mgr.db.update_conversation(
-            cid,
-            user_name=user_name if conversation.user_name is None else None,
-            avatar=avatar if conversation.avatar is None else None,
-        )
-        if conversation.user_name is None and user_name:
-            conversation.user_name = user_name
-        if conversation.avatar is None and avatar:
-            conversation.avatar = avatar
+        updates["avatar"] = avatar
+    if updates:
+        await conv_mgr.db.update_conversation(cid, **updates)
+        for field, value in updates.items():
+            setattr(conversation, field, value)
     return conversation
 
 

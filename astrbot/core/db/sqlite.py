@@ -63,69 +63,52 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_conversation_avatar_column(conn)
             await conn.commit()
 
-    async def _ensure_persona_folder_columns(self, conn) -> None:
-        """确保 personas 表有 folder_id 和 sort_order 列。
+    async def _ensure_column(
+        self, conn, table: str, column: str, ddl: str
+    ) -> None:
+        """确保指定表有指定列，如果不存在则添加。
 
         这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
         的 metadata.create_all 自动创建这些列。
+
+        Args:
+            conn: 数据库连接
+            table: 表名
+            column: 列名
+            ddl: ALTER TABLE 语句中的列定义（不包含 ALTER TABLE ... ADD COLUMN 部分）
         """
-        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        result = await conn.execute(text(f"PRAGMA table_info({table})"))
         columns = {row[1] for row in result.fetchall()}
 
-        if "folder_id" not in columns:
+        if column not in columns:
             await conn.execute(
-                text(
-                    "ALTER TABLE personas ADD COLUMN folder_id VARCHAR(36) DEFAULT NULL"
-                )
+                text(f"ALTER TABLE {table} ADD COLUMN {ddl}")
             )
-        if "sort_order" not in columns:
-            await conn.execute(
-                text("ALTER TABLE personas ADD COLUMN sort_order INTEGER DEFAULT 0")
-            )
+
+    async def _ensure_persona_folder_columns(self, conn) -> None:
+        """确保 personas 表有 folder_id 和 sort_order 列。"""
+        await self._ensure_column(
+            conn, "personas", "folder_id", "folder_id VARCHAR(36) DEFAULT NULL"
+        )
+        await self._ensure_column(
+            conn, "personas", "sort_order", "sort_order INTEGER DEFAULT 0"
+        )
 
     async def _ensure_persona_skills_column(self, conn) -> None:
-        """确保 personas 表有 skills 列。
-
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
-        """
-        result = await conn.execute(text("PRAGMA table_info(personas)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "skills" not in columns:
-            await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
+        """确保 personas 表有 skills 列。"""
+        await self._ensure_column(conn, "personas", "skills", "skills JSON")
 
     async def _ensure_conversation_user_name_column(self, conn) -> None:
-        """确保 conversations 表有 user_name 列。
-
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
-        """
-        result = await conn.execute(text("PRAGMA table_info(conversations)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "user_name" not in columns:
-            await conn.execute(
-                text(
-                    "ALTER TABLE conversations ADD COLUMN user_name VARCHAR(255) DEFAULT NULL"
-                )
-            )
+        """确保 conversations 表有 user_name 列。"""
+        await self._ensure_column(
+            conn, "conversations", "user_name", "user_name VARCHAR(255) DEFAULT NULL"
+        )
 
     async def _ensure_conversation_avatar_column(self, conn) -> None:
-        """确保 conversations 表有 avatar 列。
-
-        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
-        的 metadata.create_all 自动创建这些列。
-        """
-        result = await conn.execute(text("PRAGMA table_info(conversations)"))
-        columns = {row[1] for row in result.fetchall()}
-
-        if "avatar" not in columns:
-            await conn.execute(
-                text(
-                    "ALTER TABLE conversations ADD COLUMN avatar VARCHAR(512) DEFAULT NULL"
-                )
-            )
+        """确保 conversations 表有 avatar 列。"""
+        await self._ensure_column(
+            conn, "conversations", "avatar", "avatar VARCHAR(512) DEFAULT NULL"
+        )
 
     # ====
     # Platform Statistics
