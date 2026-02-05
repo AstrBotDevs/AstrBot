@@ -232,10 +232,14 @@ class AstrBotDashboard:
         cfg = self.config.get("dashboard", {})
         _port: str = os.environ.get("DASHBOARD_PORT") or cfg.get("port", 6185)
         port: int = int(_port)
-
         _host = os.environ.get("DASHBOARD_HOST") or cfg.get("host", "::")
         host: str = _host.strip("[]")
-        enable: bool = bool(os.environ.get("DASHBOARD_ENABLE", cfg.get("enable", True)))
+        _env = os.environ.get("DASHBOARD_ENABLE")
+        enable = (
+            _env.lower() in ("true", "1", "yes")
+            if _env is not None
+            else cfg.get("enable", True)
+        )
 
         if not enable:
             logger.info("WebUI 已被禁用")
