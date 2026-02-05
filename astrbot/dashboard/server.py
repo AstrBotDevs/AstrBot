@@ -208,7 +208,7 @@ class AstrBotDashboard:
     @staticmethod
     def get_process_using_port(port: int) -> str:
         try:
-            for conn in psutil.net_connections(kind="inet"):
+            for conn in psutil.net_connections(kind="all"):
                 if conn.laddr and conn.laddr.port == port and conn.pid:
                     p = psutil.Process(conn.pid)
                     return "\n           ".join(
