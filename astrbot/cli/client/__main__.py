@@ -359,8 +359,8 @@ def main() -> None:
 使用示例:
 
   发送消息:
-    astr "你好"                    # 发送消息给 AstrBot
-    astr "/help"                   # 查看内置帮助
+    astr 你好                     # 发送消息给 AstrBot
+    astr help                     # 查看内置命令帮助
     echo "你好" | astr             # 从标准输入读取
 
   获取日志:
@@ -369,6 +369,13 @@ def main() -> None:
     astr --log --level ERROR       # 只显示 ERROR 级别
     astr --log --pattern "CLI"     # 只显示包含 "CLI" 的日志
     astr --log --json              # 以 JSON 格式输出日志
+
+  内置命令:
+    astr help                      # 查看所有命令
+    astr plugin ls                 # 列出已安装插件
+    astr plugin on <name>          # 启用插件
+    astr new                       # 创建新对话
+    astr /自定义消息               # 带 / 的消息发给 LLM 处理
 
   高级选项:
     astr -j "测试"                 # 输出原始 JSON 响应
