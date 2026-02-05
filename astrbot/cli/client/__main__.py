@@ -28,6 +28,7 @@ import argparse  # noqa: E402
 import io  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import re  # noqa: E402
 import socket  # noqa: E402
 import sys  # noqa: E402
 import uuid  # noqa: E402
@@ -386,6 +387,35 @@ def format_response(response: dict) -> str:
     return "\n".join(lines)
 
 
+def fix_git_bash_path(message: str) -> str:
+    """修复 Git Bash 路径转换问题
+
+    Git Bash (MSYS2) 会把 /plugin ls 转换为 C:/Program Files/Git/plugin ls
+    检测并还原原始命令
+
+    Args:
+        message: 被转换后的消息
+
+    Returns:
+        修复后的消息
+    """
+    # 检测是否是 Git Bash 转换的路径
+    # 模式: <drive>:/Program Files/Git/<command>
+    pattern = r"[A-Z]:/(Program Files/Git|msys[0-9]+/[^/]+)/([^/]+)"
+    match = re.match(pattern, message)
+
+    if match:
+        # 提取原始命令
+        command = match.group(2)
+        # 获取剩余部分
+        rest = message[match.end():].lstrip()
+        if rest:
+            return f"/{command} {rest}"
+        return f"/{command}"
+
+    return message
+
+
 def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -493,6 +523,8 @@ def main() -> None:
         if args.message:
             # REMAINDER 模式下 args.message 是列表，用空格连接
             message = " ".join(args.message)
+            # 修复 Git Bash 路径转换问题
+            message = fix_git_bash_path(message)
         elif not sys.stdin.isatty():
             # 从stdin读取
             message = sys.stdin.read().strip()
