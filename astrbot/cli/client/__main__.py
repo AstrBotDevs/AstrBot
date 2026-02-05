@@ -248,14 +248,14 @@ def send_message(
             response_data += chunk
             # 尝试解析JSON，如果成功说明接收完整
             try:
-                response = json.loads(response_data.decode("utf-8"))
+                response = json.loads(response_data.decode("utf-8", errors="replace"))
                 return response
             except json.JSONDecodeError:
                 # JSON不完整，继续接收
                 continue
 
         # 如果循环结束仍未成功解析，尝试最后一次
-        response = json.loads(response_data.decode("utf-8"))
+        response = json.loads(response_data.decode("utf-8", errors="replace"))
         return response
 
     except TimeoutError:
@@ -334,12 +334,12 @@ def get_logs(
                 break
             response_data += chunk
             try:
-                response = json.loads(response_data.decode("utf-8"))
+                response = json.loads(response_data.decode("utf-8", errors="replace"))
                 return response
             except json.JSONDecodeError:
                 continue
 
-        response = json.loads(response_data.decode("utf-8"))
+        response = json.loads(response_data.decode("utf-8", errors="replace"))
         return response
 
     except TimeoutError:
