@@ -246,18 +246,16 @@ class ToolSet:
 
             result = {}
 
-            # Logic refined based on PR feedback (No side effects)
-            # Get the type value without modifying the original schema dictionary
+            # Avoid side effects by not modifying the original schema
             origin_type = schema.get("type")
             target_type = origin_type
 
-            # Handle list types (e.g., ["string", "null"] from VRChat MCP)
+            # Compatibility fix: Gemini API expects 'type' to be a string (enum),
+            # but standard JSON Schema (MCP) allows lists (e.g. ["string", "null"]).
+            # We fallback to the first non-null type.
             if isinstance(origin_type, list):
-                # Pick the first non-null type. 
-                # If the list contains only unsupported types, it will be handled by the check below.
                 target_type = next((t for t in origin_type if t != "null"), "string")
 
-            # Check if the resolved type is supported
             if target_type in supported_types:
                 result["type"] = target_type
                 if "format" in schema and schema["format"] in supported_formats.get(
@@ -266,10 +264,7 @@ class ToolSet:
                 ):
                     result["format"] = schema["format"]
             else:
-                # Fallback for unsupported types (or if target_type was invalid)
                 result["type"] = "null"
-
-            # ============================================================
 
             support_fields = {
                 "title",
@@ -299,7 +294,7 @@ class ToolSet:
                 result["items"] = convert_schema(schema["items"])
 
             return result
-            
+
         tools = []
         for tool in self.tools:
             d: dict[str, Any] = {"name": tool.name}
