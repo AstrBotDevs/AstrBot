@@ -11,18 +11,18 @@ from astrbot.core.tool_execution.interfaces import ITimeoutHandler
 
 class BackgroundHandler(ITimeoutHandler):
     """后台处理器实现"""
-    
+
     def __init__(self, bg_manager=None):
         self._bg_manager = bg_manager
-    
+
     @property
     def bg_manager(self):
         if self._bg_manager is None:
             from astrbot.core.background_tool import BackgroundToolManager
+
             self._bg_manager = BackgroundToolManager()
         return self._bg_manager
 
-    
     async def handle_timeout(self, context: Any) -> mcp.types.CallToolResult:
         """处理超时，转后台执行"""
         task_id = await self.bg_manager.submit_task(
@@ -34,11 +34,12 @@ class BackgroundHandler(ITimeoutHandler):
             event=context.get("event"),
             event_queue=context.get("event_queue"),
         )
-        
+
         return self._build_notification(context["tool_name"], task_id)
 
-    
-    def _build_notification(self, tool_name: str, task_id: str) -> mcp.types.CallToolResult:
+    def _build_notification(
+        self, tool_name: str, task_id: str
+    ) -> mcp.types.CallToolResult:
         """构建后台执行通知"""
         msg = (
             f"Tool '{tool_name}' switched to background.\n"

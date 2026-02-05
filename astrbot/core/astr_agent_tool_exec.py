@@ -18,8 +18,8 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.provider.register import llm_tools
-from astrbot.core.background_tool.manager import BackgroundToolManager
-from astrbot.core.background_tool.task_state import BackgroundTask
+from astrbot.core.tool_execution.application.tool_executor import ToolExecutor
+from astrbot.core.tool_execution.errors import MethodResolutionError
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -97,135 +97,21 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args,
     ):
+        """执行本地工具
+
+        使用 ToolExecutor 编排组件完成工具执行。
+        """
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
 
-        is_override_call = False
-        for ty in type(tool).mro():
-            if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
-                is_override_call = True
-                break
+        executor = ToolExecutor()
 
-        # 检查 tool 下有没有 run 方法
-        if not tool.handler and not hasattr(tool, "run") and not is_override_call:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        awaitable = None
-        method_name = ""
-        if tool.handler:
-            awaitable = tool.handler
-            method_name = "decorator_handler"
-        elif is_override_call:
-            awaitable = tool.call
-            method_name = "call"
-        elif hasattr(tool, "run"):
-            awaitable = getattr(tool, "run")
-            method_name = "run"
-        if awaitable is None:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        wrapper = call_local_llm_tool(
-            context=run_context,
-            handler=awaitable,
-            method_name=method_name,
-            **tool_args,
-        )
-
-        # 后台任务管理工具不应该被转后台执行
-        background_tool_names = {
-            "wait_tool_result",
-            "get_tool_output",
-            "stop_tool",
-            "list_running_tools",
-        }
-
-        # 检查是否启用超时（0表示禁用，后台任务管理工具也禁用超时）
-        timeout_enabled = (
-            run_context.tool_call_timeout > 0 and tool.name not in background_tool_names
-        )
-
-        while True:
-            try:
-                if timeout_enabled:
-                    resp = await asyncio.wait_for(
-                        anext(wrapper),
-                        timeout=run_context.tool_call_timeout,
-                    )
-                else:
-                    # 超时禁用时，直接执行不设置超时
-                    resp = await anext(wrapper)
-                if resp is not None:
-                    if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
-                    else:
-                        text_content = mcp.types.TextContent(
-                            type="text",
-                            text=str(resp),
-                        )
-                        yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
-                                    )
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
-                                )
-                    yield None
-            except asyncio.TimeoutError:
-                # 超时后转为后台执行
-                logger.info(
-                    f"[PROCESS] Tool {tool.name} timeout after {run_context.tool_call_timeout}s, "
-                    f"switching to background execution"
-                )
-
-                # 获取后台工具管理器
-                bg_manager = BackgroundToolManager()
-
-                # 获取事件队列用于任务完成后触发AI回调
-                event_queue = run_context.context.context.get_event_queue()
-
-                # 创建后台任务
-                session_id = event.unified_msg_origin
-                task_id = await bg_manager.submit_task(
-                    tool_name=tool.name,
-                    tool_args=tool_args,
-                    session_id=session_id,
-                    handler=awaitable,
-                    wait=False,
-                    event=event,
-                    event_queue=event_queue,
-                )
-
-                # 返回后台执行通知
-                notification = (
-                    f"Tool '{tool.name}' execution timeout after {run_context.tool_call_timeout}s. "
-                    f"Switched to background execution.\n"
-                    f"Task ID: {task_id}\n\n"
-                    f"You can use these tools to manage background tasks:\n"
-                    f"- get_tool_output(task_id): View output logs\n"
-                    f"- wait_tool_result(task_id): Wait for completion\n"
-                    f"- stop_tool(task_id): Stop execution\n"
-                    f"- list_running_tools(): List all running tasks"
-                )
-
-                yield mcp.types.CallToolResult(
-                    content=[mcp.types.TextContent(type="text", text=notification)]
-                )
-                return
-            except StopAsyncIteration:
-                break
+        try:
+            async for result in executor.execute(tool, run_context, **tool_args):
+                yield result
+        except MethodResolutionError as e:
+            raise ValueError(str(e)) from e
 
     @classmethod
     async def _execute_mcp(

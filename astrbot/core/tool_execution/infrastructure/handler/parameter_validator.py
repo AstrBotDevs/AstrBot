@@ -12,7 +12,7 @@ from astrbot.core.tool_execution.errors import ParameterValidationError
 
 class ParameterValidator(IParameterValidator):
     """参数验证器实现"""
-    
+
     def validate(self, handler: Callable, params: dict) -> dict:
         """验证参数"""
         try:
@@ -21,11 +21,8 @@ class ParameterValidator(IParameterValidator):
             bound = sig.bind_partial(None, **params)
             return dict(bound.arguments)
         except TypeError as e:
-            raise ParameterValidationError(
-                self._build_error_message(handler, e)
-            )
+            raise ParameterValidationError(self._build_error_message(handler, e))
 
-    
     def _build_error_message(self, handler: Callable, error: Exception) -> str:
         """构建错误消息"""
         try:
@@ -35,7 +32,7 @@ class ParameterValidator(IParameterValidator):
             return f"Parameter mismatch: {', '.join(param_strs)}"
         except Exception:
             return str(error)
-    
+
     def _format_param(self, param: inspect.Parameter) -> str:
         """格式化参数"""
         s = param.name

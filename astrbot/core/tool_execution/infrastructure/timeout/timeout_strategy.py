@@ -11,7 +11,7 @@ from astrbot.core.tool_execution.interfaces import ITimeoutStrategy
 
 class TimeoutStrategy(ITimeoutStrategy):
     """标准超时策略"""
-    
+
     async def execute(self, coro: Coroutine, timeout: float) -> Any:
         """执行带超时的协程"""
         return await asyncio.wait_for(coro, timeout=timeout)
@@ -19,7 +19,7 @@ class TimeoutStrategy(ITimeoutStrategy):
 
 class NoTimeoutStrategy(ITimeoutStrategy):
     """无超时策略"""
-    
+
     async def execute(self, coro: Coroutine, timeout: float) -> Any:
         """直接执行协程，忽略超时参数"""
         return await coro

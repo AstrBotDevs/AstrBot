@@ -7,6 +7,7 @@ from typing import Any
 
 class ExecutionStatus(Enum):
     """执行状态枚举"""
+
     SUCCESS = "success"
     FAILED = "failed"
     TIMEOUT = "timeout"
@@ -16,6 +17,7 @@ class ExecutionStatus(Enum):
 @dataclass
 class ExecutionResult:
     """执行结果"""
+
     status: ExecutionStatus
     value: Any = None
     error: str | None = None
@@ -26,6 +28,7 @@ class ExecutionResult:
 @dataclass
 class TimeoutContext:
     """超时上下文"""
+
     tool_name: str
     tool_args: dict
     session_id: str

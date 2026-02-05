@@ -12,16 +12,15 @@ from astrbot.core.tool_execution.interfaces import ICallbackEventBuilder
 
 class EventFactory(ICallbackEventBuilder):
     """事件工厂实现"""
-    
+
     def build(self, task: Any, original_event: Any) -> Any:
         """构建回调事件"""
         if not original_event:
             return None
-        
+
         notification = self._build_notification(task)
         return self._create_event(original_event, task, notification)
 
-    
     def _build_notification(self, task: Any) -> str:
         """构建通知消息"""
         status = self._get_status_text(task.status)
@@ -30,10 +29,10 @@ class EventFactory(ICallbackEventBuilder):
             msg += f"\nResult: {task.result}"
         return msg
 
-    
     def _get_status_text(self, status) -> str:
         """获取状态文本"""
         from astrbot.core.background_tool import TaskStatus
+
         mapping = {
             TaskStatus.COMPLETED: "completed",
             TaskStatus.FAILED: "failed",
@@ -41,7 +40,6 @@ class EventFactory(ICallbackEventBuilder):
         }
         return mapping.get(status, "unknown")
 
-    
     def _create_event(self, original: Any, task: Any, msg: str) -> Any:
         """创建新事件"""
         new_event = copy.copy(original)
