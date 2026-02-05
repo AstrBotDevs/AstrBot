@@ -15,6 +15,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
+from quart_cors import cors
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -32,6 +33,7 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
+APP: Quart
 
 class AstrBotDashboard:
     """AstrBot Web Dashboard"""
@@ -81,7 +83,13 @@ class AstrBotDashboard:
             static_folder=self.data_path,
             static_url_path="/",
         )
-        self.app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
+        APP = self.app 
+        self.app = cors(
+            self.app, allow_origin="*", allow_methods="*", allow_headers="*"
+        )
+        self.app.config["MAX_CONTENT_LENGTH"] = (
+            128 * 1024 * 1024
+        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
         cast(DefaultJSONProvider, self.app.json).sort_keys = False
 
         self.app.before_request(self.auth_middleware)
@@ -148,6 +156,9 @@ class AstrBotDashboard:
     # ------------------------------------------------------------------
 
     async def auth_middleware(self):
+        # 放行CORS预检请求
+        if request.method == "OPTIONS":
+            return None
         if not request.path.startswith("/api"):
             return None
 
