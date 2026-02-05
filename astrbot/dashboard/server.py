@@ -1,7 +1,11 @@
 import asyncio
+import ipaddress
 import logging
 import os
+import platform
 import socket
+from collections.abc import Callable
+from ipaddress import IPv4Address, IPv6Address
 from typing import cast
 
 import jwt
@@ -28,10 +32,18 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
-APP: Quart
-
 
 class AstrBotDashboard:
+    """AstrBot Web Dashboard"""
+
+    ALLOWED_ENDPOINT_PREFIXES = (
+        "/api/auth/login",
+        "/api/file",
+        "/api/platform/webhook",
+        "/api/stat/start-time",
+        "/api/backup/download",
+    )
+
     def __init__(
         self,
         core_lifecycle: AstrBotCoreLifecycle,
@@ -41,60 +53,68 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
+        self.shutdown_event = shutdown_event
 
-        # 参数指定webui目录
+        self._init_paths(webui_dir)
+        self._init_app()
+        self.context = RouteContext(self.config, self.app)
+
+        self._init_routes(db)
+        self._init_plugin_route_index()
+        self._init_jwt_secret()
+
+    # ------------------------------------------------------------------
+    # 初始化阶段
+    # ------------------------------------------------------------------
+
+    def _init_paths(self, webui_dir: str | None):
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
             self.data_path = os.path.abspath(
-                os.path.join(get_astrbot_data_path(), "dist"),
+                os.path.join(get_astrbot_data_path(), "dist")
             )
 
-        self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
-        APP = self.app  # noqa
-        self.app.config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
+    def _init_app(self):
+        self.app = Quart(
+            "dashboard",
+            static_folder=self.data_path,
+            static_url_path="/",
+        )
+        self.app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
         cast(DefaultJSONProvider, self.app.json).sort_keys = False
+
         self.app.before_request(self.auth_middleware)
-        # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
-        self.context = RouteContext(self.config, self.app)
-        self.ur = UpdateRoute(
-            self.context,
-            core_lifecycle.astrbot_updator,
-            core_lifecycle,
+
+    def _init_routes(self, db: BaseDatabase):
+        UpdateRoute(
+            self.context, self.core_lifecycle.astrbot_updator, self.core_lifecycle
         )
-        self.sr = StatRoute(self.context, db, core_lifecycle)
-        self.pr = PluginRoute(
-            self.context,
-            core_lifecycle,
-            core_lifecycle.plugin_manager,
+        StatRoute(self.context, db, self.core_lifecycle)
+        PluginRoute(
+            self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
         )
-        self.command_route = CommandRoute(self.context)
-        self.cr = ConfigRoute(self.context, core_lifecycle)
-        self.lr = LogRoute(self.context, core_lifecycle.log_broker)
-        self.sfr = StaticFileRoute(self.context)
-        self.ar = AuthRoute(self.context)
-        self.chat_route = ChatRoute(self.context, db, core_lifecycle)
-        self.chatui_project_route = ChatUIProjectRoute(self.context, db)
-        self.tools_root = ToolsRoute(self.context, core_lifecycle)
-        self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
-        self.skills_route = SkillsRoute(self.context, core_lifecycle)
-        self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
-        self.file_route = FileRoute(self.context)
-        self.session_management_route = SessionManagementRoute(
-            self.context,
-            db,
-            core_lifecycle,
-        )
-        self.persona_route = PersonaRoute(self.context, db, core_lifecycle)
-        self.cron_route = CronRoute(self.context, core_lifecycle)
-        self.t2i_route = T2iRoute(self.context, core_lifecycle)
-        self.kb_route = KnowledgeBaseRoute(self.context, core_lifecycle)
-        self.platform_route = PlatformRoute(self.context, core_lifecycle)
-        self.backup_route = BackupRoute(self.context, db, core_lifecycle)
-        self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        CommandRoute(self.context)
+        ConfigRoute(self.context, self.core_lifecycle)
+        LogRoute(self.context, self.core_lifecycle.log_broker)
+        StaticFileRoute(self.context)
+        AuthRoute(self.context)
+        ChatRoute(self.context, db, self.core_lifecycle)
+        ChatUIProjectRoute(self.context, db)
+        ToolsRoute(self.context, self.core_lifecycle)
+        SubAgentRoute(self.context, self.core_lifecycle)
+        SkillsRoute(self.context, self.core_lifecycle)
+        ConversationRoute(self.context, db, self.core_lifecycle)
+        FileRoute(self.context)
+        SessionManagementRoute(self.context, db, self.core_lifecycle)
+        PersonaRoute(self.context, db, self.core_lifecycle)
+        CronRoute(self.context, self.core_lifecycle)
+        T2iRoute(self.context, self.core_lifecycle)
+        KnowledgeBaseRoute(self.context, self.core_lifecycle)
+        PlatformRoute(self.context, self.core_lifecycle)
+        BackupRoute(self.context, db, self.core_lifecycle)
+        LiveChatRoute(self.context, db, self.core_lifecycle)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -102,193 +122,185 @@ class AstrBotDashboard:
             methods=["GET", "POST"],
         )
 
-        self.shutdown_event = shutdown_event
+    def _init_plugin_route_index(self):
+        """将插件路由索引，避免 O(n) 查找"""
+        self._plugin_route_map: dict[tuple[str, str], Callable] = {}
 
-        self._init_jwt_secret()
+        for (
+            route,
+            handler,
+            methods,
+            _,
+        ) in self.core_lifecycle.star_context.registered_web_apis:
+            for method in methods:
+                self._plugin_route_map[(route, method)] = handler
 
-    async def srv_plug_route(self, subpath, *args, **kwargs):
-        """插件路由"""
-        registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
-        for api in registered_web_apis:
-            route, view_handler, methods, _ = api
-            if route == f"/{subpath}" and request.method in methods:
-                return await view_handler(*args, **kwargs)
-        return jsonify(Response().error("未找到该路由").__dict__)
+    def _init_jwt_secret(self):
+        dashboard_cfg = self.config.setdefault("dashboard", {})
+        if not dashboard_cfg.get("jwt_secret"):
+            dashboard_cfg["jwt_secret"] = os.urandom(32).hex()
+            self.config.save_config()
+            logger.info("Initialized random JWT secret for dashboard.")
+        self._jwt_secret = dashboard_cfg["jwt_secret"]
+
+    # ------------------------------------------------------------------
+    # Middleware中间件
+    # ------------------------------------------------------------------
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
-        allowed_endpoints = [
-            "/api/auth/login",
-            "/api/file",
-            "/api/platform/webhook",
-            "/api/stat/start-time",
-            "/api/backup/download",  # 备份下载使用 URL 参数传递 token
-        ]
-        if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
+
+        if any(request.path.startswith(p) for p in self.ALLOWED_ENDPOINT_PREFIXES):
             return None
-        # 声明 JWT
+
         token = request.headers.get("Authorization")
         if not token:
-            r = jsonify(Response().error("未授权").__dict__)
-            r.status_code = 401
-            return r
-        token = token.removeprefix("Bearer ")
+            return self._unauthorized("未授权")
+
         try:
-            payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
+            payload = jwt.decode(
+                token.removeprefix("Bearer "),
+                self._jwt_secret,
+                algorithms=["HS256"],
+                options={"require": ["username"]},
+            )
             g.username = payload["username"]
         except jwt.ExpiredSignatureError:
-            r = jsonify(Response().error("Token 过期").__dict__)
-            r.status_code = 401
-            return r
-        except jwt.InvalidTokenError:
-            r = jsonify(Response().error("Token 无效").__dict__)
-            r.status_code = 401
-            return r
+            return self._unauthorized("Token 过期")
+        except jwt.PyJWTError:
+            return self._unauthorized("Token 无效")
 
-    def check_port_in_use(self, port: int) -> bool:
-        """跨平台检测端口是否被占用"""
+    @staticmethod
+    def _unauthorized(msg: str):
+        r = jsonify(Response().error(msg).__dict__)
+        r.status_code = 401
+        return r
+
+    # ------------------------------------------------------------------
+    # 插件路由
+    # ------------------------------------------------------------------
+
+    async def srv_plug_route(self, subpath: str, *args, **kwargs):
+        handler = self._plugin_route_map.get((f"/{subpath}", request.method))
+        if not handler:
+            return jsonify(Response().error("未找到该路由").__dict__)
+
         try:
-            # 创建 IPv4 TCP Socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # 设置超时时间
-            sock.settimeout(2)
-            result = sock.connect_ex(("127.0.0.1", port))
-            sock.close()
-            # result 为 0 表示端口被占用
-            return result == 0
-        except Exception as e:
-            logger.warning(f"检查端口 {port} 时发生错误: {e!s}")
-            # 如果出现异常，保守起见认为端口可能被占用
+            return await handler(*args, **kwargs)
+        except Exception:
+            logger.exception("插件 Web API 执行异常")
+            return jsonify(Response().error("插件执行失败").__dict__)
+
+    # ------------------------------------------------------------------
+    # 网络 / 端口
+    # ------------------------------------------------------------------
+
+    def check_port_in_use(self, host: str, port: int) -> bool:
+        try:
+            family = socket.AF_INET6 if ":" in host else socket.AF_INET
+            with socket.socket(family, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2)
+                return sock.connect_ex((host, port)) == 0
+        except Exception:
             return True
 
-    def get_process_using_port(self, port: int) -> str:
-        """获取占用端口的进程详细信息"""
+    @staticmethod
+    def get_process_using_port(port: int) -> str:
         try:
             for conn in psutil.net_connections(kind="inet"):
-                if conn.laddr and conn.laddr.port == port:
-                    try:
-                        process = psutil.Process(conn.pid)
-                        # 获取详细信息
-                        proc_info = [
-                            f"进程名: {process.name()}",
-                            f"PID: {process.pid}",
-                            f"执行路径: {process.exe()}",
-                            f"工作目录: {process.cwd()}",
-                            f"启动命令: {' '.join(process.cmdline())}",
+                if conn.laddr and conn.laddr.port == port and conn.pid:
+                    p = psutil.Process(conn.pid)
+                    return "\n           ".join(
+                        [
+                            f"进程名: {p.name()}",
+                            f"PID: {p.pid}",
+                            f"执行路径: {p.exe()}",
+                            f"工作目录: {p.cwd()}",
+                            f"启动命令: {' '.join(p.cmdline())}",
                         ]
-                        return "\n           ".join(proc_info)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                        return f"无法获取进程详细信息(可能需要管理员权限): {e!s}"
+                    )
             return "未找到占用进程"
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _init_jwt_secret(self):
-        if not self.config.get("dashboard", {}).get("jwt_secret", None):
-            # 如果没有设置 JWT 密钥，则生成一个新的密钥
-            jwt_secret = os.urandom(32).hex()
-            self.config["dashboard"]["jwt_secret"] = jwt_secret
-            self.config.save_config()
-            logger.info("Initialized random JWT secret for dashboard.")
-        self._jwt_secret = self.config["dashboard"]["jwt_secret"]
+    # ------------------------------------------------------------------
+    # 启动
+    # ------------------------------------------------------------------
 
-    def run(self):
-        ip_addr = []
-        conf = self.core_lifecycle.astrbot_config["dashboard"]
-        port = os.environ.get("DASHBOARD_PORT") or conf.get("port", 6185)
-        host = os.environ.get("DASHBOARD_HOST") or conf.get("host", "::")
-        enable = os.environ.get("DASHBOARD_ENABLE") or conf.get("enable", True)
+    def run(self) -> None:
+        cfg = self.config.get("dashboard", {})
+        _port: str = os.environ.get("DASHBOARD_PORT") or cfg.get("port", 6185)
+        port: int = int(_port)
+
+        _host = os.environ.get("DASHBOARD_HOST") or cfg.get("host", "::")
+        host: str = _host.strip("[]")
+        enable: bool = bool(os.environ.get("DASHBOARD_ENABLE", cfg.get("enable", True)))
 
         if not enable:
             logger.info("WebUI 已被禁用")
             return None
 
-        display_host = f"[{host}]" if ":" in host and "[" not in host else host
-        logger.info(f"正在启动 WebUI, 监听地址: http://{display_host}:{port}")
+        display_host = f"[{host}]" if ":" in host else host
+        logger.info(
+            "正在启动 WebUI, 监听地址: http://%s:%s",
+            display_host,
+            port,
+        )
 
-        if host == "::" or host == "0.0.0.0":
-            logger.info(
-                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
-            )
+        if self.check_port_in_use("127.0.0.1", port):
+            info = self.get_process_using_port(port)
+            raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
-        if host not in ["localhost", "127.0.0.1"]:
-            if host == "::" or host == "0.0.0.0":
-                try:
-                    ip_addr = get_local_ip_addresses()
-                    # 尝试获取 IPv6 地址
-                    import socket
+        self._print_access_urls(host, port)
 
-                    try:
-                        for res in socket.getaddrinfo(
-                            socket.gethostname(), None, socket.AF_INET6
-                        ):
-                            ip: str = str(res[4][0])
-                            if (
-                                ip not in ip_addr
-                                and not ip.startswith("fe80")
-                                and ip != "::1"
-                            ):
-                                ip_addr.append(ip)
-                    except Exception:
-                        pass
-                except Exception as _:
-                    pass
-        if isinstance(port, str):
-            port = int(port)
-
-        if self.check_port_in_use(port):
-            process_info = self.get_process_using_port(port)
-            logger.error(
-                f"错误：端口 {port} 已被占用\n"
-                f"占用信息: \n           {process_info}\n"
-                f"请确保：\n"
-                f"1. 没有其他 AstrBot 实例正在运行\n"
-                f"2. 端口 {port} 没有被其他程序占用\n"
-                f"3. 如需使用其他端口，请修改配置文件",
-            )
-
-            raise Exception(f"端口 {port} 已被占用")
-
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
-        parts.append(f"   ➜  本地: http://localhost:{port}\n")
-        for ip in ip_addr:
-            display_ip = f"[{ip}]" if ":" in ip else ip
-            parts.append(f"   ➜  网络: http://{display_ip}:{port}\n")
-
-        if any(":" in ip and not ip.startswith(("fe80", "::1")) for ip in ip_addr):
-            parts.append("   ➜  提示: 检测到公网 IPv6 地址，已开启 IPv6 支持。\n")
-
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
-        display = "".join(parts)
-
-        if not ip_addr:
-            display += (
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
-            )
-
-        logger.info(display)
-
-        # 配置 Hypercorn
         config = HyperConfig()
-        if ":" in host and "[" not in host:
-            config.bind = [f"[{host}]:{port}"]
-        else:
-            config.bind = [f"{host}:{port}"]
+        binds = [self._build_bind(host, port)]
+        # 参考：https://github.com/pgjones/hypercorn/issues/85
+        if host == "::" and platform.system() in ("Windows", "Darwin"):
+            binds.append(self._build_bind("0.0.0.0", port))
+        config.bind = binds
 
-        # 根据配置决定是否禁用访问日志
-        disable_access_log = self.core_lifecycle.astrbot_config.get(
-            "dashboard", {}
-        ).get("disable_access_log", True)
-        if disable_access_log:
+        if cfg.get("disable_access_log", True):
             config.accesslog = None
         else:
-            # 启用访问日志，使用简洁格式
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
         return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+
+    @staticmethod
+    def _build_bind(host: str, port: int) -> str:
+        try:
+            ip: IPv4Address | IPv6Address = ipaddress.ip_address(host)
+            return f"[{ip}]:{port}" if ip.version == 6 else f"{ip}:{port}"
+        except ValueError:
+            return f"{host}:{port}"
+
+    def _print_access_urls(self, host: str, port: int):
+        local_ips = get_local_ip_addresses()
+
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动\n\n"]
+
+        parts.append(f"   ➜  本地: http://localhost:{port}\n")
+
+        if host in ("::", "0.0.0.0"):
+            for ip in local_ips:
+                if ip.is_loopback:
+                    continue
+
+                # 再次过滤掉 fe80（第一次过滤在get_local_ip_addresses）
+                if ip.is_link_local:
+                    continue
+                if ip.version == 6:
+                    display_url = f"http://[{ip}]:{port}"
+                else:
+                    display_url = f"http://{ip}:{port}"
+
+                parts.append(f"   ➜  网络: {display_url}\n")
+
+        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+        logger.info("".join(parts))
 
     async def shutdown_trigger(self):
         await self.shutdown_event.wait()
