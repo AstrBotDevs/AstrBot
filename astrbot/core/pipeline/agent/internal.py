@@ -147,6 +147,7 @@ class InternalAgentExecutor:
                     event=event,
                     plugin_context=self.ctx.plugin_manager.context,
                     config=build_cfg,
+                    apply_reset=False,
                 )
 
                 if build_result is None:
@@ -155,6 +156,7 @@ class InternalAgentExecutor:
                 agent_runner = build_result.agent_runner
                 req = build_result.provider_request
                 provider = build_result.provider
+                reset_coro = build_result.reset_coro
 
                 api_base = provider.provider_config.get("api_base", "")
                 for host in decoded_blocked:
@@ -173,6 +175,10 @@ class InternalAgentExecutor:
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
                     return
+
+                # apply reset
+                if reset_coro:
+                    await reset_coro
 
                 action_type = event.get_extra("action_type")
 
@@ -364,7 +370,8 @@ class InternalAgentExecutor:
 
         token_usage = None
         if runner_stats:
-            token_usage = runner_stats.token_usage.total
+            # token_usage = runner_stats.token_usage.total
+            token_usage = llm_response.usage.total if llm_response.usage else None
 
         await self.conv_manager.update_conversation(
             event.unified_msg_origin,

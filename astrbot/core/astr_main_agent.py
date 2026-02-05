@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import zoneinfo
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
 from astrbot.api import sp
@@ -106,6 +107,7 @@ class MainAgentBuildResult:
     agent_runner: AgentRunner
     provider_request: ProviderRequest
     provider: Provider
+    reset_coro: Coroutine | None = None
 
 
 def _select_provider(
@@ -768,8 +770,12 @@ async def build_main_agent(
     config: MainAgentBuildConfig,
     provider: Provider | None = None,
     req: ProviderRequest | None = None,
+    apply_reset: bool = True,
 ) -> MainAgentBuildResult | None:
-    """构建主对话代理（Main Agent），并且自动 reset。"""
+    """构建主对话代理（Main Agent），并且自动 reset。
+
+    If apply_reset is False, will not call reset on the agent runner.
+    """
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -880,7 +886,7 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
-    await agent_runner.reset(
+    reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
         run_context=AgentContextWrapper(
@@ -898,8 +904,12 @@ async def build_main_agent(
         tool_schema_mode=config.tool_schema_mode,
     )
 
+    if apply_reset:
+        await reset_coro
+
     return MainAgentBuildResult(
         agent_runner=agent_runner,
         provider_request=req,
         provider=provider,
+        reset_coro=reset_coro if not apply_reset else None,
     )
