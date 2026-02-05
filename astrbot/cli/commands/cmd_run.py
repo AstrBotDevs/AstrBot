@@ -52,8 +52,10 @@ def run(reload: bool, host: str, port: str, backend_only: bool) -> None:
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
         sys.path.insert(0, str(astrbot_root))
 
-        os.environ["DASHBOARD_PORT"] = port or "6185"
-        os.environ["DASHBOARD_HOST"] = host or "::"
+        if port is not None:
+            os.environ["DASHBOARD_PORT"] = port
+        if host is not None:
+            os.environ["DASHBOARD_HOST"] = host
         os.environ["DASHBOARD_ENABLE"] = str(not backend_only)
 
         if reload:
