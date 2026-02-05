@@ -172,6 +172,9 @@ class Message(BaseModel):
     content: str | list[ContentPart] | None = None
     """The content of the message."""
 
+    name: str | None = None
+    """Optional name of the sender, used to identify different users in conversation."""
+
     tool_calls: list[ToolCall] | list[dict] | None = None
     """The tool calls of the message."""
 
@@ -198,6 +201,8 @@ class Message(BaseModel):
             data.pop("tool_calls", None)
         if self.tool_call_id is None:
             data.pop("tool_call_id", None)
+        if self.name is None:
+            data.pop("name", None)
         return data
 
 

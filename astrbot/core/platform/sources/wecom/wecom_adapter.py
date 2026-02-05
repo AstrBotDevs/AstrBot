@@ -184,10 +184,10 @@ class WecomPlatformAdapter(Platform):
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
+                token = msg._data["Token"]
+                kfid = msg._data["OpenKfId"]
 
                 def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
                     has_more = 1
                     ret = {}
                     while has_more:
@@ -203,6 +203,7 @@ class WecomPlatformAdapter(Platform):
                     get_latest_msg_item,
                 )
                 if msg_new:
+                    msg_new["open_kfid"] = kfid
                     await self.convert_wechat_kf_message(msg_new)
                 return
             await self.convert_message(msg)
@@ -350,11 +351,29 @@ class WecomPlatformAdapter(Platform):
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
         external_userid = cast(str, msg.get("external_userid"))
+
+        # 尝试获取客户昵称和头像
+        nickname = external_userid
+        avatar = None
+        try:
+            customer_info = await asyncio.get_event_loop().run_in_executor(
+                None,
+                self.wechat_kf_api.batchget_customer,
+                external_userid,
+            )
+            logger.info(f"获取客户信息: {customer_info}")
+            customer_list = customer_info.get("customer_list", [])
+            if customer_list:
+                nickname = customer_list[0].get("nickname", external_userid)
+                avatar = customer_list[0].get("avatar", None)
+        except Exception as e:
+            logger.debug(f"获取客户信息失败: {e}")
+
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         abm.self_id = msg["open_kfid"]
-        abm.sender = MessageMember(external_userid, external_userid)
+        abm.sender = MessageMember(external_userid, nickname, avatar)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])

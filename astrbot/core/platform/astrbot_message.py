@@ -10,6 +10,8 @@ from .message_type import MessageType
 class MessageMember:
     user_id: str  # 发送者id
     nickname: str | None = None
+    avatar: str | None = None
+    """用户头像 URL"""
 
     def __str__(self):
         # 使用 f-string 来构建返回的字符串表示形式

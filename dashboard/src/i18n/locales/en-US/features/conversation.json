@@ -28,6 +28,8 @@
       "cid": "Conversation ID",
       "umo": "Unified Message Origin",
       "sessionId": "Session ID",
+      "userName": "User Name",
+      "avatar": "Avatar",
       "createdAt": "Created At",
       "updatedAt": "Updated At",
       "actions": "Actions"

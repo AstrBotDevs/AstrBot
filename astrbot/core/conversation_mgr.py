@@ -6,6 +6,7 @@
 
 import json
 from collections.abc import Awaitable, Callable
+from datetime import timezone
 
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
@@ -58,8 +59,15 @@ class ConversationManager:
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
         """将 ConversationV2 对象转换为 Conversation 对象"""
-        created_at = int(conv_v2.created_at.timestamp())
-        updated_at = int(conv_v2.updated_at.timestamp())
+        # SQLite 读回的 datetime 可能丢失时区信息，需要显式标记为 UTC
+        ca = conv_v2.created_at
+        if ca.tzinfo is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        ua = conv_v2.updated_at
+        if ua.tzinfo is None:
+            ua = ua.replace(tzinfo=timezone.utc)
+        created_at = int(ca.timestamp())
+        updated_at = int(ua.timestamp())
         return Conversation(
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,
@@ -70,6 +78,8 @@ class ConversationManager:
             created_at=created_at,
             updated_at=updated_at,
             token_usage=conv_v2.token_usage,
+            user_name=conv_v2.user_name,
+            avatar=conv_v2.avatar,
         )
 
     async def new_conversation(
@@ -79,11 +89,15 @@ class ConversationManager:
         content: list[dict] | None = None,
         title: str | None = None,
         persona_id: str | None = None,
+        user_name: str | None = None,
+        avatar: str | None = None,
     ) -> str:
         """新建对话，并将当前会话的对话转移到新对话.
 
         Args:
             unified_msg_origin (str): 统一的消息来源字符串。格式为 platform_name:message_type:session_id
+            user_name (str | None): 用户名称
+            avatar (str | None): 用户头像 URL
         Returns:
             conversation_id (str): 对话 ID, 是 uuid 格式的字符串
 
@@ -101,6 +115,8 @@ class ConversationManager:
             content=content,
             title=title,
             persona_id=persona_id,
+            user_name=user_name,
+            avatar=avatar,
         )
         self.session_conversations[unified_msg_origin] = conv.conversation_id
         await sp.session_put(unified_msg_origin, "sel_conv_id", conv.conversation_id)

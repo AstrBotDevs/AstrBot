@@ -1,5 +1,6 @@
 import json
 import traceback
+from dataclasses import asdict
 from datetime import datetime
 from io import BytesIO
 
@@ -88,8 +89,11 @@ class ConversationRoute(Route):
                 (total_count + page_size - 1) // page_size if total_count > 0 else 1
             )
 
+            # 将 Conversation dataclass 对象转换为字典
+            conversations_dict = [asdict(conv) for conv in conversations]
+
             result = {
-                "conversations": conversations,
+                "conversations": conversations_dict,
                 "pagination": {
                     "page": page,
                     "page_size": page_size,

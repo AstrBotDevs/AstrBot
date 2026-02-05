@@ -145,15 +145,33 @@ async def _get_session_conv(
 ) -> Conversation:
     conv_mgr = plugin_context.conversation_manager
     umo = event.unified_msg_origin
+    user_name = event.get_sender_name()
+    avatar = event.get_sender_avatar()
     cid = await conv_mgr.get_curr_conversation_id(umo)
     if not cid:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id(), user_name=user_name, avatar=avatar)
     conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
+        cid = await conv_mgr.new_conversation(umo, event.get_platform_id(), user_name=user_name, avatar=avatar)
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
         raise RuntimeError("无法创建新的对话。")
+    # 如果已有对话但 user_name 或 avatar 为空，更新它们
+    need_update = False
+    if conversation.user_name is None and user_name:
+        need_update = True
+    if conversation.avatar is None and avatar:
+        need_update = True
+    if need_update:
+        await conv_mgr.db.update_conversation(
+            cid,
+            user_name=user_name if conversation.user_name is None else None,
+            avatar=avatar if conversation.avatar is None else None,
+        )
+        if conversation.user_name is None and user_name:
+            conversation.user_name = user_name
+        if conversation.avatar is None and avatar:
+            conversation.avatar = avatar
     return conversation
 
 

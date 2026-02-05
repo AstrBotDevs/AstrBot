@@ -57,6 +57,10 @@ class SQLiteDatabase(BaseDatabase):
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
+            # 确保 conversations 表有 user_name 列（前向兼容）
+            await self._ensure_conversation_user_name_column(conn)
+            # 确保 conversations 表有 avatar 列（前向兼容）
+            await self._ensure_conversation_avatar_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -90,6 +94,38 @@ class SQLiteDatabase(BaseDatabase):
 
         if "skills" not in columns:
             await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
+
+    async def _ensure_conversation_user_name_column(self, conn) -> None:
+        """确保 conversations 表有 user_name 列。
+
+        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列。
+        """
+        result = await conn.execute(text("PRAGMA table_info(conversations)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "user_name" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE conversations ADD COLUMN user_name VARCHAR(255) DEFAULT NULL"
+                )
+            )
+
+    async def _ensure_conversation_avatar_column(self, conn) -> None:
+        """确保 conversations 表有 avatar 列。
+
+        这是为了支持旧版数据库的平滑升级。新版数据库通过 SQLModel
+        的 metadata.create_all 自动创建这些列。
+        """
+        result = await conn.execute(text("PRAGMA table_info(conversations)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "avatar" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE conversations ADD COLUMN avatar VARCHAR(512) DEFAULT NULL"
+                )
+            )
 
     # ====
     # Platform Statistics
@@ -259,6 +295,8 @@ class SQLiteDatabase(BaseDatabase):
         cid=None,
         created_at=None,
         updated_at=None,
+        user_name=None,
+        avatar=None,
     ):
         kwargs = {}
         if cid:
@@ -276,13 +314,15 @@ class SQLiteDatabase(BaseDatabase):
                     platform_id=platform_id,
                     title=title,
                     persona_id=persona_id,
+                    user_name=user_name,
+                    avatar=avatar,
                     **kwargs,
                 )
                 session.add(new_conversation)
                 return new_conversation
 
     async def update_conversation(
-        self, cid, title=None, persona_id=None, content=None, token_usage=None
+        self, cid, title=None, persona_id=None, content=None, token_usage=None, user_name=None, avatar=None
     ):
         async with self.get_db() as session:
             session: AsyncSession
@@ -299,6 +339,10 @@ class SQLiteDatabase(BaseDatabase):
                     values["content"] = content
                 if token_usage is not None:
                     values["token_usage"] = token_usage
+                if user_name is not None:
+                    values["user_name"] = user_name
+                if avatar is not None:
+                    values["avatar"] = avatar
                 if not values:
                     return None
                 query = query.values(**values)
