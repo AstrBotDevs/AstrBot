@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import NoReturn, cast
+from typing import cast
 
 import botpy
 import botpy.message
@@ -132,7 +132,7 @@ class QQOfficialPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> NoReturn:
+    ) -> None:
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:

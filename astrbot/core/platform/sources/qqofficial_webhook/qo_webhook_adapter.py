@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import NoReturn, cast
+from typing import cast
 
 import botpy
 import botpy.message
@@ -115,7 +115,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> NoReturn:
+    ) -> None:
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:

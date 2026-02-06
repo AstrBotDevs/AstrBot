@@ -90,7 +90,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ) -> NoReturn:
+    ) -> None:
         raise NotImplementedError("钉钉机器人适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:

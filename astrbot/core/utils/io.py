@@ -44,7 +44,7 @@ def remove_dir(file_path: str) -> bool:
     return True
 
 
-def port_checker(port: int, host: str = "localhost") -> bool | None:
+def port_checker(port: int, host: str = "localhost") -> bool:
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
     try:
