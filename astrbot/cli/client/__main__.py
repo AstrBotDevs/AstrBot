@@ -430,21 +430,22 @@ def fix_git_bash_path(message: str) -> str:
 
 EPILOG = """使用示例:
   发送消息:
-    astr 你好                       直接发送（兼容旧用法）
-    astr send 你好                  发送消息给 AstrBot
+    astr 你好                       发送消息给 AstrBot
+    astr send 你好                  同上（显式子命令）
     astr send /help                 查看内置命令帮助
-    echo "你好" | astr send         从标准输入读取
+    echo "你好" | astr              从标准输入读取
 
   获取日志:
     astr log                        获取最近 100 行日志
+    astr --log                      同上（兼容旧用法）
     astr log --lines 50             获取最近 50 行
     astr log --level ERROR          只显示 ERROR 级别
     astr log --pattern "CLI"        只显示包含 "CLI" 的日志
     astr log -j                     以 JSON 格式输出日志
 
   高级选项:
-    astr send -j "测试"             输出原始 JSON 响应
-    astr send -t 60 "长时间任务"    设置超时时间为 60 秒
+    astr -j "测试"                  输出原始 JSON 响应
+    astr -t 60 "长时间任务"         设置超时时间为 60 秒
 
 连接说明:
   自动从 data/.cli_connection 检测连接类型（Unix Socket 或 TCP）
@@ -462,10 +463,21 @@ class RawEpilogGroup(click.Group):
             for line in self.epilog.split("\n"):
                 formatter.write(line + "\n")
 
+    # send 子命令的 option 前缀，用于识别 astr -j "你好" 等旧用法
+    _send_opts = {"-j", "--json", "-t", "--timeout", "-s", "--socket"}
+    # --log 旧用法映射到 log 子命令
+    _log_flag = {"--log"}
+
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
-        # 兼容旧用法: astr 你好 等价于 astr send 你好
-        if args and args[0] not in self.commands and not args[0].startswith("-"):
-            args = ["send"] + args
+        if args:
+            first = args[0]
+            if first in self._log_flag:
+                # astr --log ... → astr log ...
+                args = ["log"] + args[1:]
+            elif first not in self.commands:
+                if not first.startswith("-") or first in self._send_opts:
+                    # astr 你好 / astr -j "你好" → astr send ...
+                    args = ["send"] + args
         return super().parse_args(ctx, args)
 
 
