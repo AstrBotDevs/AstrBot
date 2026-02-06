@@ -255,7 +255,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if llm_resp.completion_text:
                 parts.append(TextPart(text=llm_resp.completion_text))
             if len(parts) == 0:
-                logger.warning("LLM returned empty assistant message with no tool calls.")
+                logger.warning(
+                    "LLM returned empty assistant message with no tool calls."
+                )
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
