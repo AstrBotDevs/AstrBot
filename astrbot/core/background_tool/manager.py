@@ -44,7 +44,8 @@ class BackgroundToolManager:
         self.output_buffer = OutputBuffer()
         self.executor = TaskExecutor(output_buffer=self.output_buffer)
         self.notifier = TaskNotifier()
-        self._interrupt_flags = {}  # session_id -> bool，用于中断等待
+        self._interrupt_flags: dict[str, bool] = {}
+        self._interrupt_lock = threading.Lock()
         self._cleanup_task: asyncio.Task | None = None
         self._initialized = True
 
@@ -81,11 +82,14 @@ class BackgroundToolManager:
 
                 # 清理孤立的中断标记（没有活跃任务的会话）
                 active_sessions = self.registry.get_all_session_ids()
-                stale_flags = [
-                    sid for sid in self._interrupt_flags if sid not in active_sessions
-                ]
-                for sid in stale_flags:
-                    self._interrupt_flags.pop(sid, None)
+                with self._interrupt_lock:
+                    stale_flags = [
+                        sid
+                        for sid in self._interrupt_flags
+                        if sid not in active_sessions
+                    ]
+                    for sid in stale_flags:
+                        del self._interrupt_flags[sid]
 
                 if removed_count > 0 or buffer_cleaned > 0 or stale_flags:
                     stats = self.registry.count_by_status()
@@ -280,7 +284,8 @@ class BackgroundToolManager:
         Args:
             session_id: 会话ID
         """
-        self._interrupt_flags[session_id] = True
+        with self._interrupt_lock:
+            self._interrupt_flags[session_id] = True
 
     def check_interrupt_flag(self, session_id: str) -> bool:
         """检查会话是否有中断标记
@@ -291,7 +296,8 @@ class BackgroundToolManager:
         Returns:
             是否有中断标记
         """
-        return self._interrupt_flags.get(session_id, False)
+        with self._interrupt_lock:
+            return self._interrupt_flags.get(session_id, False)
 
     def clear_interrupt_flag(self, session_id: str):
         """清除会话的中断标记
@@ -299,7 +305,8 @@ class BackgroundToolManager:
         Args:
             session_id: 会话ID
         """
-        self._interrupt_flags.pop(session_id, None)
+        with self._interrupt_lock:
+            self._interrupt_flags.pop(session_id, None)
 
     def get_running_tasks_status(self, session_id: str) -> str | None:
         """获取会话中正在运行的后台任务状态信息

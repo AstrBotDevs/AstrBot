@@ -8,6 +8,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
+from astrbot.core.tool_execution.utils.validators import (
+    ValidationError,
+    validate_positive_int,
+    validate_task_id,
+)
+
 from .manager import BackgroundToolManager
 from .task_formatter import build_task_result
 
@@ -32,6 +38,12 @@ async def get_tool_output(
     Returns:
         工具输出日志和最终结果
     """
+    try:
+        task_id = validate_task_id(task_id)
+        lines = validate_positive_int(lines, "lines")
+    except ValidationError as e:
+        return f"Error: {e}"
+
     manager = _get_manager()
 
     task = manager.registry.get(task_id)
@@ -59,6 +71,11 @@ async def wait_tool_result(
         WaitInterruptedException: 当被用户新消息中断时抛出
     """
     import asyncio
+
+    try:
+        task_id = validate_task_id(task_id)
+    except ValidationError as e:
+        return f"Error: {e}"
 
     manager = _get_manager()
     session_id = event.unified_msg_origin
@@ -118,6 +135,11 @@ async def stop_tool(
     Returns:
         终止结果
     """
+    try:
+        task_id = validate_task_id(task_id)
+    except ValidationError as e:
+        return f"Error: {e}"
+
     manager = _get_manager()
 
     task = manager.registry.get(task_id)

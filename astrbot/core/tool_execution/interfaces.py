@@ -60,11 +60,12 @@ class IResultProcessor(ABC):
     """
 
     @abstractmethod
-    async def process(self, result: Any) -> Any:
+    async def process(self, result: Any, run_context: Any = None) -> Any:
         """处理执行结果
 
         Args:
             result: 原始执行结果
+            run_context: 运行上下文（可选，用于直接发送消息等场景）
 
         Returns:
             处理后的结果

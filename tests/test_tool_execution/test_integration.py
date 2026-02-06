@@ -508,7 +508,8 @@ class TestEventDrivenWait:
             tool_args={},
             session_id="s1",
         )
-        # 不初始化 completion_event
+        # 不初始化 completion_event，但需要先 start() 再 complete()（状态转换守卫）
+        task.start()
         task.complete("done")
 
         # 应该正常完成，is_finished 返回 True

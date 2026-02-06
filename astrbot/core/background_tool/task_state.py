@@ -3,6 +3,7 @@
 定义后台任务的状态数据结构和状态转换逻辑。
 """
 
+import threading
 import time
 import uuid
 from asyncio import Event, Queue
@@ -19,6 +20,18 @@ class TaskStatus(Enum):
     COMPLETED = "completed"  # 执行完成
     FAILED = "failed"  # 执行失败
     CANCELLED = "cancelled"  # 已取消
+
+
+# 合法的状态转换矩阵
+_VALID_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
+    TaskStatus.PENDING: frozenset({TaskStatus.RUNNING, TaskStatus.CANCELLED}),
+    TaskStatus.RUNNING: frozenset(
+        {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
+    TaskStatus.COMPLETED: frozenset(),
+    TaskStatus.FAILED: frozenset(),
+    TaskStatus.CANCELLED: frozenset(),
+}
 
 
 @dataclass
@@ -59,35 +72,59 @@ class BackgroundTask:
     completion_event: Event | None = (
         None  # 任务完成信号  # 是否有LLM正在使用wait_tool_result等待此任务
     )
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     @staticmethod
     def generate_id() -> str:
         """生成唯一任务ID"""
         return str(uuid.uuid4())[:8]
 
+    def _transition_to(self, new_status: TaskStatus) -> bool:
+        """状态转换守卫，校验转换合法性
+
+        Args:
+            new_status: 目标状态
+
+        Returns:
+            是否转换成功。已处于终态时静默返回False。
+        """
+        allowed = _VALID_TRANSITIONS.get(self.status, frozenset())
+        if new_status not in allowed:
+            return False
+        self.status = new_status
+        return True
+
     def start(self) -> None:
         """标记任务开始执行"""
-        self.status = TaskStatus.RUNNING
-        self.started_at = time.time()
+        with self._lock:
+            if not self._transition_to(TaskStatus.RUNNING):
+                return
+            self.started_at = time.time()
 
     def complete(self, result: str) -> None:
         """标记任务完成"""
-        self.status = TaskStatus.COMPLETED
-        self.result = result
-        self.completed_at = time.time()
+        with self._lock:
+            if not self._transition_to(TaskStatus.COMPLETED):
+                return
+            self.result = result
+            self.completed_at = time.time()
         self._signal_completion()
 
     def fail(self, error: str) -> None:
         """标记任务失败"""
-        self.status = TaskStatus.FAILED
-        self.error = error
-        self.completed_at = time.time()
+        with self._lock:
+            if not self._transition_to(TaskStatus.FAILED):
+                return
+            self.error = error
+            self.completed_at = time.time()
         self._signal_completion()
 
     def cancel(self) -> None:
         """标记任务取消"""
-        self.status = TaskStatus.CANCELLED
-        self.completed_at = time.time()
+        with self._lock:
+            if not self._transition_to(TaskStatus.CANCELLED):
+                return
+            self.completed_at = time.time()
         self._signal_completion()
 
     def append_output(self, line: str) -> None:

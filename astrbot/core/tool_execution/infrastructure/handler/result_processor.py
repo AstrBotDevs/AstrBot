@@ -14,14 +14,14 @@ from astrbot.core.tool_execution.interfaces import IResultProcessor
 class ResultProcessor(IResultProcessor):
     """结果处理器实现"""
 
-    def __init__(self, run_context: Any = None):
-        self._run_context = run_context
-
-    async def process(self, result: Any) -> mcp.types.CallToolResult | None:
+    async def process(
+        self, result: Any, run_context: Any = None
+    ) -> mcp.types.CallToolResult | None:
         """处理执行结果
 
         Args:
             result: 工具执行返回值
+            run_context: 运行上下文（用于直接发送消息场景）
 
         Returns:
             处理后的 CallToolResult，或 None 表示无需返回
@@ -30,7 +30,7 @@ class ResultProcessor(IResultProcessor):
             return self._wrap_result(result)
 
         # result 为 None 时，检查是否需要直接发送消息给用户
-        await self._send_direct_message()
+        await self._send_direct_message(run_context)
         return None
 
     def _wrap_result(self, result: Any) -> mcp.types.CallToolResult:
@@ -44,12 +44,12 @@ class ResultProcessor(IResultProcessor):
         )
         return mcp.types.CallToolResult(content=[text_content])
 
-    async def _send_direct_message(self) -> None:
+    async def _send_direct_message(self, run_context: Any = None) -> None:
         """处理工具直接发送消息给用户的情况"""
-        if self._run_context is None:
+        if run_context is None:
             return
 
-        event = self._run_context.context.event
+        event = run_context.context.event
         if not event:
             return
 

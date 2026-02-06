@@ -109,17 +109,12 @@ class ToolExecutor:
         self, tool, run_context, handler, method_name, timeout_enabled, **tool_args
     ) -> AsyncGenerator[mcp.types.CallToolResult, None]:
         """带超时控制的执行"""
-        from astrbot.core.tool_execution.infrastructure.handler import ResultProcessor
-
         wrapper = self.tool_invoker.invoke(
             context=run_context,
             handler=handler,
             method_name=method_name,
             **tool_args,
         )
-
-        # 创建带上下文的结果处理器
-        result_processor = ResultProcessor(run_context)
 
         while True:
             try:
@@ -130,7 +125,9 @@ class ToolExecutor:
                 else:
                     resp = await anext(wrapper)
 
-                processed = await result_processor.process(resp)
+                processed = await self.result_processor.process(
+                    resp, run_context=run_context
+                )
                 if processed:
                     yield processed
 
