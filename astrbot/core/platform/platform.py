@@ -144,7 +144,7 @@ class Platform(abc.ABC):
         """提交一个事件到事件队列。"""
         self._event_queue.put_nowait(event)
 
-    def get_client(self) -> None:
+    def get_client(self) -> object:
         """获取平台的客户端对象。"""
 
     async def webhook_callback(self, request: Any) -> Any:
