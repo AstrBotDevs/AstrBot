@@ -500,7 +500,7 @@ class FunctionToolManager:
             logger.error(f"加载 MCP 配置失败: {e}")
             return DEFAULT_MCP_CONFIG
 
-    def save_mcp_config(self, config: dict) -> bool | None:
+    def save_mcp_config(self, config: dict) -> bool:
         try:
             with open(self.mcp_config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, ensure_ascii=False, indent=4)

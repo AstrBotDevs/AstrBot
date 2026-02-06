@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, NoReturn
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.core.utils.astrbot_path import (
@@ -225,7 +225,7 @@ class LocalBooter(ComputerBooter):
             "LocalBooter does not support upload_file operation. Use shell instead."
         )
 
-    async def download_file(self, remote_path: str, local_path: str) -> NoReturn:
+    async def download_file(self, remote_path: str, local_path: str) -> None:
         raise NotImplementedError(
             "LocalBooter does not support download_file operation. Use shell instead."
         )

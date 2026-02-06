@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import NoReturn, TypeAlias, Union
+from typing import TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
@@ -84,7 +84,7 @@ class Provider(AbstractProvider):
         return keys or [""]
 
     @abc.abstractmethod
-    def set_key(self, key: str) -> NoReturn:
+    def set_key(self, key: str) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
