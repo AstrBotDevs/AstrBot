@@ -206,7 +206,7 @@ class TCPSocketServer(AbstractSocketServer):
             logger.debug("[PROCESS] Waiting for client connection")
 
             # Use asyncio event loop for non-blocking accept
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             client_socket, client_address = await loop.sock_accept(self.server_socket)
 
             logger.debug(f"[PROCESS] Connection accepted from {client_address}")

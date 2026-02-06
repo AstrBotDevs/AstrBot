@@ -24,7 +24,6 @@ for handler in root.handlers[:]:
     if isinstance(handler, logging.StreamHandler):
         root.removeHandler(handler)
 
-import argparse  # noqa: E402
 import io  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
@@ -32,6 +31,8 @@ import re  # noqa: E402
 import socket  # noqa: E402
 import sys  # noqa: E402
 import uuid  # noqa: E402
+
+import click  # noqa: E402
 
 # 仅使用标准库导入，不导入astrbot框架
 # Windows UTF-8 输出支持
@@ -427,142 +428,148 @@ def fix_git_bash_path(message: str) -> str:
     return message
 
 
-def main() -> None:
-    """主函数"""
-    parser = argparse.ArgumentParser(
-        description="AstrBot CLI Client - 与 CLI Platform 通信的客户端工具",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-使用示例:
-
+EPILOG = """使用示例:
   发送消息:
-    astr 你好                     # 发送消息给 AstrBot
-    astr help                     # 查看内置命令帮助
-    echo "你好" | astr             # 从标准输入读取
+    astr 你好                       直接发送（兼容旧用法）
+    astr send 你好                  发送消息给 AstrBot
+    astr send /help                 查看内置命令帮助
+    echo "你好" | astr send         从标准输入读取
 
   获取日志:
-    astr --log                     # 获取最近 100 行日志
-    astr --log --lines 50          # 获取最近 50 行
-    astr --log --level ERROR       # 只显示 ERROR 级别
-    astr --log --pattern "CLI"     # 只显示包含 "CLI" 的日志
-    astr --log --json              # 以 JSON 格式输出日志
-
-  内置命令:
-    astr help                      # 查看所有命令
-    astr plugin ls                 # 列出已安装插件
-    astr plugin on <name>          # 启用插件
-    astr new                       # 创建新对话
-    astr /自定义消息               # 带 / 的消息发给 LLM 处理
+    astr log                        获取最近 100 行日志
+    astr log --lines 50             获取最近 50 行
+    astr log --level ERROR          只显示 ERROR 级别
+    astr log --pattern "CLI"        只显示包含 "CLI" 的日志
+    astr log -j                     以 JSON 格式输出日志
 
   高级选项:
-    astr -j "测试"                 # 输出原始 JSON 响应
-    astr -t 60 "长时间任务"        # 设置超时时间为 60 秒
+    astr send -j "测试"             输出原始 JSON 响应
+    astr send -t 60 "长时间任务"    设置超时时间为 60 秒
 
 连接说明:
-  - 自动从 data/.cli_connection 文件检测连接类型（Unix Socket 或 TCP）
-  - Token 自动从 data/.cli_token 文件读取
-  - 必须在 AstrBot 根目录下运行，或设置 ASTRBOT_ROOT 环境变量
+  自动从 data/.cli_connection 检测连接类型（Unix Socket 或 TCP）
+  Token 自动从 data/.cli_token 读取
+  需在 AstrBot 根目录下运行，或设置 ASTRBOT_ROOT 环境变量
+"""
 
-输出说明:
-  - 默认模式下，图片以 [图片] 占位符显示，不返回实际图片内容
-  - 分段回复会自动分行显示
-  - 如需完整信息（包括图片 URL/base64），请使用 -j 参数输出 JSON
-  - 如需查看详细日志，请使用 --log 参数
-        """,
-    )
 
-    parser.add_argument(
-        "message",
-        nargs=argparse.REMAINDER,
-        help="Message to send (if not provided, read from stdin)",
-    )
+class RawEpilogGroup(click.Group):
+    """保留 epilog 原始格式的 Group，同时支持默认子命令路由"""
 
-    parser.add_argument(
-        "-s",
-        "--socket",
-        default=None,
-        help="Unix socket path (default: {temp_dir}/astrbot.sock)",
-    )
+    def format_epilog(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        if self.epilog:
+            formatter.write("\n")
+            for line in self.epilog.split("\n"):
+                formatter.write(line + "\n")
 
-    parser.add_argument(
-        "-t",
-        "--timeout",
-        type=float,
-        default=30.0,
-        help="Timeout in seconds (default: 30.0)",
-    )
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        # 兼容旧用法: astr 你好 等价于 astr send 你好
+        if args and args[0] not in self.commands and not args[0].startswith("-"):
+            args = ["send"] + args
+        return super().parse_args(ctx, args)
 
-    parser.add_argument(
-        "-j", "--json", action="store_true", help="Output raw JSON response"
-    )
 
-    parser.add_argument(
-        "--log",
-        action="store_true",
-        help="Get recent console logs (instead of sending a message)",
-    )
-
-    parser.add_argument(
-        "--lines",
-        type=int,
-        default=100,
-        help="Number of log lines to return (default: 100, max: 1000)",
-    )
-
-    parser.add_argument(
-        "--level",
-        default="",
-        help="Filter logs by level (DEBUG/INFO/WARNING/ERROR/CRITICAL)",
-    )
-
-    parser.add_argument(
-        "--pattern",
-        default="",
-        help="Filter logs by pattern (substring match)",
-    )
-
-    args = parser.parse_args()
-
-    # 处理日志请求
-    if args.log:
-        response = get_logs(
-            args.socket, args.timeout, args.lines, args.level, args.pattern
-        )
-    else:
-        # 处理消息发送
-        # 获取消息内容
-        if args.message:
-            # REMAINDER 模式下 args.message 是列表，用空格连接
-            message = " ".join(args.message)
-            # 修复 Git Bash 路径转换问题
-            message = fix_git_bash_path(message)
-        elif not sys.stdin.isatty():
-            # 从stdin读取
+@click.group(
+    cls=RawEpilogGroup,
+    invoke_without_command=True,
+    epilog=EPILOG,
+)
+@click.pass_context
+def main(ctx: click.Context) -> None:
+    """AstrBot CLI Client"""
+    if ctx.invoked_subcommand is None:
+        # 无子命令时，检查 stdin 是否有管道输入
+        if not sys.stdin.isatty():
             message = sys.stdin.read().strip()
-        else:
-            parser.print_help()
-            sys.exit(1)
+            if message:
+                _do_send(message, None, 30.0, False)
+                return
+        click.echo(ctx.get_help())
 
-        if not message:
-            print("Error: Empty message", file=sys.stderr)
-            sys.exit(1)
 
-        response = send_message(message, args.socket, args.timeout)
+@main.command(help="发送消息给 AstrBot")
+@click.argument("message", nargs=-1)
+@click.option("-s", "--socket", "socket_path", default=None, help="Unix socket 路径")
+@click.option("-t", "--timeout", default=30.0, type=float, help="超时时间（秒）")
+@click.option("-j", "--json", "use_json", is_flag=True, help="输出原始 JSON 响应")
+def send(
+    message: tuple[str, ...], socket_path: str | None, timeout: float, use_json: bool
+) -> None:
+    """发送消息给 AstrBot
 
-    # 输出响应
-    if args.json:
-        # 输出原始JSON
-        print(json.dumps(response, ensure_ascii=False, indent=2))
+    \b
+    示例:
+      astr send 你好
+      astr send /help
+      astr send plugin ls
+      echo "你好" | astr send
+    """
+    if message:
+        msg = " ".join(message)
+        msg = fix_git_bash_path(msg)
+    elif not sys.stdin.isatty():
+        msg = sys.stdin.read().strip()
     else:
-        # 格式化输出
+        click.echo("Error: 请提供消息内容", err=True)
+        raise SystemExit(1)
+
+    if not msg:
+        click.echo("Error: 消息内容为空", err=True)
+        raise SystemExit(1)
+
+    _do_send(msg, socket_path, timeout, use_json)
+
+
+def _do_send(msg: str, socket_path: str | None, timeout: float, use_json: bool) -> None:
+    """执行消息发送并输出结果"""
+    response = send_message(msg, socket_path, timeout)
+    _output_response(response, use_json)
+
+
+@main.command(help="获取 AstrBot 日志")
+@click.option(
+    "--lines", default=100, type=int, help="返回的日志行数（默认 100，最大 1000）"
+)
+@click.option(
+    "--level", default="", help="按级别过滤 (DEBUG/INFO/WARNING/ERROR/CRITICAL)"
+)
+@click.option("--pattern", default="", help="按模式过滤（子串匹配）")
+@click.option("-s", "--socket", "socket_path", default=None, help="Unix socket 路径")
+@click.option("-t", "--timeout", default=30.0, type=float, help="超时时间（秒）")
+@click.option("-j", "--json", "use_json", is_flag=True, help="输出原始 JSON 响应")
+def log(
+    lines: int,
+    level: str,
+    pattern: str,
+    socket_path: str | None,
+    timeout: float,
+    use_json: bool,
+) -> None:
+    """获取 AstrBot 日志
+
+    \b
+    示例:
+      astr log
+      astr log --lines 50
+      astr log --level ERROR
+      astr log --pattern "plugin"
+    """
+    response = get_logs(socket_path, timeout, lines, level, pattern)
+    _output_response(response, use_json)
+
+
+def _output_response(response: dict, use_json: bool) -> None:
+    """统一输出响应"""
+    if use_json:
+        click.echo(json.dumps(response, ensure_ascii=False, indent=2))
+    else:
         if response.get("status") == "success":
-            # 使用格式化函数处理响应
             formatted = format_response(response)
-            print(formatted)
+            click.echo(formatted)
         else:
             error = response.get("error", "Unknown error")
-            print(f"Error: {error}", file=sys.stderr)
-            sys.exit(1)
+            click.echo(f"Error: {error}", err=True)
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":
