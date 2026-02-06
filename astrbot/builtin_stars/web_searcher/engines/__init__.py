@@ -49,7 +49,7 @@ class SearchEngine:
     def _set_selector(self, selector: str) -> str:
         raise NotImplementedError
 
-    def _get_next_page(self, query: str) -> str:
+    async def _get_next_page(self, query: str) -> str:
         raise NotImplementedError
 
     async def _get_html(self, url: str, data: dict | None = None) -> str:

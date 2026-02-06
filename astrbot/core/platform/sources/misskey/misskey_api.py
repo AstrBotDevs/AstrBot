@@ -449,7 +449,6 @@ class MisskeyAPI:
                 )
 
             self._handle_response_status(response.status, endpoint)
-            raise APIConnectionError(f"Request failed for {endpoint}")
 
     @retry_async(
         max_retries=API_MAX_RETRIES,
