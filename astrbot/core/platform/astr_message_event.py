@@ -94,7 +94,7 @@ class AstrMessageEvent(abc.ABC):
         return str(self.session)
 
     @unified_msg_origin.setter
-    def unified_msg_origin(self, value: str):
+    def unified_msg_origin(self, value: str) -> None:
         """设置统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
         self.new_session = MessageSession.from_str(value)
         self.session = self.new_session
@@ -105,7 +105,7 @@ class AstrMessageEvent(abc.ABC):
         return self.session.session_id
 
     @session_id.setter
-    def session_id(self, value: str):
+    def session_id(self, value: str) -> None:
         """设置用户的会话 ID。可以直接使用下面的 unified_msg_origin"""
         self.session.session_id = value
 

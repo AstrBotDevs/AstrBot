@@ -36,7 +36,7 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         tool: FunctionTool[Any],
         tool_args: dict | None,
-    ):
+    ) -> None:
         await call_event_hook(
             run_context.context.event,
             EventType.OnUsingLLMToolEvent,

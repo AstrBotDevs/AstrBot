@@ -233,7 +233,7 @@ class LogManager:
         class AstrBotVersionTagFilter(logging.Filter):
             """在 WARNING 及以上级别日志后追加当前 AstrBot 版本号。"""
 
-            def filter(self, record):
+            def filter(self, record) -> bool:
                 if record.levelno >= logging.WARNING:
                     record.astrbot_version_tag = f" [v{VERSION}]"
                 else:
@@ -301,7 +301,7 @@ class LogManager:
         ]
 
     @classmethod
-    def _remove_file_handlers(cls, logger: logging.Logger):
+    def _remove_file_handlers(cls, logger: logging.Logger) -> None:
         for handler in cls._get_file_handlers(logger):
             logger.removeHandler(handler)
             try:
@@ -310,7 +310,7 @@ class LogManager:
                 pass
 
     @classmethod
-    def _remove_trace_file_handlers(cls, logger: logging.Logger):
+    def _remove_trace_file_handlers(cls, logger: logging.Logger) -> None:
         for handler in cls._get_trace_file_handlers(logger):
             logger.removeHandler(handler)
             try:
@@ -326,7 +326,7 @@ class LogManager:
         max_mb: int | None = None,
         backup_count: int = 3,
         trace: bool = False,
-    ):
+    ) -> None:
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
         max_bytes = 0
         if max_mb and max_mb > 0:
@@ -365,7 +365,7 @@ class LogManager:
         logger: logging.Logger,
         config: dict | None,
         override_level: str | None = None,
-    ):
+    ) -> None:
         """根据配置设置日志级别和文件日志。
 
         Args:
@@ -413,7 +413,7 @@ class LogManager:
         cls._add_file_handler(logger, file_path, max_mb=max_mb)
 
     @classmethod
-    def configure_trace_logger(cls, config: dict | None):
+    def configure_trace_logger(cls, config: dict | None) -> None:
         """为 trace 事件配置独立的文件日志，不向控制台输出。"""
         if not config:
             return

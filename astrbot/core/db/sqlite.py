@@ -497,7 +497,7 @@ class SQLiteDatabase(BaseDatabase):
     async def delete_platform_message_offset(
         self, platform_id: str, user_id: str, offset_sec: int = 86400
     ) -> None:
-        """Delete platform message history records older than the specified offset."""
+        """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():

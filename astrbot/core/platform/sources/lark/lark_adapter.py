@@ -95,7 +95,7 @@ class LarkPlatformAdapter(Platform):
 
         self.event_id_timestamps: dict[str, float] = {}
 
-    def _clean_expired_events(self):
+    def _clean_expired_events(self) -> None:
         """清理超过 30 分钟的事件记录"""
         current_time = time.time()
         expired_keys = [
@@ -335,7 +335,7 @@ class LarkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
-    async def handle_webhook_event(self, event_data: dict):
+    async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
 
         Args:

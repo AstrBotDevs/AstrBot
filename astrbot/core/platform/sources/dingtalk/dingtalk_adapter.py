@@ -104,7 +104,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def create_message_card(
         self, message_id: str, incoming_message: dingtalk_stream.ChatbotMessage
-    ):
+    ) -> bool | None:
         if not self.card_template_id:
             return False
 
@@ -122,7 +122,9 @@ class DingtalkPlatformAdapter(Platform):
             logger.error(f"创建钉钉卡片失败: {e}")
             return False
 
-    async def send_card_message(self, message_id: str, content: str, is_final: bool):
+    async def send_card_message(
+        self, message_id: str, content: str, is_final: bool
+    ) -> None:
         if message_id not in self.card_instance_id_dict:
             return
 

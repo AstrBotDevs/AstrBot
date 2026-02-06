@@ -12,7 +12,7 @@ from astrbot.api import logger, sp
 from astrbot.core.db import BaseDatabase
 
 
-async def migrate_token_usage(db_helper: BaseDatabase):
+async def migrate_token_usage(db_helper: BaseDatabase) -> None:
     """Add token_usage column to conversations table.
 
     This migration adds a new column to track token consumption in conversations.

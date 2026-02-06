@@ -38,7 +38,7 @@ class SharedPreferences:
         )
         self._scheduler.start()
 
-    def _clear_temporary_cache(self):
+    def _clear_temporary_cache(self) -> None:
         self.temorary_cache.clear()
 
     async def get_async(

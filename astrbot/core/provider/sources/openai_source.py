@@ -363,7 +363,7 @@ class ProviderOpenAIOfficial(Provider):
 
         return payloads, context_query
 
-    def _finally_convert_payload(self, payloads: dict):
+    def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
