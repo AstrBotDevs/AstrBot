@@ -99,19 +99,11 @@ class ConfigMetadataI18n:
 
             for section_key, section_data in group_data.get("metadata", {}).items():
                 section_result = {
-                    "description": f"{group_key}.{section_key}.description",
-                    "type": section_data.get("type"),
+                    key: value
+                    for key, value in section_data.items()
+                    if key not in {"description", "hint", "labels", "name"}
                 }
-
-                for key in [
-                    "items",
-                    "condition",
-                    "_special",
-                    "invisible",
-                    "config_template",
-                ]:
-                    if key in section_data:
-                        section_result[key] = section_data[key]
+                section_result["description"] = f"{group_key}.{section_key}.description"
 
                 if "hint" in section_data:
                     section_result["hint"] = f"{group_key}.{section_key}.hint"
