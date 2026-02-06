@@ -238,6 +238,7 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
+        supported = ["web_search_tavily", "web_search_bocha"]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [
@@ -248,7 +249,7 @@ class ChatRoute(Route):
 
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
-                if tool_call.get("name") != "web_search_tavily" or not tool_call.get(
+                if tool_call.get("name") not in supported or not tool_call.get(
                     "result"
                 ):
                     continue
@@ -278,7 +279,7 @@ class ChatRoute(Route):
             if ref_index not in web_search_results:
                 continue
             payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temorary_cache.get("_ws_favicon", {}).get(payload["url"]):
+            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
                 payload["favicon"] = favicon
             used_refs.append(payload)
 
