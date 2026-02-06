@@ -22,7 +22,6 @@ from astrbot.core.astr_main_agent_resources import (
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.message_event_result import (
     CommandResult,
-    MessageChain,
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
