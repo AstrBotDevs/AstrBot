@@ -85,7 +85,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             return
         else:
-            async for r in cls._execute_local(tool, run_context, **tool_args):
+            async for r in cls._execute_local(
+                tool, run_context, tool_call_timeout=None, **tool_args
+            ):
                 yield r
             return
 
