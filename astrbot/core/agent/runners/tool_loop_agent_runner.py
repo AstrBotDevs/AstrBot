@@ -213,6 +213,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if not llm_response.is_chunk and llm_response.usage:
                 # only count the token usage of the final response for computation purpose
                 self.stats.token_usage += llm_response.usage
+                if self.req.conversation:
+                    self.req.conversation.token_usage = llm_response.usage.total
             break  # got final response
 
         if not llm_resp_result:

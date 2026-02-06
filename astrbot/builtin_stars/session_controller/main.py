@@ -54,7 +54,7 @@ class Main(Star):
                     if p_settings.get("empty_mention_waiting_need_reply", True):
                         try:
                             # 尝试使用 LLM 生成更生动的回复
-                            func_tools_mgr = self.context.get_llm_tool_manager()
+                            # func_tools_mgr = self.context.get_llm_tool_manager()
 
                             # 获取用户当前的对话信息
                             curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
@@ -81,7 +81,6 @@ class Main(Star):
                                     "你友好地询问用户想要聊些什么或者需要什么帮助，回复要符合人设，不要太过机械化。"
                                     "请注意，你仅需要输出要回复用户的内容，不要输出其他任何东西"
                                 ),
-                                func_tool_manager=func_tools_mgr,
                                 session_id=curr_cid,
                                 contexts=[],
                                 system_prompt="",

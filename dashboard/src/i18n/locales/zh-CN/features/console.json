@@ -11,5 +11,8 @@
     "mirrorLabel": "强制 PyPI 软件仓库链接（可选）",
     "mirrorHint": "强制 PyPI 软件仓库链接 > 配置项 `PyPI 软件仓库地址`",
     "installButton": "安装"
+  },
+  "debugHint": {
+    "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
   }
 }

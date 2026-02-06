@@ -248,8 +248,18 @@ class ToolSet:
 
             result = {}
 
-            if "type" in schema and schema["type"] in supported_types:
-                result["type"] = schema["type"]
+            # Avoid side effects by not modifying the original schema
+            origin_type = schema.get("type")
+            target_type = origin_type
+
+            # Compatibility fix: Gemini API expects 'type' to be a string (enum),
+            # but standard JSON Schema (MCP) allows lists (e.g. ["string", "null"]).
+            # We fallback to the first non-null type.
+            if isinstance(origin_type, list):
+                target_type = next((t for t in origin_type if t != "null"), "string")
+
+            if target_type in supported_types:
+                result["type"] = target_type
                 if "format" in schema and schema["format"] in supported_formats.get(
                     result["type"],
                     set(),

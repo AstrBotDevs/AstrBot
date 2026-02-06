@@ -317,6 +317,17 @@ class PluginRoute(Route):
                 "display_name": plugin.display_name,
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
             }
+            # 检查是否为全空的幽灵插件
+            if not any(
+                [
+                    plugin.name,
+                    plugin.author,
+                    plugin.desc,
+                    plugin.version,
+                    plugin.display_name,
+                ]
+            ):
+                continue
             _plugin_resp.append(_t)
         return (
             Response()

@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "SubAgent 编排",
-    "beta": "Beta",
+    "beta": "实验性",
     "subtitle": "主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。"
   },
   "actions": {
@@ -35,8 +35,8 @@
     "nameHint": "建议使用英文小写+下划线，且全局唯一",
     "providerLabel": "Chat Provider（可选）",
     "providerHint": "留空表示跟随全局默认 provider。",
-    "personaLabel": "选择 Persona",
-    "personaHint": "SubAgent 将直接继承所选 Persona 的系统设定与工具。",
+    "personaLabel": "选择人格设定",
+    "personaHint": "SubAgent 将直接继承所选 Persona 的系统设定与工具。在人格设定页管理和新建人格。",
     "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
     "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
   },

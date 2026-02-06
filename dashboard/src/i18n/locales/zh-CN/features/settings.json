@@ -16,6 +16,16 @@
       "custom": "自定义"
     }
   },
+  "theme": {
+    "title": "主题",
+    "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
+    "customize": {
+      "title": "主题颜色",
+      "primary": "主色",
+      "secondary": "辅助色",
+      "reset": "恢复默认"
+    }
+  },
   "system": {
     "title": "系统",
     "restart": {

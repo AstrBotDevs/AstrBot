@@ -11,5 +11,8 @@
     "mirrorLabel": "Force PyPI repository URL (optional)",
     "mirrorHint": "Force PyPI repository URL > Config item `PyPI Repository Address`",
     "installButton": "Install"
+  },
+  "debugHint": {
+    "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
   }
-} 
+}

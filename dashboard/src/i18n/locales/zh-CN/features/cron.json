@@ -1,10 +1,10 @@
 {
   "page": {
     "title": "未来任务管理",
-    "beta": "Beta",
-    "subtitle": "查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。",
+    "beta": "实验性",
+    "subtitle": "查看给 AstrBot 布置的未来任务。AstrBot 将会被自动唤醒、执行任务，然后将结果告知任务布置方。需要先在配置文件中启用“主动型能力”。",
     "proactive": {
-      "supported": "主动发送结果仅支持以下平台：{platforms}",
+      "supported": "主动发送结果仅支持以下您已配置的平台：{platforms}",
       "unsupported": "暂无支持主动消息的平台，请在平台设置中开启。"
     }
   },
@@ -22,6 +22,7 @@
       "name": "名称",
       "type": "类型",
       "cron": "Cron",
+      "session": "会话 ID",
       "nextRun": "下一次执行",
       "lastRun": "最近执行",
       "note": "说明",
@@ -39,6 +40,7 @@
   },
   "form": {
     "title": "新建任务",
+    "chatHint": "你可以直接通过聊天的方式来让 AstrBot 创建未来任务，而不必在此添加。",
     "runOnce": "一次性任务",
     "name": "任务名称",
     "note": "任务说明",
