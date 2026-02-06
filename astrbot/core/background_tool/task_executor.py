@@ -219,11 +219,30 @@ class TaskExecutor:
                     if output is not None:
                         self._log(task.task_id, str(output))
                         final_result = output
+                # handler 可能通过 event.set_result() 设置结果而非直接 return
+                if final_result is None and task.event is not None:
+                    event_result = task.event.get_result()
+                    if event_result is not None:
+                        final_result = event_result.get_plain_text()
+                        self._log(
+                            task.task_id,
+                            f"[EVENT_RESULT] Got result from event: {final_result[:200] if final_result else None}",
+                        )
                 return final_result
 
             # 检查是否是协程
             elif asyncio.iscoroutine(result):
-                return await result
+                coro_result = await result
+                # handler 可能通过 event.set_result() 设置结果而非直接 return
+                if coro_result is None and task.event is not None:
+                    event_result = task.event.get_result()
+                    if event_result is not None:
+                        coro_result = event_result.get_plain_text()
+                        self._log(
+                            task.task_id,
+                            f"[EVENT_RESULT] Got result from event: {coro_result[:200] if coro_result else None}",
+                        )
+                return coro_result
 
             else:
                 return result
