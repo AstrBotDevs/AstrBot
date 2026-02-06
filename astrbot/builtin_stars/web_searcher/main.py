@@ -23,12 +23,16 @@ class Main(star.Star):
         "fetch_url",
         "web_search_tavily",
         "tavily_extract_web_page",
+        "web_search_bocha",
     ]
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self.tavily_key_index = 0
         self.tavily_key_lock = asyncio.Lock()
+
+        self.bocha_key_index = 0
+        self.bocha_key_lock = asyncio.Lock()
 
         # 将 str 类型的 key 迁移至 list[str]，并保存
         cfg = self.context.get_config()
@@ -43,6 +47,14 @@ class Main(star.Star):
                     provider_settings["websearch_tavily_key"] = [tavily_key]
                 else:
                     provider_settings["websearch_tavily_key"] = []
+                cfg.save_config()
+
+            bocha_key = provider_settings.get("websearch_bocha_key")
+            if isinstance(bocha_key, str):
+                if bocha_key:
+                    provider_settings["websearch_bocha_key"] = [bocha_key]
+                else:
+                    provider_settings["websearch_bocha_key"] = []
                 cfg.save_config()
 
         self.bing_search = Bing()
@@ -382,6 +394,161 @@ class Main(star.Star):
             return "Error: Tavily web searcher does not return any results."
         return ret
 
+    async def _get_bocha_key(self, cfg: AstrBotConfig) -> str:
+        """并发安全的从列表中获取并轮换BoCha API密钥。"""
+        bocha_keys = cfg.get("provider_settings", {}).get("websearch_bocha_key", [])
+        if not bocha_keys:
+            raise ValueError("错误：BoCha API密钥未在AstrBot中配置。")
+
+        async with self.bocha_key_lock:
+            key = bocha_keys[self.bocha_key_index]
+            self.bocha_key_index = (self.bocha_key_index + 1) % len(bocha_keys)
+            return key
+
+    async def _web_search_bocha(
+            self,
+            cfg: AstrBotConfig,
+            payload: dict,
+    ) -> list[SearchResult]:
+        """使用 BoCha 搜索引擎进行搜索"""
+        bocha_key = await self._get_bocha_key(cfg)
+        url = "https://api.bochaai.com/v1/web-search"
+        header = {
+            "Authorization": f"Bearer {bocha_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                    url,
+                    json=payload,
+                    headers=header,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    raise Exception(
+                        f"BoCha web search failed: {reason}, status: {response.status}",
+                    )
+                data = await response.json()
+                print(data)
+                data = data["data"]["webPages"]["value"]
+                results = []
+                for item in data:
+                    result = SearchResult(
+                        title=item.get("name"),
+                        url=item.get("url"),
+                        snippet=item.get("snippet"),
+                        favicon=item.get("siteIcon"),
+                    )
+                    results.append(result)
+                return results
+
+    @llm_tool("web_search_bocha")
+    async def search_from_bocha(
+            self,
+            event: AstrMessageEvent,
+            query: str,
+            freshness: str = "noLimit",
+            summary: bool = False,
+            include: str = "",
+            exclude: str = "",
+            count: int = 10,
+    ) -> str:
+        """
+        A web search tool based on Bocha Search API, used to retrieve web pages
+        related to the user's query.
+
+        Args:
+            query (string): Required. User's search query.
+
+            freshness (string): Optional. Specifies the time range of the search.
+                Supported values:
+                - "noLimit": No time limit (default, recommended).
+                - "oneDay": Within one day.
+                - "oneWeek": Within one week.
+                - "oneMonth": Within one month.
+                - "oneYear": Within one year.
+                - "YYYY-MM-DD..YYYY-MM-DD": Search within a specific date range.
+                  Example: "2025-01-01..2025-04-06".
+                - "YYYY-MM-DD": Search on a specific date.
+                  Example: "2025-04-06".
+                It is recommended to use "noLimit", as the search algorithm will
+                automatically optimize time relevance. Manually restricting the
+                time range may result in no search results.
+
+            summary (boolean): Optional. Whether to include a text summary
+                for each search result.
+                - True: Include summary.
+                - False: Do not include summary (default).
+
+            include (string): Optional. Specifies the domains to include in
+                the search. Multiple domains can be separated by "|" or ",".
+                A maximum of 100 domains is allowed.
+                Examples:
+                - "qq.com"
+                - "qq.com|m.163.com"
+
+            exclude (string): Optional. Specifies the domains to exclude from
+                the search. Multiple domains can be separated by "|" or ",".
+                A maximum of 100 domains is allowed.
+                Examples:
+                - "qq.com"
+                - "qq.com|m.163.com"
+
+            count (number): Optional. Number of search results to return.
+                - Range: 1–50
+                - Default: 10
+                The actual number of returned results may be less than the
+                specified count.
+        """
+        logger.info(f"web_searcher - search_from_bocha: {query}")
+        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        # websearch_link = cfg["provider_settings"].get("web_search_link", False)
+        if not cfg.get("provider_settings", {}).get("websearch_bocha_key", []):
+            raise ValueError("Error: BoCha API key is not configured in AstrBot.")
+
+        # build payload
+        payload = {
+            "query": query,
+            "count": count,
+        }
+
+        # freshness：只在非默认值时传入
+        if freshness:
+            payload["freshness"] = freshness
+
+        # 是否返回摘要
+        payload["summary"] = summary
+
+        # include：限制搜索域
+        if include:
+            payload["include"] = include
+
+        # exclude：排除搜索域
+        if exclude:
+            payload["exclude"] = exclude
+
+        results = await self._web_search_bocha(cfg, payload)
+        if not results:
+            return "Error: Tavily web searcher does not return any results."
+
+        ret_ls = []
+        ref_uuid = str(uuid.uuid4())[:4]
+        for idx, result in enumerate(results, 1):
+            index = f"{ref_uuid}.{idx}"
+            ret_ls.append(
+                {
+                    "title": f"{result.title}",
+                    "url": f"{result.url}",
+                    "snippet": f"{result.snippet}",
+                    "index": index,
+                }
+            )
+            if result.favicon:
+                sp.temorary_cache["_ws_favicon"][result.url] = result.favicon
+        # ret = "\n".join(ret_ls)
+        ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
+        return ret
+
     @filter.on_llm_request(priority=-10000)
     async def edit_web_search_tools(
         self,
@@ -407,7 +574,6 @@ class Main(star.Star):
             for tool_name in self.TOOLS:
                 tool_set.remove_tool(tool_name)
             return
-
         func_tool_mgr = self.context.get_llm_tool_manager()
         if provider == "default":
             web_search_t = func_tool_mgr.get_func("web_search")
@@ -419,6 +585,7 @@ class Main(star.Star):
             tool_set.remove_tool("web_search_tavily")
             tool_set.remove_tool("tavily_extract_web_page")
             tool_set.remove_tool("AIsearch")
+            tool_set.remove_tool("web_search_bocha")
         elif provider == "tavily":
             web_search_tavily = func_tool_mgr.get_func("web_search_tavily")
             tavily_extract_web_page = func_tool_mgr.get_func("tavily_extract_web_page")
@@ -429,6 +596,7 @@ class Main(star.Star):
             tool_set.remove_tool("web_search")
             tool_set.remove_tool("fetch_url")
             tool_set.remove_tool("AIsearch")
+            tool_set.remove_tool("web_search_bocha")
         elif provider == "baidu_ai_search":
             try:
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
@@ -440,5 +608,16 @@ class Main(star.Star):
                 tool_set.remove_tool("fetch_url")
                 tool_set.remove_tool("web_search_tavily")
                 tool_set.remove_tool("tavily_extract_web_page")
+                tool_set.remove_tool("web_search_bocha")
             except Exception as e:
                 logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
+        elif provider == "bocha":
+            web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
+            if web_search_bocha:
+                tool_set.add_tool(web_search_bocha)
+            tool_set.remove_tool("web_search")
+            tool_set.remove_tool("fetch_url")
+            tool_set.remove_tool("AIsearch")
+            tool_set.remove_tool("web_search_tavily")
+            tool_set.remove_tool("tavily_extract_web_page")
+
