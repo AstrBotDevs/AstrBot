@@ -6,6 +6,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from astrbot.core.background_tool.task_state import BackgroundTask
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from astrbot.core.tool_execution.utils.validators import (
@@ -21,6 +22,21 @@ from .task_formatter import build_task_result
 # 获取全局管理器实例
 def _get_manager() -> BackgroundToolManager:
     return BackgroundToolManager()
+
+
+def _get_task_for_session(
+    manager: BackgroundToolManager, task_id: str, session_id: str
+) -> "BackgroundTask | None":
+    """按task_id查找任务，并校验会话归属。
+
+    不匹配时返回None（与"不存在"相同响应，避免信息泄露）。
+    """
+    task = manager.registry.get(task_id)
+    if task is None:
+        return None
+    if task.session_id != session_id:
+        return None
+    return task
 
 
 async def get_tool_output(
@@ -45,8 +61,9 @@ async def get_tool_output(
         return f"Error: {e}"
 
     manager = _get_manager()
+    session_id = event.unified_msg_origin
 
-    task = manager.registry.get(task_id)
+    task = _get_task_for_session(manager, task_id, session_id)
     if task is None:
         return f"Error: Task {task_id} not found."
 
@@ -85,7 +102,7 @@ async def wait_tool_result(
 
     logger.info(f"[wait_tool_result] Looking for task {task_id}")
 
-    task = manager.registry.get(task_id)
+    task = _get_task_for_session(manager, task_id, session_id)
     if task is None:
         return f"Error: Task {task_id} not found."
 
@@ -141,8 +158,9 @@ async def stop_tool(
         return f"Error: {e}"
 
     manager = _get_manager()
+    session_id = event.unified_msg_origin
 
-    task = manager.registry.get(task_id)
+    task = _get_task_for_session(manager, task_id, session_id)
     if task is None:
         return f"Error: Task {task_id} not found."
 
