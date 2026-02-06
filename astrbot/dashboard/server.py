@@ -32,11 +32,6 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
-
-class _AddrWithPort(Protocol):
-    port: int
-
-
 APP: Quart
 
 
