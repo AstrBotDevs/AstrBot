@@ -406,9 +406,9 @@ class Main(star.Star):
             return key
 
     async def _web_search_bocha(
-            self,
-            cfg: AstrBotConfig,
-            payload: dict,
+        self,
+        cfg: AstrBotConfig,
+        payload: dict,
     ) -> list[SearchResult]:
         """使用 BoCha 搜索引擎进行搜索"""
         bocha_key = await self._get_bocha_key(cfg)
@@ -419,9 +419,9 @@ class Main(star.Star):
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
             async with session.post(
-                    url,
-                    json=payload,
-                    headers=header,
+                url,
+                json=payload,
+                headers=header,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -443,14 +443,14 @@ class Main(star.Star):
 
     @llm_tool("web_search_bocha")
     async def search_from_bocha(
-            self,
-            event: AstrMessageEvent,
-            query: str,
-            freshness: str = "noLimit",
-            summary: bool = False,
-            include: str = "",
-            exclude: str = "",
-            count: int = 10,
+        self,
+        event: AstrMessageEvent,
+        query: str,
+        freshness: str = "noLimit",
+        summary: bool = False,
+        include: str = "",
+        exclude: str = "",
+        count: int = 10,
     ) -> str:
         """
         A web search tool based on Bocha Search API, used to retrieve web pages
