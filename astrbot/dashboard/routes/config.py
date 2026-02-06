@@ -58,6 +58,7 @@ def try_cast(value: Any, type_: str):
             return None
 
 
+
 def _expect_type(value, expected_type, path_key, errors, expected_name=None):
     if not isinstance(value, expected_type):
         errors.append(
@@ -407,8 +408,19 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
+        provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "provider_group": {
+                    "metadata": {
+                        "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
+                            "provider"
+                        ]
+                    }
+                }
+            }
+        )
         config_schema = {
-            "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+            "provider": provider_metadata["provider_group"]["metadata"]["provider"]
         }
         data = {
             "config_schema": config_schema,
