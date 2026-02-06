@@ -58,7 +58,6 @@ def try_cast(value: Any, type_: str):
             return None
 
 
-
 def _expect_type(value, expected_type, path_key, errors, expected_name=None):
     if not isinstance(value, expected_type):
         errors.append(

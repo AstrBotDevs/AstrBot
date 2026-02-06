@@ -103,7 +103,13 @@ class ConfigMetadataI18n:
                     "type": section_data.get("type"),
                 }
 
-                for key in ["items", "condition", "_special", "invisible", "config_template"]:
+                for key in [
+                    "items",
+                    "condition",
+                    "_special",
+                    "invisible",
+                    "config_template",
+                ]:
                     if key in section_data:
                         section_result[key] = section_data[key]
 
