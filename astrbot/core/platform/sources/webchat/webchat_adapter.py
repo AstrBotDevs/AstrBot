@@ -31,7 +31,7 @@ class QueueListener:
         self.callback = callback
         self.running_tasks = set()
 
-    async def listen_to_queue(self, conversation_id: str):
+    async def listen_to_queue(self, conversation_id: str) -> None:
         """Listen to a specific conversation queue"""
         queue = self.webchat_queue_mgr.get_or_create_queue(conversation_id)
         while True:
@@ -44,7 +44,7 @@ class QueueListener:
                 )
                 break
 
-    async def run(self):
+    async def run(self) -> None:
         """Monitor for new conversation queues and start listeners"""
         monitored_conversations = set()
 
@@ -93,7 +93,7 @@ class WebChatAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         message_id = f"active_{str(uuid.uuid4())}"
         await WebChatMessageEvent._send(message_id, message_chain, session.session_id)
         await super().send_by_session(session, message_chain)
@@ -212,7 +212,7 @@ class WebChatAdapter(Platform):
         return abm
 
     def run(self) -> Coroutine[Any, Any, None]:
-        async def callback(data: tuple):
+        async def callback(data: tuple) -> None:
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
@@ -222,7 +222,7 @@ class WebChatAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WebChatMessageEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -240,6 +240,6 @@ class WebChatAdapter(Platform):
 
         self.commit_event(message_event)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         # Do nothing
         pass

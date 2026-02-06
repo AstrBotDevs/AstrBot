@@ -2,7 +2,7 @@ import asyncio
 import os
 import threading
 import uuid
-from typing import cast
+from typing import NoReturn, cast
 
 import aiohttp
 import dingtalk_stream
@@ -90,7 +90,7 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> NoReturn:
         raise NotImplementedError("钉钉机器人适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
@@ -104,7 +104,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def create_message_card(
         self, message_id: str, incoming_message: dingtalk_stream.ChatbotMessage
-    ):
+    ) -> bool | None:
         if not self.card_template_id:
             return False
 
@@ -122,7 +122,9 @@ class DingtalkPlatformAdapter(Platform):
             logger.error(f"创建钉钉卡片失败: {e}")
             return False
 
-    async def send_card_message(self, message_id: str, content: str, is_final: bool):
+    async def send_card_message(
+        self, message_id: str, content: str, is_final: bool
+    ) -> None:
         if message_id not in self.card_instance_id_dict:
             return
 
@@ -276,7 +278,7 @@ class DingtalkPlatformAdapter(Platform):
                     return ""
                 return (await resp.json())["data"]["accessToken"]
 
-    async def handle_msg(self, abm: AstrBotMessage):
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
         event = DingtalkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
@@ -288,10 +290,10 @@ class DingtalkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
-    async def run(self):
+    async def run(self) -> None:
         # await self.client_.start()
         # 钉钉的 SDK 并没有实现真正的异步，start() 里面有堵塞方法。
-        def start_client(loop: asyncio.AbstractEventLoop):
+        def start_client(loop: asyncio.AbstractEventLoop) -> None:
             try:
                 self._shutdown_event = threading.Event()
                 task = loop.create_task(self.client_.start())
@@ -307,8 +309,8 @@ class DingtalkPlatformAdapter(Platform):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, start_client, loop)
 
-    async def terminate(self):
-        def monkey_patch_close():
+    async def terminate(self) -> None:
+        def monkey_patch_close() -> NoReturn:
             raise KeyboardInterrupt("Graceful shutdown")
 
         if self.client_.websocket is not None:

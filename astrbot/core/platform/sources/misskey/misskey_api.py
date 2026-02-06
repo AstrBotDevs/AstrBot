@@ -3,7 +3,7 @@ import json
 import random
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, NoReturn
 
 try:
     import aiohttp
@@ -43,7 +43,7 @@ class WebSocketError(APIError):
 
 
 class StreamingClient:
-    def __init__(self, instance_url: str, access_token: str):
+    def __init__(self, instance_url: str, access_token: str) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self.websocket: Any | None = None
@@ -90,7 +90,7 @@ class StreamingClient:
             self.is_connected = False
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         self._running = False
         if self.websocket:
             await self.websocket.close()
@@ -116,7 +116,7 @@ class StreamingClient:
         self.channels[channel_id] = channel_type
         return channel_id
 
-    async def unsubscribe_channel(self, channel_id: str):
+    async def unsubscribe_channel(self, channel_id: str) -> None:
         if (
             not self.is_connected
             or not self.websocket
@@ -136,10 +136,10 @@ class StreamingClient:
         self,
         event_type: str,
         handler: Callable[[dict], Awaitable[None]],
-    ):
+    ) -> None:
         self.message_handlers[event_type] = handler
 
-    async def listen(self):
+    async def listen(self) -> None:
         if not self.is_connected or not self.websocket:
             raise WebSocketError("WebSocket 未连接")
 
@@ -187,7 +187,7 @@ class StreamingClient:
             except Exception:
                 pass
 
-    async def _handle_message(self, data: dict[str, Any]):
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         message_type = data.get("type")
         body = data.get("body", {})
 
@@ -334,7 +334,7 @@ class MisskeyAPI:
         download_timeout: int = 15,
         chunk_size: int = 64 * 1024,
         max_download_bytes: int | None = None,
-    ):
+    ) -> None:
         self.instance_url = instance_url.rstrip("/")
         self.access_token = access_token
         self._session: aiohttp.ClientSession | None = None
@@ -375,7 +375,7 @@ class MisskeyAPI:
             self._session = aiohttp.ClientSession(headers=headers)
         return self._session
 
-    def _handle_response_status(self, status: int, endpoint: str):
+    def _handle_response_status(self, status: int, endpoint: str) -> NoReturn:
         """处理 HTTP 响应状态码"""
         if status == 400:
             logger.error(f"[Misskey API] 请求参数错误: {endpoint} (HTTP {status})")

@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import NoReturn, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
@@ -32,7 +32,7 @@ class AbstractProvider(abc.ABC):
         self.model_name = ""
         self.provider_config = provider_config
 
-    def set_model(self, model_name: str):
+    def set_model(self, model_name: str) -> None:
         """Set the current model name"""
         self.model_name = model_name
 
@@ -54,7 +54,7 @@ class AbstractProvider(abc.ABC):
         )
         return meta
 
-    async def test(self):
+    async def test(self) -> None:
         """test the provider is a
 
         raises:
@@ -84,7 +84,7 @@ class Provider(AbstractProvider):
         return keys or [""]
 
     @abc.abstractmethod
-    def set_key(self, key: str):
+    def set_key(self, key: str) -> NoReturn:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -157,7 +157,7 @@ class Provider(AbstractProvider):
             yield None  # type: ignore
         raise NotImplementedError()
 
-    async def pop_record(self, context: list):
+    async def pop_record(self, context: list) -> None:
         """弹出 context 第一条非系统提示词对话记录"""
         poped = 0
         indexs_to_pop = []
@@ -188,7 +188,7 @@ class Provider(AbstractProvider):
 
         return dicts
 
-    async def test(self, timeout: float = 45.0):
+    async def test(self, timeout: float = 45.0) -> None:
         await asyncio.wait_for(
             self.text_chat(prompt="REPLY `PONG` ONLY"),
             timeout=timeout,
@@ -206,7 +206,7 @@ class STTProvider(AbstractProvider):
         """获取音频的文本"""
         raise NotImplementedError
 
-    async def test(self):
+    async def test(self) -> None:
         sample_audio_path = os.path.join(
             get_astrbot_path(),
             "samples",
@@ -280,7 +280,7 @@ class TTSProvider(AbstractProvider):
 
             accumulated_text += text_part
 
-    async def test(self):
+    async def test(self) -> None:
         await self.get_audio("hi")
 
 
@@ -305,7 +305,7 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
-    async def test(self):
+    async def test(self) -> None:
         await self.get_embedding("astrbot")
 
     async def get_embeddings_batch(
@@ -335,7 +335,7 @@ class EmbeddingProvider(AbstractProvider):
         completed_count = 0
         total_count = len(texts)
 
-        async def process_batch(batch_idx: int, batch_texts: list[str]):
+        async def process_batch(batch_idx: int, batch_texts: list[str]) -> None:
             nonlocal completed_count
             async with semaphore:
                 for attempt in range(max_retries):
@@ -392,7 +392,7 @@ class RerankProvider(AbstractProvider):
         """获取查询和文档的重排序分数"""
         ...
 
-    async def test(self):
+    async def test(self) -> None:
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
             raise Exception("Rerank provider test failed, no results returned")

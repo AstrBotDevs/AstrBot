@@ -28,7 +28,7 @@ from .components import DiscordEmbed, DiscordView
 class DiscordViewComponent(BaseMessageComponent):
     type: str = "discord_view"
 
-    def __init__(self, view: discord.ui.View):
+    def __init__(self, view: discord.ui.View) -> None:
         self.view = view
 
 
@@ -41,12 +41,12 @@ class DiscordPlatformEvent(AstrMessageEvent):
         session_id: str,
         client: DiscordBotClient,
         interaction_followup_webhook: discord.Webhook | None = None,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.interaction_followup_webhook = interaction_followup_webhook
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
         # 解析消息链为 Discord 所需的对象
         try:
@@ -267,7 +267,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         """对原消息添加反应"""
         try:
             if hasattr(self.message_obj, "raw_message") and hasattr(

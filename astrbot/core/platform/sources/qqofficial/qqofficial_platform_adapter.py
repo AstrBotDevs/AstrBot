@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import cast
+from typing import NoReturn, cast
 
 import botpy
 import botpy.message
@@ -35,11 +35,13 @@ for handler in logging.root.handlers[:]:
 
 # QQ 机器人官方框架
 class botClient(Client):
-    def set_platform(self, platform: QQOfficialPlatformAdapter):
+    def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
 
     # 收到群消息
-    async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
+    async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -49,7 +51,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到频道消息
-    async def on_at_message_create(self, message: botpy.message.Message):
+    async def on_at_message_create(self, message: botpy.message.Message) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -59,7 +61,9 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到私聊消息
-    async def on_direct_message_create(self, message: botpy.message.DirectMessage):
+    async def on_direct_message_create(
+        self, message: botpy.message.DirectMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -68,7 +72,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到 C2C 消息
-    async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
+    async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -76,7 +80,7 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self._commit(abm)
 
-    def _commit(self, abm: AstrBotMessage):
+    def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.commit_event(
             QQOfficialMessageEvent(
                 abm.message_str,
@@ -128,7 +132,7 @@ class QQOfficialPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> NoReturn:
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
@@ -222,6 +226,6 @@ class QQOfficialPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         await self.client.close()
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")

@@ -17,7 +17,7 @@ DEFAULT_PERSONALITY = Personality(
 
 
 class PersonaManager:
-    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager):
+    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
         default_ps = acm.default_conf.get("provider_settings", {})
@@ -29,7 +29,7 @@ class PersonaManager:
         self.selected_default_persona_v3: Personality | None = None
         self.persona_v3_config: list[dict] = []
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
         logger.info(f"已加载 {len(self.personas)} 个人格。")
@@ -58,7 +58,7 @@ class PersonaManager:
         except Exception:
             return DEFAULT_PERSONALITY
 
-    async def delete_persona(self, persona_id: str):
+    async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
         if not await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} does not exist.")

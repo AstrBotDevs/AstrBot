@@ -10,7 +10,7 @@ from . import HandlerFilter
 class RegexFilter(HandlerFilter):
     """正则表达式过滤器"""
 
-    def __init__(self, regex: str):
+    def __init__(self, regex: str) -> None:
         self.regex_str = regex
         self.regex = re.compile(regex)
 
