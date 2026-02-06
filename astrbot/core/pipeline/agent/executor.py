@@ -5,6 +5,10 @@ from astrbot.core.pipeline.agent.internal import InternalAgentExecutor
 from astrbot.core.pipeline.agent.third_party import ThirdPartyAgentExecutor
 from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_LLM,
+    is_chain_runtime_feature_enabled,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
@@ -33,9 +37,10 @@ class AgentExecutor:
 
     async def run(self, event: AstrMessageEvent) -> AgentRunOutcome:
         outcome = AgentRunOutcome()
-        if not self.ctx.astrbot_config["provider_settings"]["enable"]:
+        chain_id = event.chain_config.chain_id if event.chain_config else None
+        if not await is_chain_runtime_feature_enabled(chain_id, FEATURE_LLM):
             logger.debug(
-                "This pipeline does not enable AI capability, skip processing."
+                "Current chain runtime LLM switch is disabled, skip processing."
             )
             return outcome
 

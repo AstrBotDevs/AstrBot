@@ -44,28 +44,6 @@
         "image_caption_prompt": {
           "description": "Image Caption Prompt"
         }
-      },
-      "provider_stt_settings": {
-        "enable": {
-          "description": "Enable Speech-to-Text",
-          "hint": "Master switch for STT"
-        },
-        "provider_id": {
-          "description": "Default Speech-to-Text Model",
-          "hint": "Users can also select session-specific STT models using the /provider command."
-        }
-      },
-      "provider_tts_settings": {
-        "enable": {
-          "description": "Enable Text-to-Speech",
-          "hint": "Master switch for TTS"
-        },
-        "provider_id": {
-          "description": "Default Text-to-Speech Model"
-        },
-        "trigger_probability": {
-          "description": "TTS Trigger Probability"
-        }
       }
     },
     "persona": {
@@ -114,22 +92,6 @@
         },
         "web_search_link": {
           "description": "Display Source Citations"
-        }
-      }
-    },
-    "file_extract": {
-      "description": "File Extract",
-      "provider_settings": {
-        "file_extract": {
-          "enable": {
-            "description": "Enable File Extract"
-          },
-          "provider": {
-            "description": "File Extract Provider"
-          },
-          "moonshotai_api_key": {
-            "description": "Moonshot AI API Key"
-          }
         }
       }
     },
@@ -279,11 +241,6 @@
         "reachability_check": {
           "description": "Provider Reachability Check",
           "hint": "When running the /provider command, test provider connectivity in parallel. This actively pings models and may consume extra tokens."
-        }
-      },
-      "provider_tts_settings": {
-        "dual_output": {
-          "description": "Output Both Voice and Text When TTS is Enabled"
         }
       }
     }

@@ -31,7 +31,6 @@
   "fields": {
     "config": "配置文件",
     "enabled": "启用",
-    "chatProvider": "聊天 Provider",
     "sttProvider": "STT Provider",
     "ttsProvider": "TTS Provider",
     "selectNode": "选择节点",
@@ -39,7 +38,6 @@
     "pluginList": "插件列表"
   },
   "providers": {
-    "chat": "Chat",
     "tts": "TTS",
     "stt": "STT",
     "followDefault": "跟随默认"
@@ -107,9 +105,13 @@
     }
   },
   "pluginConfig": {
+    "inherit": "跟随全局限制",
     "blacklist": "黑名单",
     "whitelist": "白名单",
+    "noRestriction": "不限制",
+    "inheritHint": "跟随全局插件限制",
     "blacklistHint": "选中的插件将不会执行",
-    "whitelistHint": "只有选中的插件会执行"
+    "whitelistHint": "只有选中的插件会执行",
+    "noRestrictionHint": "不限制插件，全部可执行"
   }
 }

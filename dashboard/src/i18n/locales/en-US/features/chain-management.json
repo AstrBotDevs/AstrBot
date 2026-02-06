@@ -31,7 +31,6 @@
   "fields": {
     "config": "Config File",
     "enabled": "Enabled",
-    "chatProvider": "Chat Provider",
     "sttProvider": "STT Provider",
     "ttsProvider": "TTS Provider",
     "selectNode": "Select Node",
@@ -39,7 +38,6 @@
     "pluginList": "Plugin List"
   },
   "providers": {
-    "chat": "Chat",
     "tts": "TTS",
     "stt": "STT",
     "followDefault": "Follow default"
@@ -107,9 +105,13 @@
     }
   },
   "pluginConfig": {
+    "inherit": "Follow global",
     "blacklist": "Blacklist",
     "whitelist": "Whitelist",
+    "noRestriction": "No restriction",
+    "inheritHint": "Follow global plugin restrictions",
     "blacklistHint": "Selected plugins will not be executed",
-    "whitelistHint": "Only selected plugins will be executed"
+    "whitelistHint": "Only selected plugins will be executed",
+    "noRestrictionHint": "No plugin restriction; all plugins can run"
   }
 }

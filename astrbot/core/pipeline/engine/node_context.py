@@ -25,8 +25,7 @@ class NodeContext:
 
     status: NodeExecutionStatus = NodeExecutionStatus.PENDING
     input: Any = None  # From upstream EXECUTED node's output
-    output: Any = None  # Data to pass downstream (side-effects go in meta)
-    meta: dict = field(default_factory=dict)
+    output: Any = None  # Data to pass downstream
 
 
 @dataclass

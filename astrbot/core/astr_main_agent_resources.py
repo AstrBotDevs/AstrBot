@@ -6,7 +6,7 @@ from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 import astrbot.core.message.components as Comp
-from astrbot.api import logger, sp
+from astrbot.api import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -375,49 +375,14 @@ async def retrieve_knowledge_base(
     kb_mgr = context.kb_manager
     config = context.get_config(umo=umo)
 
-    # 1. 优先读取会话级配置
-    session_config = await sp.session_get(umo, "kb_config", default={})
-
-    if session_config and "kb_ids" in session_config:
-        # 会话级配置
-        kb_ids = session_config.get("kb_ids", [])
-
-        # 如果配置为空列表，明确表示不使用知识库
-        if not kb_ids:
-            logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
-            return
-
-        top_k = session_config.get("top_k", 5)
-
-        # 将 kb_ids 转换为 kb_names
-        kb_names = []
-        invalid_kb_ids = []
-        for kb_id in kb_ids:
-            kb_helper = await kb_mgr.get_kb(kb_id)
-            if kb_helper:
-                kb_names.append(kb_helper.kb.kb_name)
-            else:
-                logger.warning(f"[知识库] 知识库不存在或未加载: {kb_id}")
-                invalid_kb_ids.append(kb_id)
-
-        if invalid_kb_ids:
-            logger.warning(
-                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}",
-            )
-
-        if not kb_names:
-            return
-
-        logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
-    else:
-        kb_names = config.get("kb_names", [])
-        top_k = config.get("kb_final_top_k", 5)
-        logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
+    kb_names = config.get("kb_names", [])
+    top_k = config.get("kb_final_top_k", 5)
+    logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
-        return
+        return None
 
     logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
     kb_context = await kb_mgr.retrieve(
@@ -428,13 +393,14 @@ async def retrieve_knowledge_base(
     )
 
     if not kb_context:
-        return
+        return None
 
     formatted = kb_context.get("context_text", "")
     if formatted:
         results = kb_context.get("results", [])
         logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
         return formatted
+    return None
 
 
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()

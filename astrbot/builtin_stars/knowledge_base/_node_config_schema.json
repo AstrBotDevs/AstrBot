@@ -1,0 +1,22 @@
+{
+  "use_global_kb": {
+    "type": "bool",
+    "description": "Use global knowledge base settings when kb_ids is empty",
+    "hint": "If false and kb_ids is empty, this node will skip knowledge base retrieval.",
+    "default": true
+  },
+  "kb_ids": {
+    "type": "list",
+    "description": "Knowledge base IDs",
+    "items": {
+      "type": "string"
+    },
+    "hint": "Set to override global knowledge bases. Leave empty to use global settings (when use_global_kb is true)."
+  },
+  "top_k": {
+    "type": "int",
+    "description": "Top K retrieved chunks",
+    "hint": "Only used when kb_ids is set.",
+    "default": 5
+  }
+}

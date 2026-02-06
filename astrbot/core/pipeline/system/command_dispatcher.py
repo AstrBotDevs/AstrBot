@@ -60,6 +60,9 @@ class CommandDispatcher:
             return
         await self._agent_executor.run(event)
         await self._send_service.send(event)
+        event.set_extra("_provider_request_consumed", True)
+        event.set_extra("provider_request", None)
+        event.set_extra("has_provider_request", False)
 
     async def match(
         self,
@@ -129,7 +132,10 @@ class CommandDispatcher:
                     return True
 
                 # 检查是否有 LLM 请求
-                if result.llm_requests:
+                if result.llm_requests and not event.get_extra(
+                    "_provider_request_consumed",
+                    False,
+                ):
                     event.set_extra("has_provider_request", True)
 
                 if result.stopped or event.is_stopped():

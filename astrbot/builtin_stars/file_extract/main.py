@@ -127,7 +127,7 @@ class FileExtractNode(NodeStar):
 
     @staticmethod
     async def _extract_moonshotai(
-            file_path: str, moonshotai_api_key: str
+        file_path: str, moonshotai_api_key: str
     ) -> str | None:
         """使用 Moonshot AI API 提取文件内容"""
         from astrbot.core.utils.file_extract import extract_file_moonshotai

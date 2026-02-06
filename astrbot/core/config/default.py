@@ -110,11 +110,6 @@ DEFAULT_CONFIG = {
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
-        "file_extract": {
-            "enable": False,
-            "provider": "moonshotai",
-            "moonshotai_api_key": "",
-        },
         "proactive_capability": {
             "add_cron_tools": True,
         },
@@ -140,12 +135,6 @@ DEFAULT_CONFIG = {
             "Do not try to use domain tools yourself. If no subagent fits, respond directly."
         ),
         "agents": [],
-    },
-    "provider_stt_settings": {
-        "provider_id": "",
-    },
-    "provider_tts_settings": {
-        "provider_id": "",
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -2176,20 +2165,6 @@ CONFIG_METADATA_2 = {
                             },
                         },
                     },
-                    "file_extract": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "provider": {
-                                "type": "string",
-                            },
-                            "moonshotai_api_key": {
-                                "type": "string",
-                            },
-                        },
-                    },
                     "proactive_capability": {
                         "type": "object",
                         "items": {
@@ -2197,22 +2172,6 @@ CONFIG_METADATA_2 = {
                                 "type": "bool",
                             },
                         },
-                    },
-                },
-            },
-            "provider_stt_settings": {
-                "type": "object",
-                "items": {
-                    "provider_id": {
-                        "type": "string",
-                    },
-                },
-            },
-            "provider_tts_settings": {
-                "type": "object",
-                "items": {
-                    "provider_id": {
-                        "type": "string",
                     },
                 },
             },
@@ -2400,17 +2359,6 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
-                    "provider_stt_settings.provider_id": {
-                        "description": "默认语音转文本模型",
-                        "type": "string",
-                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
-                        "_special": "select_provider_stt",
-                    },
-                    "provider_tts_settings.provider_id": {
-                        "description": "默认文本转语音模型",
-                        "type": "string",
-                        "_special": "select_provider_tts",
-                    },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
                         "type": "text",
@@ -2581,36 +2529,6 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            # "file_extract": {
-            #     "description": "文档解析能力 [beta]",
-            #     "type": "object",
-            #     "items": {
-            #         "provider_settings.file_extract.enable": {
-            #             "description": "启用文档解析能力",
-            #             "type": "bool",
-            #         },
-            #         "provider_settings.file_extract.provider": {
-            #             "description": "文档解析提供商",
-            #             "type": "string",
-            #             "options": ["moonshotai"],
-            #             "condition": {
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #         "provider_settings.file_extract.moonshotai_api_key": {
-            #             "description": "Moonshot AI API Key",
-            #             "type": "string",
-            #             "condition": {
-            #                 "provider_settings.file_extract.provider": "moonshotai",
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #     },
-            #     "condition": {
-            #         "provider_settings.agent_runner_type": "local",
-            #         "provider_settings.enable": True,
-            #     },
-            # },
             "proactive_capability": {
                 "description": "主动型 Agent",
                 "hint": "https://docs.astrbot.app/use/proactive-agent.html",

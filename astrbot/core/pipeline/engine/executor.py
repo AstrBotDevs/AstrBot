@@ -192,15 +192,27 @@ class PipelineExecutor:
 
     def _resolve_plugins_name(self, chain_config) -> list[str] | None:
         if chain_config and chain_config.plugin_filter:
-            mode = chain_config.plugin_filter.mode or "blacklist"
+            mode = (chain_config.plugin_filter.mode or "blacklist").lower()
             plugins = chain_config.plugin_filter.plugins or []
+
+            if mode == "inherit":
+                return self._resolve_global_plugins_name()
+            if mode == "none":
+                return []
             if mode == "whitelist":
                 return plugins
-            if not plugins:
-                return None
-            all_names = [p.name for p in self.context.get_all_stars() if p.name]
-            return [name for name in all_names if name not in set(plugins)]
+            if mode == "blacklist":
+                if not plugins:
+                    return None
+                all_names = [p.name for p in self.context.get_all_stars() if p.name]
+                return [name for name in all_names if name not in set(plugins)]
 
+            logger.warning("未知插件过滤模式: %s，使用全局限制。", mode)
+            return self._resolve_global_plugins_name()
+
+        return self._resolve_global_plugins_name()
+
+    def _resolve_global_plugins_name(self) -> list[str] | None:
         plugins_name = self.pipeline_ctx.astrbot_config.get("plugin_set", ["*"])
         if plugins_name == ["*"]:
             return None

@@ -2,22 +2,37 @@
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_STT,
+    toggle_chain_runtime_flag,
+)
+
+from ._node_binding import get_chain_nodes
 
 
 class STTCommand:
-    """Toggle speech-to-text globally."""
+    """Toggle speech-to-text for the current routed chain."""
 
     def __init__(self, context: star.Context):
         self.context = context
 
     async def stt(self, event: AstrMessageEvent):
-        config = self.context.get_config(umo=event.unified_msg_origin)
-        stt_settings = config.get("provider_stt_settings", {})
-        enabled = bool(stt_settings.get("enable", False))
+        chain_config = event.chain_config
+        if not chain_config:
+            event.set_result(MessageEventResult().message("No routed chain found."))
+            return
 
-        stt_settings["enable"] = not enabled
-        config["provider_stt_settings"] = stt_settings
-        config.save_config()
+        nodes = get_chain_nodes(event, "stt")
+        if not nodes:
+            event.set_result(
+                MessageEventResult().message("Current chain has no STT node.")
+            )
+            return
 
-        status = "已开启" if not enabled else "已关闭"
-        event.set_result(MessageEventResult().message(f"{status}语音转文本功能。"))
+        enabled = await toggle_chain_runtime_flag(chain_config.chain_id, FEATURE_STT)
+        status = "enabled" if enabled else "disabled"
+        event.set_result(
+            MessageEventResult().message(
+                f"STT is now {status} for chain `{chain_config.chain_id}` ({len(nodes)} node(s))."
+            )
+        )

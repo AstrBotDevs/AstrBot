@@ -431,8 +431,12 @@ class ConfigRoute(Route):
         config = post_data.get("config", DEFAULT_CONFIG)
 
         try:
-            conf_id = self.acm.create_conf(name=name, config=config)
-            return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
+            config_id = self.acm.create_conf(name=name, config=config)
+            return (
+                Response()
+                .ok(message="创建成功", data={"config_id": config_id})
+                .__dict__
+            )
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
@@ -464,12 +468,12 @@ class ConfigRoute(Route):
         if not post_data:
             return Response().error("缺少配置数据").__dict__
 
-        conf_id = post_data.get("id")
-        if not conf_id:
+        config_id = post_data.get("config_id") or post_data.get("id")
+        if not config_id:
             return Response().error("缺少配置文件 ID").__dict__
 
         try:
-            success = self.acm.delete_conf(conf_id)
+            success = self.acm.delete_conf(config_id)
             if success:
                 return Response().ok(message="删除成功").__dict__
             return Response().error("删除失败").__dict__
@@ -485,14 +489,14 @@ class ConfigRoute(Route):
         if not post_data:
             return Response().error("缺少配置数据").__dict__
 
-        conf_id = post_data.get("id")
-        if not conf_id:
+        config_id = post_data.get("config_id") or post_data.get("id")
+        if not config_id:
             return Response().error("缺少配置文件 ID").__dict__
 
         name = post_data.get("name")
 
         try:
-            success = self.acm.update_conf_info(conf_id, name=name)
+            success = self.acm.update_conf_info(config_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
             return Response().error("更新失败").__dict__
@@ -820,18 +824,18 @@ class ConfigRoute(Route):
     async def post_astrbot_configs(self):
         data = await request.json
         config = data.get("config", None)
-        conf_id = data.get("conf_id", None)
+        config_id = data.get("config_id")
 
         try:
             # 不更新 provider_sources, provider, platform
             # 这些配置有单独的接口进行更新
-            if conf_id == "default":
+            if config_id == "default":
                 no_update_keys = ["provider_sources", "provider", "platform"]
                 for key in no_update_keys:
                     config[key] = self.acm.default_conf[key]
 
-            await self._save_astrbot_configs(config, conf_id)
-            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+            await self._save_astrbot_configs(config, config_id)
+            await self.core_lifecycle.reload_pipeline_executor(config_id)
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -1265,12 +1269,12 @@ class ConfigRoute(Route):
         return ret
 
     async def _save_astrbot_configs(
-        self, post_configs: dict, conf_id: str | None = None
+        self, post_configs: dict, config_id: str | None = None
     ):
         try:
-            if conf_id not in self.acm.confs:
-                raise ValueError(f"配置文件 {conf_id} 不存在")
-            astrbot_config = self.acm.confs[conf_id]
+            if config_id not in self.acm.confs:
+                raise ValueError(f"配置文件 {config_id} 不存在")
+            astrbot_config = self.acm.confs[config_id]
 
             # 保留服务端的 t2i_active_template 值
             if "t2i_active_template" in astrbot_config:

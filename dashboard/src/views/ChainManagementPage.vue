@@ -135,46 +135,6 @@
             </v-col>
           </v-row>
 
-          <div class="section-title">{{ tm('sections.providers') }}</div>
-          <v-row dense>
-            <v-col cols="12" md="4">
-              <v-select
-                v-model="editingChain.chat_provider_id"
-                :items="chatProviderOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('fields.chatProvider')"
-                clearable
-                variant="outlined"
-              ></v-select>
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-select
-                v-model="editingChain.stt_provider_id"
-                :items="sttProviderOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('fields.sttProvider')"
-                clearable
-                variant="outlined"
-              ></v-select>
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-select
-                v-model="editingChain.tts_provider_id"
-                :items="ttsProviderOptions"
-                item-title="label"
-                item-value="value"
-                :label="tm('fields.ttsProvider')"
-                clearable
-                variant="outlined"
-              ></v-select>
-            </v-col>
-          </v-row>
-
-          <v-row dense>
-          </v-row>
-
           <v-divider class="my-4"></v-divider>
 
           <div class="d-flex align-center justify-space-between mb-3">
@@ -238,11 +198,12 @@
                 closable-chips
                 clearable
                 variant="outlined"
+                :disabled="isPluginFilterListDisabled"
               ></v-select>
             </v-col>
           </v-row>
           <div class="text-caption text-grey mt-1">
-            {{ editingChain.plugin_filter.mode === 'blacklist' ? tm('pluginConfig.blacklistHint') : tm('pluginConfig.whitelistHint') }}
+            {{ pluginFilterHint }}
           </div>
 
         </v-card-text>
@@ -434,9 +395,6 @@ const selectedNodeToAdd = ref('')
 const sortChains = ref([])
 
 const availableOptions = ref({
-  available_chat_providers: [],
-  available_tts_providers: [],
-  available_stt_providers: [],
   available_plugins: [],
   available_nodes: [],
   default_nodes: [],
@@ -494,29 +452,6 @@ const availableNodeMap = computed(() => {
   return map
 })
 
-const chatProviderOptions = computed(() => [
-  { label: tm('providers.followDefault'), value: '' },
-  ...availableOptions.value.available_chat_providers.map(p => ({
-    label: `${p.id}${p.model ? ` (${p.model})` : ''}`,
-    value: p.id
-  }))
-])
-
-const ttsProviderOptions = computed(() => [
-  { label: tm('providers.followDefault'), value: '' },
-  ...availableOptions.value.available_tts_providers.map(p => ({
-    label: `${p.id}${p.model ? ` (${p.model})` : ''}`,
-    value: p.id
-  }))
-])
-
-const sttProviderOptions = computed(() => [
-  { label: tm('providers.followDefault'), value: '' },
-  ...availableOptions.value.available_stt_providers.map(p => ({
-    label: `${p.id}${p.model ? ` (${p.model})` : ''}`,
-    value: p.id
-  }))
-])
 
 const configOptions = computed(() => [
   { label: tm('providers.followDefault'), value: 'default' },
@@ -527,9 +462,24 @@ const configOptions = computed(() => [
 ])
 
 const pluginFilterModeOptions = computed(() => [
+  { label: tm('pluginConfig.inherit'), value: 'inherit' },
   { label: tm('pluginConfig.blacklist'), value: 'blacklist' },
-  { label: tm('pluginConfig.whitelist'), value: 'whitelist' }
+  { label: tm('pluginConfig.whitelist'), value: 'whitelist' },
+  { label: tm('pluginConfig.noRestriction'), value: 'none' }
 ])
+
+const pluginFilterHint = computed(() => {
+  const mode = editingChain.value?.plugin_filter?.mode
+  if (mode === 'inherit') return tm('pluginConfig.inheritHint')
+  if (mode === 'none') return tm('pluginConfig.noRestrictionHint')
+  if (mode === 'whitelist') return tm('pluginConfig.whitelistHint')
+  return tm('pluginConfig.blacklistHint')
+})
+
+const isPluginFilterListDisabled = computed(() => {
+  const mode = editingChain.value?.plugin_filter?.mode
+  return mode === 'inherit' || mode === 'none'
+})
 
 const availablePluginsForFilter = computed(() => {
   return (availableOptions.value.available_plugins || []).map(p => ({
@@ -602,10 +552,7 @@ function buildEmptyChain() {
     enabled: true,
     nodes: [],
     llm_enabled: true,
-    chat_provider_id: '',
-    tts_provider_id: '',
-    stt_provider_id: '',
-    plugin_filter: { mode: 'blacklist', plugins: [] },
+    plugin_filter: { mode: 'inherit', plugins: [] },
     nodes_is_default: false,
     is_default: false
   }
@@ -625,15 +572,17 @@ function normalizeChainPayload(chain) {
     }))
   }
   delete payload.nodes_is_default
-  if (!payload.plugin_filter || !payload.plugin_filter.plugins?.length) {
+  if (!payload.plugin_filter || payload.plugin_filter.mode === 'inherit') {
     payload.plugin_filter = null
+  } else {
+    payload.plugin_filter = {
+      mode: payload.plugin_filter.mode || 'blacklist',
+      plugins: payload.plugin_filter.plugins || []
+    }
   }
   if (!payload.config_id || payload.config_id === 'default') {
     payload.config_id = null
   }
-  if (payload.chat_provider_id === '') payload.chat_provider_id = null
-  if (payload.tts_provider_id === '') payload.tts_provider_id = null
-  if (payload.stt_provider_id === '') payload.stt_provider_id = null
   return payload
 }
 
@@ -744,10 +693,11 @@ function openEditDialog(chain) {
   editingChain.value.is_default = Boolean(cloned.is_default)
   editingChain.value.config_id = editingChain.value.config_id || 'default'
   if (!editingChain.value.plugin_filter || typeof editingChain.value.plugin_filter !== 'object') {
-    editingChain.value.plugin_filter = { mode: 'blacklist', plugins: [] }
+    editingChain.value.plugin_filter = { mode: 'inherit', plugins: [] }
   } else {
+    const mode = editingChain.value.plugin_filter.mode || 'blacklist'
     editingChain.value.plugin_filter = {
-      mode: editingChain.value.plugin_filter.mode || 'blacklist',
+      mode,
       plugins: editingChain.value.plugin_filter.plugins || []
     }
   }
@@ -1015,6 +965,16 @@ watch(searchQuery, () => {
     loadChains()
   }, 300)
 })
+
+watch(
+  () => editingChain.value?.plugin_filter?.mode,
+  mode => {
+    if (!editingChain.value?.plugin_filter) return
+    if (mode === 'inherit' || mode === 'none') {
+      editingChain.value.plugin_filter.plugins = []
+    }
+  }
+)
 
 onMounted(async () => {
   await Promise.all([loadChains(), loadOptions()])

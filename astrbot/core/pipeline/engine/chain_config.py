@@ -25,13 +25,7 @@ class ChainConfigModel(TimestampMixin, SQLModel, table=True):
 
     llm_enabled: bool = Field(default=True)
 
-    chat_provider_id: str | None = Field(default=None)
-    tts_provider_id: str | None = Field(default=None)
-    stt_provider_id: str | None = Field(default=None)
-
     plugin_filter: dict | None = Field(default=None, sa_type=JSON)
-
-    kb_config: dict | None = Field(default=None, sa_type=JSON)
 
     config_id: str | None = Field(default=None, max_length=36)
 
@@ -114,11 +108,7 @@ class ChainConfig:
     enabled: bool = True
     nodes: list[ChainNodeConfig] = field(default_factory=list)
     llm_enabled: bool = True
-    chat_provider_id: str | None = None
-    tts_provider_id: str | None = None
-    stt_provider_id: str | None = None
     plugin_filter: PluginFilterConfig | None = None
-    kb_config: dict | None = None
     config_id: str | None = None
 
     def matches(
@@ -154,11 +144,7 @@ class ChainConfig:
             enabled=model.enabled,
             nodes=nodes,
             llm_enabled=model.llm_enabled,
-            chat_provider_id=model.chat_provider_id,
-            tts_provider_id=model.tts_provider_id,
-            stt_provider_id=model.stt_provider_id,
             plugin_filter=plugin_filter,
-            kb_config=model.kb_config,
             config_id=model.config_id,
         )
 

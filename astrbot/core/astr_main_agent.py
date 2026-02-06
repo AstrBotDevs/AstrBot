@@ -114,17 +114,33 @@ def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
-    if sel_provider and isinstance(sel_provider, str):
-        provider = plugin_context.get_provider_by_id(sel_provider)
-        if not provider:
-            logger.error("未找到指定的提供商: %s。", sel_provider)
-        if not isinstance(provider, Provider):
-            logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-            )
-            return None
-        return provider
+    node_config = event.node_config or {}
+    if isinstance(node_config, dict):
+        node_provider_id = str(node_config.get("provider_id") or "").strip()
+        if node_provider_id:
+            provider = plugin_context.get_provider_by_id(node_provider_id)
+            if not provider:
+                logger.error("未找到指定的提供商: %s。", node_provider_id)
+                return None
+            if not isinstance(provider, Provider):
+                logger.error(
+                    "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
+                )
+                return None
+            return provider
+
+    if event.chain_config is None:
+        sel_provider = event.get_extra("selected_provider")
+        if sel_provider and isinstance(sel_provider, str):
+            provider = plugin_context.get_provider_by_id(sel_provider)
+            if not provider:
+                logger.error("未找到指定的提供商: %s。", sel_provider)
+            if not isinstance(provider, Provider):
+                logger.error(
+                    "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
+                )
+                return None
+            return provider
     try:
         return plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:
@@ -191,25 +207,32 @@ async def _ensure_persona_and_skills(
 
     # get persona ID
 
-    # 1. from session service config - highest priority
-    persona_id = (
-        await sp.get_async(
-            scope="umo",
-            scope_id=event.unified_msg_origin,
-            key="session_service_config",
-            default={},
-        )
-    ).get("persona_id")
+    # 1. from node config - highest priority
+    node_config = event.node_config or {}
+    persona_id = ""
+    if isinstance(node_config, dict):
+        persona_id = str(node_config.get("persona_id") or "").strip()
+
+    # 2. from session service config
+    if not persona_id:
+        persona_id = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=event.unified_msg_origin,
+                key="session_service_config",
+                default={},
+            )
+        ).get("persona_id")
 
     if not persona_id:
-        # 2. from conversation setting - second priority
+        # 3. from conversation setting - second priority
         persona_id = req.conversation.persona_id
 
         if persona_id == "[%None]":
             # explicitly set to no persona
             pass
         elif persona_id is None:
-            # 3. from config default persona setting - last priority
+            # 4. from config default persona setting - last priority
             persona_id = cfg.get("default_personality")
 
     persona = next(

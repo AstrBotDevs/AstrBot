@@ -1,25 +1,25 @@
 {
+  "provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "TTS provider ID override for this node."
+  },
   "trigger_probability": {
     "type": "float",
     "default": 1.0,
     "description": "Trigger probability",
-    "hint": "0.0-1.0 probability for converting LLM text to audio.",
-    "slider": {
-      "min": 0,
-      "max": 1,
-      "step": 0.05
-    }
+    "hint": "Probability to convert text to speech (0.0-1.0)."
   },
   "use_file_service": {
     "type": "bool",
     "default": false,
-    "description": "Use file service"
+    "description": "Use file service",
+    "hint": "Serve generated audio through the file service when enabled."
   },
   "dual_output": {
     "type": "bool",
     "default": false,
     "description": "Dual output",
-    "hint": "Send both audio and original text when enabled."
+    "hint": "Send both audio and text when enabled."
   }
 }
-

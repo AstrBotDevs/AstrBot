@@ -1,5 +1,3 @@
-# astrbot/dashboard/routes/t2i.py
-
 from dataclasses import asdict
 
 from quart import jsonify, request
@@ -35,6 +33,11 @@ class T2iRoute(Route):
             ),
         ]
         self.register_routes()
+
+    async def _reload_all_pipeline_executors(self) -> None:
+        config_ids = list(self.core_lifecycle.astrbot_config_mgr.confs.keys())
+        for config_id in config_ids:
+            await self.core_lifecycle.reload_pipeline_executor(config_id)
 
     async def list_templates(self):
         """获取所有T2I模板列表"""
@@ -131,7 +134,7 @@ class T2iRoute(Route):
             # 检查更新的是否为当前激活的模板，如果是，则热重载
             active_template = self.config.get("t2i_active_template", "base")
             if name == active_template:
-                await self.core_lifecycle.reload_pipeline_scheduler("default")
+                await self._reload_all_pipeline_executors()
                 message = f"模板 '{name}' 已更新并重新加载。"
             else:
                 message = f"模板 '{name}' 已更新。"
@@ -186,7 +189,7 @@ class T2iRoute(Route):
             config.save_config(config)
 
             # 热重载以应用更改
-            await self.core_lifecycle.reload_pipeline_scheduler("default")
+            await self._reload_all_pipeline_executors()
 
             return jsonify(asdict(Response().ok(message=f"模板 '{name}' 已成功应用。")))
 
@@ -213,7 +216,7 @@ class T2iRoute(Route):
             config.save_config(config)
 
             # 热重载以应用更改
-            await self.core_lifecycle.reload_pipeline_scheduler("default")
+            await self._reload_all_pipeline_executors()
 
             return jsonify(
                 asdict(

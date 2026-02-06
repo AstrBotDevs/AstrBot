@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -19,11 +21,11 @@ from astrbot.core.pipeline.engine.chain_config import (
 from astrbot.core.umop_config_router import UmopConfigRouter
 
 _MIGRATION_FLAG = "migration_done_v5"
+_MIGRATION_PROVIDER_CLEANUP_FLAG = "migration_done_v5_provider_cleanup"
 
 _SESSION_RULE_KEYS = {
     "session_service_config",
     "session_plugin_config",
-    "kb_config",
     "provider_perf_chat_completion",
     "provider_perf_text_to_speech",
     "provider_perf_speech_to_text",
@@ -110,12 +112,24 @@ def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
             node_uuid=node_map["t2i"],
         ).save_config(t2i_conf)
 
+    if "stt" in node_map:
+        stt_settings = conf.get("provider_stt_settings", {}) or {}
+        stt_conf = {
+            "provider_id": str(stt_settings.get("provider_id", "") or "").strip(),
+        }
+        AstrBotNodeConfig.get_cached(
+            node_name="stt",
+            chain_id=chain_id,
+            node_uuid=node_map["stt"],
+        ).save_config(stt_conf)
+
     if "tts" in node_map:
         tts_settings = conf.get("provider_tts_settings", {}) or {}
         tts_conf = {
             "trigger_probability": tts_settings.get("trigger_probability", 1.0),
             "use_file_service": tts_settings.get("use_file_service", False),
             "dual_output": tts_settings.get("dual_output", False),
+            "provider_id": str(tts_settings.get("provider_id", "") or "").strip(),
         }
         AstrBotNodeConfig.get_cached(
             node_name="tts",
@@ -145,6 +159,7 @@ async def migrate_4_to_5(
 ) -> None:
     """Migrate UMOP/session-manager rules to chain configs."""
     if await sp.global_get(_MIGRATION_FLAG, False):
+        await _run_provider_cleanup_for_v5(db_helper, acm)
         return
 
     try:
@@ -162,6 +177,7 @@ async def migrate_4_to_5(
                 "Chain configs already exist, skip 4->5 migration to avoid conflicts."
             )
             await sp.global_put(_MIGRATION_FLAG, True)
+            await _run_provider_cleanup_for_v5(db_helper, acm)
             return
 
     # Load session-level rules from preferences.
@@ -197,9 +213,9 @@ async def migrate_4_to_5(
     umop_chains: list[ChainConfigModel] = []
     node_defaults: list[tuple[str, list, dict]] = []
 
-    def get_conf(conf_id: str | None) -> dict:
-        if conf_id and conf_id in acm.confs:
-            return acm.confs[conf_id]
+    def get_config(config_id: str | None) -> dict:
+        if config_id and config_id in acm.confs:
+            return acm.confs[config_id]
         return acm.confs["default"]
 
     # Build chains for session-specific rules.
@@ -217,30 +233,24 @@ async def migrate_4_to_5(
             llm_enabled = service_cfg.get("llm_enabled")
 
         plugin_filter = _build_plugin_filter(rules.get("session_plugin_config"))
-        kb_config = rules.get("kb_config")
-        if not isinstance(kb_config, dict):
-            kb_config = None
-
         needs_chain = False
         if llm_enabled is not None:
             needs_chain = True
         if plugin_filter:
             needs_chain = True
-        if kb_config is not None:
-            needs_chain = True
 
         if not needs_chain:
             continue
 
-        conf_id = None
+        config_id = None
         try:
-            conf_id = ucr.get_conf_id_for_umop(umo)
+            config_id = ucr.get_config_id_for_umop(umo)
         except Exception:
-            conf_id = None
-        if conf_id not in acm.confs:
-            conf_id = "default"
+            config_id = None
+        if config_id not in acm.confs:
+            config_id = "default"
 
-        conf = get_conf(conf_id)
+        conf = get_config(config_id)
         chain_id = str(uuid.uuid4())
         nodes_list = _build_nodes_for_config(conf)
         normalized_nodes = normalize_chain_nodes(nodes_list, chain_id)
@@ -253,26 +263,22 @@ async def migrate_4_to_5(
             enabled=True,
             nodes=nodes_payload,
             llm_enabled=bool(llm_enabled) if llm_enabled is not None else True,
-            chat_provider_id=None,
-            tts_provider_id=None,
-            stt_provider_id=None,
             plugin_filter=plugin_filter,
-            kb_config=kb_config,
-            config_id=conf_id,
+            config_id=config_id,
         )
         session_chains.append(chain)
         node_defaults.append((chain_id, normalized_nodes, conf))
 
     # Build chains for UMOP routing.
-    for pattern, conf_id in (ucr.umop_to_conf_id or {}).items():
+    for pattern, config_id in (ucr.umop_to_config_id or {}).items():
         norm = _normalize_umop_pattern(pattern)
         if not norm:
             continue
 
-        if conf_id not in acm.confs:
-            conf_id = "default"
+        if config_id not in acm.confs:
+            config_id = "default"
 
-        conf = get_conf(conf_id)
+        conf = get_config(config_id)
         chain_id = str(uuid.uuid4())
         nodes_list = _build_nodes_for_config(conf)
         normalized_nodes = normalize_chain_nodes(nodes_list, chain_id)
@@ -285,18 +291,14 @@ async def migrate_4_to_5(
             enabled=True,
             nodes=nodes_payload,
             llm_enabled=True,
-            chat_provider_id=None,
-            tts_provider_id=None,
-            stt_provider_id=None,
             plugin_filter=None,
-            kb_config=None,
-            config_id=conf_id,
+            config_id=config_id,
         )
         umop_chains.append(chain)
         node_defaults.append((chain_id, normalized_nodes, conf))
 
     # Always create a default chain for legacy behavior.
-    default_conf = get_conf("default")
+    default_conf = get_config("default")
     default_nodes_list = _build_nodes_for_config(default_conf)
     default_nodes = normalize_chain_nodes(default_nodes_list, "default")
     default_nodes_payload = serialize_chain_nodes(default_nodes)
@@ -308,11 +310,7 @@ async def migrate_4_to_5(
         enabled=True,
         nodes=default_nodes_payload,
         llm_enabled=True,
-        chat_provider_id=None,
-        tts_provider_id=None,
-        stt_provider_id=None,
         plugin_filter=None,
-        kb_config=None,
         config_id="default",
     )
     node_defaults.append(("default", default_nodes, default_conf))
@@ -342,3 +340,179 @@ async def migrate_4_to_5(
 
     await sp.global_put(_MIGRATION_FLAG, True)
     logger.info("Migration from v4 to v5 completed successfully.")
+    await _run_provider_cleanup_for_v5(db_helper, acm)
+
+
+def _read_provider_id(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+async def _migrate_chain_provider_columns_to_node_config(
+    db_helper: BaseDatabase,
+) -> None:
+    table = ChainConfigModel.__tablename__
+
+    async with db_helper.get_db() as session:
+        cols = await session.execute(text(f"PRAGMA table_info({table})"))
+        names = {row[1] for row in cols.fetchall()}
+        has_tts = "tts_provider_id" in names
+        has_stt = "stt_provider_id" in names
+        if not has_tts and not has_stt:
+            return
+
+        select_cols = ["chain_id", "nodes"]
+        if has_tts:
+            select_cols.append("tts_provider_id")
+        if has_stt:
+            select_cols.append("stt_provider_id")
+        rows = (
+            await session.execute(text(f"SELECT {', '.join(select_cols)} FROM {table}"))
+        ).fetchall()
+
+    for row in rows:
+        chain_id = row[0]
+        raw_nodes = row[1]
+        offset = 2
+        tts_provider_id = _read_provider_id(row[offset]) if has_tts else ""
+        if has_tts:
+            offset += 1
+        stt_provider_id = _read_provider_id(row[offset]) if has_stt else ""
+
+        if isinstance(raw_nodes, str):
+            try:
+                raw_nodes = json.loads(raw_nodes)
+            except Exception:
+                raw_nodes = []
+
+        nodes = normalize_chain_nodes(raw_nodes, chain_id)
+        for node in nodes:
+            if node.name == "tts" and tts_provider_id:
+                cfg = AstrBotNodeConfig.get_cached(
+                    node_name="tts",
+                    chain_id=chain_id,
+                    node_uuid=node.uuid,
+                    schema=None,
+                )
+                if not cfg.get("provider_id"):
+                    cfg.save_config({"provider_id": tts_provider_id})
+            if node.name == "stt" and stt_provider_id:
+                cfg = AstrBotNodeConfig.get_cached(
+                    node_name="stt",
+                    chain_id=chain_id,
+                    node_uuid=node.uuid,
+                    schema=None,
+                )
+                if not cfg.get("provider_id"):
+                    cfg.save_config({"provider_id": stt_provider_id})
+
+
+async def _drop_chain_provider_columns(db_helper: BaseDatabase) -> None:
+    table = ChainConfigModel.__tablename__
+
+    async with db_helper.get_db() as session:
+        cols = await session.execute(text(f"PRAGMA table_info({table})"))
+        names = {row[1] for row in cols.fetchall()}
+        has_tts = "tts_provider_id" in names
+        has_stt = "stt_provider_id" in names
+        if not has_tts and not has_stt:
+            return
+
+        try:
+            if has_tts:
+                await session.execute(
+                    text(f"ALTER TABLE {table} DROP COLUMN tts_provider_id")
+                )
+            if has_stt:
+                await session.execute(
+                    text(f"ALTER TABLE {table} DROP COLUMN stt_provider_id")
+                )
+            await session.commit()
+            return
+        except Exception:
+            await session.rollback()
+
+        old_table = f"{table}_old_v5_cleanup"
+        await session.execute(text(f"ALTER TABLE {table} RENAME TO {old_table}"))
+        await session.execute(
+            text(
+                f"""
+                CREATE TABLE {table} (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    chain_id VARCHAR(36) NOT NULL UNIQUE,
+                    match_rule JSON,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    nodes JSON,
+                    llm_enabled BOOLEAN NOT NULL DEFAULT 1,
+                    plugin_filter JSON,
+                    config_id VARCHAR(36),
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+                """
+            )
+        )
+        await session.execute(
+            text(
+                f"""
+                INSERT INTO {table} (
+                    id,
+                    chain_id,
+                    match_rule,
+                    sort_order,
+                    enabled,
+                    nodes,
+                    llm_enabled,
+                    plugin_filter,
+                    config_id,
+                    created_at,
+                    updated_at
+                )
+                SELECT
+                    id,
+                    chain_id,
+                    match_rule,
+                    sort_order,
+                    enabled,
+                    nodes,
+                    llm_enabled,
+                    plugin_filter,
+                    config_id,
+                    created_at,
+                    updated_at
+                FROM {old_table}
+                """
+            )
+        )
+        await session.execute(text(f"DROP TABLE {old_table}"))
+        await session.commit()
+
+
+def _cleanup_legacy_provider_config_keys(acm: AstrBotConfigManager) -> None:
+    for conf in acm.confs.values():
+        changed = False
+        if "provider_tts_settings" in conf:
+            conf.pop("provider_tts_settings", None)
+            changed = True
+        if "provider_stt_settings" in conf:
+            conf.pop("provider_stt_settings", None)
+            changed = True
+        if changed:
+            conf.save_config()
+
+
+async def _run_provider_cleanup_for_v5(
+    db_helper: BaseDatabase,
+    acm: AstrBotConfigManager,
+) -> None:
+    if await sp.global_get(_MIGRATION_PROVIDER_CLEANUP_FLAG, False):
+        return
+
+    logger.info("Starting v5 provider cleanup migration")
+    await _migrate_chain_provider_columns_to_node_config(db_helper)
+    _cleanup_legacy_provider_config_keys(acm)
+    await _drop_chain_provider_columns(db_helper)
+    await sp.global_put(_MIGRATION_PROVIDER_CLEANUP_FLAG, True)
+    logger.info("v5 provider cleanup migration completed")

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import (
+    MessageChain,
     MessageEventResult,
     ResultContentType,
 )
@@ -56,33 +57,46 @@ class ContentSafetyStar(NodeStar):
     async def process(self, event: AstrMessageEvent) -> NodeResult:
         self._ensure_strategy_selector(event)
 
-        # 检查输入
+        # 输入检查使用当前 message_str（已反映 STT/文件提取结果）。
+        # get_node_input 仅包含已执行节点输出，受链路顺序影响。
         text = event.get_message_str()
         if text:
             ok, info = self._check_content(text)
             if not ok:
                 return self._block_event(event, info)
 
-        # 检查输出（如果是流式消息先收集）
-        result = event.get_result()
-        if result and result.result_content_type == ResultContentType.STREAMING_RESULT:
-            await self.collect_stream(event)
-            result = event.get_result()
+        upstream_output = await event.get_node_input(strategy="last")
+        output_text = ""
+        if isinstance(upstream_output, MessageEventResult):
+            event.set_result(upstream_output)
+            if (
+                upstream_output.result_content_type
+                == ResultContentType.STREAMING_RESULT
+            ):
+                await self.collect_stream(event)
+                result = upstream_output
+            else:
+                result = upstream_output
+            if result.chain:
+                output_text = "".join(
+                    comp.text for comp in result.chain if isinstance(comp, Plain)
+                )
+        elif isinstance(upstream_output, MessageChain):
+            output_text = "".join(
+                comp.text for comp in upstream_output.chain if isinstance(comp, Plain)
+            )
+        elif isinstance(upstream_output, str):
+            output_text = upstream_output
+        elif upstream_output is not None:
+            output_text = str(upstream_output)
 
-        if result and result.chain:
-            output_parts = []
-            for comp in result.chain:
-                if isinstance(comp, Plain):
-                    output_parts.append(comp.text)
-            output_text = "".join(output_parts)
+        if output_text:
+            ok, info = self._check_content(output_text)
+            if not ok:
+                return self._block_event(event, info)
 
-            if output_text:
-                ok, info = self._check_content(output_text)
-                if not ok:
-                    return self._block_event(event, info)
-
-        # Write output to ctx for downstream nodes (pass through the result)
-        if result:
-            event.set_node_output(result)
+        # 向下游传递上游输出
+        if upstream_output is not None:
+            event.set_node_output(upstream_output)
 
         return NodeResult.CONTINUE

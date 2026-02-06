@@ -73,12 +73,14 @@ class EventBus:
 
                     event.chain_config = routed_chain_config
                     config_id = routed_chain_config.config_id or "default"
-                    self.astrbot_config_mgr.set_runtime_conf_id(
+                    self.astrbot_config_mgr.set_runtime_config_id(
                         event.unified_msg_origin,
                         config_id,
                     )
-                    conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
-                    self._print_event(event, conf_info["name"])
+                    config_info = self.astrbot_config_mgr.get_config_info_by_id(
+                        config_id
+                    )
+                    self._print_event(event, config_info["name"])
 
                     executor = self.pipeline_executor_mapping.get(config_id)
                     if executor is None:
@@ -97,12 +99,12 @@ class EventBus:
                 event.set_extra("_resume_node_uuid", wait_state.node_uuid)
                 event.set_extra("_resume_from_wait", True)
                 config_id = wait_state.config_id or "default"
-                self.astrbot_config_mgr.set_runtime_conf_id(
+                self.astrbot_config_mgr.set_runtime_config_id(
                     event.unified_msg_origin,
                     config_id,
                 )
-                conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
-                self._print_event(event, conf_info["name"])
+                config_info = self.astrbot_config_mgr.get_config_info_by_id(config_id)
+                self._print_event(event, config_info["name"])
                 executor = self.pipeline_executor_mapping.get(config_id)
                 if executor is None:
                     executor = self.pipeline_executor_mapping.get("default")
@@ -130,13 +132,13 @@ class EventBus:
 
             event.chain_config = chain_config
             config_id = chain_config.config_id or "default"
-            self.astrbot_config_mgr.set_runtime_conf_id(
+            self.astrbot_config_mgr.set_runtime_config_id(
                 event.unified_msg_origin,
                 config_id,
             )
-            conf_info = self.astrbot_config_mgr.get_conf_info_by_id(config_id)
+            config_info = self.astrbot_config_mgr.get_config_info_by_id(config_id)
 
-            self._print_event(event, conf_info["name"])
+            self._print_event(event, config_info["name"])
 
             executor = self.pipeline_executor_mapping.get(config_id)
             if executor is None:

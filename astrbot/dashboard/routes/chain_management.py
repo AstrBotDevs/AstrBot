@@ -67,11 +67,7 @@ class ChainManagementRoute(Route):
             "enabled": chain.enabled,
             "nodes": nodes_payload,
             "llm_enabled": chain.llm_enabled,
-            "chat_provider_id": chain.chat_provider_id,
-            "tts_provider_id": chain.tts_provider_id,
-            "stt_provider_id": chain.stt_provider_id,
             "plugin_filter": chain.plugin_filter,
-            "kb_config": chain.kb_config,
             "config_id": chain.config_id,
             "created_at": chain.created_at.isoformat() if chain.created_at else None,
             "updated_at": chain.updated_at.isoformat() if chain.updated_at else None,
@@ -86,11 +82,7 @@ class ChainManagementRoute(Route):
             "enabled": True,
             "nodes": None,
             "llm_enabled": DEFAULT_CHAIN_CONFIG.llm_enabled,
-            "chat_provider_id": None,
-            "tts_provider_id": None,
-            "stt_provider_id": None,
             "plugin_filter": None,
-            "kb_config": None,
             "config_id": "default",
             "created_at": None,
             "updated_at": None,
@@ -252,11 +244,7 @@ class ChainManagementRoute(Route):
                 enabled=data.get("enabled", True),
                 nodes=nodes_payload,
                 llm_enabled=data.get("llm_enabled", True),
-                chat_provider_id=data.get("chat_provider_id"),
-                tts_provider_id=data.get("tts_provider_id"),
-                stt_provider_id=data.get("stt_provider_id"),
                 plugin_filter=data.get("plugin_filter"),
-                kb_config=data.get("kb_config"),
                 config_id=data.get("config_id"),
             )
 
@@ -305,11 +293,7 @@ class ChainManagementRoute(Route):
                         enabled=data.get("enabled", True),
                         nodes=nodes_payload,
                         llm_enabled=data.get("llm_enabled", True),
-                        chat_provider_id=data.get("chat_provider_id"),
-                        tts_provider_id=data.get("tts_provider_id"),
-                        stt_provider_id=data.get("stt_provider_id"),
                         plugin_filter=data.get("plugin_filter"),
-                        kb_config=data.get("kb_config"),
                         config_id="default",
                     )
                     session.add(chain)
@@ -323,11 +307,7 @@ class ChainManagementRoute(Route):
                     "enabled",
                     "nodes",
                     "llm_enabled",
-                    "chat_provider_id",
-                    "tts_provider_id",
-                    "stt_provider_id",
                     "plugin_filter",
-                    "kb_config",
                     "config_id",
                 ]:
                     if field in data:
@@ -425,15 +405,6 @@ class ChainManagementRoute(Route):
             provider_manager = self.core_lifecycle.provider_manager
             plugin_manager = self.core_lifecycle.plugin_manager
 
-            available_chat_providers = [
-                {
-                    "id": p.meta().id,
-                    "name": p.meta().id,
-                    "model": p.meta().model,
-                }
-                for p in provider_manager.provider_insts
-            ]
-
             available_stt_providers = [
                 {
                     "id": p.meta().id,
@@ -489,7 +460,6 @@ class ChainManagementRoute(Route):
                 Response()
                 .ok(
                     {
-                        "available_chat_providers": available_chat_providers,
                         "available_stt_providers": available_stt_providers,
                         "available_tts_providers": available_tts_providers,
                         "available_plugins": available_plugins,

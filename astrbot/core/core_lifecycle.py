@@ -200,8 +200,8 @@ class AstrBotCoreLifecycle:
 
         await self.kb_manager.initialize()
 
-        # 初始化消息事件流水线调度器
-        self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
+        # 初始化消息事件流水线执行器
+        self.pipeline_executor_mapping = await self.load_pipeline_executors()
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
@@ -209,7 +209,7 @@ class AstrBotCoreLifecycle:
         # 初始化事件总线
         self.event_bus = EventBus(
             self.event_queue,
-            self.pipeline_scheduler_mapping,
+            self.pipeline_executor_mapping,
             self.astrbot_config_mgr,
             self.chain_config_router,
         )
@@ -357,48 +357,43 @@ class AstrBotCoreLifecycle:
             )
         return tasks
 
-    async def load_pipeline_scheduler(self) -> dict[str, PipelineExecutor]:
+    async def load_pipeline_executors(self) -> dict[str, PipelineExecutor]:
         """加载消息事件流水线执行器.
 
         Returns:
-            dict[str, PipelineExecutor]: 平台 ID 到流水线执行器的映射
+            dict[str, PipelineExecutor]: 配置 ID 到流水线执行器的映射
 
         """
         mapping = {}
-        for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
+        for config_id, ab_config in self.astrbot_config_mgr.confs.items():
             executor = PipelineExecutor(
                 self.star_context,
                 PipelineContext(
                     ab_config,
                     self.plugin_manager,
-                    conf_id,
+                    config_id,
                     provider_manager=self.provider_manager,
                     db_helper=self.db,
                 ),
             )
             await executor.initialize()
-            mapping[conf_id] = executor
+            mapping[config_id] = executor
         return mapping
 
-    async def reload_pipeline_scheduler(self, conf_id: str) -> None:
-        """重新加载消息事件流水线执行器.
-
-        Returns:
-            dict[str, PipelineExecutor]: 平台 ID 到流水线执行器的映射
-
-        """
-        ab_config = self.astrbot_config_mgr.confs.get(conf_id)
+    async def reload_pipeline_executor(self, config_id: str) -> None:
+        """重新加载消息事件流水线执行器."""
+        ab_config = self.astrbot_config_mgr.confs.get(config_id)
         if not ab_config:
-            raise ValueError(f"配置文件 {conf_id} 不存在")
+            raise ValueError(f"配置文件 {config_id} 不存在")
         executor = PipelineExecutor(
             self.star_context,
             PipelineContext(
                 ab_config,
                 self.plugin_manager,
-                conf_id,
+                config_id,
                 provider_manager=self.provider_manager,
                 db_helper=self.db,
             ),
         )
         await executor.initialize()
-        self.pipeline_scheduler_mapping[conf_id] = executor
+        self.pipeline_executor_mapping[config_id] = executor

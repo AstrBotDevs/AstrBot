@@ -4,8 +4,13 @@ import random
 import traceback
 from typing import TYPE_CHECKING
 
-from astrbot.core import file_token_service, logger, sp
+from astrbot.core import file_token_service, logger
 from astrbot.core.message.components import Plain, Record
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_TTS,
+    is_chain_runtime_feature_enabled,
+)
 from astrbot.core.star.node_star import NodeResult, NodeStar
 
 if TYPE_CHECKING:
@@ -19,31 +24,17 @@ class TTSStar(NodeStar):
         super().__init__(context, config)
         self.callback_api_base = None
 
-    @staticmethod
-    async def _session_tts_enabled(umo: str) -> bool:
-        session_config = await sp.session_get(
-            umo,
-            "session_service_config",
-            default={},
-        )
-        session_config = session_config or {}
-        tts_enabled = session_config.get("tts_enabled")
-        if tts_enabled is None:
-            return True
-        return bool(tts_enabled)
-
     async def node_initialize(self) -> None:
         config = self.context.get_config()
         self.callback_api_base = config.get("callback_api_base", "")
 
     async def process(self, event: AstrMessageEvent) -> NodeResult:
-        config = self.context.get_config(umo=event.unified_msg_origin)
-        if not config.get("provider_tts_settings", {}).get("enable", False):
-            return NodeResult.SKIP
-        if not await self._session_tts_enabled(event.unified_msg_origin):
+        chain_id = event.chain_config.chain_id if event.chain_config else None
+        if not await is_chain_runtime_feature_enabled(chain_id, FEATURE_TTS):
             return NodeResult.SKIP
 
         node_config = event.node_config or {}
+
         use_file_service = node_config.get("use_file_service", False)
         dual_output = node_config.get("dual_output", False)
         trigger_probability = node_config.get("trigger_probability", 1.0)
@@ -52,11 +43,16 @@ class TTSStar(NodeStar):
         except (TypeError, ValueError):
             trigger_probability = 1.0
 
-        result = event.get_result()
-        if not result:
+        upstream_output = await event.get_node_input(strategy="last")
+        if not isinstance(upstream_output, MessageEventResult):
+            logger.warning(
+                "TTS upstream output is not MessageEventResult. type=%s",
+                type(upstream_output).__name__,
+            )
             return NodeResult.SKIP
+        result = upstream_output
+        event.set_result(result)
 
-        # 先收集流式内容（如果有）
         await self.collect_stream(event)
 
         if not result.chain:
@@ -70,7 +66,9 @@ class TTSStar(NodeStar):
 
         tts_provider = self.get_tts_provider(event)
         if not tts_provider:
-            logger.warning(f"会话 {event.unified_msg_origin} 未配置文本转语音模型。")
+            logger.warning(
+                f"Session {event.unified_msg_origin} has no TTS provider configured."
+            )
             return NodeResult.SKIP
 
         new_chain = []
@@ -78,12 +76,12 @@ class TTSStar(NodeStar):
         for comp in result.chain:
             if isinstance(comp, Plain) and len(comp.text) > 1:
                 try:
-                    logger.info(f"TTS 请求: {comp.text}")
+                    logger.info(f"TTS request: {comp.text}")
                     audio_path = await tts_provider.get_audio(comp.text)
-                    logger.info(f"TTS 结果: {audio_path}")
+                    logger.info(f"TTS result: {audio_path}")
 
                     if not audio_path:
-                        logger.error(f"TTS 音频文件未找到: {comp.text}")
+                        logger.error(f"TTS audio not found: {comp.text}")
                         new_chain.append(comp)
                         continue
 
@@ -91,7 +89,7 @@ class TTSStar(NodeStar):
                     if use_file_service and self.callback_api_base:
                         token = await file_token_service.register_file(audio_path)
                         url = f"{self.callback_api_base}/api/file/{token}"
-                        logger.debug(f"已注册：{url}")
+                        logger.debug(f"Registered file service url: {url}")
 
                     new_chain.append(
                         Record(
@@ -105,13 +103,12 @@ class TTSStar(NodeStar):
 
                 except Exception:
                     logger.error(traceback.format_exc())
-                    logger.error("TTS 失败，使用文本发送。")
+                    logger.error("TTS failed, fallback to text output.")
                     new_chain.append(comp)
             else:
                 new_chain.append(comp)
 
         result.chain = new_chain
-
         event.set_node_output(result)
 
         return NodeResult.CONTINUE

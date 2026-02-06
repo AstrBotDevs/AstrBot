@@ -133,7 +133,6 @@ class StarYieldDriver:
             result.llm_requests.append(yielded)
             event.set_extra("has_provider_request", True)
             event.set_extra("provider_request", yielded)
-            event.set_extra("_provider_request", yielded)
             if self._on_provider_request:
                 await self._on_provider_request(event, yielded)
             return

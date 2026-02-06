@@ -1,0 +1,7 @@
+{
+  "provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "STT provider ID override for this node."
+  }
+}

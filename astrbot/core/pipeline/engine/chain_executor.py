@@ -136,7 +136,6 @@ class ChainExecutor:
             if not node:
                 logger.error(f"Node unavailable: {node_name}")
                 node_ctx.status = NodeExecutionStatus.FAILED
-                node_ctx.meta["error"] = f"Node '{node_name}' is not available"
                 result.success = False
                 result.error = RuntimeError(f"Node '{node_name}' is not available")
                 return result
@@ -151,7 +150,6 @@ class ChainExecutor:
                     logger.error(f"Node {node_name} initialize error: {e}")
                     logger.error(traceback.format_exc())
                     node_ctx.status = NodeExecutionStatus.FAILED
-                    node_ctx.meta["error"] = str(e)
                     result.success = False
                     result.error = e
                     return result
@@ -185,7 +183,6 @@ class ChainExecutor:
 
             except Exception as e:
                 node_ctx.status = NodeExecutionStatus.FAILED
-                node_ctx.meta["error"] = str(e)
                 logger.error(f"Node {node_name} error: {e}")
                 logger.error(traceback.format_exc())
                 result.success = False

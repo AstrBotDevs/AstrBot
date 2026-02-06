@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from astrbot.core import logger
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_LLM,
+    is_chain_runtime_feature_enabled,
+)
 from astrbot.core.star.node_star import NodeResult, NodeStar
 
 if TYPE_CHECKING:
@@ -19,10 +23,6 @@ class AgentNode(NodeStar):
         if event.get_extra("skip_agent", False):
             return NodeResult.SKIP
 
-        if not self.context.get_config()["provider_settings"].get("enable", True):
-            logger.debug("This pipeline does not enable AI capability, skip.")
-            return NodeResult.SKIP
-
         chain_config = event.chain_config
         if chain_config and not chain_config.llm_enabled:
             logger.debug(
@@ -30,7 +30,12 @@ class AgentNode(NodeStar):
             )
             return NodeResult.SKIP
 
-        # Merge upstream outputs for agent input
+        chain_id = chain_config.chain_id if chain_config else None
+        if not await is_chain_runtime_feature_enabled(chain_id, FEATURE_LLM):
+            logger.debug(f"The chain {chain_id} runtime LLM switch is disabled.")
+            return NodeResult.SKIP
+
+        # 合并上游输出作为 agent 输入
         if ctx:
             merged_input = await event.get_node_input(strategy="text_concat")
             if isinstance(merged_input, str):
@@ -60,6 +65,9 @@ class AgentNode(NodeStar):
 
     def _should_execute(self, event: AstrMessageEvent, ctx: NodeContext | None) -> bool:
         """Determine whether this agent node should execute."""
+        if event.get_extra("_provider_request_consumed", False):
+            return False
+
         has_provider_request = event.get_extra("has_provider_request", False)
         if has_provider_request:
             return True
