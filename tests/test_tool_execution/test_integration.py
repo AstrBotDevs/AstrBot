@@ -675,7 +675,7 @@ class TestSanitizer:
         params = {
             "username": "test_user",
             "password": "secret123",
-            "api_key": "sk-test-fake-key-for-unit-test",
+            "api_key": "fake-key-for-unit-test",
         }
         result = sanitize_params(params)
 
