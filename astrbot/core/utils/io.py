@@ -254,8 +254,10 @@ async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
                     ip = ip_address(raw_ip)
                     if ip.version not in found_ips:
                         found_ips[ip.version] = ip
-        except Exception:
-            pass
+        except Exception as e:
+            # Ignore errors from individual services so that a single failing
+            # endpoint does not prevent discovering the public IP from others.
+            logger.debug("Failed to fetch public IP from %s: %s", url, e)
 
     async with aiohttp.ClientSession() as session:
         tasks = [fetch(session, url) for url in urls]
