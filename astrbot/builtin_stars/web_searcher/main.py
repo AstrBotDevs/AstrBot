@@ -353,7 +353,7 @@ class Main(star.Star):
                 }
             )
             if result.favicon:
-                sp.temorary_cache["_ws_favicon"][result.url] = result.favicon
+                sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
         # ret = "\n".join(ret_ls)
         ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
         return ret
@@ -543,7 +543,7 @@ class Main(star.Star):
                 }
             )
             if result.favicon:
-                sp.temorary_cache["_ws_favicon"][result.url] = result.favicon
+                sp.temporary_cache["_ws_favicon"][result.url] = result.favicon
         # ret = "\n".join(ret_ls)
         ret = json.dumps({"results": ret_ls}, ensure_ascii=False)
         return ret
