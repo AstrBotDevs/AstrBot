@@ -28,6 +28,8 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.tool_execution.application.tool_executor import ToolExecutor
+from astrbot.core.tool_execution.errors import MethodResolutionError
 from astrbot.core.utils.history_saver import persist_agent_history
 
 
@@ -270,80 +272,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_call_timeout: int | None = None,
         **tool_args,
     ):
+        """执行本地工具，使用 ToolExecutor 编排组件完成工具执行。"""
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
 
-        is_override_call = False
-        for ty in type(tool).mro():
-            if "call" in ty.__dict__ and ty.__dict__["call"] is not FunctionTool.call:
-                is_override_call = True
-                break
+        # 如果外部指定了超时（如后台任务用3600s），临时覆盖run_context的超时值
+        original_timeout = run_context.tool_call_timeout
+        if tool_call_timeout is not None:
+            run_context.tool_call_timeout = tool_call_timeout
 
-        # 检查 tool 下有没有 run 方法
-        if not tool.handler and not hasattr(tool, "run") and not is_override_call:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
+        executor = ToolExecutor()
 
-        awaitable = None
-        method_name = ""
-        if tool.handler:
-            awaitable = tool.handler
-            method_name = "decorator_handler"
-        elif is_override_call:
-            awaitable = tool.call
-            method_name = "call"
-        elif hasattr(tool, "run"):
-            awaitable = getattr(tool, "run")
-            method_name = "run"
-        if awaitable is None:
-            raise ValueError("Tool must have a valid handler or override 'run' method.")
-
-        wrapper = call_local_llm_tool(
-            context=run_context,
-            handler=awaitable,
-            method_name=method_name,
-            **tool_args,
-        )
-        while True:
-            try:
-                resp = await asyncio.wait_for(
-                    anext(wrapper),
-                    timeout=tool_call_timeout or run_context.tool_call_timeout,
-                )
-                if resp is not None:
-                    if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
-                    else:
-                        text_content = mcp.types.TextContent(
-                            type="text",
-                            text=str(resp),
-                        )
-                        yield mcp.types.CallToolResult(content=[text_content])
-                else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
-                    if res := run_context.context.event.get_result():
-                        if res.chain:
-                            try:
-                                await event.send(
-                                    MessageChain(
-                                        chain=res.chain,
-                                        type="tool_direct_result",
-                                    )
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
-                                    exc_info=True,
-                                )
-                    yield None
-            except asyncio.TimeoutError:
-                raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
-                )
-            except StopAsyncIteration:
-                break
+        try:
+            async for result in executor.execute(tool, run_context, **tool_args):
+                yield result
+        except MethodResolutionError as e:
+            raise ValueError(str(e)) from e
+        finally:
+            run_context.tool_call_timeout = original_timeout
 
     @classmethod
     async def _execute_mcp(

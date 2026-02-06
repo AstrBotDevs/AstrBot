@@ -138,6 +138,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+        self._wait_interrupted = False  # 等待中断标记
 
     async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
@@ -547,6 +548,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
             except Exception as e:
+                from astrbot.core.background_tool import WaitInterruptedException
+
+                if isinstance(e, WaitInterruptedException):
+                    # 等待被中断，结束当前响应周期
+                    logger.info(
+                        f"Wait interrupted for task {e.task_id}, ending current response cycle"
+                    )
+                    self._wait_interrupted = True
+                    self._transition_state(AgentState.DONE)
+                    return
+
                 logger.warning(traceback.format_exc())
                 tool_call_result_blocks.append(
                     ToolCallMessageSegment(
