@@ -76,13 +76,11 @@ class BackgroundToolManager:
                 )
 
                 # 同步清理OutputBuffer中的孤立缓冲区
-                valid_task_ids = set(self.registry._tasks.keys())
+                valid_task_ids = self.registry.get_all_task_ids()
                 buffer_cleaned = self.output_buffer.cleanup_old_buffers(valid_task_ids)
 
                 # 清理孤立的中断标记（没有活跃任务的会话）
-                active_sessions = {
-                    task.session_id for task in self.registry._tasks.values()
-                }
+                active_sessions = self.registry.get_all_session_ids()
                 stale_flags = [
                     sid for sid in self._interrupt_flags if sid not in active_sessions
                 ]
@@ -150,7 +148,6 @@ class BackgroundToolManager:
             f"[BackgroundToolManager] Creating task {task.task_id} for tool {tool_name}, session {session_id}"
         )
 
-        task.init_completion_event()
         self.registry.register(task)
         logger.info(
             f"[BackgroundToolManager] Task {task.task_id} registered successfully"

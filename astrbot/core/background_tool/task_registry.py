@@ -165,6 +165,16 @@ class TaskRegistry:
             self._tasks.clear()
             self._session_index.clear()
 
+    def get_all_task_ids(self) -> set[str]:
+        """获取所有任务ID（线程安全）"""
+        with self._rwlock.read():
+            return set(self._tasks.keys())
+
+    def get_all_session_ids(self) -> set[str]:
+        """获取所有有活跃任务的会话ID（线程安全）"""
+        with self._rwlock.read():
+            return {task.session_id for task in self._tasks.values()}
+
     def count(self) -> int:
         """获取任务数量"""
         with self._rwlock.read():
