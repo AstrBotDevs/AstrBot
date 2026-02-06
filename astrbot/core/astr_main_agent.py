@@ -154,16 +154,12 @@ def _apply_kb(
     req: ProviderRequest,
     config: MainAgentBuildConfig,
 ) -> None:
-    if not config.kb_agentic_mode:
-        # Non-agentic mode: read from KnowledgeBaseNode injected context
-        kb_result = event.get_extra("kb_context")
-        if kb_result and req.system_prompt is not None:
-            req.system_prompt += f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-    else:
+    if config.kb_agentic_mode:
         # Agentic mode: add knowledge base query tool
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+    # Non-agentic mode: KB context is injected via _inject_pipeline_context()
 
 
 def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
@@ -501,6 +497,51 @@ def _append_system_reminders(
         req.extra_user_content_parts.append(TextPart(text=system_content))
 
 
+def _inject_pipeline_context(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """Inject upstream node output into LLM request.
+
+    When Agent nodes are chained (e.g., [Agent A] -> [Agent B]), this ensures
+    Agent B receives Agent A's output as additional context.
+    """
+    ctx = event.node_context
+    if ctx is None or ctx.input is None:
+        return
+
+    # Format the upstream output for LLM consumption
+    upstream_input = ctx.input
+
+    # Handle different types of upstream output
+    if hasattr(upstream_input, "chain"):
+        # It's a MessageEventResult - extract text content
+        from astrbot.core.message.components import Plain
+
+        parts = []
+        for comp in upstream_input.chain or []:
+            if isinstance(comp, Plain):
+                parts.append(comp.text)
+        if parts:
+            upstream_text = "\n".join(parts)
+        else:
+            return  # No text content to inject
+    elif isinstance(upstream_input, str):
+        upstream_text = upstream_input
+    else:
+        # Try to convert to string
+        upstream_text = str(upstream_input)
+
+    if not upstream_text or not upstream_text.strip():
+        return
+
+    # Inject as pipeline context
+    pipeline_context = (
+        f"<pipeline_context>\n"
+        f"The following is output from a previous node in the processing pipeline:\n"
+        f"{upstream_text}\n"
+        f"</pipeline_context>"
+    )
+    req.extra_user_content_parts.append(TextPart(text=pipeline_context))
+
+
 async def _decorate_llm_request(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -832,6 +873,8 @@ async def build_main_agent(
             return None
 
     await _decorate_llm_request(event, req, plugin_context, config)
+
+    _inject_pipeline_context(event, req)
 
     _apply_kb(event, req, config)
 

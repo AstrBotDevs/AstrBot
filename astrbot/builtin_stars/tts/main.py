@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import random
 import traceback
+from typing import TYPE_CHECKING
 
 from astrbot.core import file_token_service, logger, sp
 from astrbot.core.message.components import Plain, Record
 from astrbot.core.star.node_star import NodeResult, NodeStar
 
+if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
+
 
 class TTSStar(NodeStar):
     """Text-to-speech."""
+
+    def __init__(self, context, config: dict | None = None):
+        super().__init__(context, config)
+        self.callback_api_base = None
 
     @staticmethod
     async def _session_tts_enabled(umo: str) -> bool:
@@ -28,12 +36,12 @@ class TTSStar(NodeStar):
         config = self.context.get_config()
         self.callback_api_base = config.get("callback_api_base", "")
 
-    async def process(self, event) -> NodeResult:
+    async def process(self, event: AstrMessageEvent) -> NodeResult:
         config = self.context.get_config(umo=event.unified_msg_origin)
         if not config.get("provider_tts_settings", {}).get("enable", False):
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
         if not await self._session_tts_enabled(event.unified_msg_origin):
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         node_config = event.node_config or {}
         use_file_service = node_config.get("use_file_service", False)
@@ -46,24 +54,24 @@ class TTSStar(NodeStar):
 
         result = event.get_result()
         if not result:
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         # 先收集流式内容（如果有）
         await self.collect_stream(event)
 
         if not result.chain:
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         if not result.is_llm_result():
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         if random.random() > trigger_probability:
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         tts_provider = self.get_tts_provider(event)
         if not tts_provider:
             logger.warning(f"会话 {event.unified_msg_origin} 未配置文本转语音模型。")
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         new_chain = []
 
@@ -103,5 +111,7 @@ class TTSStar(NodeStar):
                 new_chain.append(comp)
 
         result.chain = new_chain
+
+        event.set_node_output(result)
 
         return NodeResult.CONTINUE

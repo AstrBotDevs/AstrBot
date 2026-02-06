@@ -22,7 +22,12 @@ from astrbot.core.message.components import (
     Plain,
     Reply,
 )
-from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.message.message_event_result import (
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+    collect_streaming_result,
+)
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
@@ -35,6 +40,7 @@ from .platform_metadata import PlatformMetadata
 if TYPE_CHECKING:
     from astrbot.core.pipeline.agent import AgentExecutor
     from astrbot.core.pipeline.engine.chain_config import ChainConfig
+    from astrbot.core.pipeline.engine.node_context import NodeContext, NodeContextStack
     from astrbot.core.pipeline.engine.send_service import SendService
 
 
@@ -99,6 +105,23 @@ class AstrMessageEvent(abc.ABC):
         # Pipeline services (set by ChainExecutor)
         self.send_service: SendService | None = None
         self.agent_executor: AgentExecutor | None = None
+
+        # NodeContext stack (lazily initialized)
+        self._node_context_stack: NodeContextStack | None = None
+
+    @property
+    def context_stack(self) -> NodeContextStack:
+        """Get the NodeContextStack for this event, lazily initialized."""
+        if self._node_context_stack is None:
+            from astrbot.core.pipeline.engine.node_context import NodeContextStack
+
+            self._node_context_stack = NodeContextStack()
+        return self._node_context_stack
+
+    @property
+    def node_context(self) -> NodeContext | None:
+        """Get the current NodeContext from the stack."""
+        return self.context_stack.current()
 
     @property
     def unified_msg_origin(self) -> str:
@@ -293,6 +316,110 @@ class AstrMessageEvent(abc.ABC):
         if isinstance(result, MessageEventResult) and result.chain is None:
             result.chain = []
         self._result = result
+
+    def set_node_output(self, output: Any) -> None:
+        """Set node output for downstream nodes and sync MessageEventResult."""
+        ctx = self.node_context
+        if not ctx:
+            raise RuntimeError("Node context is not available for this event.")
+        ctx.output = output
+        if isinstance(output, MessageEventResult):
+            self.set_result(output)
+
+    @staticmethod
+    def _normalize_node_names(names: str | list[str] | None) -> set[str] | None:
+        if names is None:
+            return None
+        if isinstance(names, str):
+            names_list = [names]
+        else:
+            names_list = list(names)
+        cleaned = {str(name).strip() for name in names_list if str(name).strip()}
+        return cleaned or None
+
+    @staticmethod
+    async def _collect_streaming_output(
+        output: MessageEventResult,
+    ) -> MessageEventResult:
+        if output.result_content_type != ResultContentType.STREAMING_RESULT:
+            return output
+        if output.async_stream is None:
+            return output
+        return await collect_streaming_result(output, warn=True, logger=logger)
+
+    @staticmethod
+    def _output_to_text(output: Any) -> str:
+        if isinstance(output, MessageChain):
+            return output.get_plain_text()
+        if isinstance(output, str):
+            return output
+        return str(output)
+
+    async def get_node_input(
+        self,
+        strategy: str = "last",
+        names: str | list[str] | None = None,
+    ) -> Any:
+        """Get upstream node output with optional merge strategy.
+
+        strategy:
+            - "last" (default): last output in chain order
+            - "first": first output in chain order
+            - "list": list of outputs
+            - "text_concat": merge as concatenated text
+            - "chain_concat": merge as MessageEventResult (chain)
+        names:
+            Limit outputs to specific node names (str or list[str]).
+        """
+        ctx = self.node_context
+        if not ctx:
+            raise RuntimeError("Node context is not available for this event.")
+
+        from astrbot.core.pipeline.engine.node_context import NodeExecutionStatus
+
+        name_set = self._normalize_node_names(names)
+        outputs = self.context_stack.get_outputs(
+            names=name_set,
+            status=NodeExecutionStatus.EXECUTED,
+            include_none=False,
+        )
+        if not outputs:
+            return None
+
+        strategy = (strategy or "last").lower()
+
+        if strategy == "last":
+            return outputs[-1]
+        if strategy == "first":
+            return outputs[0]
+        if strategy == "list":
+            return outputs
+
+        if strategy == "text_concat":
+            texts: list[str] = []
+            for output in outputs:
+                if isinstance(output, MessageEventResult):
+                    output = await self._collect_streaming_output(output)
+                text = self._output_to_text(output)
+                if text and text.strip():
+                    texts.append(text)
+            return "\n".join(texts)
+
+        if strategy == "chain_concat":
+            chain = []
+            for output in outputs:
+                if isinstance(output, MessageEventResult):
+                    output = await self._collect_streaming_output(output)
+                    chain.extend(output.chain or [])
+                elif isinstance(output, MessageChain):
+                    chain.extend(output.chain or [])
+                elif isinstance(output, str):
+                    chain.append(Plain(output))
+                else:
+                    chain.append(Plain(str(output)))
+            return MessageEventResult(chain=chain)
+
+        raise ValueError(f"Unsupported node input strategy: {strategy}")
 
     def stop_event(self):
         """终止事件传播。"""

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from astrbot.core import logger
 from astrbot.core.message.components import File, Plain, Reply
 from astrbot.core.star.node_star import NodeResult, NodeStar
+
+if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 class FileExtractNode(NodeStar):
@@ -23,7 +27,7 @@ class FileExtractNode(NodeStar):
     - moonshotai: 使用 Moonshot AI API
     """
 
-    async def process(self, event) -> NodeResult:
+    async def process(self, event: AstrMessageEvent) -> NodeResult:
         node_config = event.node_config or {}
         provider = node_config.get("provider", "moonshotai")
         moonshotai_api_key = node_config.get("moonshotai_api_key", "")
@@ -48,7 +52,12 @@ class FileExtractNode(NodeStar):
             event.message_obj.message_str = event.message_str
             logger.debug(f"File extraction: replaced {replaced} File component(s)")
 
-        return NodeResult.CONTINUE
+            # Write output to ctx for downstream nodes
+            event.set_node_output(event.message_str)
+
+            return NodeResult.CONTINUE
+
+        return NodeResult.SKIP
 
     async def _replace_files(
         self, components: list, provider: str, moonshotai_api_key: str
@@ -102,22 +111,23 @@ class FileExtractNode(NodeStar):
             logger.warning(f"Local parsing failed for {file_path}: {e}")
             return None
 
-    async def _select_parser(self, ext: str):
+    @staticmethod
+    async def _select_parser(ext: str):
         """根据文件扩展名选择解析器"""
-        if ext in {".md", ".txt", ".markdown", ".xlsx", ".docx", ".xls"}:
+        if ext == ".pdf":
+            from astrbot.core.knowledge_base.parsers.pdf_parser import PDFParser
+
+            return PDFParser()
+        else:
             from astrbot.core.knowledge_base.parsers.markitdown_parser import (
                 MarkitdownParser,
             )
 
             return MarkitdownParser()
-        if ext == ".pdf":
-            from astrbot.core.knowledge_base.parsers.pdf_parser import PDFParser
 
-            return PDFParser()
-        raise ValueError(f"暂时不支持的文件格式: {ext}")
-
+    @staticmethod
     async def _extract_moonshotai(
-        self, file_path: str, moonshotai_api_key: str
+            file_path: str, moonshotai_api_key: str
     ) -> str | None:
         """使用 Moonshot AI API 提取文件内容"""
         from astrbot.core.utils.file_extract import extract_file_moonshotai

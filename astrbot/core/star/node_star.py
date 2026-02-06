@@ -21,7 +21,7 @@ class MyNode(NodeStar):
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot.core import logger
 
@@ -41,6 +41,8 @@ class NodeResult(Enum):
     """停止链路处理"""
     WAIT = "wait"
     """暂停链路，等待下一条消息再从当前Node恢复"""
+    SKIP = "skip"
+    """跳过当前 Node（条件不满足时使用）"""
 
 
 class NodeStar(Star):
@@ -80,6 +82,20 @@ class NodeStar(Star):
             - 通过 event.get_extra()/set_extra() 进行节点间通信
         """
         raise NotImplementedError
+
+    def set_node_output(self, event: AstrMessageEvent, output: Any) -> None:
+        """Unified node output API for chaining and sending."""
+        event.set_node_output(output)
+
+    async def get_node_input(
+        self,
+        event: AstrMessageEvent,
+        *,
+        strategy: str = "last",
+        names: str | list[str] | None = None,
+    ) -> Any:
+        """Get upstream node output with optional merge strategy."""
+        return await event.get_node_input(strategy=strategy, names=names)
 
     # -------------------- Chain-aware Provider 便捷方法 -------------------- #
 
@@ -141,7 +157,10 @@ class NodeStar(Star):
             收集到的完整文本，如果没有流式结果则返回 None
         """
         from astrbot.core.message.components import Plain
-        from astrbot.core.message.message_event_result import ResultContentType
+        from astrbot.core.message.message_event_result import (
+            ResultContentType,
+            collect_streaming_result,
+        )
 
         result = event.get_result()
         if not result:
@@ -153,19 +172,11 @@ class NodeStar(Star):
         if result.async_stream is None:
             return None
 
-        # 消费流
-        parts: list[str] = []
-        async for chunk in result.async_stream:
-            if hasattr(chunk, "chain") and chunk.chain:
-                for comp in chunk.chain:
-                    if isinstance(comp, Plain):
-                        parts.append(comp.text)
+        await collect_streaming_result(result)
 
+        # Reconstruct text from collected chain
+        parts: list[str] = [
+            comp.text for comp in result.chain if isinstance(comp, Plain)
+        ]
         collected_text = "".join(parts)
-
-        # 更新 result
-        result.chain = [Plain(collected_text)] if collected_text else []
-        result.result_content_type = ResultContentType.LLM_RESULT
-        result.async_stream = None
-
         return collected_text

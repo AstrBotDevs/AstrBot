@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astrbot.core import logger
 from astrbot.core.star.node_star import NodeResult, NodeStar
+
+if TYPE_CHECKING:
+    from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 
 class KnowledgeBaseNode(NodeStar):
@@ -19,11 +24,17 @@ class KnowledgeBaseNode(NodeStar):
     如需Agentic模式（LLM主动调用知识库工具），请在provider_settings中启用kb_agentic_mode。
     """
 
-    async def process(self, event) -> NodeResult:
+    async def process(self, event: AstrMessageEvent) -> NodeResult:
         # 检查是否有消息内容需要检索
-        query = event.message_str
+        merged_query = await event.get_node_input(strategy="text_concat")
+        if isinstance(merged_query, str) and merged_query.strip():
+            query = merged_query
+        elif merged_query is not None:
+            query = str(merged_query)
+        else:
+            query = event.message_str
         if not query or not query.strip():
-            return NodeResult.CONTINUE
+            return NodeResult.SKIP
 
         try:
             kb_result = await self._retrieve_knowledge_base(
@@ -32,9 +43,8 @@ class KnowledgeBaseNode(NodeStar):
                 event.chain_config,
             )
             if kb_result:
-                # workaround: 将知识库结果存储到 event extra 中，供后续节点使用
-                event.set_extra("kb_context", kb_result)
-                logger.debug("[知识库节点] 设置了知识库上下文")
+                event.set_node_output(kb_result)
+                logger.debug("[知识库节点] 检索到知识库上下文")
         except Exception as e:
             logger.error(f"[知识库节点] 检索知识库时发生错误: {e}")
 
@@ -108,8 +118,9 @@ class KnowledgeBaseNode(NodeStar):
 
         return await self._do_retrieve(kb_mgr, query, kb_names, top_k, config)
 
+    @staticmethod
     async def _do_retrieve(
-        self, kb_mgr, query: str, kb_names: list[str], top_k: int, config: dict
+            kb_mgr, query: str, kb_names: list[str], top_k: int, config: dict
     ) -> str | None:
         """执行知识库检索"""
         top_k_fusion = config.get("kb_fusion_top_k", 20)
