@@ -675,7 +675,7 @@ class TestSanitizer:
         params = {
             "username": "test_user",
             "password": "secret123",
-            "api_key": "sk-1234567890",
+            "api_key": "sk-test-fake-key-for-unit-test",
         }
         result = sanitize_params(params)
 
@@ -689,7 +689,7 @@ class TestSanitizer:
 
         params = {
             "header": "Bearer eyJhbGciOiJIUzI1NiJ9",
-            "config": "api_key=sk-1234567890abcdefghij",
+            "config": "api_key=test-fake-key-for-unit-test",
         }
         result = sanitize_params(params)
 
