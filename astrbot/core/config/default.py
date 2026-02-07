@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.14.4"
+VERSION = "4.14.5"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -75,6 +75,7 @@ DEFAULT_CONFIG = {
         "web_search": False,
         "websearch_provider": "default",
         "websearch_tavily_key": [],
+        "websearch_bocha_key": [],
         "websearch_baidu_app_builder_key": "",
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -2429,7 +2430,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.websearch_provider": {
                         "description": "网页搜索提供商",
                         "type": "string",
-                        "options": ["default", "tavily", "baidu_ai_search"],
+                        "options": ["default", "tavily", "baidu_ai_search", "bocha"],
                         "condition": {
                             "provider_settings.web_search": True,
                         },
@@ -2441,6 +2442,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可添加多个 Key 进行轮询。",
                         "condition": {
                             "provider_settings.websearch_provider": "tavily",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_bocha_key": {
+                        "description": "BoCha API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。",
+                        "condition": {
+                            "provider_settings.websearch_provider": "bocha",
                             "provider_settings.web_search": True,
                         },
                     },

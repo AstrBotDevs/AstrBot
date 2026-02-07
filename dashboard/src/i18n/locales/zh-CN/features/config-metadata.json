@@ -89,6 +89,10 @@
           "description": "Tavily API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_bocha_key": {
+          "description": "BoCha API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
