@@ -272,51 +272,44 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type: 接收者ID类型（用于主动发送）
         """
         file_path = file_comp.file if file_comp.file else ""
-        file_obj = None
 
         if not file_path:
             logger.error("[Lark] 文件路径为空，无法上传")
             return
 
-        try:
-            file_obj = open(file_path, "rb")
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开文件: {e}")
-            return
-
-        request = (
-            CreateFileRequest.builder()
-            .request_body(
-                CreateFileRequestBody.builder()
-                .file_type("stream")
-                .file_name(os.path.basename(file_path))
-                .file(file_obj)
-                .build(),
-            )
-            .build()
-        )
-
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法上传文件")
-            if file_obj:
-                file_obj.close()
             return
 
-        response = await lark_client.im.v1.file.acreate(request)
+        try:
+            with open(file_path, "rb") as file_obj:
+                request = (
+                    CreateFileRequest.builder()
+                    .request_body(
+                        CreateFileRequestBody.builder()
+                        .file_type("stream")
+                        .file_name(os.path.basename(file_path))
+                        .file(file_obj)
+                        .build(),
+                    )
+                    .build()
+                )
 
-        if file_obj:
-            file_obj.close()
+                response = await lark_client.im.v1.file.acreate(request)
 
-        if not response.success():
-            logger.error(f"无法上传飞书文件({response.code}): {response.msg}")
+                if not response.success():
+                    logger.error(f"无法上传飞书文件({response.code}): {response.msg}")
+                    return
+
+                if response.data is None:
+                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
+                    return
+
+                file_key = response.data.file_key
+                logger.debug(f"[Lark] 文件上传成功: {file_key}")
+        except Exception as e:
+            logger.error(f"[Lark] 无法打开或上传文件: {e}")
             return
-
-        if response.data is None:
-            logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
-            return
-
-        file_key = response.data.file_key
-        logger.debug(f"[Lark] 文件上传成功: {file_key}")
 
         # 发送文件消息
         file_content = json.dumps({"file_key": file_key})
@@ -413,61 +406,56 @@ class LarkMessageEvent(AstrMessageEvent):
         # 获取音频时长
         duration = await get_media_duration(audio_path)
 
-        # 上传音频文件
-        audio_obj = None
-        try:
-            audio_obj = open(audio_path, "rb")
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开音频文件: {e}")
-            return
-
-        # 构建请求体，设置file_type为opus
-        request_body_builder = (
-            CreateFileRequestBody.builder()
-            .file_type("opus")
-            .file_name(os.path.basename(audio_path))
-            .file(audio_obj)
-        )
-
-        # 如果成功获取时长，添加duration参数
-        if duration is not None:
-            request_body_builder.duration(duration)
-
-        request = (
-            CreateFileRequest.builder()
-            .request_body(request_body_builder.build())
-            .build()
-        )
-
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法上传音频")
-            if audio_obj:
-                audio_obj.close()
             return
 
-        response = await lark_client.im.v1.file.acreate(request)
+        # 上传音频文件
+        try:
+            with open(audio_path, "rb") as audio_obj:
+                # 构建请求体，设置file_type为opus
+                request_body_builder = (
+                    CreateFileRequestBody.builder()
+                    .file_type("opus")
+                    .file_name(os.path.basename(audio_path))
+                    .file(audio_obj)
+                )
 
-        if audio_obj:
-            audio_obj.close()
+                # 如果成功获取时长，添加duration参数
+                if duration is not None:
+                    request_body_builder.duration(duration)
 
-        # 删除转换后的临时音频文件
-        if converted_audio_path and os.path.exists(converted_audio_path):
-            try:
-                os.remove(converted_audio_path)
-                logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
-            except Exception as e:
-                logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
+                request = (
+                    CreateFileRequest.builder()
+                    .request_body(request_body_builder.build())
+                    .build()
+                )
 
-        if not response.success():
-            logger.error(f"无法上传飞书音频({response.code}): {response.msg}")
+                response = await lark_client.im.v1.file.acreate(request)
+
+                # 删除转换后的临时音频文件
+                if converted_audio_path and os.path.exists(converted_audio_path):
+                    try:
+                        os.remove(converted_audio_path)
+                        logger.debug(
+                            f"[Lark] 已删除转换后的音频文件: {converted_audio_path}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
+
+                if not response.success():
+                    logger.error(f"无法上传飞书音频({response.code}): {response.msg}")
+                    return
+
+                if response.data is None:
+                    logger.error("[Lark] 上传音频成功但未返回数据(data is None)")
+                    return
+
+                file_key = response.data.file_key
+                logger.debug(f"[Lark] 音频上传成功: {file_key}")
+        except Exception as e:
+            logger.error(f"[Lark] 无法打开或上传音频文件: {e}")
             return
-
-        if response.data is None:
-            logger.error("[Lark] 上传音频成功但未返回数据(data is None)")
-            return
-
-        file_key = response.data.file_key
-        logger.debug(f"[Lark] 音频上传成功: {file_key}")
 
         # 发送音频消息
         audio_content = json.dumps({"file_key": file_key})
@@ -564,60 +552,55 @@ class LarkMessageEvent(AstrMessageEvent):
         # 获取视频时长
         duration = await get_media_duration(video_path)
 
-        # 上传视频文件
-        video_obj = None
-        try:
-            video_obj = open(video_path, "rb")
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开视频文件: {e}")
-            return
-
-        # 构建请求体，设置file_type为mp4
-        request_body_builder = (
-            CreateFileRequestBody.builder()
-            .file_type("mp4")
-            .file_name(os.path.basename(video_path))
-            .file(video_obj)
-        )
-
-        # 如果成功获取时长，添加duration参数
-        if duration is not None:
-            request_body_builder.duration(duration)
-
-        request = (
-            CreateFileRequest.builder()
-            .request_body(request_body_builder.build())
-            .build()
-        )
-
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法上传视频")
-            if video_obj:
-                video_obj.close()
             return
 
-        response = await lark_client.im.v1.file.acreate(request)
+        # 上传视频文件
+        try:
+            with open(video_path, "rb") as video_obj:
+                # 构建请求体，设置file_type为mp4
+                request_body_builder = (
+                    CreateFileRequestBody.builder()
+                    .file_type("mp4")
+                    .file_name(os.path.basename(video_path))
+                    .file(video_obj)
+                )
 
-        if video_obj:
-            video_obj.close()
+                # 如果成功获取时长，添加duration参数
+                if duration is not None:
+                    request_body_builder.duration(duration)
 
-        # 删除转换后的临时视频文件
-        if converted_video_path and os.path.exists(converted_video_path):
-            try:
-                os.remove(converted_video_path)
-                logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
-            except Exception as e:
-                logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
+                request = (
+                    CreateFileRequest.builder()
+                    .request_body(request_body_builder.build())
+                    .build()
+                )
 
-        if not response.success():
-            logger.error(f"无法上传飞书视频({response.code}): {response.msg}")
+                response = await lark_client.im.v1.file.acreate(request)
+
+                # 删除转换后的临时视频文件
+                if converted_video_path and os.path.exists(converted_video_path):
+                    try:
+                        os.remove(converted_video_path)
+                        logger.debug(
+                            f"[Lark] 已删除转换后的视频文件: {converted_video_path}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
+
+                if not response.success():
+                    logger.error(f"无法上传飞书视频({response.code}): {response.msg}")
+                    return
+
+                if response.data is None:
+                    logger.error("[Lark] 上传视频成功但未返回数据(data is None)")
+                    return
+
+                file_key = response.data.file_key
+        except Exception as e:
+            logger.error(f"[Lark] 无法打开或上传视频文件: {e}")
             return
-
-        if response.data is None:
-            logger.error("[Lark] 上传视频成功但未返回数据(data is None)")
-            return
-
-        file_key = response.data.file_key
         logger.debug(f"[Lark] 视频上传成功: {file_key}")
 
         # 发送视频消息
