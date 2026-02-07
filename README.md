@@ -132,6 +132,10 @@ uv run main.py
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
+#### 桌面端 Electron 打包
+
+桌面端（前端-only 打包）构建流程请参阅：[`desktop/README.md`](desktop/README.md)。
+
 ## 支持的消息平台
 
 **官方维护**
@@ -269,4 +273,3 @@ _陪伴与能力从来不应该是对立面。我们希望创造的是一个既�
 _私は、高性能ですから!_
 
 <img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
-
