@@ -13,7 +13,7 @@ from sqlalchemy import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
-from astrbot.core.db import BaseDatabase
+from astrbot.core.db import NOT_GIVEN, BaseDatabase, NotGivenType
 from astrbot.core.db.po import (
     Attachment,
     ChatUIProject,
@@ -37,7 +37,6 @@ from astrbot.core.db.po import (
     Stats as DeprecatedStats,
 )
 
-NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
@@ -655,8 +654,8 @@ class SQLiteDatabase(BaseDatabase):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools=NOT_GIVEN,
-        skills=NOT_GIVEN,
+        tools: list[str] | None | NotGivenType = NOT_GIVEN,
+        skills: list[str] | None | NotGivenType = NOT_GIVEN,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -762,8 +761,8 @@ class SQLiteDatabase(BaseDatabase):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = NOT_GIVEN,
-        description: T.Any = NOT_GIVEN,
+        parent_id: str | None | NotGivenType = NOT_GIVEN,
+        description: str | None | NotGivenType = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""
@@ -773,7 +772,7 @@ class SQLiteDatabase(BaseDatabase):
                 query = update(PersonaFolder).where(
                     col(PersonaFolder.folder_id) == folder_id
                 )
-                values: dict[str, T.Any] = {}
+                values: dict[str, object] = {}
                 if name is not None:
                     values["name"] = name
                 if parent_id is not NOT_GIVEN:
