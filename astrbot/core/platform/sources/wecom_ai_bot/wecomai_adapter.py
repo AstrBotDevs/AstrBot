@@ -42,7 +42,7 @@ from .wecomai_utils import (
 
 
 class WecomAIQueueListener:
-    """企业微信智能机器人队列监听器，参考webchat的QueueListener设计"""
+    """企业微信智能机器人队列监听器，使用单个工作线程动态监控所有会话队列"""
 
     def __init__(
         self,
@@ -51,44 +51,41 @@ class WecomAIQueueListener:
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
-        self.running_tasks = set()
-
-    async def listen_to_queue(self, session_id: str):
-        """监听特定会话的队列"""
-        queue = self.queue_mgr.get_or_create_queue(session_id)
-        while True:
-            try:
-                data = await queue.get()
-                await self.callback(data)
-            except Exception as e:
-                logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
-                break
 
     async def run(self):
-        """监控新会话队列并启动监听器"""
-        monitored_sessions = set()
-
+        """单个工作线程动态监控所有会话队列"""
         while True:
-            # 检查新会话
-            current_sessions = set(self.queue_mgr.queues.keys())
-            new_sessions = current_sessions - monitored_sessions
+            # 获取当前活跃的会话列表
+            session_ids = list(self.queue_mgr.queues.keys())
 
-            # 为新会话启动监听器
-            for session_id in new_sessions:
-                task = asyncio.create_task(self.listen_to_queue(session_id))
-                self.running_tasks.add(task)
-                task.add_done_callback(self.running_tasks.discard)
-                monitored_sessions.add(session_id)
-                logger.debug(f"[WecomAI] 为会话启动监听器: {session_id}")
+            if not session_ids:
+                # 没有活跃会话，等待后再检查
+                await asyncio.sleep(0.1)
+                continue
 
-            # 清理已不存在的会话
-            removed_sessions = monitored_sessions - current_sessions
-            monitored_sessions -= removed_sessions
+            # 公平地处理所有活跃队列中的消息
+            for session_id in session_ids:
+                # 检查队列是否仍然存在（可能已被移除）
+                if session_id not in self.queue_mgr.queues:
+                    continue
+
+                queue = self.queue_mgr.queues[session_id]
+
+                try:
+                    # 非阻塞获取，立即超时
+                    data = await asyncio.wait_for(queue.get(), timeout=0.01)
+                    await self.callback(data)
+                except asyncio.TimeoutError:
+                    # 该队列中没有消息，继续下一个
+                    continue
+                except Exception as e:
+                    logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
 
             # 清理过期的待处理响应
             self.queue_mgr.cleanup_expired_responses()
 
-            await asyncio.sleep(1)  # 每秒检查一次新会话
+            # 短暂延迟以防止队列为空时的紧密循环
+            await asyncio.sleep(0.01)
 
 
 @register_platform_adapter(
