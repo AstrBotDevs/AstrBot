@@ -29,43 +29,40 @@ class QueueListener:
     def __init__(self, webchat_queue_mgr: WebChatQueueMgr, callback: Callable) -> None:
         self.webchat_queue_mgr = webchat_queue_mgr
         self.callback = callback
-        self.running_tasks = set()
-
-    async def listen_to_queue(self, conversation_id: str):
-        """Listen to a specific conversation queue"""
-        queue = self.webchat_queue_mgr.get_or_create_queue(conversation_id)
-        while True:
-            try:
-                data = await queue.get()
-                await self.callback(data)
-            except Exception as e:
-                logger.error(
-                    f"Error processing message from conversation {conversation_id}: {e}",
-                )
-                break
 
     async def run(self):
-        """Monitor for new conversation queues and start listeners"""
-        monitored_conversations = set()
-
+        """Single worker that monitors all conversation queues dynamically"""
         while True:
-            # Check for new conversations
-            current_conversations = set(self.webchat_queue_mgr.queues.keys())
-            new_conversations = current_conversations - monitored_conversations
+            # Get current active conversations
+            conversation_ids = list(self.webchat_queue_mgr.queues.keys())
 
-            # Start listeners for new conversations
-            for conversation_id in new_conversations:
-                task = asyncio.create_task(self.listen_to_queue(conversation_id))
-                self.running_tasks.add(task)
-                task.add_done_callback(self.running_tasks.discard)
-                monitored_conversations.add(conversation_id)
-                logger.debug(f"Started listener for conversation: {conversation_id}")
+            if not conversation_ids:
+                # No active conversations, wait before checking again
+                await asyncio.sleep(0.1)
+                continue
 
-            # Clean up monitored conversations that no longer exist
-            removed_conversations = monitored_conversations - current_conversations
-            monitored_conversations -= removed_conversations
+            # Process messages from all active queues in a fair manner
+            for conversation_id in conversation_ids:
+                # Check if queue still exists (might have been removed)
+                if conversation_id not in self.webchat_queue_mgr.queues:
+                    continue
 
-            await asyncio.sleep(1)  # Check for new conversations every second
+                queue = self.webchat_queue_mgr.queues[conversation_id]
+
+                try:
+                    # Non-blocking get with immediate timeout
+                    data = await asyncio.wait_for(queue.get(), timeout=0.01)
+                    await self.callback(data)
+                except asyncio.TimeoutError:
+                    # No message in this queue, continue to next
+                    continue
+                except Exception as e:
+                    logger.error(
+                        f"Error processing message from conversation {conversation_id}: {e}",
+                    )
+
+            # Small delay to prevent tight loop when queues are empty
+            await asyncio.sleep(0.01)
 
 
 @register_platform_adapter("webchat", "webchat")
