@@ -1,5 +1,7 @@
 """使用此功能应该先 pip install baidu-aip"""
 
+from typing import Any, cast
+
 from aip import AipContentCensor
 
 from . import ContentSafetyStrategy
@@ -23,7 +25,8 @@ class BaiduAipStrategy(ContentSafetyStrategy):
         count = len(res["data"])
         parts = [f"百度审核服务发现 {count} 处违规：\n"]
         for i in res["data"]:
-            parts.append(f"{i['msg']}；\n")
+            # 百度 AIP 返回结构是动态 dict；类型检查时 i 可能被推断为序列，转成 dict 后用 get 取字段
+            parts.append(f"{cast(dict[str, Any], i).get('msg', '')}；\n")
         parts.append("\n判断结果：" + res["conclusion"])
         info = "".join(parts)
         return False, info
