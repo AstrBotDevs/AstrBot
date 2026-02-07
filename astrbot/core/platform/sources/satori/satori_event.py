@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -160,7 +161,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         try:
             content_parts = []
 

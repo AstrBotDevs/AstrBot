@@ -1,5 +1,6 @@
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from astrbot.core.message.components import Plain
@@ -59,7 +60,9 @@ class CronMessageEvent(AstrMessageEvent):
         await self.context_obj.send_message(self.session, message)
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ) -> None:
         async for chain in generator:
             await self.send(chain)
 

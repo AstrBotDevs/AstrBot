@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from collections.abc import AsyncGenerator
 from typing import cast
 
 from wechatpy import WeChatClient
@@ -175,7 +176,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         buffer = None
         async for chain in generator:
             if not buffer:
