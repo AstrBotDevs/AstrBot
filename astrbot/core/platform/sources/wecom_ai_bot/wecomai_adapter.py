@@ -11,6 +11,8 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from quart import Request, ResponseReturnValue
+
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Image, Plain
@@ -53,7 +55,7 @@ class WecomAIQueueListener:
         self.callback = callback
         self.running_tasks = set()
 
-    async def listen_to_queue(self, session_id: str):
+    async def listen_to_queue(self, session_id: str) -> None:
         """监听特定会话的队列"""
         queue = self.queue_mgr.get_or_create_queue(session_id)
         while True:
@@ -64,7 +66,7 @@ class WecomAIQueueListener:
                 logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
                 break
 
-    async def run(self):
+    async def run(self) -> None:
         """监控新会话队列并启动监听器"""
         monitored_sessions = set()
 
@@ -104,7 +106,7 @@ class WecomAIBotAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self.settings = platform_settings
 
         # 初始化配置参数
@@ -154,7 +156,7 @@ class WecomAIBotAdapter(Platform):
             self._handle_queued_message,
         )
 
-    async def _handle_queued_message(self, data: dict):
+    async def _handle_queued_message(self, data: dict) -> None:
         """处理队列中的消息，类似webchat的callback"""
         try:
             abm = await self.convert_message(data)
@@ -314,7 +316,7 @@ class WecomAIBotAdapter(Platform):
         callback_params: dict[str, str],
         stream_id: str,
         session_id: str,
-    ):
+    ) -> None:
         """将消息放入队列进行异步处理"""
         input_queue = self.queue_mgr.get_or_create_queue(stream_id)
         _ = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -418,7 +420,7 @@ class WecomAIBotAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         """通过会话发送消息"""
         # 企业微信智能机器人主要通过回调响应，这里记录日志
         logger.info("会话发送消息: %s -> %s", session.session_id, message_chain)
@@ -427,7 +429,7 @@ class WecomAIBotAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
 
-        async def run_both():
+        async def run_both() -> None:
             # 如果启用统一 webhook 模式，则不启动独立服务器
             webhook_uuid = self.config.get("webhook_uuid")
             if self.unified_webhook_mode and webhook_uuid:
@@ -446,7 +448,7 @@ class WecomAIBotAdapter(Platform):
 
         return run_both()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
@@ -454,7 +456,7 @@ class WecomAIBotAdapter(Platform):
         else:
             return await self.server.handle_callback(request)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止适配器"""
         logger.info("企业微信智能机器人适配器正在关闭...")
         self.shutdown_event.set()
@@ -464,7 +466,7 @@ class WecomAIBotAdapter(Platform):
         """获取平台元数据"""
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         """处理消息，创建消息事件并提交到事件队列"""
         try:
             message_event = WecomAIBotMessageEvent(

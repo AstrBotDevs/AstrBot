@@ -5,7 +5,7 @@ import re
 import uuid
 from collections.abc import AsyncGenerator
 from time import time
-from typing import Any
+from typing import Any, TypeVar, overload
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
@@ -23,12 +23,15 @@ from astrbot.core.message.components import (
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
 from .astrbot_message import AstrBotMessage, Group
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
+
+_VT = TypeVar("_VT")
 
 
 class AstrMessageEvent(abc.ABC):
@@ -38,7 +41,7 @@ class AstrMessageEvent(abc.ABC):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-    ):
+    ) -> None:
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -91,7 +94,7 @@ class AstrMessageEvent(abc.ABC):
         return str(self.session)
 
     @unified_msg_origin.setter
-    def unified_msg_origin(self, value: str):
+    def unified_msg_origin(self, value: str) -> None:
         """设置统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
         self.new_session = MessageSession.from_str(value)
         self.session = self.new_session
@@ -102,18 +105,18 @@ class AstrMessageEvent(abc.ABC):
         return self.session.session_id
 
     @session_id.setter
-    def session_id(self, value: str):
+    def session_id(self, value: str) -> None:
         """设置用户的会话 ID。可以直接使用下面的 unified_msg_origin"""
         self.session.session_id = value
 
-    def get_platform_name(self):
+    def get_platform_name(self) -> str:
         """获取这个事件所属的平台的类型（如 aiocqhttp, slack, discord 等）。
 
         NOTE: 用户可能会同时运行多个相同类型的平台适配器。
         """
         return self.platform_meta.name
 
-    def get_platform_id(self):
+    def get_platform_id(self) -> str:
         """获取这个事件所属的平台的 ID。
 
         NOTE: 用户可能会同时运行多个相同类型的平台适配器，但能确定的是 ID 是唯一的。
@@ -191,17 +194,23 @@ class AstrMessageEvent(abc.ABC):
             return self.message_obj.sender.nickname
         return ""
 
-    def set_extra(self, key, value):
+    def set_extra(self, key: str, value: object) -> None:
         """设置额外的信息。"""
         self._extras[key] = value
 
-    def get_extra(self, key: str | None = None, default=None) -> Any:
+    @overload
+    def get_extra(self, key: str, default: _VT = None) -> _VT: ...
+
+    @overload
+    def get_extra(self, key: None = None, default: object | None = None) -> dict: ...
+
+    def get_extra(self, key: str | None = None, default: _VT = None) -> dict | _VT:
         """获取额外的信息。"""
         if key is None:
             return self._extras
         return self._extras.get(key, default)
 
-    def clear_extra(self):
+    def clear_extra(self) -> None:
         """清除额外的信息。"""
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
@@ -234,7 +243,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ):
+    ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
@@ -244,13 +253,13 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def _pre_send(self):
+    async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
-    async def _post_send(self):
+    async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
-    def set_result(self, result: MessageEventResult | str):
+    def set_result(self, result: MessageEventResult | str) -> None:
         """设置消息事件的结果。
 
         Note:
@@ -279,14 +288,14 @@ class AstrMessageEvent(abc.ABC):
             result.chain = []
         self._result = result
 
-    def stop_event(self):
+    def stop_event(self) -> None:
         """终止事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
             self._result.stop_event()
 
-    def continue_event(self):
+    def continue_event(self) -> None:
         """继续事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
@@ -299,7 +308,7 @@ class AstrMessageEvent(abc.ABC):
             return False  # 默认是继续传播
         return self._result.is_stopped()
 
-    def should_call_llm(self, call_llm: bool):
+    def should_call_llm(self, call_llm: bool) -> None:
         """是否在此消息事件中禁止默认的 LLM 请求。
 
         只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
@@ -310,7 +319,7 @@ class AstrMessageEvent(abc.ABC):
         """获取消息事件的结果。"""
         return self._result
 
-    def clear_result(self):
+    def clear_result(self) -> None:
         """清除消息事件的结果。"""
         self._result = None
 
@@ -355,7 +364,7 @@ class AstrMessageEvent(abc.ABC):
     def request_llm(
         self,
         prompt: str,
-        func_tool_manager=None,
+        func_tool_manager: FunctionToolManager | None = None,
         tool_set: ToolSet | None = None,
         session_id: str = "",
         image_urls: list[str] | None = None,
@@ -404,7 +413,7 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息到消息平台。
 
         Args:
@@ -423,7 +432,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         """对消息添加表情回应。
 
         默认实现为发送一条包含该表情的消息。
@@ -432,7 +441,9 @@ class AstrMessageEvent(abc.ABC):
         """
         await self.send(MessageChain([Plain(emoji)]))
 
-    async def get_group(self, group_id: str | None = None, **kwargs) -> Group | None:
+    async def get_group(
+        self, group_id: str | None = None, **kwargs: object
+    ) -> Group | None:
         """获取一个群聊的数据, 如果不填写 group_id: 如果是私聊消息，返回 None。如果是群聊消息，返回当前群聊的数据。
 
         适配情况:

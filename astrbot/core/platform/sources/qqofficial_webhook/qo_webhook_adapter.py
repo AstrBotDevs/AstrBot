@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from typing import Any, cast
+from typing import cast
 
 import botpy
 import botpy.message
 import botpy.types
 import botpy.types.message
 from botpy import Client
+from quart import Request, ResponseReturnValue
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -26,11 +27,13 @@ for handler in logging.root.handlers[:]:
 
 # QQ 机器人官方框架
 class botClient(Client):
-    def set_platform(self, platform: "QQOfficialWebhookPlatformAdapter"):
+    def set_platform(self, platform: "QQOfficialWebhookPlatformAdapter") -> None:
         self.platform = platform
 
     # 收到群消息
-    async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
+    async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -40,7 +43,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到频道消息
-    async def on_at_message_create(self, message: botpy.message.Message):
+    async def on_at_message_create(self, message: botpy.message.Message) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -50,7 +53,9 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到私聊消息
-    async def on_direct_message_create(self, message: botpy.message.DirectMessage):
+    async def on_direct_message_create(
+        self, message: botpy.message.DirectMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -59,7 +64,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到 C2C 消息
-    async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
+    async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -67,7 +72,7 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self._commit(abm)
 
-    def _commit(self, abm: AstrBotMessage):
+    def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.commit_event(
             QQOfficialWebhookMessageEvent(
                 abm.message_str,
@@ -87,7 +92,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
 
         self.appid = platform_config["appid"]
         self.secret = platform_config["secret"]
@@ -110,7 +115,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
@@ -121,7 +126,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             support_proactive_message=False,
         )
 
-    async def run(self):
+    async def run(self) -> None:
         self.webhook_helper = QQOfficialWebhook(
             self.config,
             self._event_queue,
@@ -141,7 +146,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_helper:
             return {"error": "Webhook helper not initialized"}, 500
@@ -149,7 +154,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         # 复用 webhook_helper 的回调处理逻辑
         return await self.webhook_helper.handle_callback(request)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         if self.webhook_helper:
             self.webhook_helper.shutdown_event.set()
         await self.client.close()

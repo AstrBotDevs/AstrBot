@@ -7,7 +7,10 @@ import ssl
 import time
 import uuid
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
+from types import TracebackType
+from typing import Any
 
 import aiohttp
 import certifi
@@ -19,7 +22,11 @@ from .astrbot_path import get_astrbot_data_path
 logger = logging.getLogger("astrbot")
 
 
-def on_error(func, path, exc_info):
+def on_error(
+    func: Callable[..., Any],
+    path: str,
+    exc_info: tuple[type[BaseException], BaseException, TracebackType],
+) -> None:
     """A callback of the rmtree function."""
     import stat
 
@@ -37,7 +44,7 @@ def remove_dir(file_path: str) -> bool:
     return True
 
 
-def port_checker(port: int, host: str = "localhost"):
+def port_checker(port: int, host: str = "localhost") -> bool:
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
     try:
@@ -134,7 +141,7 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False):
+async def download_file(url: str, path: str, show_progress: bool = False) -> None:
     """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(
@@ -217,7 +224,7 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
-def get_local_ip_addresses():
+def get_local_ip_addresses() -> list[str]:
     net_interfaces = psutil.net_if_addrs()
     network_ips = []
 
@@ -229,7 +236,7 @@ def get_local_ip_addresses():
     return network_ips
 
 
-async def get_dashboard_version():
+async def get_dashboard_version() -> str | None:
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")

@@ -1,8 +1,23 @@
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Generic
+
+from typing_extensions import TypedDict, Unpack
+
+from astrbot.core.message.message_event_result import MessageEventResult
 
 from .agent import Agent
 from .run_context import TContext
-from .tool import FunctionTool
+from .tool import FunctionTool, ParametersType
+
+
+class HandoffInitKwargs(TypedDict, total=False):
+    handler: (
+        Callable[..., Awaitable[str | None] | AsyncGenerator[MessageEventResult]] | None
+    )
+    handler_module_path: str | None
+    active: bool
 
 
 class HandoffTool(FunctionTool, Generic[TContext]):
@@ -11,10 +26,10 @@ class HandoffTool(FunctionTool, Generic[TContext]):
     def __init__(
         self,
         agent: Agent[TContext],
-        parameters: dict | None = None,
+        parameters: ParametersType | None = None,
         tool_description: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Unpack[HandoffInitKwargs],
+    ) -> None:
         self.agent = agent
 
         # Avoid passing duplicate `description` to the FunctionTool dataclass.

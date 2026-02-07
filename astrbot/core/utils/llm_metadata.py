@@ -29,7 +29,7 @@ class LLMMetadata(TypedDict):
 LLM_METADATAS: dict[str, LLMMetadata] = {}
 
 
-async def update_llm_metadata():
+async def update_llm_metadata() -> None:
     url = "https://models.dev/api.json"
     try:
         async with aiohttp.ClientSession() as session:

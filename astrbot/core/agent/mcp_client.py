@@ -4,6 +4,7 @@ from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
 
+from mcp.types import CallToolResult
 from tenacity import (
     before_sleep_log,
     retry,
@@ -108,7 +109,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize session and client objects
         self.session: mcp.ClientSession | None = None
         self.exit_stack = AsyncExitStack()
@@ -126,7 +127,7 @@ class MCPClient:
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False  # For logging and debugging
 
-    async def connect_to_server(self, mcp_server_config: dict, name: str):
+    async def connect_to_server(self, mcp_server_config: dict, name: str) -> None:
         """Connect to MCP server
 
         If `url` parameter exists:
@@ -144,7 +145,7 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(msg: str):
+        def logging_callback(msg: str) -> None:
             # Handle MCP service error logs
             print(f"MCP Server {name} Error: {msg}")
             self.server_errlogs.append(msg)
@@ -214,7 +215,7 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str):
+            def callback(msg: str) -> None:
                 # Handle MCP service error logs
                 self.server_errlogs.append(msg)
 
@@ -322,7 +323,7 @@ class MCPClient:
             before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
-        async def _call_with_retry():
+        async def _call_with_retry() -> CallToolResult:
             if not self.session:
                 raise ValueError("MCP session is not available for MCP function tools.")
 
@@ -343,7 +344,7 @@ class MCPClient:
 
         return await _call_with_retry()
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources including old exit stacks from reconnections"""
         # Close current exit stack
         try:
@@ -364,8 +365,12 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
-    ):
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        **kwargs: object,
+    ) -> None:
         super().__init__(
             name=mcp_tool.name,
             description=mcp_tool.description or "",
@@ -376,7 +381,9 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_server_name = mcp_server_name
 
     async def call(
-        self, context: ContextWrapper[TContext], **kwargs
+        self,
+        context: ContextWrapper[TContext],
+        **kwargs: object,
     ) -> mcp.types.CallToolResult:
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,

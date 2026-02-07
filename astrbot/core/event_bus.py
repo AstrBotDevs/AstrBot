@@ -28,13 +28,13 @@ class EventBus:
         event_queue: Queue,
         pipeline_scheduler_mapping: dict[str, PipelineScheduler],
         astrbot_config_mgr: AstrBotConfigManager,
-    ):
+    ) -> None:
         self.event_queue = event_queue  # 事件队列
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
 
-    async def dispatch(self):
+    async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
@@ -47,7 +47,7 @@ class EventBus:
                 continue
             asyncio.create_task(scheduler.execute(event))
 
-    def _print_event(self, event: AstrMessageEvent, conf_name: str):
+    def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息
 
         Args:

@@ -3,7 +3,7 @@ import traceback
 from datetime import datetime
 from io import BytesIO
 
-from quart import request, send_file
+from quart import ResponseReturnValue, request, send_file
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -39,7 +39,7 @@ class ConversationRoute(Route):
         self.core_lifecycle = core_lifecycle
         self.register_routes()
 
-    async def list_conversations(self):
+    async def list_conversations(self) -> ResponseReturnValue:
         """获取对话列表，支持分页、排序和筛选"""
         try:
             # 获取分页参数
@@ -104,7 +104,7 @@ class ConversationRoute(Route):
             logger.error(error_msg)
             return Response().error(f"获取对话列表失败: {e!s}").__dict__
 
-    async def get_conv_detail(self):
+    async def get_conv_detail(self) -> ResponseReturnValue:
         """获取指定对话详情（通过POST请求）"""
         try:
             data = await request.get_json()
@@ -141,7 +141,7 @@ class ConversationRoute(Route):
             logger.error(f"获取对话详情失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"获取对话详情失败: {e!s}").__dict__
 
-    async def upd_conv(self):
+    async def upd_conv(self) -> ResponseReturnValue:
         """更新对话信息(标题和角色ID)"""
         try:
             data = await request.get_json()
@@ -171,7 +171,7 @@ class ConversationRoute(Route):
             logger.error(f"更新对话信息失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新对话信息失败: {e!s}").__dict__
 
-    async def del_conv(self):
+    async def del_conv(self) -> ResponseReturnValue:
         """删除对话"""
         try:
             data = await request.get_json()
@@ -240,7 +240,7 @@ class ConversationRoute(Route):
             logger.error(f"删除对话失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"删除对话失败: {e!s}").__dict__
 
-    async def update_history(self):
+    async def update_history(self) -> ResponseReturnValue:
         """更新对话历史内容"""
         try:
             data = await request.get_json()
@@ -287,7 +287,7 @@ class ConversationRoute(Route):
             logger.error(f"更新对话历史失败: {e!s}\n{traceback.format_exc()}")
             return Response().error(f"更新对话历史失败: {e!s}").__dict__
 
-    async def export_conversations(self):
+    async def export_conversations(self) -> ResponseReturnValue:
         """批量导出对话为 JSONL 格式"""
         try:
             data = await request.get_json()

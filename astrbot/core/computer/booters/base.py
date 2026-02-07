@@ -22,7 +22,7 @@ class ComputerBooter:
         """
         ...
 
-    async def download_file(self, remote_path: str, local_path: str):
+    async def download_file(self, remote_path: str, local_path: str) -> None:
         """Download file from the computer."""
         ...
 

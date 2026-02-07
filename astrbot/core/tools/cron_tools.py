@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import cast
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -148,7 +149,7 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
             return "error: cron manager is not available."
-        job_type = kwargs.get("job_type")
+        job_type = cast(str | None, kwargs.get("job_type"))
         jobs = await cron_mgr.list_jobs(job_type)
         if not jobs:
             return "No cron jobs found."

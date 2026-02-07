@@ -3,10 +3,10 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 
 
 class LLMCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def llm(self, event: AstrMessageEvent):
+    async def llm(self, event: AstrMessageEvent) -> None:
         """开启/关闭 LLM"""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         enable = cfg["provider_settings"].get("enable", True)

@@ -1,4 +1,5 @@
 import traceback
+from collections.abc import AsyncGenerator
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
@@ -18,14 +19,16 @@ class Main(star.Star):
         except BaseException as e:
             logger.error(f"聊天增强 err: {e}")
 
-    def ltm_enabled(self, event: AstrMessageEvent):
+    def ltm_enabled(self, event: AstrMessageEvent) -> bool:
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
             "provider_ltm_settings"
         ]
         return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
-    async def on_message(self, event: AstrMessageEvent):
+    async def on_message(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[ProviderRequest, None]:
         """群聊记忆增强"""
         has_image_or_plain = False
         for comp in event.message_obj.message:
@@ -85,7 +88,9 @@ class Main(star.Star):
                     logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
-    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
+    async def decorate_llm_req(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
             try:
@@ -94,7 +99,9 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.on_llm_response()
-    async def record_llm_resp_to_ltm(self, event: AstrMessageEvent, resp: LLMResponse):
+    async def record_llm_resp_to_ltm(
+        self, event: AstrMessageEvent, resp: LLMResponse
+    ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
             try:
@@ -103,7 +110,7 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.after_message_sent()
-    async def after_message_sent(self, event: AstrMessageEvent):
+    async def after_message_sent(self, event: AstrMessageEvent) -> None:
         """消息发送后处理"""
         if self.ltm and self.ltm_enabled(event):
             try:

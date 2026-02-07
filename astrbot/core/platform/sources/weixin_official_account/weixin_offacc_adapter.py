@@ -2,7 +2,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import cast
 
 import quart
 from requests import Response
@@ -35,7 +35,7 @@ else:
 
 
 class WeixinOfficialAccountServer:
-    def __init__(self, event_queue: asyncio.Queue, config: dict):
+    def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
@@ -129,7 +129,7 @@ class WeixinOfficialAccountServer:
 
         return "success"
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。",
         )
@@ -139,7 +139,7 @@ class WeixinOfficialAccountServer:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
 
@@ -153,7 +153,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self.settingss = platform_settings
         self.client_self_id = uuid.uuid4().hex[:8]
         self.api_base_url = platform_config.get(
@@ -218,7 +218,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         await super().send_by_session(session, message_chain)
 
     @override
@@ -232,7 +232,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         # 如果启用统一 webhook 模式，则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
@@ -242,7 +242,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         else:
             await self.server.start_polling()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(
+        self, request: quart.Request
+    ) -> quart.ResponseReturnValue:
         """统一 Webhook 回调入口"""
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
@@ -331,7 +333,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -344,7 +346,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     def get_client(self) -> WeChatClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()

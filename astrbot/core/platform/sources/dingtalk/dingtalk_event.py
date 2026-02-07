@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import dingtalk_stream
@@ -17,7 +18,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         session_id,
         client: dingtalk_stream.ChatbotHandler,
         adapter: "Any" = None,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
         self.adapter = adapter
@@ -26,7 +27,7 @@ class DingtalkMessageEvent(AstrMessageEvent):
         self,
         client: dingtalk_stream.ChatbotHandler,
         message: MessageChain,
-    ):
+    ) -> None:
         icm = cast(dingtalk_stream.ChatbotMessage, self.message_obj.raw_message)
         ats = []
         # fixes: #4218
@@ -80,11 +81,13 @@ class DingtalkMessageEvent(AstrMessageEvent):
                     logger.warning(f"钉钉图片处理失败: {e}, 跳过图片发送")
                     continue
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         await self.send_with_client(self.client, message)
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         if not self.adapter or not self.adapter.card_template_id:
             logger.warning(
                 f"DingTalk streaming is enabled, but 'card_template_id' is not configured for platform '{self.platform_meta.id}'. Falling back to text streaming."

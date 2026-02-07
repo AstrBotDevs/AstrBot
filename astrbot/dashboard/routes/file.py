@@ -1,4 +1,4 @@
-from quart import abort, send_file
+from quart import ResponseReturnValue, abort, send_file
 
 from astrbot import logger
 from astrbot.core import file_token_service
@@ -17,7 +17,7 @@ class FileRoute(Route):
         }
         self.register_routes()
 
-    async def serve_file(self, file_token: str):
+    async def serve_file(self, file_token: str) -> ResponseReturnValue:
         try:
             file_path = await file_token_service.handle_file(file_token)
             return await send_file(file_path)

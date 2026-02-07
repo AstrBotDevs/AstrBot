@@ -19,7 +19,7 @@ class AuthRoute(Route):
         }
         self.register_routes()
 
-    async def login(self):
+    async def login(self) -> dict:
         username = self.config["dashboard"]["username"]
         password = self.config["dashboard"]["password"]
         post_data = await request.json
@@ -47,7 +47,7 @@ class AuthRoute(Route):
         await asyncio.sleep(3)
         return Response().error("用户名或密码错误").__dict__
 
-    async def edit_account(self):
+    async def edit_account(self) -> dict:
         if DEMO_MODE:
             return (
                 Response()
@@ -77,7 +77,7 @@ class AuthRoute(Route):
 
         return Response().ok(None, "修改成功").__dict__
 
-    def generate_jwt(self, username):
+    def generate_jwt(self, username: str) -> str:
         payload = {
             "username": username,
             "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7),

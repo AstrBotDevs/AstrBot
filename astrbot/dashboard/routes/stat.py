@@ -7,7 +7,7 @@ from functools import cmp_to_key
 
 import aiohttp
 import psutil
-from quart import request
+from quart import ResponseReturnValue, request
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.config import VERSION
@@ -42,7 +42,7 @@ class StatRoute(Route):
         self.register_routes()
         self.core_lifecycle = core_lifecycle
 
-    async def restart_core(self):
+    async def restart_core(self) -> ResponseReturnValue:
         if DEMO_MODE:
             return (
                 Response()
@@ -53,13 +53,13 @@ class StatRoute(Route):
         await self.core_lifecycle.restart()
         return Response().ok().__dict__
 
-    def _get_running_time_components(self, total_seconds: int):
+    def _get_running_time_components(self, total_seconds: int) -> dict[str, int]:
         """将总秒数转换为时分秒组件"""
         minutes, seconds = divmod(total_seconds, 60)
         hours, minutes = divmod(minutes, 60)
         return {"hours": hours, "minutes": minutes, "seconds": seconds}
 
-    def is_default_cred(self):
+    def is_default_cred(self) -> bool:
         username = self.config["dashboard"]["username"]
         password = self.config["dashboard"]["password"]
         return (
@@ -68,7 +68,7 @@ class StatRoute(Route):
             and not DEMO_MODE
         )
 
-    async def get_version(self):
+    async def get_version(self) -> ResponseReturnValue:
         need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
 
         return (
@@ -84,10 +84,10 @@ class StatRoute(Route):
             .__dict__
         )
 
-    async def get_start_time(self):
+    async def get_start_time(self) -> ResponseReturnValue:
         return Response().ok({"start_time": self.core_lifecycle.start_time}).__dict__
 
-    async def get_stat(self):
+    async def get_stat(self) -> ResponseReturnValue:
         offset_sec = request.args.get("offset_sec", 86400)
         offset_sec = int(offset_sec)
         try:
@@ -156,7 +156,7 @@ class StatRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(e.__str__()).__dict__
 
-    async def test_ghproxy_connection(self):
+    async def test_ghproxy_connection(self) -> ResponseReturnValue:
         """测试 GitHub 代理连接是否可用。"""
         try:
             data = await request.get_json()
@@ -191,7 +191,7 @@ class StatRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"Error: {e!s}").__dict__
 
-    async def get_changelog(self):
+    async def get_changelog(self) -> ResponseReturnValue:
         """获取指定版本的更新日志"""
         try:
             version = request.args.get("version")
@@ -249,7 +249,7 @@ class StatRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"Error: {e!s}").__dict__
 
-    async def list_changelog_versions(self):
+    async def list_changelog_versions(self) -> ResponseReturnValue:
         """获取所有可用的更新日志版本列表"""
         try:
             project_path = get_astrbot_path()

@@ -295,7 +295,7 @@ async def _run_agent_feeder(
     max_step: int,
     show_tool_use: bool,
     show_reasoning: bool,
-):
+) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
     try:
@@ -352,7 +352,7 @@ async def _safe_tts_stream_wrapper(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
-):
+) -> None:
     """包装原生流式 TTS 确保异常处理和队列关闭"""
     try:
         await tts_provider.get_audio_stream(text_queue, audio_queue)
@@ -366,7 +366,7 @@ async def _simulated_stream_tts(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
-):
+) -> None:
     """模拟流式 TTS 分句生成音频"""
     try:
         while True:

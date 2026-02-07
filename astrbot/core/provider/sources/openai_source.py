@@ -363,7 +363,7 @@ class ProviderOpenAIOfficial(Provider):
 
         return payloads, context_query
 
-    def _finally_convert_payload(self, payloads: dict):
+    def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
@@ -617,7 +617,7 @@ class ProviderOpenAIOfficial(Provider):
     def get_keys(self) -> list[str]:
         return self.api_keys
 
-    def set_key(self, key):
+    def set_key(self, key) -> None:
         self.client.api_key = key
 
     async def assemble_context(

@@ -24,7 +24,7 @@ class SlackMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         web_client: AsyncWebClient,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.web_client = web_client
 
@@ -126,7 +126,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
         return blocks, "" if blocks else text_content
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
@@ -174,7 +174,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
     async def send_streaming(
         self,
-        generator: AsyncGenerator,
+        generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
     ):
         if not use_fallback:

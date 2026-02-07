@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import uuid
+from collections.abc import AsyncGenerator
 from io import BytesIO
 
 import lark_oapi as lark
@@ -31,7 +32,7 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
 
@@ -110,7 +111,7 @@ class LarkMessageEvent(AstrMessageEvent):
             ret.append(_stage)
         return ret
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         res = await LarkMessageEvent._convert_to_lark(message, self.bot)
         wrapped = {
             "zh_cn": {
@@ -144,7 +145,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return
@@ -165,7 +166,9 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
             return
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         buffer = None
         async for chain in generator:
             if not buffer:

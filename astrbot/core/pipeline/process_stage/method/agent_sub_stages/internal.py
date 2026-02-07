@@ -336,7 +336,7 @@ class InternalAgentSubStage(Stage):
         llm_response: LLMResponse | None,
         all_messages: list[Message],
         runner_stats: AgentStats | None,
-    ):
+    ) -> None:
         if (
             not req
             or not req.conversation

@@ -3,7 +3,9 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from types import TracebackType
 
 import aiofiles
 
@@ -31,14 +33,14 @@ from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
 class RateLimiter:
     """一个简单的速率限制器"""
 
-    def __init__(self, max_rpm: int):
+    def __init__(self, max_rpm: int) -> None:
         self.max_per_minute = max_rpm
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "RateLimiter":
         if self.interval == 0:
-            return
+            return self
 
         now = time.monotonic()
         elapsed = now - self.last_call_time
@@ -47,8 +49,14 @@ class RateLimiter:
             await asyncio.sleep(self.interval - elapsed)
 
         self.last_call_time = time.monotonic()
+        return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
 
@@ -116,7 +124,7 @@ class KBHelper:
         provider_manager: ProviderManager,
         kb_root_dir: str,
         chunker: BaseChunker,
-    ):
+    ) -> None:
         self.kb_db = kb_db
         self.kb = kb
         self.prov_mgr = provider_manager
@@ -130,7 +138,7 @@ class KBHelper:
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self._ensure_vec_db()
 
     async def get_ep(self) -> EmbeddingProvider:
@@ -174,7 +182,7 @@ class KBHelper:
         self.vec_db = vec_db
         return vec_db
 
-    async def delete_vec_db(self):
+    async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
         import shutil
 
@@ -182,7 +190,7 @@ class KBHelper:
         if self.kb_dir.exists():
             shutil.rmtree(self.kb_dir)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         if self.vec_db:
             await self.vec_db.close()
 
@@ -196,7 +204,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
@@ -293,7 +301,7 @@ class KBHelper:
                 await progress_callback("chunking", 100, 100)
 
             # 阶段3: 生成向量（带进度回调）
-            async def embedding_progress_callback(current, total):
+            async def embedding_progress_callback(current: int, total: int) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
@@ -360,7 +368,7 @@ class KBHelper:
         doc = await self.kb_db.get_document_by_id(doc_id)
         return doc
 
-    async def delete_document(self, doc_id: str):
+    async def delete_document(self, doc_id: str) -> None:
         """删除单个文档及其相关数据"""
         await self.kb_db.delete_document_by_id(
             doc_id=doc_id,
@@ -372,7 +380,7 @@ class KBHelper:
         )
         await self.refresh_kb()
 
-    async def delete_chunk(self, chunk_id: str, doc_id: str):
+    async def delete_chunk(self, chunk_id: str, doc_id: str) -> None:
         """删除单个文本块及其相关数据"""
         vec_db: FaissVecDB = self.vec_db  # type: ignore
         await vec_db.delete(chunk_id)
@@ -383,7 +391,7 @@ class KBHelper:
         await self.refresh_kb()
         await self.refresh_document(doc_id)
 
-    async def refresh_kb(self):
+    async def refresh_kb(self) -> None:
         if self.kb:
             kb = await self.kb_db.get_kb_by_id(self.kb.kb_id)
             if kb:
@@ -475,7 +483,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
     ) -> KBDocument:
@@ -562,7 +570,7 @@ class KBHelper:
         self,
         content: str,
         url: str,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
         repair_max_rpm: int = 60,

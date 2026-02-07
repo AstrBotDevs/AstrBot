@@ -61,7 +61,7 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 
 @pytest.mark.asyncio
-async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle) -> None:
     """Tests the login functionality with both wrong and correct credentials."""
     test_client = app.test_client()
     response = await test_client.post(
@@ -83,7 +83,7 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
 
 
 @pytest.mark.asyncio
-async def test_get_stat(app: Quart, authenticated_header: dict):
+async def test_get_stat(app: Quart, authenticated_header: dict) -> None:
     test_client = app.test_client()
     response = await test_client.get("/api/stat/get")
     assert response.status_code == 401
@@ -94,7 +94,7 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_plugins(app: Quart, authenticated_header: dict):
+async def test_plugins(app: Quart, authenticated_header: dict) -> None:
     test_client = app.test_client()
     # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
@@ -189,7 +189,7 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_check_update(app: Quart, authenticated_header: dict):
+async def test_check_update(app: Quart, authenticated_header: dict) -> None:
     test_client = app.test_client()
     response = await test_client.get("/api/update/check", headers=authenticated_header)
     assert response.status_code == 200
@@ -204,22 +204,22 @@ async def test_do_update(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path_factory,
-):
+) -> None:
     test_client = app.test_client()
 
     # Use a temporary path for the mock update to avoid side effects
     temp_release_dir = tmp_path_factory.mktemp("release")
     release_path = temp_release_dir / "astrbot"
 
-    async def mock_update(*args, **kwargs):
+    async def mock_update(*args, **kwargs) -> None:
         """Mocks the update process by creating a directory in the temp path."""
         os.makedirs(release_path, exist_ok=True)
 
-    async def mock_download_dashboard(*args, **kwargs):
+    async def mock_download_dashboard(*args, **kwargs) -> None:
         """Mocks the dashboard download to prevent network access."""
         return
 
-    async def mock_pip_install(*args, **kwargs):
+    async def mock_pip_install(*args, **kwargs) -> None:
         """Mocks pip install to prevent actual installation."""
         return
 

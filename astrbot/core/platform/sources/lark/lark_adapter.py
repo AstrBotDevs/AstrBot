@@ -4,7 +4,7 @@ import json
 import re
 import time
 import uuid
-from typing import Any, cast
+from typing import cast
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -13,6 +13,7 @@ from lark_oapi.api.im.v1 import (
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
+from quart import Request, ResponseReturnValue
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
@@ -42,7 +43,7 @@ class LarkPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
 
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
@@ -56,10 +57,10 @@ class LarkPlatformAdapter(Platform):
             logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
         # 初始化 WebSocket 长连接相关配置
-        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1):
+        async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             await self.convert_msg(event)
 
-        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1):
+        def do_v2_msg_event(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
             asyncio.create_task(on_msg_event_recv(event))
 
         self.event_handler = (
@@ -94,7 +95,7 @@ class LarkPlatformAdapter(Platform):
 
         self.event_id_timestamps: dict[str, float] = {}
 
-    def _clean_expired_events(self):
+    def _clean_expired_events(self) -> None:
         """清理超过 30 分钟的事件记录"""
         current_time = time.time()
         expired_keys = [
@@ -124,7 +125,7 @@ class LarkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         if self.lark_api.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送消息")
             return
@@ -173,7 +174,7 @@ class LarkPlatformAdapter(Platform):
             support_streaming_message=False,
         )
 
-    async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1):
+    async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1) -> None:
         if event.event is None:
             logger.debug("[Lark] 收到空事件(event.event is None)")
             return
@@ -323,7 +324,7 @@ class LarkPlatformAdapter(Platform):
         logger.debug(abm)
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage):
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
         event = LarkMessageEvent(
             message_str=abm.message_str,
             message_obj=abm,
@@ -334,7 +335,7 @@ class LarkPlatformAdapter(Platform):
 
         self._event_queue.put_nowait(event)
 
-    async def handle_webhook_event(self, event_data: dict):
+    async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
 
         Args:
@@ -356,7 +357,7 @@ class LarkPlatformAdapter(Platform):
         except Exception as e:
             logger.error(f"[Lark Webhook] 处理事件失败: {e}", exc_info=True)
 
-    async def run(self):
+    async def run(self) -> None:
         if self.connection_mode == "webhook":
             # Webhook 模式
             if self.webhook_server is None:
@@ -372,14 +373,14 @@ class LarkPlatformAdapter(Platform):
             # 长连接模式
             await self.client._connect()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_server:
             return {"error": "Webhook server not initialized"}, 500
 
         return await self.webhook_server.handle_callback(request)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         if self.connection_mode == "socket":
             await self.client._disconnect()
         logger.info("飞书(Lark) 适配器已关闭")

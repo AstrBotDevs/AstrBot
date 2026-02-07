@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import uuid
+from collections.abc import AsyncGenerator
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -15,7 +16,7 @@ imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
 
 
 class WebChatMessageEvent(AstrMessageEvent):
-    def __init__(self, message_str, message_obj, platform_meta, session_id):
+    def __init__(self, message_str, message_obj, platform_meta, session_id) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         os.makedirs(imgs_dir, exist_ok=True)
 
@@ -116,12 +117,14 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain | None):
+    async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ) -> None:
         final_data = ""
         reasoning_content = ""
         cid = self.session_id.split("!")[-1]

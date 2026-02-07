@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+from collections.abc import AsyncGenerator
 
 from wechatpy.enterprise import WeChatClient
 
@@ -28,7 +29,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: WeChatClient,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
@@ -37,7 +38,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         client: WeChatClient,
         message: MessageChain,
         user_name: str,
-    ):
+    ) -> None:
         pass
 
     async def split_plain(self, plain: str) -> list[str]:
@@ -86,7 +87,7 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         return result
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         message_obj = self.message_obj
 
         is_wechat_kf = hasattr(self.client, "kf_message")
@@ -211,7 +212,9 @@ class WecomPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         buffer = None
         async for chain in generator:
             if not buffer:

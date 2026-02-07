@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -28,7 +29,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         adapter: "SatoriPlatformAdapter",
-    ):
+    ) -> None:
         # 更新平台元数据
         if adapter and hasattr(adapter, "logins") and adapter.logins:
             current_login = adapter.logins[0]
@@ -110,7 +111,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             logger.error(f"Satori 消息发送异常: {e}")
             return None
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         platform = getattr(self, "platform", None)
         user_id = getattr(self, "user_id", None)
 
@@ -160,7 +161,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         try:
             content_parts = []
 

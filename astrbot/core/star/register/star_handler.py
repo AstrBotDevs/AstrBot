@@ -155,9 +155,7 @@ def register_custom_filter(custom_type_filter, *args, **kwargs):
 
     def decorator(awaitable):
         # 裸指令，子指令与指令组的区分，指令组会因为标记跳过wake。
-        if (
-            not add_to_event_filters and isinstance(awaitable, RegisteringCommandable)
-        ) or (add_to_event_filters and isinstance(awaitable, RegisteringCommandable)):
+        if isinstance(awaitable, RegisteringCommandable):
             # 指令组 与 根指令组，添加到本层的grouphandle中一起判断
             awaitable.parent_group.add_custom_filter(custom_filter)
         else:
@@ -250,7 +248,7 @@ class RegisteringCommandable:
     command: Callable[..., Callable[..., None]] = register_command
     custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
-    def __init__(self, parent_group: CommandGroupFilter):
+    def __init__(self, parent_group: CommandGroupFilter) -> None:
         self.parent_group = parent_group
 
 
@@ -565,7 +563,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[AstrAgentContext]):
+    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
         self._agent = agent
 
 

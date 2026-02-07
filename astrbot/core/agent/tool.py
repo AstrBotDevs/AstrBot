@@ -1,5 +1,5 @@
 import copy
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from typing import Any, Generic
 
 import jsonschema
@@ -64,10 +64,12 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     with a task identifier while the real work continues asynchronously.
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: object
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
@@ -88,7 +90,7 @@ class ToolSet:
         """Check if the tool set is empty."""
         return len(self.tools) == 0
 
-    def add_tool(self, tool: FunctionTool):
+    def add_tool(self, tool: FunctionTool) -> None:
         """Add a tool to the set."""
         # 检查是否已存在同名工具
         for i, existing_tool in enumerate(self.tools):
@@ -97,7 +99,7 @@ class ToolSet:
                 return
         self.tools.append(tool)
 
-    def remove_tool(self, name: str):
+    def remove_tool(self, name: str) -> None:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
@@ -156,7 +158,7 @@ class ToolSet:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any]],
-    ):
+    ) -> None:
         """Add a function tool to the set."""
         params = {
             "type": "object",  # hard-coded here
@@ -176,7 +178,7 @@ class ToolSet:
         self.add_tool(_func)
 
     @deprecated(reason="Use remove_tool() instead", version="4.0.0")
-    def remove_func(self, name: str):
+    def remove_func(self, name: str) -> None:
         """Remove a function tool by its name."""
         self.remove_tool(name)
 
@@ -310,37 +312,39 @@ class ToolSet:
         return declarations
 
     @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
+    def get_func_desc_openai_style(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list[dict]:
         return self.openai_schema(omit_empty_parameter_field)
 
     @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
-    def get_func_desc_anthropic_style(self):
+    def get_func_desc_anthropic_style(self) -> list[dict]:
         return self.anthropic_schema()
 
     @deprecated(reason="Use google_schema() instead", version="4.0.0")
-    def get_func_desc_google_genai_style(self):
+    def get_func_desc_google_genai_style(self) -> dict:
         return self.google_schema()
 
     def names(self) -> list[str]:
         """获取所有工具的名称列表"""
         return [tool.name for tool in self.tools]
 
-    def merge(self, other: "ToolSet"):
+    def merge(self, other: "ToolSet") -> None:
         """Merge another ToolSet into this one."""
         for tool in other.tools:
             self.add_tool(tool)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tools)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return len(self.tools) > 0
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self.tools)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ToolSet(tools={self.tools})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ToolSet(tools={self.tools})"

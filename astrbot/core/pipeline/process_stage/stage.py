@@ -31,7 +31,7 @@ class ProcessStage(Stage):
     ) -> None | AsyncGenerator[None, None]:
         """处理事件"""
         activated_handlers: list[StarHandlerMetadata] = event.get_extra(
-            "activated_handlers",
+            "activated_handlers", []
         )
         # 有插件 Handler 被激活
         if activated_handlers:

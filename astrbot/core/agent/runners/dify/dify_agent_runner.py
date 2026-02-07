@@ -63,7 +63,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         self.api_client = DifyAPIClient(self.api_key, self.api_base)
 
     @override
-    async def step(self):
+    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
         """
         执行 Dify Agent 的一个步骤
         """
@@ -106,7 +106,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             async for resp in self.step():
                 yield resp
 
-    async def _execute_dify_request(self):
+    async def _execute_dify_request(self) -> T.AsyncGenerator[AgentResponse, None]:
         """执行 Dify 请求的核心逻辑"""
         prompt = self.req.prompt or ""
         session_id = self.req.session_id or "unknown"
@@ -285,7 +285,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
             # Chat
             return MessageChain(chain=[Comp.Plain(chunk)])
 
-        async def parse_file(item: dict):
+        async def parse_file(item: dict) -> object:
             match item["type"]:
                 case "image":
                     return Comp.Image(file=item["url"], url=item["url"])

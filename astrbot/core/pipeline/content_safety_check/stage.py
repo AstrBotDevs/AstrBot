@@ -16,7 +16,7 @@ class ContentSafetyCheckStage(Stage):
     当前只会检查文本的。
     """
 
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         config = ctx.astrbot_config["content_safety"]
         self.strategy_selector = StrategySelector(config)
 

@@ -3,9 +3,10 @@ import base64
 import re
 import time
 import uuid
-from typing import Any, cast
+from typing import cast
 
 import aiohttp
+from quart import Request, ResponseReturnValue
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -39,7 +40,7 @@ class SlackAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, event_queue)
+        super().__init__(platform_config, platform_settings, event_queue)
         self.settings = platform_settings
 
         self.bot_token = platform_config.get("bot_token")
@@ -81,7 +82,7 @@ class SlackAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message_chain=message_chain,
             web_client=self.web_client,
@@ -285,7 +286,7 @@ class SlackAdapter(Platform):
 
         return message_components
 
-    async def _handle_socket_event(self, req: SocketModeRequest):
+    async def _handle_socket_event(self, req: SocketModeRequest) -> None:
         """处理 Socket Mode 事件"""
         if req.type == "events_api":
             # 事件 API
@@ -374,7 +375,7 @@ class SlackAdapter(Platform):
                 f"不支持的连接模式: {self.connection_mode}，请使用 'socket' 或 'webhook'",
             )
 
-    async def _handle_webhook_event(self, event_data: dict):
+    async def _handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件"""
         event = event_data.get("event", {})
 
@@ -394,14 +395,14 @@ class SlackAdapter(Platform):
             if abm:
                 await self.handle_msg(abm)
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if self.connection_mode != "webhook" or not self.webhook_client:
             return {"error": "Slack adapter is not in webhook mode"}, 400
 
         return await self.webhook_client.handle_callback(request)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         if self.socket_client:
             await self.socket_client.stop()
         if self.webhook_client:
@@ -411,7 +412,7 @@ class SlackAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = SlackMessageEvent(
             message_str=message.message_str,
             message_obj=message,
