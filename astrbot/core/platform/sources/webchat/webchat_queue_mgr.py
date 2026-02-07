@@ -10,6 +10,8 @@ class WebChatQueueMgr:
         """Conversation ID to asyncio.Queue mapping"""
         self.back_queues: dict[str, asyncio.Queue] = {}
         """Request ID to asyncio.Queue mapping for responses"""
+        self._conversation_back_requests: dict[str, set[str]] = {}
+        self._request_conversation: dict[str, str] = {}
         self._queue_close_events: dict[str, asyncio.Event] = {}
         self._listener_tasks: dict[str, asyncio.Task] = {}
         self._listener_callback: Callable[[tuple], Awaitable[None]] | None = None
@@ -24,20 +26,41 @@ class WebChatQueueMgr:
             self._start_listener_if_needed(conversation_id)
         return self.queues[conversation_id]
 
-    def get_or_create_back_queue(self, request_id: str) -> asyncio.Queue:
+    def get_or_create_back_queue(
+        self,
+        request_id: str,
+        conversation_id: str | None = None,
+    ) -> asyncio.Queue:
         """Get or create a back queue for the given request ID"""
         if request_id not in self.back_queues:
             self.back_queues[request_id] = asyncio.Queue(
                 maxsize=self.back_queue_maxsize
             )
+        if conversation_id:
+            self._request_conversation[request_id] = conversation_id
+            if conversation_id not in self._conversation_back_requests:
+                self._conversation_back_requests[conversation_id] = set()
+            self._conversation_back_requests[conversation_id].add(request_id)
         return self.back_queues[request_id]
 
     def remove_back_queue(self, request_id: str):
         """Remove back queue for the given request ID"""
         self.back_queues.pop(request_id, None)
+        conversation_id = self._request_conversation.pop(request_id, None)
+        if conversation_id:
+            request_ids = self._conversation_back_requests.get(conversation_id)
+            if request_ids is not None:
+                request_ids.discard(request_id)
+                if not request_ids:
+                    self._conversation_back_requests.pop(conversation_id, None)
 
     def remove_queues(self, conversation_id: str):
         """Remove queues for the given conversation ID"""
+        for request_id in list(
+            self._conversation_back_requests.get(conversation_id, set())
+        ):
+            self.remove_back_queue(request_id)
+        self._conversation_back_requests.pop(conversation_id, None)
         self.remove_queue(conversation_id)
 
     def remove_queue(self, conversation_id: str):

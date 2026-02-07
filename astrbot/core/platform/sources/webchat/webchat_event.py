@@ -27,7 +27,11 @@ class WebChatMessageEvent(AstrMessageEvent):
         streaming: bool = False,
     ) -> str | None:
         request_id = str(message_id)
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(request_id)
+        conversation_id = session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            request_id,
+            conversation_id,
+        )
         if not message:
             await web_chat_back_queue.put(
                 {
@@ -126,7 +130,11 @@ class WebChatMessageEvent(AstrMessageEvent):
         reasoning_content = ""
         message_id = self.message_obj.message_id
         request_id = str(message_id)
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(request_id)
+        conversation_id = self.session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            request_id,
+            conversation_id,
+        )
         async for chain in generator:
             # 处理音频流（Live Mode）
             if chain.type == "audio_chunk":

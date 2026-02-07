@@ -359,7 +359,10 @@ class ChatRoute(Route):
         message_parts = await self._build_user_message_parts(message)
 
         message_id = str(uuid.uuid4())
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id)
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            message_id,
+            webchat_conv_id,
+        )
 
         async def stream():
             client_disconnected = False

@@ -256,7 +256,7 @@ class LiveChatRoute(Route):
             await queue.put((session.username, cid, payload))
 
             # 3. 等待响应并流式发送 TTS 音频
-            back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id)
+            back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, cid)
 
             bot_text = ""
             audio_playing = False
