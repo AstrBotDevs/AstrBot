@@ -274,7 +274,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """通用的消息链发送方法
 
         Args:
@@ -342,7 +342,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 media_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(
             message,
@@ -358,7 +358,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送文件消息
 
         Args:
@@ -392,7 +392,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送音频消息
 
         Args:
@@ -465,7 +465,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送视频消息
 
         Args:
