@@ -4,7 +4,7 @@ import os
 import platform
 import socket
 from collections.abc import Callable
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import cast
 
 import jwt
@@ -319,7 +319,7 @@ class AstrBotDashboard:
     @staticmethod
     def _build_bind(host: str, port: int) -> str:
         try:
-            ip: IPv4Address | IPv6Address = ipaddress.ip_address(host)
+            ip: IPv4Address | IPv6Address = ip_address(host)
             return f"[{ip}]:{port}" if ip.version == 6 else f"{ip}:{port}"
         except ValueError:
             return f"{host}:{port}"
