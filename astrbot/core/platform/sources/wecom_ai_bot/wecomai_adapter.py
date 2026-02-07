@@ -51,44 +51,13 @@ class WecomAIQueueListener:
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
-        self.running_tasks = set()
-
-    async def listen_to_queue(self, session_id: str):
-        """监听特定会话的队列"""
-        queue = self.queue_mgr.get_or_create_queue(session_id)
-        while True:
-            try:
-                data = await queue.get()
-                await self.callback(data)
-            except Exception as e:
-                logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
-                break
 
     async def run(self):
-        """监控新会话队列并启动监听器"""
-        monitored_sessions = set()
-
+        """注册监听回调并定期清理过期响应。"""
+        self.queue_mgr.set_listener(self.callback)
         while True:
-            # 检查新会话
-            current_sessions = set(self.queue_mgr.queues.keys())
-            new_sessions = current_sessions - monitored_sessions
-
-            # 为新会话启动监听器
-            for session_id in new_sessions:
-                task = asyncio.create_task(self.listen_to_queue(session_id))
-                self.running_tasks.add(task)
-                task.add_done_callback(self.running_tasks.discard)
-                monitored_sessions.add(session_id)
-                logger.debug(f"[WecomAI] 为会话启动监听器: {session_id}")
-
-            # 清理已不存在的会话
-            removed_sessions = monitored_sessions - current_sessions
-            monitored_sessions -= removed_sessions
-
-            # 清理过期的待处理响应
             self.queue_mgr.cleanup_expired_responses()
-
-            await asyncio.sleep(1)  # 每秒检查一次新会话
+            await asyncio.sleep(1)
 
 
 @register_platform_adapter(
@@ -212,7 +181,12 @@ class WecomAIBotAdapter(Platform):
             # wechat server is requesting for updates of a stream
             stream_id = message_data["stream"]["id"]
             if not self.queue_mgr.has_back_queue(stream_id):
-                logger.error(f"Cannot find back queue for stream_id: {stream_id}")
+                if self.queue_mgr.is_stream_finished(stream_id):
+                    logger.debug(
+                        f"Stream already finished, returning end message: {stream_id}"
+                    )
+                else:
+                    logger.warning(f"Cannot find back queue for stream_id: {stream_id}")
 
                 # 返回结束标志，告诉微信服务器流已结束
                 end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
@@ -243,10 +217,10 @@ class WecomAIBotAdapter(Platform):
                     latest_plain_content = msg["data"] or ""
                 elif msg["type"] == "image":
                     image_base64.append(msg["image_data"])
-                elif msg["type"] == "end":
+                elif msg["type"] in {"end", "complete"}:
                     # stream end
                     finish = True
-                    self.queue_mgr.remove_queues(stream_id)
+                    self.queue_mgr.remove_queues(stream_id, mark_finished=True)
                     break
 
             logger.debug(
