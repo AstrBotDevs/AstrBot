@@ -10,7 +10,6 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
@@ -38,6 +37,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
@@ -114,38 +114,7 @@ def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
     """Select chat provider for the event."""
-    node_config = event.node_config or {}
-    if isinstance(node_config, dict):
-        node_provider_id = str(node_config.get("provider_id") or "").strip()
-        if node_provider_id:
-            provider = plugin_context.get_provider_by_id(node_provider_id)
-            if not provider:
-                logger.error("未找到指定的提供商: %s。", node_provider_id)
-                return None
-            if not isinstance(provider, Provider):
-                logger.error(
-                    "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-                )
-                return None
-            return provider
-
-    if event.chain_config is None:
-        sel_provider = event.get_extra("selected_provider")
-        if sel_provider and isinstance(sel_provider, str):
-            provider = plugin_context.get_provider_by_id(sel_provider)
-            if not provider:
-                logger.error("未找到指定的提供商: %s。", sel_provider)
-            if not isinstance(provider, Provider):
-                logger.error(
-                    "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-                )
-                return None
-            return provider
-    try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
-    except ValueError as exc:
-        logger.error("Error occurred while selecting provider: %s", exc)
-        return None
+    return plugin_context.get_chat_provider_for_event(event)
 
 
 async def _get_session_conv(
@@ -200,6 +169,7 @@ async def _ensure_persona_and_skills(
     cfg: dict,
     plugin_context: Context,
     event: AstrMessageEvent,
+    subagent_orchestrator_cfg: dict | None = None,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
@@ -213,26 +183,15 @@ async def _ensure_persona_and_skills(
     if isinstance(node_config, dict):
         persona_id = str(node_config.get("persona_id") or "").strip()
 
-    # 2. from session service config
     if not persona_id:
-        persona_id = (
-            await sp.get_async(
-                scope="umo",
-                scope_id=event.unified_msg_origin,
-                key="session_service_config",
-                default={},
-            )
-        ).get("persona_id")
-
-    if not persona_id:
-        # 3. from conversation setting - second priority
+        # 2. from conversation setting - second priority
         persona_id = req.conversation.persona_id
 
         if persona_id == "[%None]":
             # explicitly set to no persona
             pass
         elif persona_id is None:
-            # 4. from config default persona setting - last priority
+            # 3. from config default persona setting - last priority
             persona_id = cfg.get("default_personality")
 
     persona = next(
@@ -277,7 +236,7 @@ async def _ensure_persona_and_skills(
     tmgr = plugin_context.get_llm_tool_manager()
 
     # sub agents integration
-    orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
+    orch_cfg = subagent_orchestrator_cfg or {}
     so = plugin_context.subagent_orchestrator
     if orch_cfg.get("main_enable", False) and so:
         remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
@@ -338,11 +297,7 @@ async def _ensure_persona_and_skills(
 
         req.func_tool = toolset
 
-        router_prompt = (
-            plugin_context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("router_system_prompt", "")
-        ).strip()
+        router_prompt = str(orch_cfg.get("router_system_prompt", "") or "").strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
         return
@@ -426,6 +381,7 @@ async def _ensure_img_caption(
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
+    cfg: dict,
     img_cap_prov_id: str,
     plugin_context: Context,
 ) -> None:
@@ -451,23 +407,34 @@ async def _process_quote_message(
 
     if image_seg:
         try:
-            prov = None
-            if img_cap_prov_id:
-                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+            image_path = await image_seg.convert_to_file_path()
+            caption_text = ""
 
-            if prov and isinstance(prov, Provider):
-                llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
-                    image_urls=[await image_seg.convert_to_file_path()],
+            if img_cap_prov_id:
+                caption_text = await _request_img_caption(
+                    img_cap_prov_id,
+                    cfg,
+                    [image_path],
+                    plugin_context,
                 )
-                if llm_resp.completion_text:
-                    content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
-                    )
             else:
-                logger.warning("No provider found for image captioning in quote.")
+                prov = plugin_context.get_chat_provider_for_event(event)
+                if prov and isinstance(prov, Provider):
+                    llm_resp = await prov.text_chat(
+                        prompt=cfg.get(
+                            "image_caption_prompt",
+                            "Please describe the image.",
+                        ),
+                        image_urls=[image_path],
+                    )
+                    caption_text = llm_resp.completion_text
+                else:
+                    logger.warning("No provider found for image captioning in quote.")
+
+            if caption_text:
+                content_parts.append(
+                    f"[Image Caption in quoted message]: {caption_text}"
+                )
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
 
@@ -530,27 +497,25 @@ def _inject_pipeline_context(event: AstrMessageEvent, req: ProviderRequest) -> N
     if ctx is None or ctx.input is None:
         return
 
-    # Format the upstream output for LLM consumption
-    upstream_input = ctx.input
+    input_data = ctx.input.data
 
-    # Handle different types of upstream output
-    if hasattr(upstream_input, "chain"):
-        # It's a MessageEventResult - extract text content
+    if isinstance(input_data, MessageChain):
+        # It's message content - extract text content
         from astrbot.core.message.components import Plain
 
         parts = []
-        for comp in upstream_input.chain or []:
+        for comp in input_data.chain or []:
             if isinstance(comp, Plain):
                 parts.append(comp.text)
         if parts:
             upstream_text = "\n".join(parts)
         else:
             return  # No text content to inject
-    elif isinstance(upstream_input, str):
-        upstream_text = upstream_input
+    elif isinstance(input_data, str):
+        upstream_text = input_data
     else:
         # Try to convert to string
-        upstream_text = str(upstream_input)
+        upstream_text = str(input_data)
 
     if not upstream_text or not upstream_text.strip():
         return
@@ -571,35 +536,58 @@ async def _decorate_llm_request(
     plugin_context: Context,
     config: MainAgentBuildConfig,
 ) -> None:
-    cfg = config.provider_settings or plugin_context.get_config(
-        umo=event.unified_msg_origin
-    ).get("provider_settings", {})
+    chain_config_id = event.chain_config.config_id if event.chain_config else None
+    runtime_config = plugin_context.get_config_by_id(chain_config_id)
+    cfg = config.provider_settings or runtime_config.get("provider_settings", {})
+    node_config = event.node_config if isinstance(event.node_config, dict) else {}
+
+    img_caption_cfg = dict(cfg)
+    node_image_caption_prompt = str(
+        node_config.get("image_caption_prompt") or ""
+    ).strip()
+    if node_image_caption_prompt:
+        img_caption_cfg["image_caption_prompt"] = node_image_caption_prompt
+
+    node_img_cap_prov_id = str(
+        node_config.get("image_caption_provider_id") or ""
+    ).strip()
+    default_img_cap_prov_id = str(
+        cfg.get("default_image_caption_provider_id")
+        or runtime_config.get("default_image_caption_provider_id")
+        or ""
+    ).strip()
+    img_cap_prov_id = node_img_cap_prov_id or default_img_cap_prov_id
 
     _apply_prompt_prefix(req, cfg)
 
     if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+        await _ensure_persona_and_skills(
+            req,
+            cfg,
+            plugin_context,
+            event,
+            subagent_orchestrator_cfg=config.subagent_orchestrator,
+        )
 
-        img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls:
             await _ensure_img_caption(
                 req,
-                cfg,
+                img_caption_cfg,
                 plugin_context,
                 img_cap_prov_id,
             )
 
-    img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     await _process_quote_message(
         event,
         req,
+        img_caption_cfg,
         img_cap_prov_id,
         plugin_context,
     )
 
     tz = config.timezone
     if tz is None:
-        tz = plugin_context.get_config().get("timezone")
+        tz = runtime_config.get("timezone")
     _append_system_reminders(event, req, cfg, tz)
 
 

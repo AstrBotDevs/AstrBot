@@ -19,20 +19,20 @@ class TTSCommand:
     async def tts(self, event: AstrMessageEvent):
         chain_config = event.chain_config
         if not chain_config:
-            event.set_result(MessageEventResult().message("No routed chain found."))
+            event.set_result(MessageEventResult().message("未找到已路由的 Chain。"))
             return
 
         nodes = get_chain_nodes(event, "tts")
         if not nodes:
             event.set_result(
-                MessageEventResult().message("Current chain has no TTS node.")
+                MessageEventResult().message("当前 Chain 中没有 TTS 节点。")
             )
             return
 
         enabled = await toggle_chain_runtime_flag(chain_config.chain_id, FEATURE_TTS)
-        status = "enabled" if enabled else "disabled"
+        status = "开启" if enabled else "关闭"
         event.set_result(
             MessageEventResult().message(
-                f"TTS is now {status} for chain `{chain_config.chain_id}` ({len(nodes)} node(s))."
+                f"Chain `{chain_config.chain_id}` 的 TTS 功能已{status}（共 {len(nodes)} 个节点）。"
             )
         )

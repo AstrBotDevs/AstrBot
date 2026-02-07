@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from astrbot.core import logger
 from astrbot.core.pipeline.agent.internal import InternalAgentExecutor
+from astrbot.core.pipeline.agent.runner_config import resolve_agent_runner_config
 from astrbot.core.pipeline.agent.third_party import ThirdPartyAgentExecutor
 from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext
@@ -28,12 +29,10 @@ class AgentExecutor:
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
-        agent_runner_type = self.config["provider_settings"]["agent_runner_type"]
-        if agent_runner_type == "local":
-            self.executor = InternalAgentExecutor()
-        else:
-            self.executor = ThirdPartyAgentExecutor()
-        await self.executor.initialize(ctx)
+        self.internal_executor = InternalAgentExecutor()
+        self.third_party_executor = ThirdPartyAgentExecutor()
+        await self.internal_executor.initialize(ctx)
+        await self.third_party_executor.initialize(ctx)
 
     async def run(self, event: AstrMessageEvent) -> AgentRunOutcome:
         outcome = AgentRunOutcome()
@@ -44,4 +43,16 @@ class AgentExecutor:
             )
             return outcome
 
-        return await self.executor.run(event, self.prov_wake_prefix)
+        runner_type, provider_id = resolve_agent_runner_config(
+            event.node_config if isinstance(event.node_config, dict) else None,
+        )
+
+        if runner_type == "local":
+            return await self.internal_executor.run(event, self.prov_wake_prefix)
+
+        return await self.third_party_executor.run(
+            event,
+            self.prov_wake_prefix,
+            runner_type=runner_type,
+            provider_id=provider_id,
+        )

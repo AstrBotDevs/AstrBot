@@ -54,7 +54,7 @@ class PipelineExecutor:
         )
 
         # Chain 执行器（NodeStar 插件）
-        self.chain_executor = ChainExecutor(self.context)
+        self.chain_executor = ChainExecutor()
 
         self.rate_limiter = RateLimiter(pipeline_ctx)
         self.access_controller = AccessController(pipeline_ctx)
@@ -90,10 +90,9 @@ class PipelineExecutor:
             if not chain_config:
                 raise RuntimeError("Missing chain_config on event.")
 
-            resume_node = event.get_extra("_resume_node")
             resume_node_uuid = event.get_extra("_resume_node_uuid")
 
-            if resume_node or resume_node_uuid:
+            if resume_node_uuid:
                 if await self._run_system_mechanisms(event) == NodeResult.STOP:
                     if event.get_result():
                         await self.send_service.send(event)
@@ -104,7 +103,6 @@ class PipelineExecutor:
                     chain_config,
                     self.send_service,
                     self.agent_executor,
-                    start_node_name=resume_node,
                     start_node_uuid=resume_node_uuid,
                 )
 
@@ -197,6 +195,8 @@ class PipelineExecutor:
 
             if mode == "inherit":
                 return self._resolve_global_plugins_name()
+            if mode == "unrestricted":
+                return None
             if mode == "none":
                 return []
             if mode == "whitelist":

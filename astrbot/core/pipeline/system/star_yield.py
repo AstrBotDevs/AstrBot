@@ -1,13 +1,7 @@
 """Star 插件 yield 模式兼容层。
 
 提供 StarYieldDriver 和 StarHandlerAdapter，用于在新架构中
-完整支持旧版 Star 插件的 AsyncGenerator (yield) 模式。
-
-yield 模式允许插件：
-1. 多次 yield 发送中间消息
-2. yield ProviderRequest 进行 LLM 请求
-3. 通过 try/except 处理异常
-4. 通过 event.stop_event() 控制流程
+支持传统 Star 插件的 AsyncGenerator (yield) 模式。
 """
 
 from __future__ import annotations
@@ -39,17 +33,7 @@ class YieldDriverResult:
 
 
 class StarYieldDriver:
-    """Star 插件 yield 模式驱动器
-
-    处理 AsyncGenerator 返回的 handler，支持：
-    1. 多次 yield 发送中间消息
-    2. yield ProviderRequest 进行 LLM 请求
-    3. 异常传播回 generator (athrow)
-    4. event.stop_event() 控制流程
-
-    从原 PluginDispatcher._drive_async_generator 和
-    context_utils.call_handler 提炼整合。
-    """
+    """Star 插件 yield 模式驱动器"""
 
     def __init__(
         self,

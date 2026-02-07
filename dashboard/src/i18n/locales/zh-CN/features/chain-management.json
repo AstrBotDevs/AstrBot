@@ -69,7 +69,8 @@
     "nodeConfigLoadError": "加载节点配置失败",
     "nodeConfigSaveError": "保存节点配置失败",
     "nodeConfigJsonError": "JSON 格式错误",
-    "nodeConfigRawHint": "未提供 Schema，请在下方编辑原始 JSON。",
+    "nodeConfigRawHint": "未提供 Schema，节点配置不可编辑。",
+    "nodeConfigNoSchema": "未提供 Schema，节点配置不可编辑。",
     "sortSuccess": "排序已更新",
     "sortError": "排序更新失败",
     "sortLoadError": "加载排序失败"
@@ -108,10 +109,12 @@
     "inherit": "跟随全局限制",
     "blacklist": "黑名单",
     "whitelist": "白名单",
-    "noRestriction": "不限制",
+    "noRestriction": "启用所有插件",
+    "disableAll": "禁用所有插件",
     "inheritHint": "跟随全局插件限制",
     "blacklistHint": "选中的插件将不会执行",
     "whitelistHint": "只有选中的插件会执行",
-    "noRestrictionHint": "不限制插件，全部可执行"
+    "noRestrictionHint": "该 Chain 允许任何插件执行",
+    "disableAllHint": "该 Chain 不允许任何插件执行"
   }
 }

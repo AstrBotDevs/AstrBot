@@ -13,10 +13,20 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.node_config import AstrBotNodeConfig
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Preference
+from astrbot.core.pipeline.agent.runner_config import (
+    AGENT_RUNNER_PROVIDER_KEY,
+    normalize_agent_runner_type,
+)
 from astrbot.core.pipeline.engine.chain_config import (
     ChainConfigModel,
     normalize_chain_nodes,
     serialize_chain_nodes,
+)
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_LLM,
+    FEATURE_STT,
+    FEATURE_T2I,
+    FEATURE_TTS,
 )
 from astrbot.core.umop_config_router import UmopConfigRouter
 
@@ -82,18 +92,148 @@ def _build_plugin_filter(plugin_cfg: dict | None) -> dict | None:
     return None
 
 
-def _build_nodes_for_config(conf: dict) -> list[str]:
-    nodes: list[str] = ["stt"]
+def _read_legacy_enabled(value: object, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return bool(value)
 
-    file_extract_cfg = conf.get("provider_settings", {}).get("file_extract", {}) or {}
-    if file_extract_cfg.get("enable", False):
+
+def _has_kb_binding(conf: dict) -> bool:
+    kb_names = conf.get("kb_names")
+    if isinstance(kb_names, list):
+        for kb_name in kb_names:
+            if str(kb_name or "").strip():
+                return True
+
+    default_kb_collection = str(conf.get("default_kb_collection", "") or "").strip()
+    return bool(default_kb_collection)
+
+
+def _build_nodes_for_config(conf: dict) -> list[str]:
+    provider_settings = conf.get("provider_settings", {}) or {}
+    file_extract_cfg = provider_settings.get("file_extract", {}) or {}
+    stt_settings = conf.get("provider_stt_settings", {}) or {}
+    tts_settings = conf.get("provider_tts_settings", {}) or {}
+
+    nodes: list[str] = []
+
+    if _read_legacy_enabled(stt_settings.get("enable"), False):
+        nodes.append("stt")
+
+    if _read_legacy_enabled(file_extract_cfg.get("enable"), False):
         nodes.append("file_extract")
 
-    if not conf.get("kb_agentic_mode", False):
+    if not _read_legacy_enabled(conf.get("kb_agentic_mode"), False) and _has_kb_binding(
+        conf
+    ):
         nodes.append("knowledge_base")
 
-    nodes.extend(["agent", "tts", "t2i"])
+    nodes.append("agent")
+
+    if _read_legacy_enabled(tts_settings.get("enable"), False):
+        nodes.append("tts")
+
+    if _read_legacy_enabled(conf.get("t2i"), False):
+        nodes.append("t2i")
+
     return nodes
+
+
+def _build_chain_runtime_flags_for_config(conf: dict) -> dict[str, bool]:
+    provider_settings = conf.get("provider_settings", {}) or {}
+    stt_settings = conf.get("provider_stt_settings", {}) or {}
+    tts_settings = conf.get("provider_tts_settings", {}) or {}
+
+    return {
+        FEATURE_LLM: _read_legacy_enabled(provider_settings.get("enable"), True),
+        FEATURE_STT: _read_legacy_enabled(stt_settings.get("enable"), False),
+        FEATURE_TTS: _read_legacy_enabled(tts_settings.get("enable"), False),
+        FEATURE_T2I: _read_legacy_enabled(conf.get("t2i"), False),
+    }
+
+
+async def _apply_chain_runtime_flags(
+    chain_runtime_flags: list[tuple[str, dict[str, bool]]],
+) -> None:
+    if not chain_runtime_flags:
+        return
+
+    raw = await sp.global_get("chain_runtime_flags", {})
+    all_flags = raw if isinstance(raw, dict) else {}
+
+    for chain_id, flags in chain_runtime_flags:
+        existing_flags = all_flags.get(chain_id)
+        merged_flags = existing_flags if isinstance(existing_flags, dict) else {}
+        merged_flags.update(
+            {
+                FEATURE_LLM: bool(flags.get(FEATURE_LLM, True)),
+                FEATURE_STT: bool(flags.get(FEATURE_STT, False)),
+                FEATURE_TTS: bool(flags.get(FEATURE_TTS, False)),
+                FEATURE_T2I: bool(flags.get(FEATURE_T2I, False)),
+            }
+        )
+        all_flags[chain_id] = merged_flags
+
+    await sp.global_put("chain_runtime_flags", all_flags)
+
+
+def _infer_legacy_agent_runner_from_default_provider(
+    conf: dict,
+) -> tuple[str, str] | None:
+    provider_settings = conf.get("provider_settings", {}) or {}
+    default_provider_id = str(
+        provider_settings.get("default_provider_id", "") or ""
+    ).strip()
+    if not default_provider_id:
+        return None
+
+    for provider in conf.get("provider", []) or []:
+        if provider.get("id") != default_provider_id:
+            continue
+        provider_type = str(provider.get("type") or "").strip().lower()
+        if provider_type in AGENT_RUNNER_PROVIDER_KEY:
+            return provider_type, default_provider_id
+        return None
+
+    return None
+
+
+def _resolve_legacy_agent_node_config(conf: dict) -> dict:
+    provider_settings = conf.get("provider_settings", {}) or {}
+
+    runner_type = normalize_agent_runner_type(
+        provider_settings.get("agent_runner_type")
+    )
+    provider_key = AGENT_RUNNER_PROVIDER_KEY.get(runner_type, "")
+    provider_id = str(provider_settings.get(provider_key, "") or "").strip()
+
+    if runner_type in AGENT_RUNNER_PROVIDER_KEY and not provider_id:
+        inferred = _infer_legacy_agent_runner_from_default_provider(conf)
+        if inferred is not None:
+            runner_type, provider_id = inferred
+
+    node_conf: dict[str, object] = {
+        "agent_runner_type": runner_type,
+        "provider_id": str(
+            provider_settings.get("default_provider_id", "") or ""
+        ).strip(),
+    }
+    for key in AGENT_RUNNER_PROVIDER_KEY.values():
+        node_conf[key] = ""
+    if runner_type in AGENT_RUNNER_PROVIDER_KEY:
+        node_conf[AGENT_RUNNER_PROVIDER_KEY[runner_type]] = provider_id
+
+    return node_conf
 
 
 def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
@@ -110,6 +250,7 @@ def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
             node_name="t2i",
             chain_id=chain_id,
             node_uuid=node_map["t2i"],
+            schema={},
         ).save_config(t2i_conf)
 
     if "stt" in node_map:
@@ -121,6 +262,7 @@ def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
             node_name="stt",
             chain_id=chain_id,
             node_uuid=node_map["stt"],
+            schema={},
         ).save_config(stt_conf)
 
     if "tts" in node_map:
@@ -135,6 +277,7 @@ def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
             node_name="tts",
             chain_id=chain_id,
             node_uuid=node_map["tts"],
+            schema={},
         ).save_config(tts_conf)
 
     if "file_extract" in node_map:
@@ -149,7 +292,17 @@ def _apply_node_defaults(chain_id: str, nodes: list, conf: dict) -> None:
             node_name="file_extract",
             chain_id=chain_id,
             node_uuid=node_map["file_extract"],
+            schema={},
         ).save_config(file_extract_conf)
+
+    if "agent" in node_map:
+        agent_conf = _resolve_legacy_agent_node_config(conf)
+        AstrBotNodeConfig.get_cached(
+            node_name="agent",
+            chain_id=chain_id,
+            node_uuid=node_map["agent"],
+            schema={},
+        ).save_config(agent_conf)
 
 
 async def migrate_4_to_5(
@@ -212,6 +365,7 @@ async def migrate_4_to_5(
     session_chains: list[ChainConfigModel] = []
     umop_chains: list[ChainConfigModel] = []
     node_defaults: list[tuple[str, list, dict]] = []
+    runtime_flag_defaults: list[tuple[str, dict[str, bool]]] = []
 
     def get_config(config_id: str | None) -> dict:
         if config_id and config_id in acm.confs:
@@ -228,16 +382,8 @@ async def migrate_4_to_5(
             disabled_umos.append(umo)
             continue
 
-        llm_enabled = None
-        if isinstance(service_cfg, dict) and "llm_enabled" in service_cfg:
-            llm_enabled = service_cfg.get("llm_enabled")
-
         plugin_filter = _build_plugin_filter(rules.get("session_plugin_config"))
-        needs_chain = False
-        if llm_enabled is not None:
-            needs_chain = True
-        if plugin_filter:
-            needs_chain = True
+        needs_chain = bool(plugin_filter)
 
         if not needs_chain:
             continue
@@ -262,12 +408,14 @@ async def migrate_4_to_5(
             sort_order=0,
             enabled=True,
             nodes=nodes_payload,
-            llm_enabled=bool(llm_enabled) if llm_enabled is not None else True,
             plugin_filter=plugin_filter,
             config_id=config_id,
         )
         session_chains.append(chain)
         node_defaults.append((chain_id, normalized_nodes, conf))
+        runtime_flag_defaults.append(
+            (chain_id, _build_chain_runtime_flags_for_config(conf))
+        )
 
     # Build chains for UMOP routing.
     for pattern, config_id in (ucr.umop_to_config_id or {}).items():
@@ -290,12 +438,14 @@ async def migrate_4_to_5(
             sort_order=0,
             enabled=True,
             nodes=nodes_payload,
-            llm_enabled=True,
             plugin_filter=None,
             config_id=config_id,
         )
         umop_chains.append(chain)
         node_defaults.append((chain_id, normalized_nodes, conf))
+        runtime_flag_defaults.append(
+            (chain_id, _build_chain_runtime_flags_for_config(conf))
+        )
 
     # Always create a default chain for legacy behavior.
     default_conf = get_config("default")
@@ -309,11 +459,13 @@ async def migrate_4_to_5(
         sort_order=-1,
         enabled=True,
         nodes=default_nodes_payload,
-        llm_enabled=True,
         plugin_filter=None,
         config_id="default",
     )
     node_defaults.append(("default", default_nodes, default_conf))
+    runtime_flag_defaults.append(
+        ("default", _build_chain_runtime_flags_for_config(default_conf))
+    )
 
     # Apply disabled session exclusions.
     if disabled_umos:
@@ -337,6 +489,13 @@ async def migrate_4_to_5(
             _apply_node_defaults(chain_id, nodes, conf)
         except Exception as e:
             logger.warning(f"Failed to apply node defaults for chain {chain_id}: {e!s}")
+
+    try:
+        await _apply_chain_runtime_flags(runtime_flag_defaults)
+    except Exception as e:
+        logger.warning(
+            f"Failed to apply chain runtime flags during 4->5 migration: {e!s}"
+        )
 
     await sp.global_put(_MIGRATION_FLAG, True)
     logger.info("Migration from v4 to v5 completed successfully.")
@@ -393,7 +552,7 @@ async def _migrate_chain_provider_columns_to_node_config(
                     node_name="tts",
                     chain_id=chain_id,
                     node_uuid=node.uuid,
-                    schema=None,
+                    schema={},
                 )
                 if not cfg.get("provider_id"):
                     cfg.save_config({"provider_id": tts_provider_id})
@@ -402,7 +561,7 @@ async def _migrate_chain_provider_columns_to_node_config(
                     node_name="stt",
                     chain_id=chain_id,
                     node_uuid=node.uuid,
-                    schema=None,
+                    schema={},
                 )
                 if not cfg.get("provider_id"):
                     cfg.save_config({"provider_id": stt_provider_id})
@@ -445,7 +604,6 @@ async def _drop_chain_provider_columns(db_helper: BaseDatabase) -> None:
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     enabled BOOLEAN NOT NULL DEFAULT 1,
                     nodes JSON,
-                    llm_enabled BOOLEAN NOT NULL DEFAULT 1,
                     plugin_filter JSON,
                     config_id VARCHAR(36),
                     created_at DATETIME,
@@ -464,7 +622,6 @@ async def _drop_chain_provider_columns(db_helper: BaseDatabase) -> None:
                     sort_order,
                     enabled,
                     nodes,
-                    llm_enabled,
                     plugin_filter,
                     config_id,
                     created_at,
@@ -477,7 +634,6 @@ async def _drop_chain_provider_columns(db_helper: BaseDatabase) -> None:
                     sort_order,
                     enabled,
                     nodes,
-                    llm_enabled,
                     plugin_filter,
                     config_id,
                     created_at,
@@ -499,6 +655,20 @@ def _cleanup_legacy_provider_config_keys(acm: AstrBotConfigManager) -> None:
         if "provider_stt_settings" in conf:
             conf.pop("provider_stt_settings", None)
             changed = True
+
+        provider_settings = conf.get("provider_settings")
+        if isinstance(provider_settings, dict):
+            for legacy_key in (
+                "enable",
+                "agent_runner_type",
+                "dify_agent_runner_provider_id",
+                "coze_agent_runner_provider_id",
+                "dashscope_agent_runner_provider_id",
+            ):
+                if legacy_key in provider_settings:
+                    provider_settings.pop(legacy_key, None)
+                    changed = True
+
         if changed:
             conf.save_config()
 

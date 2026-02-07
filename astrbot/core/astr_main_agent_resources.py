@@ -160,10 +160,13 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         query = kwargs.get("query", "")
         if not query:
             return "error: Query parameter is empty."
+        event = context.context.event
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
         result = await retrieve_knowledge_base(
             query=kwargs.get("query", ""),
-            umo=context.context.event.unified_msg_origin,
+            umo=event.unified_msg_origin,
             context=context.context.context,
+            config_id=chain_config_id,
         )
         if not result:
             return "No relevant knowledge found."
@@ -234,6 +237,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
+                context.context.event.chain_config.config_id
+                if context.context.event.chain_config
+                else None,
             )
             # Use shell to check if the file exists in sandbox
             result = await sb.shell.exec(f"test -f {path} && echo '_&exists_'")
@@ -365,6 +371,7 @@ async def retrieve_knowledge_base(
     query: str,
     umo: str,
     context: Context,
+    config_id: str | None = None,
 ) -> str | None:
     """Inject knowledge base context into the provider request
 
@@ -373,7 +380,7 @@ async def retrieve_knowledge_base(
         p_ctx: Pipeline context
     """
     kb_mgr = context.kb_manager
-    config = context.get_config(umo=umo)
+    config = context.get_config_by_id(config_id)
 
     kb_names = config.get("kb_names", [])
     top_k = config.get("kb_final_top_k", 5)

@@ -1,13 +1,16 @@
-{
+﻿{
   "internal_keywords": {
     "type": "object",
+    "description": "内置关键词检测策略配置",
     "items": {
       "enable": {
         "type": "bool",
-        "default": true
+        "default": true,
+        "description": "是否启用内置关键词检测"
       },
       "extra_keywords": {
         "type": "list",
+        "description": "追加关键词列表",
         "items": {
           "type": "string"
         },
@@ -17,24 +20,28 @@
   },
   "baidu_aip": {
     "type": "object",
+    "description": "百度内容安全策略配置",
     "items": {
       "enable": {
         "type": "bool",
-        "default": false
+        "default": false,
+        "description": "是否启用百度内容安全检测"
       },
       "app_id": {
         "type": "string",
-        "default": ""
+        "default": "",
+        "description": "百度内容安全 APP ID"
       },
       "api_key": {
         "type": "string",
-        "default": ""
+        "default": "",
+        "description": "百度内容安全 API Key"
       },
       "secret_key": {
         "type": "string",
-        "default": ""
+        "default": "",
+        "description": "百度内容安全 Secret Key"
       }
     }
   }
 }
-

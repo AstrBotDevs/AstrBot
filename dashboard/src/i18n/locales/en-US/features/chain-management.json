@@ -69,7 +69,8 @@
     "nodeConfigLoadError": "Failed to load node config",
     "nodeConfigSaveError": "Failed to save node config",
     "nodeConfigJsonError": "Invalid JSON format",
-    "nodeConfigRawHint": "No schema provided. Edit raw JSON below.",
+    "nodeConfigRawHint": "No schema provided. Node config is unavailable.",
+    "nodeConfigNoSchema": "No schema provided. Node config is unavailable.",
     "sortSuccess": "Order updated",
     "sortError": "Failed to update order",
     "sortLoadError": "Failed to load chain order"
@@ -108,10 +109,12 @@
     "inherit": "Follow global",
     "blacklist": "Blacklist",
     "whitelist": "Whitelist",
-    "noRestriction": "No restriction",
+    "noRestriction": "Enable all plugins",
+    "disableAll": "Disable all plugins",
     "inheritHint": "Follow global plugin restrictions",
     "blacklistHint": "Selected plugins will not be executed",
     "whitelistHint": "Only selected plugins will be executed",
-    "noRestrictionHint": "No plugin restriction; all plugins can run"
+    "noRestrictionHint": "This chain allows any plugin to be executed",
+    "disableAllHint": "No plugins will be executed for this chain"
   }
 }

@@ -12,7 +12,7 @@ from astrbot.core.star.node_star import NodeResult
 
 
 class RateLimiter:
-    """Fixed-window rate limiter (system-level mechanism)."""
+    """Fixed-window rate limiter"""
 
     def __init__(self, ctx: PipelineContext):
         self._ctx = ctx

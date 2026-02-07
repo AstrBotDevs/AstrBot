@@ -19,9 +19,8 @@ class Main(star.Star):
             logger.error(f"聊天增强 err: {e}")
 
     def ltm_enabled(self, event: AstrMessageEvent):
-        ltmse = self.context.get_config(umo=event.unified_msg_origin)[
-            "provider_ltm_settings"
-        ]
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+        ltmse = self.context.get_config_by_id(chain_config_id)["provider_ltm_settings"]
         return ltmse["group_icl_enable"] or ltmse["active_reply"]["enable"]
 
     @filter.platform_adapter_type(filter.PlatformAdapterType.ALL)
@@ -36,9 +35,12 @@ class Main(star.Star):
         if self.ltm_enabled(event) and self.ltm and has_image_or_plain:
             need_active = await self.ltm.need_active_reply(event)
 
-            group_icl_enable = self.context.get_config()["provider_ltm_settings"][
-                "group_icl_enable"
-            ]
+            chain_config_id = (
+                event.chain_config.config_id if event.chain_config else None
+            )
+            group_icl_enable = self.context.get_config_by_id(chain_config_id)[
+                "provider_ltm_settings"
+            ]["group_icl_enable"]
             if group_icl_enable:
                 """记录对话"""
                 try:
@@ -48,7 +50,25 @@ class Main(star.Star):
 
             if need_active:
                 """主动回复"""
-                provider = self.context.get_using_provider(event.unified_msg_origin)
+                chain_config_id = (
+                    event.chain_config.config_id if event.chain_config else None
+                )
+                runtime_cfg = self.context.get_config_by_id(chain_config_id)
+                default_provider_id = str(
+                    runtime_cfg.get("provider_settings", {}).get(
+                        "default_provider_id",
+                        "",
+                    )
+                    or ""
+                ).strip()
+                provider = (
+                    self.context.get_provider_by_id(default_provider_id)
+                    if default_provider_id
+                    else None
+                )
+                if not provider:
+                    all_providers = self.context.get_all_providers()
+                    provider = all_providers[0] if all_providers else None
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return

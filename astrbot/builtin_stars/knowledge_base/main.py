@@ -37,12 +37,14 @@ class KnowledgeBaseNode(NodeStar):
         if not query or not query.strip():
             return NodeResult.SKIP
 
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+
         try:
             kb_result = await self._retrieve_knowledge_base(
                 query,
-                event.unified_msg_origin,
                 event.node_config,
                 event.chain_config.chain_id if event.chain_config else "unknown",
+                chain_config_id,
             )
             if kb_result:
                 event.set_node_output(kb_result)
@@ -55,22 +57,21 @@ class KnowledgeBaseNode(NodeStar):
     async def _retrieve_knowledge_base(
         self,
         query: str,
-        umo: str,
         node_config,
         chain_id: str,
+        config_id: str | None,
     ) -> str | None:
         """检索知识库
 
         Args:
             query: 查询文本
-            umo: 会话标识
             node_config: Node config for this node
 
         Returns:
             检索到的知识库内容，如果没有则返回 None
         """
         kb_mgr = self.context.kb_manager
-        config = self.context.get_config(umo=umo)
+        config = self.context.get_config_by_id(config_id)
         node_config = node_config or {}
         use_global_kb = node_config.get("use_global_kb", True)
         kb_names = node_config.get("kb_names", []) or []
@@ -110,6 +111,7 @@ class KnowledgeBaseNode(NodeStar):
                 query,
                 kb_names,
                 top_k,
+                None,
                 config,
             )
         else:
@@ -119,14 +121,36 @@ class KnowledgeBaseNode(NodeStar):
         if not kb_names:
             return None
 
-        return await self._do_retrieve(kb_mgr, query, kb_names, top_k, config)
+        fusion_top_k = node_config.get("fusion_top_k")
+        if fusion_top_k is not None:
+            try:
+                fusion_top_k = int(fusion_top_k)
+            except (TypeError, ValueError):
+                fusion_top_k = None
+
+        return await self._do_retrieve(
+            kb_mgr,
+            query,
+            kb_names,
+            top_k,
+            fusion_top_k,
+            config,
+        )
 
     @staticmethod
     async def _do_retrieve(
-        kb_mgr, query: str, kb_names: list[str], top_k: int, config: dict
+        kb_mgr,
+        query: str,
+        kb_names: list[str],
+        top_k: int,
+        fusion_top_k: int | None,
+        config: dict,
     ) -> str | None:
         """执行知识库检索"""
-        top_k_fusion = config.get("kb_fusion_top_k", 20)
+        if fusion_top_k is None:
+            top_k_fusion = config.get("kb_fusion_top_k", 20)
+        else:
+            top_k_fusion = fusion_top_k
 
         logger.debug(
             f"[知识库节点] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}"

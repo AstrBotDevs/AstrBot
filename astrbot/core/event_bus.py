@@ -1,12 +1,4 @@
-"""事件总线 - 消息队列消费 + Pipeline 分发
-
-架构:
-    Platform Adapter → Queue.put_nowait(event)
-                            ↓
-    EventBus.dispatch() → 路由到对应 PipelineExecutor
-                            ↓
-                       PipelineExecutor.execute()
-"""
+"""事件总线 - 消息队列消费 + Pipeline 分发"""
 
 from __future__ import annotations
 
@@ -26,8 +18,6 @@ if TYPE_CHECKING:
 
 
 class EventBus:
-    """事件总线 - 消息队列消费 + Pipeline 分发"""
-
     def __init__(
         self,
         event_queue: Queue,
@@ -71,50 +61,18 @@ class EventBus:
                         )
                         continue
 
-                    event.chain_config = routed_chain_config
-                    config_id = routed_chain_config.config_id or "default"
-                    self.astrbot_config_mgr.set_runtime_config_id(
-                        event.unified_msg_origin,
-                        config_id,
-                    )
-                    config_info = self.astrbot_config_mgr.get_config_info_by_id(
-                        config_id
-                    )
-                    self._print_event(event, config_info["name"])
-
-                    executor = self.pipeline_executor_mapping.get(config_id)
-                    if executor is None:
-                        executor = self.pipeline_executor_mapping.get("default")
-                    if executor is None:
-                        logger.error(
-                            f"PipelineExecutor not found for config_id: {config_id}, "
-                            "event ignored."
-                        )
+                    if not self._dispatch_with_chain_config(
+                        event,
+                        routed_chain_config,
+                    ):
                         continue
-                    asyncio.create_task(executor.execute(event))
                     continue
 
                 event.chain_config = wait_state.chain_config
-                event.set_extra("_resume_node", wait_state.node_name)
                 event.set_extra("_resume_node_uuid", wait_state.node_uuid)
-                event.set_extra("_resume_from_wait", True)
-                config_id = wait_state.config_id or "default"
-                self.astrbot_config_mgr.set_runtime_config_id(
-                    event.unified_msg_origin,
-                    config_id,
-                )
-                config_info = self.astrbot_config_mgr.get_config_info_by_id(config_id)
-                self._print_event(event, config_info["name"])
-                executor = self.pipeline_executor_mapping.get(config_id)
-                if executor is None:
-                    executor = self.pipeline_executor_mapping.get("default")
-                if executor is None:
-                    logger.error(
-                        "PipelineExecutor not found for config_id: "
-                        f"{config_id}, event ignored."
-                    )
+
+                if not self._dispatch_with_chain_config(event, wait_state.chain_config):
                     continue
-                asyncio.create_task(executor.execute(event))
                 continue
 
             event.message_str = event.message_str.strip()
@@ -131,29 +89,11 @@ class EventBus:
                 continue
 
             event.chain_config = chain_config
-            config_id = chain_config.config_id or "default"
-            self.astrbot_config_mgr.set_runtime_config_id(
-                event.unified_msg_origin,
-                config_id,
-            )
-            config_info = self.astrbot_config_mgr.get_config_info_by_id(config_id)
-
-            self._print_event(event, config_info["name"])
-
-            executor = self.pipeline_executor_mapping.get(config_id)
-            if executor is None:
-                executor = self.pipeline_executor_mapping.get("default")
-
-            if executor is None:
-                logger.error(
-                    f"PipelineExecutor not found for config_id: {config_id}, event ignored."
-                )
+            if not self._dispatch_with_chain_config(event, chain_config):
                 continue
 
-            # 分发到 Pipeline（fire-and-forget）
-            asyncio.create_task(executor.execute(event))
-
-    def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
+    @staticmethod
+    def _print_event(event: AstrMessageEvent, conf_name: str) -> None:
         """记录事件信息"""
         sender = event.get_sender_name()
         sender_id = event.get_sender_id()
@@ -170,3 +110,30 @@ class EventBus:
             logger.info(
                 f"[{conf_name}] [{platform_id}({platform_name})] {sender_id}: {outline}"
             )
+
+    def _dispatch_with_chain_config(
+        self,
+        event: AstrMessageEvent,
+        chain_config,
+    ) -> bool:
+        event.chain_config = chain_config
+        config_id = chain_config.config_id or "default"
+        self.astrbot_config_mgr.set_runtime_config_id(
+            event.unified_msg_origin,
+            config_id,
+        )
+        config_info = self.astrbot_config_mgr.get_config_info_by_id(config_id)
+        self._print_event(event, config_info["name"])
+
+        executor = self.pipeline_executor_mapping.get(config_id)
+        if executor is None:
+            executor = self.pipeline_executor_mapping.get("default")
+        if executor is None:
+            logger.error(
+                f"PipelineExecutor not found for config_id: {config_id}, event ignored."
+            )
+            return False
+
+        # 分发到 Pipeline（fire-and-forget）
+        asyncio.create_task(executor.execute(event))
+        return True

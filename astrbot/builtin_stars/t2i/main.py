@@ -20,19 +20,15 @@ if TYPE_CHECKING:
 class T2IStar(NodeStar):
     """Text-to-image."""
 
-    def __init__(self, context, config: dict | None = None):
-        super().__init__(context, config)
-        self.callback_api_base = None
-        self.t2i_active_template = None
-
     async def process(self, event: AstrMessageEvent) -> NodeResult:
         chain_id = event.chain_config.chain_id if event.chain_config else None
         if not await is_chain_runtime_feature_enabled(chain_id, FEATURE_T2I):
             return NodeResult.SKIP
 
-        config = self.context.get_config()
-        self.t2i_active_template = config.get("t2i_active_template", "base")
-        self.callback_api_base = config.get("callback_api_base", "")
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+        runtime_cfg = self.context.get_config_by_id(chain_config_id)
+        t2i_active_template = runtime_cfg.get("t2i_active_template", "base")
+        callback_api_base = runtime_cfg.get("callback_api_base", "")
 
         node_config = event.node_config or {}
         word_threshold = node_config.get("word_threshold", 150)
@@ -48,9 +44,7 @@ class T2IStar(NodeStar):
             )
             return NodeResult.SKIP
         result = upstream_output
-        event.set_result(result)
-
-        await self.collect_stream(event)
+        await self.collect_stream(event, result)
 
         if not result.chain:
             return NodeResult.SKIP
@@ -81,7 +75,7 @@ class T2IStar(NodeStar):
         render_start = time.time()
         try:
             if not active_template:
-                active_template = self.t2i_active_template
+                active_template = t2i_active_template
             url = await html_renderer.render_t2i(
                 plain_str,
                 return_url=True,
@@ -99,9 +93,9 @@ class T2IStar(NodeStar):
         if url:
             if url.startswith("http"):
                 result.chain = [Image.fromURL(url)]
-            elif use_file_service and self.callback_api_base:
+            elif use_file_service and callback_api_base:
                 token = await file_token_service.register_file(url)
-                url = f"{self.callback_api_base}/api/file/{token}"
+                url = f"{callback_api_base}/api/file/{token}"
                 logger.debug(f"Registered file service url: {url}")
                 result.chain = [Image.fromURL(url)]
             else:

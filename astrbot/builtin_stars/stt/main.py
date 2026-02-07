@@ -23,7 +23,7 @@ class STTStar(NodeStar):
         if not await is_chain_runtime_feature_enabled(chain_id, FEATURE_STT):
             return NodeResult.SKIP
 
-        stt_provider = self.get_stt_provider(event)
+        stt_provider = self.context.get_stt_provider_for_event(event)
         if not stt_provider:
             logger.warning(
                 f"Session {event.unified_msg_origin} has no STT provider configured."
@@ -43,8 +43,7 @@ class STTStar(NodeStar):
                         if result:
                             logger.info("STT result: " + result)
                             message_chain[idx] = Plain(result)
-                            event.message_str += result
-                            event.message_obj.message_str += result
+                            event.append_message_str(result)
                             transcribed_texts.append(result)
                         break
                     except FileNotFoundError as e:

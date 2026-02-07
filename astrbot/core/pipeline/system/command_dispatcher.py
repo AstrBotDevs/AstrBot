@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from astrbot.core.pipeline.agent.executor import AgentExecutor
     from astrbot.core.pipeline.engine.send_service import SendService
     from astrbot.core.platform.astr_message_event import AstrMessageEvent
-    from astrbot.core.provider.entities import ProviderRequest
 
 
 class CommandDispatcher:
@@ -35,7 +34,6 @@ class CommandDispatcher:
         # 初始化 yield 驱动器
         self._yield_driver = StarYieldDriver(
             self._send_message,
-            self._handle_provider_request,
         )
         self._handler_adapter = StarHandlerAdapter(self._yield_driver)
 
@@ -53,7 +51,6 @@ class CommandDispatcher:
     async def _handle_provider_request(
         self,
         event: AstrMessageEvent,
-        request: ProviderRequest,
     ) -> None:
         """收到 ProviderRequest 时立即执行 Agent 并发送结果"""
         if not self._agent_executor:
@@ -219,8 +216,6 @@ class CommandDispatcher:
                 if self._no_permission_reply:
                     await self._handle_permission_denied(event, handler)
                 event.stop_event()
-                event.set_extra("activated_handlers", [])
-                event.set_extra("handlers_parsed_params", {})
                 return []
 
             # 跳过 CommandGroup 的空 handler

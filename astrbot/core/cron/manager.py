@@ -297,9 +297,9 @@ class CronJobManager:
         )
 
         # judge user's role
-        umo = cron_event.unified_msg_origin
-        cfg = self.ctx.get_config(umo=umo)
         cron_payload = extras.get("cron_payload", {}) if extras else {}
+        chain_config_id = cron_payload.get("config_id")
+        cfg = self.ctx.get_config_by_id(chain_config_id)
         sender_id = cron_payload.get("sender_id")
         admin_ids = cfg.get("admins_id", [])
         if admin_ids:

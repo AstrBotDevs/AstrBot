@@ -30,7 +30,7 @@ from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
-from .node_star import NodeStar
+from .node_star import is_node_star_metadata
 from .star import star_map, star_registry
 from .star_handler import star_handlers_registry
 from .updator import PluginUpdator
@@ -96,19 +96,9 @@ class PluginManager:
         _parse_schema(schema, conf)
         return conf
 
-    @staticmethod
-    def _is_node_plugin(metadata: StarMetadata) -> bool:
-        """Determine whether a plugin is a NodeStar plugin."""
-        if metadata.star_cls_type:
-            try:
-                return issubclass(metadata.star_cls_type, NodeStar)
-            except TypeError:
-                return False
-        return isinstance(metadata.star_cls, NodeStar)
-
     def _load_node_schema(self, metadata: StarMetadata, plugin_dir_path: str) -> None:
         """Load node schema for NodeStar plugins when available."""
-        if not self._is_node_plugin(metadata):
+        if not is_node_star_metadata(metadata):
             metadata.node_schema = None
             return
         node_schema_path = os.path.join(
@@ -292,8 +282,6 @@ class PluginManager:
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
-                plugin_type=metadata.get("type"),
-                node_config=metadata.get("node_config"),
             )
 
         return metadata
@@ -509,8 +497,6 @@ class PluginManager:
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
-                            metadata.plugin_type = metadata_yaml.plugin_type
-                            metadata.node_config = metadata_yaml.node_config
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",

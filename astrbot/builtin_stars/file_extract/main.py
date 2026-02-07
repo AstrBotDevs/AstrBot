@@ -44,12 +44,7 @@ class FileExtractNode(NodeStar):
 
         if replaced:
             # 重建 message_str
-            parts = []
-            for comp in message:
-                if isinstance(comp, Plain):
-                    parts.append(comp.text)
-            event.message_str = "".join(parts)
-            event.message_obj.message_str = event.message_str
+            event.rebuild_message_str_from_plain()
             logger.debug(f"File extraction: replaced {replaced} File component(s)")
 
             # Write output to ctx for downstream nodes

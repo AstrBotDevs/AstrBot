@@ -58,13 +58,11 @@ class ProviderCommands:
             targets = list_nodes_with_config(self.context, event, node_name)
             if not targets:
                 continue
-            rows.append(f"[{kind}] nodes:")
+            rows.append(f"[{kind}] 节点绑定：")
             for idx, target in enumerate(targets, start=1):
-                bound = target.config.get("provider_id", "") or "<inherit>"
-                rows.append(f"  {idx}. {target.node.uuid[:8]} provider={bound}")
-        return (
-            "\n".join(rows) if rows else "No provider-capable nodes in current chain."
-        )
+                bound = target.config.get("provider_id", "") or "<继承>"
+                rows.append(f"  {idx}. 节点={target.node.uuid[:8]} provider={bound}")
+        return "\n".join(rows) if rows else "当前 Chain 没有可绑定 provider 的节点。"
 
     def _render_provider_list(self) -> str:
         parts: list[str] = []
@@ -72,13 +70,13 @@ class ProviderCommands:
             providers = self._providers_by_kind(kind)
             if not providers:
                 continue
-            parts.append(f"[{kind}] providers:")
+            parts.append(f"[{kind}] 可用 provider：")
             for idx, prov in enumerate(providers, start=1):
                 meta = prov.meta()
                 model = getattr(meta, "model", "")
                 suffix = f" ({model})" if model else ""
                 parts.append(f"  {idx}. {meta.id}{suffix}")
-        return "\n".join(parts) if parts else "No providers loaded."
+        return "\n".join(parts) if parts else "当前没有已加载的 provider。"
 
     async def provider(
         self,
@@ -89,20 +87,20 @@ class ProviderCommands:
         del idx, idx2
         chain = event.chain_config
         if not chain:
-            event.set_result(MessageEventResult().message("No routed chain found."))
+            event.set_result(MessageEventResult().message("未找到已路由的 Chain。"))
             return
 
         tokens = self._split_tokens(event.message_str)
         if not tokens:
             msg = [
-                f"Chain: {chain.chain_id}",
+                f"当前 Chain: {chain.chain_id}",
                 self._render_provider_list(),
                 "",
                 self._render_node_bindings(event),
                 "",
-                "Usage:",
-                "/provider <provider_idx_or_id>  # single-agent compatibility",
-                "/provider <llm|tts|stt> <provider_idx_or_id>  # single-node compatibility",
+                "用法：",
+                "/provider <provider_idx_or_id>  # 兼容单 agent 绑定",
+                "/provider <llm|tts|stt> <provider_idx_or_id>  # 兼容单节点绑定",
                 "/provider <llm|tts|stt> <node_idx|node_uuid> <provider_idx_or_id>",
                 "/provider node ls",
             ]
@@ -130,7 +128,7 @@ class ProviderCommands:
         if not node_targets:
             event.set_result(
                 MessageEventResult().message(
-                    f"Current chain has no `{node_name}` node for {kind} provider binding."
+                    f"当前 Chain 中没有可用于 {kind} 绑定的 `{node_name}` 节点。"
                 )
             )
             return
@@ -143,7 +141,7 @@ class ProviderCommands:
             if len(node_targets) > 1:
                 event.set_result(
                     MessageEventResult().message(
-                        f"Multiple `{node_name}` nodes found. Use `/provider {kind} <node_idx|node_uuid> <provider>`."
+                        f"检测到多个 `{node_name}` 节点，请使用 `/provider {kind} <node_idx|node_uuid> <provider>` 指定节点。"
                     )
                 )
                 return
@@ -152,14 +150,12 @@ class ProviderCommands:
             provider_token = remaining[1]
 
         if not provider_token:
-            event.set_result(MessageEventResult().message("Missing provider argument."))
+            event.set_result(MessageEventResult().message("缺少 provider 参数。"))
             return
 
         provider = self._resolve_provider(kind, provider_token)
         if not provider:
-            event.set_result(
-                MessageEventResult().message("Invalid provider index or id.")
-            )
+            event.set_result(MessageEventResult().message("provider 序号或 ID 无效。"))
             return
 
         target = get_node_target(
@@ -170,11 +166,11 @@ class ProviderCommands:
         )
         if not target:
             if selector:
-                event.set_result(MessageEventResult().message("Invalid node selector."))
+                event.set_result(MessageEventResult().message("节点选择器无效。"))
             else:
                 event.set_result(
                     MessageEventResult().message(
-                        f"Multiple `{node_name}` nodes found. Please specify a node selector."
+                        f"检测到多个 `{node_name}` 节点，请显式指定节点。"
                     )
                 )
             return
@@ -182,7 +178,7 @@ class ProviderCommands:
         target.config.save_config({"provider_id": provider.meta().id})
         event.set_result(
             MessageEventResult().message(
-                f"Bound {kind} provider `{provider.meta().id}` to node `{target.node.uuid[:8]}` in chain `{chain.chain_id}`."
+                f"已将 {kind} provider `{provider.meta().id}` 绑定到 Chain `{chain.chain_id}` 的节点 `{target.node.uuid[:8]}`。"
             )
         )
 
@@ -191,9 +187,11 @@ class ProviderCommands:
         message: AstrMessageEvent,
         idx_or_name: int | str | None = None,
     ):
-        prov = self.context.get_using_provider(message.unified_msg_origin)
+        prov = self.context.get_chat_provider_for_event(message)
         if not prov:
-            message.set_result(MessageEventResult().message("No active LLM provider."))
+            message.set_result(
+                MessageEventResult().message("当前没有可用的 LLM provider。")
+            )
             return
         api_key_pattern = re.compile(r"key=[^&'\" ]+")
 
@@ -204,16 +202,16 @@ class ProviderCommands:
                 err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
                     MessageEventResult()
-                    .message("Failed to load models: " + err_msg)
+                    .message("获取模型列表失败：" + err_msg)
                     .use_t2i(False)
                 )
                 return
 
-            parts = ["Models:"]
+            parts = ["模型列表："]
             for i, model in enumerate(models, 1):
                 parts.append(f"\n{i}. {model}")
-            parts.append(f"\nCurrent model: [{prov.get_model() or '-'}]")
-            parts.append("\nUse /model <index|name> to switch model.")
+            parts.append(f"\n当前模型：[{prov.get_model() or '-'}]")
+            parts.append("\n使用 /model <index|name> 切换模型。")
             message.set_result(
                 MessageEventResult().message("".join(parts)).use_t2i(False)
             )
@@ -222,38 +220,40 @@ class ProviderCommands:
                 models = await prov.get_models()
             except BaseException as e:
                 message.set_result(
-                    MessageEventResult().message("Failed to load models: " + str(e))
+                    MessageEventResult().message("获取模型列表失败：" + str(e))
                 )
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
-                message.set_result(MessageEventResult().message("Invalid model index."))
+                message.set_result(MessageEventResult().message("模型序号无效。"))
                 return
             new_model = models[idx_or_name - 1]
             prov.set_model(new_model)
             message.set_result(
-                MessageEventResult().message(f"Switched model to {prov.get_model()}")
+                MessageEventResult().message(f"已切换到模型 {prov.get_model()}。")
             )
         else:
             prov.set_model(idx_or_name)
             message.set_result(
-                MessageEventResult().message(f"Switched model to {prov.get_model()}")
+                MessageEventResult().message(f"已切换到模型 {prov.get_model()}。")
             )
 
     async def key(self, message: AstrMessageEvent, index: int | None = None):
-        prov = self.context.get_using_provider(message.unified_msg_origin)
+        prov = self.context.get_chat_provider_for_event(message)
         if not prov:
-            message.set_result(MessageEventResult().message("No active LLM provider."))
+            message.set_result(
+                MessageEventResult().message("当前没有可用的 LLM provider。")
+            )
             return
 
         if index is None:
             keys_data = prov.get_keys()
             curr_key = prov.get_current_key()
-            parts = ["Keys:"]
+            parts = ["可用密钥："]
             for i, k in enumerate(keys_data, 1):
                 parts.append(f"\n{i}. {k[:8]}")
-            parts.append(f"\nCurrent key: {curr_key[:8]}")
-            parts.append(f"\nCurrent model: {prov.get_model()}")
-            parts.append("\nUse /key <index> to switch key.")
+            parts.append(f"\n当前密钥：{curr_key[:8]}")
+            parts.append(f"\n当前模型：{prov.get_model()}")
+            parts.append("\n使用 /key <index> 切换密钥。")
             message.set_result(
                 MessageEventResult().message("".join(parts)).use_t2i(False)
             )
@@ -261,8 +261,8 @@ class ProviderCommands:
 
         keys_data = prov.get_keys()
         if index > len(keys_data) or index < 1:
-            message.set_result(MessageEventResult().message("Invalid key index."))
+            message.set_result(MessageEventResult().message("密钥序号无效。"))
             return
         new_key = keys_data[index - 1]
         prov.set_key(new_key)
-        message.set_result(MessageEventResult().message("Switched key successfully."))
+        message.set_result(MessageEventResult().message("密钥切换成功。"))

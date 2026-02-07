@@ -23,8 +23,6 @@ class ChainConfigModel(TimestampMixin, SQLModel, table=True):
 
     nodes: list[dict | str] | None = Field(default=None, sa_type=JSON)
 
-    llm_enabled: bool = Field(default=True)
-
     plugin_filter: dict | None = Field(default=None, sa_type=JSON)
 
     config_id: str | None = Field(default=None, max_length=36)
@@ -107,7 +105,6 @@ class ChainConfig:
     sort_order: int = 0
     enabled: bool = True
     nodes: list[ChainNodeConfig] = field(default_factory=list)
-    llm_enabled: bool = True
     plugin_filter: PluginFilterConfig | None = None
     config_id: str | None = None
 
@@ -143,7 +140,6 @@ class ChainConfig:
             sort_order=model.sort_order,
             enabled=model.enabled,
             nodes=nodes,
-            llm_enabled=model.llm_enabled,
             plugin_filter=plugin_filter,
             config_id=model.config_id,
         )

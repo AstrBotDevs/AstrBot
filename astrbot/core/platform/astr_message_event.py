@@ -28,6 +28,7 @@ from astrbot.core.message.message_event_result import (
     ResultContentType,
     collect_streaming_result,
 )
+from astrbot.core.pipeline.engine.node_context import NodePacket, NodePacketKind
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
     from astrbot.core.pipeline.engine.chain_config import ChainConfig
     from astrbot.core.pipeline.engine.node_context import NodeContext, NodeContextStack
     from astrbot.core.pipeline.engine.send_service import SendService
+
+ASTR_MESSAGE_EVENT_VERSION = 5
 
 
 class AstrMessageEvent(abc.ABC):
@@ -74,6 +77,9 @@ class AstrMessageEvent(abc.ABC):
         """统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
         self._result: MessageEventResult | None = None
         """消息事件的结果"""
+
+        self.version: int = ASTR_MESSAGE_EVENT_VERSION
+        """Event payload schema version."""
 
         self.created_at = time()
         """事件创建时间(Unix timestamp)"""
@@ -161,6 +167,28 @@ class AstrMessageEvent(abc.ABC):
     def get_message_str(self) -> str:
         """获取消息字符串。"""
         return self.message_str
+
+    def set_message_str(self, text: str) -> None:
+        """Update input message_str and keep message_obj.message_str in sync."""
+        self.message_str = text
+        self.message_obj.message_str = text
+
+    def append_message_str(self, text: str) -> None:
+        """Append text to input message_str and keep message_obj.message_str in sync."""
+        if not text:
+            return
+        self.message_str += text
+        self.message_obj.message_str += text
+
+    def rebuild_message_str_from_plain(self) -> str:
+        """Rebuild input message_str from top-level Plain components."""
+        parts: list[str] = []
+        for comp in self.message_obj.message:
+            if isinstance(comp, Plain):
+                parts.append(comp.text)
+        merged = "".join(parts)
+        self.set_message_str(merged)
+        return merged
 
     def _outline_chain(self, chain: list[BaseMessageComponent] | None) -> str:
         if not chain:
@@ -322,9 +350,12 @@ class AstrMessageEvent(abc.ABC):
         ctx = self.node_context
         if not ctx:
             raise RuntimeError("Node context is not available for this event.")
-        ctx.output = output
-        if isinstance(output, MessageEventResult):
-            self.set_result(output)
+
+        packet = NodePacket.create(output)
+        ctx.output = packet
+
+        if isinstance(packet.data, MessageEventResult):
+            self.set_result(packet.data)
 
     @staticmethod
     def _normalize_node_names(names: str | list[str] | None) -> set[str] | None:
@@ -378,43 +409,55 @@ class AstrMessageEvent(abc.ABC):
         from astrbot.core.pipeline.engine.node_context import NodeExecutionStatus
 
         name_set = self._normalize_node_names(names)
-        outputs = self.context_stack.get_outputs(
+        packets = self.context_stack.get_outputs(
             names=name_set,
             status=NodeExecutionStatus.EXECUTED,
             include_none=False,
         )
-        if not outputs:
+        if not packets:
             return None
 
         strategy = (strategy or "last").lower()
 
         if strategy == "last":
-            return outputs[-1]
+            return packets[-1].data
         if strategy == "first":
-            return outputs[0]
+            return packets[0].data
         if strategy == "list":
-            return outputs
+            return [packet.data for packet in packets]
 
         if strategy == "text_concat":
             texts: list[str] = []
-            for output in outputs:
-                if isinstance(output, MessageEventResult):
-                    output = await self._collect_streaming_output(output)
-                text = self._output_to_text(output)
+            for packet in packets:
+                output = packet.data
+                if packet.kind == NodePacketKind.MESSAGE:
+                    if isinstance(output, MessageEventResult):
+                        output = await self._collect_streaming_output(output)
+                    text = self._output_to_text(output)
+                elif packet.kind == NodePacketKind.TEXT:
+                    text = output if isinstance(output, str) else str(output)
+                else:
+                    text = self._output_to_text(output)
                 if text and text.strip():
                     texts.append(text)
             return "\n".join(texts)
 
         if strategy == "chain_concat":
             chain = []
-            for output in outputs:
-                if isinstance(output, MessageEventResult):
-                    output = await self._collect_streaming_output(output)
-                    chain.extend(output.chain or [])
-                elif isinstance(output, MessageChain):
-                    chain.extend(output.chain or [])
-                elif isinstance(output, str):
-                    chain.append(Plain(output))
+            for packet in packets:
+                output = packet.data
+                if packet.kind == NodePacketKind.MESSAGE:
+                    if isinstance(output, MessageEventResult):
+                        output = await self._collect_streaming_output(output)
+                        chain.extend(output.chain or [])
+                    elif isinstance(output, MessageChain):
+                        chain.extend(output.chain or [])
+                    else:
+                        chain.append(Plain(str(output)))
+                elif packet.kind == NodePacketKind.TEXT:
+                    chain.append(
+                        Plain(output if isinstance(output, str) else str(output))
+                    )
                 else:
                     chain.append(Plain(str(output)))
             return MessageEventResult(chain=chain)

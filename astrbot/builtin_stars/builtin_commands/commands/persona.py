@@ -31,39 +31,80 @@ class PersonaCommands:
     def _render_agent_nodes(self, event: AstrMessageEvent) -> str:
         targets = list_nodes_with_config(self.context, event, "agent")
         if not targets:
-            return "Current chain has no agent node."
+            return "当前 Chain 中没有 agent 节点。"
         lines = []
         for idx, target in enumerate(targets, start=1):
-            persona_id = target.config.get("persona_id") or "<inherit>"
-            provider_id = target.config.get("provider_id") or "<inherit>"
+            persona_id = target.config.get("persona_id") or "<继承>"
+            provider_id = target.config.get("provider_id") or "<继承>"
             lines.append(
-                f"{idx}. node={target.node.uuid[:8]} persona={persona_id} provider={provider_id}"
+                f"{idx}. 节点={target.node.uuid[:8]} persona={persona_id} provider={provider_id}"
             )
+        return "\n".join(lines)
+
+    async def _render_persona_tree(self) -> str:
+        folders = await self.context.persona_manager.get_folder_tree()
+        personas = await self.context.persona_manager.get_all_personas()
+
+        personas_by_folder: dict[str | None, list] = {}
+        for persona in personas:
+            personas_by_folder.setdefault(persona.folder_id, []).append(persona)
+
+        for folder_personas in personas_by_folder.values():
+            folder_personas.sort(key=lambda p: (p.sort_order, p.persona_id))
+
+        lines: list[str] = ["人格树："]
+
+        def append_personas(folder_id: str | None, indent: str) -> None:
+            for persona in personas_by_folder.get(folder_id, []):
+                lines.append(f"{indent}- {persona.persona_id}")
+
+        def append_folders(folder_nodes: list[dict], indent: str) -> None:
+            for folder in folder_nodes:
+                folder_name = folder.get("name") or "<未命名文件夹>"
+                lines.append(f"{indent}[{folder_name}]")
+
+                folder_id = folder.get("folder_id")
+                append_personas(folder_id, indent + "  ")
+
+                children = folder.get("children") or []
+                if children:
+                    append_folders(children, indent + "  ")
+
+        append_personas(None, "")
+        if folders:
+            if len(lines) > 1:
+                lines.append("")
+            append_folders(folders, "")
+
+        if len(lines) == 1:
+            lines.append("(空)")
+
         return "\n".join(lines)
 
     async def persona(self, message: AstrMessageEvent):
         chain = message.chain_config
         if not chain:
-            message.set_result(MessageEventResult().message("No routed chain found."))
+            message.set_result(MessageEventResult().message("未找到已路由的 Chain。"))
             return
 
         tokens = self._split_tokens(message.message_str)
+        chain_config_id = chain.config_id if chain else None
         default_persona = await self.context.persona_manager.get_default_persona_v3(
-            umo=message.unified_msg_origin,
+            config_id=chain_config_id,
         )
 
         if not tokens:
             help_text = [
-                f"Chain: {chain.chain_id}",
-                f"Default persona: {default_persona['name']}",
+                f"当前 Chain: {chain.chain_id}",
+                f"默认人格: {default_persona['name']}",
                 "",
                 self._render_agent_nodes(message),
                 "",
-                "Usage:",
+                "用法：",
                 "/persona list",
                 "/persona view <persona_name>",
-                "/persona <persona_name>  # single-agent compatibility",
-                "/persona unset  # single-agent compatibility",
+                "/persona <persona_name>  # 兼容单 agent 绑定",
+                "/persona unset  # 兼容单 agent 解绑",
                 "/persona node ls",
                 "/persona node set <node_idx|node_uuid> <persona_name>",
                 "/persona node unset <node_idx|node_uuid>",
@@ -74,31 +115,29 @@ class PersonaCommands:
             return
 
         if tokens[0] == "list":
-            all_personas = self.context.persona_manager.personas
-            lines = ["Personas:"]
-            for persona in all_personas:
-                lines.append(f"- {persona.persona_id}")
             message.set_result(
-                MessageEventResult().message("\n".join(lines)).use_t2i(False)
+                MessageEventResult()
+                .message(await self._render_persona_tree())
+                .use_t2i(False)
             )
             return
 
         if tokens[0] == "view":
             if len(tokens) < 2:
                 message.set_result(
-                    MessageEventResult().message("Please input persona name.")
+                    MessageEventResult().message("请输入 persona 名称。")
                 )
                 return
             persona_name = tokens[1]
             persona = self._find_persona(persona_name)
             if not persona:
                 message.set_result(
-                    MessageEventResult().message(f"Persona `{persona_name}` not found.")
+                    MessageEventResult().message(f"未找到 persona `{persona_name}`。")
                 )
                 return
             message.set_result(
                 MessageEventResult().message(
-                    f"Persona {persona_name}:\n{persona['prompt']}"
+                    f"persona {persona_name}:\n{persona['prompt']}"
                 )
             )
             return
@@ -118,7 +157,7 @@ class PersonaCommands:
                 if not persona:
                     message.set_result(
                         MessageEventResult().message(
-                            f"Persona `{persona_name}` not found."
+                            f"未找到 persona `{persona_name}`。"
                         )
                     )
                     return
@@ -127,13 +166,13 @@ class PersonaCommands:
                 )
                 if not target:
                     message.set_result(
-                        MessageEventResult().message("Invalid agent node selector.")
+                        MessageEventResult().message("agent 节点选择器无效。")
                     )
                     return
                 target.config.save_config({"persona_id": persona_name})
                 message.set_result(
                     MessageEventResult().message(
-                        f"Bound persona `{persona_name}` to agent node `{target.node.uuid[:8]}`."
+                        f"已将 persona `{persona_name}` 绑定到 agent 节点 `{target.node.uuid[:8]}`。"
                     )
                 )
                 return
@@ -144,20 +183,20 @@ class PersonaCommands:
                 )
                 if not target:
                     message.set_result(
-                        MessageEventResult().message("Invalid agent node selector.")
+                        MessageEventResult().message("agent 节点选择器无效。")
                     )
                     return
                 target.config.save_config({"persona_id": ""})
                 message.set_result(
                     MessageEventResult().message(
-                        f"Cleared persona binding for agent node `{target.node.uuid[:8]}`."
+                        f"已清除 agent 节点 `{target.node.uuid[:8]}` 的 persona 绑定。"
                     )
                 )
                 return
 
             message.set_result(
                 MessageEventResult().message(
-                    "Usage: /persona node ls | /persona node set <node> <persona> | /persona node unset <node>"
+                    "用法: /persona node ls | /persona node set <node> <persona> | /persona node unset <node>"
                 )
             )
             return
@@ -167,12 +206,12 @@ class PersonaCommands:
             if len(targets) != 1:
                 message.set_result(
                     MessageEventResult().message(
-                        "Multiple agent nodes found. Use /persona node unset <node_idx|node_uuid>."
+                        "检测到多个 agent 节点，请使用 /persona node unset <node_idx|node_uuid>。"
                     )
                 )
                 return
             targets[0].config.save_config({"persona_id": ""})
-            message.set_result(MessageEventResult().message("Persona cleared."))
+            message.set_result(MessageEventResult().message("已清除 persona 绑定。"))
             return
 
         persona_name = " ".join(tokens).strip()
@@ -180,7 +219,7 @@ class PersonaCommands:
         if not persona:
             message.set_result(
                 MessageEventResult().message(
-                    f"Persona `{persona_name}` not found. Use /persona list."
+                    f"未找到 persona `{persona_name}`，请使用 /persona list 查看。"
                 )
             )
             return
@@ -189,7 +228,7 @@ class PersonaCommands:
         if len(targets) != 1:
             message.set_result(
                 MessageEventResult().message(
-                    "Multiple agent nodes found. Use /persona node set <node_idx|node_uuid> <persona_name>."
+                    "检测到多个 agent 节点，请使用 /persona node set <node_idx|node_uuid> <persona_name>。"
                 )
             )
             return
@@ -197,6 +236,6 @@ class PersonaCommands:
         targets[0].config.save_config({"persona_id": persona_name})
         message.set_result(
             MessageEventResult().message(
-                f"Bound persona `{persona_name}` to the current agent node."
+                f"已将 persona `{persona_name}` 绑定到当前 agent 节点。"
             )
         )

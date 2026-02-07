@@ -16,7 +16,7 @@ from astrbot.core.pipeline.engine.chain_config import (
     serialize_chain_nodes,
 )
 from astrbot.core.star.modality import Modality
-from astrbot.core.star.node_star import NodeStar
+from astrbot.core.star.node_star import is_node_star_metadata
 from astrbot.core.star.star import StarMetadata
 
 from .config import validate_config
@@ -66,7 +66,6 @@ class ChainManagementRoute(Route):
             "sort_order": chain.sort_order,
             "enabled": chain.enabled,
             "nodes": nodes_payload,
-            "llm_enabled": chain.llm_enabled,
             "plugin_filter": chain.plugin_filter,
             "config_id": chain.config_id,
             "created_at": chain.created_at.isoformat() if chain.created_at else None,
@@ -81,7 +80,6 @@ class ChainManagementRoute(Route):
             "sort_order": -1,
             "enabled": True,
             "nodes": None,
-            "llm_enabled": DEFAULT_CHAIN_CONFIG.llm_enabled,
             "plugin_filter": None,
             "config_id": "default",
             "created_at": None,
@@ -89,20 +87,11 @@ class ChainManagementRoute(Route):
             "is_default": True,
         }
 
-    @staticmethod
-    def _is_node_plugin(plugin: StarMetadata) -> bool:
-        if plugin.star_cls_type:
-            try:
-                return issubclass(plugin.star_cls_type, NodeStar)
-            except TypeError:
-                return False
-        return isinstance(plugin.star_cls, NodeStar)
-
     def _get_node_plugin_map(self) -> dict[str, StarMetadata]:
         return {
             p.name: p
             for p in self.core_lifecycle.plugin_manager.context.get_all_stars()
-            if p.name and self._is_node_plugin(p)
+            if p.name and is_node_star_metadata(p)
         }
 
     def _get_node_schema(self, node_name: str) -> dict | None:
@@ -243,7 +232,6 @@ class ChainManagementRoute(Route):
                 sort_order=max_sort_order + 1,
                 enabled=data.get("enabled", True),
                 nodes=nodes_payload,
-                llm_enabled=data.get("llm_enabled", True),
                 plugin_filter=data.get("plugin_filter"),
                 config_id=data.get("config_id"),
             )
@@ -292,7 +280,6 @@ class ChainManagementRoute(Route):
                         sort_order=-1,
                         enabled=data.get("enabled", True),
                         nodes=nodes_payload,
-                        llm_enabled=data.get("llm_enabled", True),
                         plugin_filter=data.get("plugin_filter"),
                         config_id="default",
                     )
@@ -306,7 +293,6 @@ class ChainManagementRoute(Route):
                     "match_rule",
                     "enabled",
                     "nodes",
-                    "llm_enabled",
                     "plugin_filter",
                     "config_id",
                 ]:
@@ -430,13 +416,13 @@ class ChainManagementRoute(Route):
                     "desc": p.desc,
                 }
                 for p in plugin_manager.context.get_all_stars()
-                if not p.reserved and p.name and not self._is_node_plugin(p)
+                if not p.reserved and p.name and not is_node_star_metadata(p)
             ]
 
             node_plugins = [
                 p
                 for p in plugin_manager.context.get_all_stars()
-                if p.name and self._is_node_plugin(p)
+                if p.name and is_node_star_metadata(p)
             ]
             available_nodes = [
                 {
@@ -479,17 +465,18 @@ class ChainManagementRoute(Route):
         try:
             chain_id = request.args.get("chain_id", "").strip()
             node_name = request.args.get("node_name", "").strip()
-            node_uuid = request.args.get("node_uuid", "").strip() or None
+            node_uuid = request.args.get("node_uuid", "").strip()
 
             if not chain_id or not node_name:
                 return Response().error("缺少必要参数: chain_id 或 node_name").__dict__
 
-            schema = self._get_node_schema(node_name) or {}
+            raw_schema = self._get_node_schema(node_name)
+            schema = raw_schema or {}
             node_config = AstrBotNodeConfig.get_cached(
                 node_name=node_name,
                 chain_id=chain_id,
                 node_uuid=node_uuid,
-                schema=schema or None,
+                schema=raw_schema,
             )
 
             return (
@@ -511,7 +498,7 @@ class ChainManagementRoute(Route):
             data = await request.get_json()
             chain_id = (data.get("chain_id") or "").strip()
             node_name = (data.get("node_name") or "").strip()
-            node_uuid = (data.get("node_uuid") or "").strip() or None
+            node_uuid = (data.get("node_uuid") or "").strip()
             config = data.get("config")
 
             if not chain_id or not node_name:
@@ -519,9 +506,14 @@ class ChainManagementRoute(Route):
             if not isinstance(config, dict):
                 return Response().error("配置内容必须是对象").__dict__
 
-            schema = self._get_node_schema(node_name) or {}
-            if schema:
-                errors, config = validate_config(config, schema, is_core=False)
+            raw_schema = self._get_node_schema(node_name)
+            if raw_schema is None:
+                return (
+                    Response().error("该节点未声明配置 Schema，无法保存配置").__dict__
+                )
+
+            if raw_schema:
+                errors, config = validate_config(config, raw_schema, is_core=False)
                 if errors:
                     return Response().error(f"配置校验失败: {errors}").__dict__
 
@@ -529,7 +521,7 @@ class ChainManagementRoute(Route):
                 node_name=node_name,
                 chain_id=chain_id,
                 node_uuid=node_uuid,
-                schema=schema or None,
+                schema=raw_schema,
             )
             node_config.save_config(config)
 

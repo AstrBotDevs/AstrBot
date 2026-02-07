@@ -70,6 +70,8 @@ DEFAULT_CONFIG = {
         "default_provider_id": "",
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "default_stt_provider_id": "",
+        "default_tts_provider_id": "",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
@@ -100,10 +102,6 @@ DEFAULT_CONFIG = {
         "streaming_response": False,
         "show_tool_use_status": False,
         "sanitize_context_by_modalities": False,
-        "agent_runner_type": "local",
-        "dify_agent_runner_provider_id": "",
-        "coze_agent_runner_provider_id": "",
-        "dashscope_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
@@ -2092,6 +2090,12 @@ CONFIG_METADATA_2 = {
                     "default_provider_id": {
                         "type": "string",
                     },
+                    "default_image_caption_provider_id": {
+                        "type": "string",
+                    },
+                    "image_caption_prompt": {
+                        "type": "string",
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -2132,18 +2136,6 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                     },
                     "unsupported_streaming_strategy": {
-                        "type": "string",
-                    },
-                    "agent_runner_type": {
-                        "type": "string",
-                    },
-                    "dify_agent_runner_provider_id": {
-                        "type": "string",
-                    },
-                    "coze_agent_runner_provider_id": {
-                        "type": "string",
-                    },
-                    "dashscope_agent_runner_provider_id": {
                         "type": "string",
                     },
                     "max_agent_step": {
@@ -2295,54 +2287,6 @@ CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
         "metadata": {
-            "agent_runner": {
-                "description": "Agent 执行方式",
-                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器，不需要修改此节。",
-                "type": "object",
-                "items": {
-                    "provider_settings.enable": {
-                        "description": "启用",
-                        "type": "bool",
-                        "hint": "AI 对话总开关",
-                    },
-                    "provider_settings.agent_runner_type": {
-                        "description": "执行器",
-                        "type": "string",
-                        "options": ["local", "dify", "coze", "dashscope"],
-                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
-                        "condition": {
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.coze_agent_runner_provider_id": {
-                        "description": "Coze Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:coze",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "coze",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.dify_agent_runner_provider_id": {
-                        "description": "Dify Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:dify",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "dify",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.dashscope_agent_runner_provider_id": {
-                        "description": "阿里云百炼应用 Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:dashscope",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "dashscope",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                },
-            },
             "ai": {
                 "description": "模型",
                 "hint": "当使用非内置 Agent 执行器时，默认聊天模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
@@ -2365,9 +2309,7 @@ CONFIG_METADATA_3 = {
                         "type": "text",
                     },
                 },
-                "condition": {
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "persona": {
                 "description": "人格",
@@ -2380,10 +2322,7 @@ CONFIG_METADATA_3 = {
                         "_special": "select_persona",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "knowledgebase": {
                 "description": "知识库",
@@ -2413,10 +2352,7 @@ CONFIG_METADATA_3 = {
                         "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "websearch": {
                 "description": "网页搜索",
@@ -2471,10 +2407,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "agent_computer_use": {
                 "description": "Agent Computer Use",
@@ -2535,10 +2468,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "proactive_capability": {
                 "description": "主动型 Agent",
@@ -2551,10 +2481,7 @@ CONFIG_METADATA_3 = {
                         "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务。",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "truncate_and_compress": {
                 "hint": "",
@@ -2565,26 +2492,20 @@ CONFIG_METADATA_3 = {
                         "description": "最多携带对话轮数",
                         "type": "int",
                         "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.dequeue_context_length": {
                         "description": "丢弃对话轮数",
                         "type": "int",
                         "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.context_limit_reached_strategy": {
                         "description": "超出模型上下文窗口时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                         "hint": "",
                     },
                     "provider_settings.llm_compress_instruction": {
@@ -2593,7 +2514,6 @@ CONFIG_METADATA_3 = {
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.llm_compress_keep_recent": {
@@ -2602,7 +2522,6 @@ CONFIG_METADATA_3 = {
                         "hint": "始终保留的最近 N 轮对话。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.llm_compress_provider_id": {
@@ -2612,14 +2531,10 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "others": {
                 "description": "其他配置",
@@ -2628,9 +2543,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.streaming_response": {
                         "description": "流式输出",
@@ -2674,38 +2587,28 @@ CONFIG_METADATA_3 = {
                         "description": "现实世界时间感知",
                         "type": "bool",
                         "hint": "启用后，会在系统提示词中附带当前时间信息。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
                         "type": "bool",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.sanitize_context_by_modalities": {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
                         "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.tool_schema_mode": {
                         "description": "工具调用模式",
@@ -2713,9 +2616,7 @@ CONFIG_METADATA_3 = {
                         "options": ["skills_like", "full"],
                         "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
@@ -2733,9 +2634,7 @@ CONFIG_METADATA_3 = {
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
                     },
                 },
-                "condition": {
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
         },
     },

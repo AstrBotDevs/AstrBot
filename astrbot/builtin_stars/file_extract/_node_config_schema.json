@@ -1,14 +1,15 @@
-{
+﻿{
   "provider": {
     "type": "string",
     "default": "moonshotai",
-    "description": "Extraction provider",
-    "options": ["local", "moonshotai"]
+    "description": "文件提取服务提供方",
+    "options": ["local", "moonshotai"],
+    "labels": ["本地解析", "Moonshot AI"]
   },
   "moonshotai_api_key": {
     "type": "string",
     "default": "",
-    "description": "Moonshot AI API key",
-    "hint": "Required when provider is moonshotai."
+    "description": "Moonshot AI 的 API Key",
+    "hint": "当提供方为 moonshotai 时必填"
   }
 }

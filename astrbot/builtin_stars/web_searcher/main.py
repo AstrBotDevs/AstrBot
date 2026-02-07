@@ -222,7 +222,9 @@ class Main(star.Star):
 
         """
         logger.info(f"web_searcher - search_from_search_engine: {query}")
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
 
         results = await self._web_search_default(query, max_results)
@@ -246,10 +248,10 @@ class Main(star.Star):
 
         return ret
 
-    async def ensure_baidu_ai_search_mcp(self, umo: str | None = None):
+    async def ensure_baidu_ai_search_mcp(self, config_id: str | None = None):
         if self.baidu_initialized:
             return
-        cfg = self.context.get_config(umo=umo)
+        cfg = self.context.get_config_by_id(config_id)
         key = cfg.get("provider_settings", {}).get(
             "websearch_baidu_app_builder_key",
             "",
@@ -310,7 +312,9 @@ class Main(star.Star):
 
         """
         logger.info(f"web_searcher - search_from_tavily: {query}")
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
@@ -372,7 +376,9 @@ class Main(star.Star):
             extract_depth(string): Optional. The depth of the extraction, must be one of 'basic', 'advanced'. Default is "basic".
 
         """
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
             raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
@@ -500,7 +506,9 @@ class Main(star.Star):
                 specified count.
         """
         logger.info(f"web_searcher - search_from_bocha: {query}")
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
         if not cfg.get("provider_settings", {}).get("websearch_bocha_key", []):
             raise ValueError("Error: BoCha API key is not configured in AstrBot.")
@@ -555,7 +563,8 @@ class Main(star.Star):
         req: ProviderRequest,
     ):
         """Get the session conversation for the given event."""
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+        cfg = self.context.get_config_by_id(chain_config_id)
         prov_settings = cfg.get("provider_settings", {})
         websearch_enable = prov_settings.get("web_search", False)
         provider = prov_settings.get("websearch_provider", "default")
@@ -599,7 +608,7 @@ class Main(star.Star):
             tool_set.remove_tool("web_search_bocha")
         elif provider == "baidu_ai_search":
             try:
-                await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
+                await self.ensure_baidu_ai_search_mcp(chain_config_id)
                 aisearch_tool = func_tool_mgr.get_func("AIsearch")
                 if not aisearch_tool:
                     raise ValueError("Cannot get Baidu AI Search MCP tool.")

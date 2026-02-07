@@ -8,7 +8,7 @@ from astrbot.core.star.node_star import NodeResult
 
 
 class AccessController:
-    """Whitelist check (system-level mechanism)."""
+    """Whitelist check"""
 
     def __init__(self, ctx: PipelineContext):
         self._ctx = ctx

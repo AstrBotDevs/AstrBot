@@ -35,7 +35,6 @@ from astrbot.core.star import PluginManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
-from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
@@ -128,11 +127,10 @@ class AstrBotCoreLifecycle:
 
         # apply migration
         try:
-            umop_config_router = UmopConfigRouter(sp)
             await migra(
                 self.db,
                 self.astrbot_config_mgr,
-                umop_config_router,
+                sp,
                 self.astrbot_config_mgr,
             )
         except Exception as e:
@@ -371,9 +369,6 @@ class AstrBotCoreLifecycle:
                 PipelineContext(
                     ab_config,
                     self.plugin_manager,
-                    config_id,
-                    provider_manager=self.provider_manager,
-                    db_helper=self.db,
                 ),
             )
             await executor.initialize()
@@ -390,9 +385,6 @@ class AstrBotCoreLifecycle:
             PipelineContext(
                 ab_config,
                 self.plugin_manager,
-                config_id,
-                provider_manager=self.provider_manager,
-                db_helper=self.db,
             ),
         )
         await executor.initialize()

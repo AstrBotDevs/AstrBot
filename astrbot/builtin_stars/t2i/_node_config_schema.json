@@ -1,27 +1,28 @@
-{
+﻿{
   "word_threshold": {
     "type": "int",
     "default": 150,
-    "description": "Word threshold",
-    "hint": "Minimum plain-text length to trigger text-to-image."
+    "description": "触发文转图的文本长度阈值",
+    "hint": "纯文本长度超过该值时才会触发文转图"
   },
   "strategy": {
     "type": "string",
-    "description": "Strategy",
+    "description": "渲染策略",
     "options": ["remote", "local"],
+    "labels": ["远程渲染", "本地渲染"],
     "default": "remote",
-    "hint": "Remote uses the t2i endpoint; local uses the renderer directly."
+    "hint": "remote 使用 t2i 端点；local 由本地渲染器处理"
   },
   "active_template": {
     "type": "string",
-    "description": "Active template",
+    "description": "渲染模板名称",
     "default": "",
-    "hint": "Template name for rendering (leave empty to use the global template)."
+    "hint": "留空则使用全局激活模板"
   },
   "use_file_service": {
     "type": "bool",
     "default": false,
-    "description": "Use file service",
-    "hint": "Serve generated images through the file service when enabled."
+    "description": "是否使用文件服务分发图片",
+    "hint": "开启后，生成图片将通过文件服务对外提供访问链接"
   }
 }

@@ -1,26 +1,26 @@
-{
+﻿{
   "provider_id": {
     "type": "string",
     "default": "",
-    "description": "TTS provider ID override for this node.",
+    "description": "覆盖此节点的文字转语音（TTS）提供商 ID",
     "_special": "select_provider_tts"
   },
   "trigger_probability": {
     "type": "float",
     "default": 1.0,
-    "description": "Trigger probability",
-    "hint": "Probability to convert text to speech (0.0-1.0)."
+    "description": "触发概率。",
+    "hint": "文本转换为语音的概率，范围为 0.0 到 1.0"
   },
   "use_file_service": {
     "type": "bool",
     "default": false,
-    "description": "Use file service",
-    "hint": "Serve generated audio through the file service when enabled."
+    "description": "是否使用文件服务分发语音。",
+    "hint": "开启后，生成音频将通过文件服务对外提供访问链接"
   },
   "dual_output": {
     "type": "bool",
     "default": false,
-    "description": "Dual output",
-    "hint": "Send both audio and text when enabled."
+    "description": "是否双输出。",
+    "hint": "开启后将同时输出语音和文本"
   }
 }

@@ -104,6 +104,9 @@ class FileUploadTool(FunctionTool):
         sb = await get_booter(
             context.context.context,
             context.context.event.unified_msg_origin,
+            context.context.event.chain_config.config_id
+            if context.context.event.chain_config
+            else None,
         )
         try:
             # Check if file exists
@@ -163,6 +166,9 @@ class FileDownloadTool(FunctionTool):
         sb = await get_booter(
             context.context.context,
             context.context.event.unified_msg_origin,
+            context.context.event.chain_config.config_id
+            if context.context.event.chain_config
+            else None,
         )
         try:
             name = os.path.basename(remote_path)

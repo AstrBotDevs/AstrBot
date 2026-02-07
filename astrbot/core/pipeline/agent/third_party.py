@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.pipeline.agent.runner_config import AGENT_RUNNER_PROVIDER_KEY
 from astrbot.core.pipeline.agent.types import AgentRunOutcome
 from astrbot.core.pipeline.context import PipelineContext, call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -27,12 +28,6 @@ from astrbot.core.provider.entities import (
 )
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
-
-AGENT_RUNNER_TYPE_KEY = {
-    "dify": "dify_agent_runner_provider_id",
-    "coze": "coze_agent_runner_provider_id",
-    "dashscope": "dashscope_agent_runner_provider_id",
-}
 
 
 async def run_third_party_agent(
@@ -65,11 +60,6 @@ class ThirdPartyAgentExecutor:
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.conf = ctx.astrbot_config
-        self.runner_type = self.conf["provider_settings"]["agent_runner_type"]
-        self.prov_id = self.conf["provider_settings"].get(
-            AGENT_RUNNER_TYPE_KEY.get(self.runner_type, ""),
-            "",
-        )
         settings = ctx.astrbot_config["provider_settings"]
         self.streaming_response: bool = settings["streaming_response"]
         self.unsupported_streaming_strategy: str = settings[
@@ -77,7 +67,12 @@ class ThirdPartyAgentExecutor:
         ]
 
     async def run(
-        self, event: AstrMessageEvent, provider_wake_prefix: str
+        self,
+        event: AstrMessageEvent,
+        provider_wake_prefix: str,
+        *,
+        runner_type: str,
+        provider_id: str,
     ) -> AgentRunOutcome:
         outcome = AgentRunOutcome()
         req: ProviderRequest | None = None
@@ -87,16 +82,22 @@ class ThirdPartyAgentExecutor:
         ):
             return outcome
 
-        self.prov_cfg: dict = next(
-            (p for p in astrbot_config["provider"] if p["id"] == self.prov_id),
+        if runner_type not in AGENT_RUNNER_PROVIDER_KEY:
+            logger.error("Unsupported third party agent runner type: %s", runner_type)
+            return outcome
+
+        if not provider_id:
+            logger.error("没有填写 Agent Runner 提供商 ID，请在 Agent 节点配置中设置。")
+            return outcome
+
+        prov_cfg: dict = next(
+            (p for p in astrbot_config["provider"] if p["id"] == provider_id),
             {},
         )
-        if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
-            return outcome
-        if not self.prov_cfg:
+        if not prov_cfg:
             logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
+                "Agent Runner 提供商 %s 配置不存在，请检查 Agent 节点配置。",
+                provider_id,
             )
             return outcome
 
@@ -116,15 +117,15 @@ class ThirdPartyAgentExecutor:
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return outcome
 
-        if self.runner_type == "dify":
+        if runner_type == "dify":
             runner = DifyAgentRunner[AstrAgentContext]()
-        elif self.runner_type == "coze":
+        elif runner_type == "coze":
             runner = CozeAgentRunner[AstrAgentContext]()
-        elif self.runner_type == "dashscope":
+        elif runner_type == "dashscope":
             runner = DashscopeAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
-                f"Unsupported third party agent runner type: {self.runner_type}",
+                f"Unsupported third party agent runner type: {runner_type}",
             )
 
         astr_agent_ctx = AstrAgentContext(
@@ -148,7 +149,7 @@ class ThirdPartyAgentExecutor:
                 tool_call_timeout=60,
             ),
             agent_hooks=MAIN_AGENT_HOOKS,
-            provider_config=self.prov_cfg,
+            provider_config=prov_cfg,
             streaming=streaming_response,
         )
         outcome.handled = True
@@ -165,8 +166,8 @@ class ThirdPartyAgentExecutor:
                 asyncio.create_task(
                     Metric.upload(
                         llm_tick=1,
-                        model_name=self.runner_type,
-                        provider_type=self.runner_type,
+                        model_name=runner_type,
+                        provider_type=runner_type,
                     ),
                 )
 
@@ -203,8 +204,8 @@ class ThirdPartyAgentExecutor:
         asyncio.create_task(
             Metric.upload(
                 llm_tick=1,
-                model_name=self.runner_type,
-                provider_type=self.runner_type,
+                model_name=runner_type,
+                provider_type=runner_type,
             ),
         )
 

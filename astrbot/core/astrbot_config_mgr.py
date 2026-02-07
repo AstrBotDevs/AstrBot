@@ -121,9 +121,16 @@ class AstrBotConfigManager:
         if not config_id:
             return self.confs["default"]
 
+        return self.get_conf_by_id(config_id)
+
+    def get_conf_by_id(self, config_id: str | None) -> AstrBotConfig:
+        """通过配置文件 ID 获取配置；无效 ID 回退到默认配置。"""
+        if not config_id:
+            return self.confs["default"]
+
         conf = self.confs.get(config_id)
-        if not conf:
-            conf = self.confs["default"]  # default MUST exists
+        if conf is None:
+            return self.confs["default"]
 
         return conf
 

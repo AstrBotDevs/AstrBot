@@ -105,7 +105,7 @@ class InternalAgentExecutor:
             add_cron_tools=self.add_cron_tools,
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            timezone=conf.get("timezone"),
         )
 
     async def run(
@@ -198,8 +198,8 @@ class InternalAgentExecutor:
                     logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
 
                     tts_provider = (
-                        self.ctx.plugin_manager.context.get_using_tts_provider(
-                            event.unified_msg_origin
+                        self.ctx.plugin_manager.context.get_tts_provider_for_event(
+                            event
                         )
                     )
 

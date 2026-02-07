@@ -1,23 +1,29 @@
-{
+﻿{
   "use_global_kb": {
     "type": "bool",
-    "description": "Use global knowledge base settings when kb_names is empty",
-    "hint": "If false and kb_names is empty, this node will skip knowledge base retrieval.",
+    "description": "当 kb_names 为空时，是否使用全局知识库配置",
+    "hint": "若关闭且 kb_names 为空，则此节点会跳过知识库检索",
     "default": true
   },
   "kb_names": {
     "type": "list",
-    "description": "Knowledge base names",
+    "description": "知识库名称列表",
     "_special": "select_knowledgebase",
     "items": {
       "type": "string"
     },
-    "hint": "Set to override global knowledge bases. Leave empty to use global settings (when use_global_kb is true)."
+    "hint": "填写后将覆盖全局知识库；留空则在 use_global_kb 为 true 时使用全局配置"
   },
   "top_k": {
     "type": "int",
-    "description": "Top K retrieved chunks",
-    "hint": "Only used when kb_names is set.",
+    "description": "最终返回的知识块数量（Top K）",
+    "hint": "仅在配置了 kb_names 时生效。",
     "default": 5
+  },
+  "fusion_top_k": {
+    "type": "int",
+    "description": "融合阶段召回数量（Fusion Top K）",
+    "hint": "设置后将覆盖全局 kb_fusion_top_k。",
+    "default": 20
   }
 }

@@ -61,14 +61,8 @@ class StarMetadata:
     logo_path: str | None = None
     """插件 Logo 的路径"""
 
-    plugin_type: str | None = None
-    """插件类型，例如 node"""
-
     node_schema: dict | None = None
     """Node 参数 Schema，仅对 node 类型插件有效"""
-
-    node_config: dict | None = None
-    """Node 运行配置，例如可接受模态、输出模态、是否可选"""
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"

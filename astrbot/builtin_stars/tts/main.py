@@ -22,11 +22,6 @@ class TTSStar(NodeStar):
 
     def __init__(self, context, config: dict | None = None):
         super().__init__(context, config)
-        self.callback_api_base = None
-
-    async def node_initialize(self) -> None:
-        config = self.context.get_config()
-        self.callback_api_base = config.get("callback_api_base", "")
 
     async def process(self, event: AstrMessageEvent) -> NodeResult:
         chain_id = event.chain_config.chain_id if event.chain_config else None
@@ -34,6 +29,9 @@ class TTSStar(NodeStar):
             return NodeResult.SKIP
 
         node_config = event.node_config or {}
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+        runtime_cfg = self.context.get_config_by_id(chain_config_id)
+        callback_api_base = runtime_cfg.get("callback_api_base", "")
 
         use_file_service = node_config.get("use_file_service", False)
         dual_output = node_config.get("dual_output", False)
@@ -51,9 +49,7 @@ class TTSStar(NodeStar):
             )
             return NodeResult.SKIP
         result = upstream_output
-        event.set_result(result)
-
-        await self.collect_stream(event)
+        await self.collect_stream(event, result)
 
         if not result.chain:
             return NodeResult.SKIP
@@ -64,7 +60,7 @@ class TTSStar(NodeStar):
         if random.random() > trigger_probability:
             return NodeResult.SKIP
 
-        tts_provider = self.get_tts_provider(event)
+        tts_provider = self.context.get_tts_provider_for_event(event)
         if not tts_provider:
             logger.warning(
                 f"Session {event.unified_msg_origin} has no TTS provider configured."
@@ -86,9 +82,9 @@ class TTSStar(NodeStar):
                         continue
 
                     url = None
-                    if use_file_service and self.callback_api_base:
+                    if use_file_service and callback_api_base:
                         token = await file_token_service.register_file(audio_path)
-                        url = f"{self.callback_api_base}/api/file/{token}"
+                        url = f"{callback_api_base}/api/file/{token}"
                         logger.debug(f"Registered file service url: {url}")
 
                     new_chain.append(

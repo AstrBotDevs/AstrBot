@@ -281,15 +281,8 @@
             />
             <div v-else>
               <v-alert type="info" variant="tonal" class="mb-4">
-                {{ tm('messages.nodeConfigRawHint') }}
+                {{ tm('messages.nodeConfigNoSchema') }}
               </v-alert>
-              <v-textarea
-                v-model="nodeConfigRaw"
-                variant="outlined"
-                rows="10"
-                auto-grow
-                hide-details
-              ></v-textarea>
             </div>
           </div>
         </v-card-text>
@@ -297,7 +290,7 @@
         <v-card-actions class="px-4 py-3">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeNodeConfigDialog">{{ tm('buttons.cancel') }}</v-btn>
-          <v-btn color="primary" variant="tonal" :loading="nodeConfigSaving" @click="saveNodeConfig">
+          <v-btn color="primary" variant="tonal" :loading="nodeConfigSaving" :disabled="!hasNodeSchema" @click="saveNodeConfig">
             {{ tm('buttons.save') }}
           </v-btn>
         </v-card-actions>
@@ -422,7 +415,6 @@ const isDefaultChain = computed(() => Boolean(editingChain.value.is_default))
 const nodeConfigTarget = ref(null)
 const nodeConfigData = ref({})
 const nodeConfigSchema = ref({})
-const nodeConfigRaw = ref('')
 const nodeConfigLoading = ref(false)
 const nodeConfigSaving = ref(false)
 const sortLoading = ref(false)
@@ -465,20 +457,22 @@ const pluginFilterModeOptions = computed(() => [
   { label: tm('pluginConfig.inherit'), value: 'inherit' },
   { label: tm('pluginConfig.blacklist'), value: 'blacklist' },
   { label: tm('pluginConfig.whitelist'), value: 'whitelist' },
-  { label: tm('pluginConfig.noRestriction'), value: 'none' }
+  { label: tm('pluginConfig.noRestriction'), value: 'unrestricted' },
+  { label: tm('pluginConfig.disableAll'), value: 'none' }
 ])
 
 const pluginFilterHint = computed(() => {
   const mode = editingChain.value?.plugin_filter?.mode
   if (mode === 'inherit') return tm('pluginConfig.inheritHint')
-  if (mode === 'none') return tm('pluginConfig.noRestrictionHint')
+  if (mode === 'unrestricted') return tm('pluginConfig.noRestrictionHint')
+  if (mode === 'none') return tm('pluginConfig.disableAllHint')
   if (mode === 'whitelist') return tm('pluginConfig.whitelistHint')
   return tm('pluginConfig.blacklistHint')
 })
 
 const isPluginFilterListDisabled = computed(() => {
   const mode = editingChain.value?.plugin_filter?.mode
-  return mode === 'inherit' || mode === 'none'
+  return mode === 'inherit' || mode === 'unrestricted' || mode === 'none'
 })
 
 const availablePluginsForFilter = computed(() => {
@@ -551,7 +545,6 @@ function buildEmptyChain() {
     config_id: 'default',
     enabled: true,
     nodes: [],
-    llm_enabled: true,
     plugin_filter: { mode: 'inherit', plugins: [] },
     nodes_is_default: false,
     is_default: false
@@ -740,7 +733,6 @@ async function openNodeConfigDialog(node) {
   }
   nodeConfigTarget.value = node
   nodeConfigData.value = {}
-  nodeConfigRaw.value = ''
   nodeConfigSchema.value = availableNodeMap.value.get(node.name)?.schema || {}
   nodeConfigLoading.value = true
   nodeConfigDialog.value = true
@@ -757,7 +749,6 @@ async function openNodeConfigDialog(node) {
       if (!hasNodeSchema.value && response.data.data.schema) {
         nodeConfigSchema.value = response.data.data.schema || {}
       }
-      nodeConfigRaw.value = JSON.stringify(nodeConfigData.value || {}, null, 2)
     } else {
       showMessage(response.data.message || tm('messages.nodeConfigLoadError'), 'error')
     }
@@ -774,16 +765,11 @@ function closeNodeConfigDialog() {
 
 async function saveNodeConfig() {
   if (!nodeConfigTarget.value) return
-  let payloadConfig = nodeConfigData.value || {}
   if (!hasNodeSchema.value) {
-    try {
-      payloadConfig = JSON.parse(nodeConfigRaw.value || '{}')
-      nodeConfigData.value = payloadConfig
-    } catch (error) {
-      showMessage(tm('messages.nodeConfigJsonError'), 'error')
-      return
-    }
+    showMessage(tm('messages.nodeConfigNoSchema'), 'error')
+    return
   }
+  const payloadConfig = nodeConfigData.value || {}
   nodeConfigSaving.value = true
   try {
     const response = await axios.post('/api/chain/node-config/update', {
@@ -970,7 +956,7 @@ watch(
   () => editingChain.value?.plugin_filter?.mode,
   mode => {
     if (!editingChain.value?.plugin_filter) return
-    if (mode === 'inherit' || mode === 'none') {
+    if (mode === 'inherit' || mode === 'unrestricted' || mode === 'none') {
       editingChain.value.plugin_filter.plugins = []
     }
   }

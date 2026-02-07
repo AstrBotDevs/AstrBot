@@ -68,12 +68,11 @@ class ContentSafetyStar(NodeStar):
         upstream_output = await event.get_node_input(strategy="last")
         output_text = ""
         if isinstance(upstream_output, MessageEventResult):
-            event.set_result(upstream_output)
             if (
                 upstream_output.result_content_type
                 == ResultContentType.STREAMING_RESULT
             ):
-                await self.collect_stream(event)
+                await self.collect_stream(event, upstream_output)
                 result = upstream_output
             else:
                 result = upstream_output

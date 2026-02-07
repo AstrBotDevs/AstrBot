@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 @dataclass
 class WaitState:
     chain_config: ChainConfig
-    node_name: str
-    node_uuid: str | None = None
-    config_id: str | None = None
+    node_uuid: str
 
     def is_valid(self, current_chain_config: ChainConfig | None) -> bool:
         """检查 WaitState 是否仍然有效"""
@@ -47,17 +45,9 @@ class WaitRegistry:
         async with self._lock:
             self._by_key[key] = state
 
-    async def get(self, key: str) -> WaitState | None:
-        async with self._lock:
-            return self._by_key.get(key)
-
     async def pop(self, key: str) -> WaitState | None:
         async with self._lock:
             return self._by_key.pop(key, None)
-
-    async def clear(self, key: str) -> None:
-        async with self._lock:
-            self._by_key.pop(key, None)
 
 
 wait_registry = WaitRegistry()

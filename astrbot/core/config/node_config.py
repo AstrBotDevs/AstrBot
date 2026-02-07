@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 
@@ -19,15 +18,14 @@ def _sanitize_name(value: str) -> str:
 
 
 def _build_node_config_path(
-    node_name: str, chain_id: str, node_uuid: str | None = None
+    node_name: str,
+    chain_id: str,
+    node_uuid: str,
 ) -> str:
-    plugin_key = _sanitize_name(node_name or "unknown")
-    chain_key = _sanitize_name(chain_id or "default")
-    if node_uuid:
-        uuid_key = _sanitize_name(node_uuid)
-        filename = f"node_{plugin_key}_{chain_key}_{uuid_key}.json"
-    else:
-        filename = f"node_{plugin_key}_{chain_key}.json"
+    plugin_key = _sanitize_name(node_name)
+    chain_key = _sanitize_name(chain_id)
+    uuid_key = _sanitize_name(node_uuid)
+    filename = f"node_{plugin_key}_{chain_key}_{uuid_key}.json"
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     return os.path.join(get_astrbot_config_path(), filename)
 
@@ -40,17 +38,17 @@ class AstrBotNodeConfig(AstrBotConfig):
     and persistence logic, only overriding the config path.
     """
 
-    node_name: str | None
-    chain_id: str | None
-    node_uuid: str | None
+    node_name: str
+    chain_id: str
+    node_uuid: str
 
     _cache: dict[tuple[str, str, str], AstrBotNodeConfig] = {}
 
     def __init__(
         self,
-        node_name: str | None = None,
-        chain_id: str | None = None,
-        node_uuid: str | None = None,
+        node_name: str,
+        chain_id: str,
+        node_uuid: str,
         schema: dict | None = None,
     ):
         # Store node identifiers before parent init
@@ -58,19 +56,10 @@ class AstrBotNodeConfig(AstrBotConfig):
         object.__setattr__(self, "chain_id", chain_id)
         object.__setattr__(self, "node_uuid", node_uuid)
 
-        # Build config path based on node_name and chain_id
-        if node_name and chain_id:
-            legacy_path = _build_node_config_path(node_name, chain_id)
+        # Keep behavior aligned with Star plugin config:
+        # if schema is not declared, do not create a persisted config file.
+        if schema is not None:
             config_path = _build_node_config_path(node_name, chain_id, node_uuid)
-            if (
-                node_uuid
-                and not os.path.exists(config_path)
-                and os.path.exists(legacy_path)
-            ):
-                with open(legacy_path, encoding="utf-8-sig") as f:
-                    legacy_conf = json.loads(f.read())
-                with open(config_path, "w", encoding="utf-8-sig") as f:
-                    json.dump(legacy_conf, f, indent=2, ensure_ascii=False)
         else:
             config_path = ""
 
@@ -98,12 +87,12 @@ class AstrBotNodeConfig(AstrBotConfig):
     @classmethod
     def get_cached(
         cls,
-        node_name: str | None,
-        chain_id: str | None,
-        node_uuid: str | None = None,
+        node_name: str,
+        chain_id: str,
+        node_uuid: str,
         schema: dict | None = None,
     ) -> AstrBotNodeConfig:
-        cache_key = (node_name or "", chain_id or "", node_uuid or "")
+        cache_key = (node_name, chain_id, node_uuid)
         cached = cls._cache.get(cache_key)
         if cached is None:
             cached = cls(
@@ -116,6 +105,15 @@ class AstrBotNodeConfig(AstrBotConfig):
             return cached
 
         if schema is not None:
+            if not cached.config_path:
+                cached = cls(
+                    node_name=node_name,
+                    chain_id=chain_id,
+                    node_uuid=node_uuid,
+                    schema=schema,
+                )
+                cls._cache[cache_key] = cached
+                return cached
             cached._update_schema(schema)
         return cached
 
