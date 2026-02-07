@@ -1,0 +1,61 @@
+{
+  "name": "astrbot-desktop",
+  "version": "4.3.2",
+  "description": "AstrBot desktop wrapper",
+  "private": true,
+  "main": "main.js",
+  "author": "AstrBot",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "sync:version": "node scripts/sync-version.mjs",
+    "build:webui": "node scripts/prepare-webui.mjs",
+    "build:backend": "node scripts/build-backend.mjs",
+    "dist:full": "npm run build:webui && npm run dist",
+    "pack": "npm run sync:version && electron-builder --dir",
+    "dist": "npm run sync:version && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.0"
+  },
+  "build": {
+    "appId": "com.astrbot.desktop",
+    "productName": "AstrBot",
+    "icon": "assets/icon.png",
+    "extraResources": [
+      {
+        "from": "resources/webui",
+        "to": "webui"
+      },
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
+    "files": [
+      "**/*",
+      "!resources/backend{,/**}",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/.bin"
+    ],
+    "asar": true,
+    "directories": {
+      "buildResources": "assets"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    }
+  }
+}
