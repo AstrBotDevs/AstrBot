@@ -106,6 +106,16 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
+            # 清理可能已生成但无效的临时文件
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                    logger.debug(
+                        f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
+                    )
+                except OSError as e:
+                    logger.warning(f"[Media Utils] 清理失败的opus输出文件时出错: {e}")
+
             error_msg = stderr.decode() if stderr else "未知错误"
             logger.error(f"[Media Utils] ffmpeg转换音频失败: {error_msg}")
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
@@ -168,6 +178,18 @@ async def convert_video_format(
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
+            # 清理可能已生成但无效的临时文件
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                    logger.debug(
+                        f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
+                    )
+                except OSError as e:
+                    logger.warning(
+                        f"[Media Utils] 清理失败的{output_format}输出文件时出错: {e}"
+                    )
+
             error_msg = stderr.decode() if stderr else "未知错误"
             logger.error(f"[Media Utils] ffmpeg转换视频失败: {error_msg}")
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
