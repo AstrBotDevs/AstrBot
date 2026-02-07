@@ -43,6 +43,7 @@ package-lock.json
 package.json
 yarn.lock
 !desktop/package.json
+!desktop/package-lock.json
 !desktop/resources/backend/.gitkeep
 !desktop/resources/webui/.gitkeep
 
