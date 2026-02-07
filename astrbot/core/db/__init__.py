@@ -346,8 +346,8 @@ class BaseDatabase(abc.ABC):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = None,
-        description: T.Any = None,
+        parent_id: str | None | NotGivenType = NOT_GIVEN,
+        description: str | None | NotGivenType = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""
