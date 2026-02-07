@@ -50,8 +50,8 @@ class QueueListener:
                 queue = self.webchat_queue_mgr.queues[conversation_id]
 
                 try:
-                    # Non-blocking get with immediate timeout
-                    data = await asyncio.wait_for(queue.get(), timeout=0.01)
+                    # Non-blocking get with short timeout
+                    data = await asyncio.wait_for(queue.get(), timeout=0.05)
                     await self.callback(data)
                 except asyncio.TimeoutError:
                     # No message in this queue, continue to next

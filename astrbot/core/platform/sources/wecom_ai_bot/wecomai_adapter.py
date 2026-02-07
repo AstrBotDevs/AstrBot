@@ -72,8 +72,8 @@ class WecomAIQueueListener:
                 queue = self.queue_mgr.queues[session_id]
 
                 try:
-                    # 非阻塞获取，立即超时
-                    data = await asyncio.wait_for(queue.get(), timeout=0.01)
+                    # 非阻塞获取，短超时
+                    data = await asyncio.wait_for(queue.get(), timeout=0.05)
                     await self.callback(data)
                 except asyncio.TimeoutError:
                     # 该队列中没有消息，继续下一个
