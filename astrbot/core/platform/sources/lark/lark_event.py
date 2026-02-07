@@ -43,6 +43,144 @@ class LarkMessageEvent(AstrMessageEvent):
         self.bot = bot
 
     @staticmethod
+    async def _send_im_message(
+        lark_client: lark.Client,
+        *,
+        content: str,
+        msg_type: str,
+        reply_message_id: str | None = None,
+        receive_id: str | None = None,
+        receive_id_type: str | None = None,
+    ) -> bool:
+        """发送飞书 IM 消息的通用辅助函数
+
+        Args:
+            lark_client: 飞书客户端
+            content: 消息内容（JSON字符串）
+            msg_type: 消息类型（post/file/audio/media等）
+            reply_message_id: 回复的消息ID（用于回复消息）
+            receive_id: 接收者ID（用于主动发送）
+            receive_id_type: 接收者ID类型（用于主动发送）
+
+        Returns:
+            是否发送成功
+        """
+        if lark_client.im is None:
+            logger.error("[Lark] API Client im 模块未初始化")
+            return False
+
+        if reply_message_id:
+            request = (
+                ReplyMessageRequest.builder()
+                .message_id(reply_message_id)
+                .request_body(
+                    ReplyMessageRequestBody.builder()
+                    .content(content)
+                    .msg_type(msg_type)
+                    .uuid(str(uuid.uuid4()))
+                    .reply_in_thread(False)
+                    .build()
+                )
+                .build()
+            )
+            response = await lark_client.im.v1.message.areply(request)
+        else:
+            from lark_oapi.api.im.v1 import (
+                CreateMessageRequest,
+                CreateMessageRequestBody,
+            )
+
+            if receive_id_type is None or receive_id is None:
+                logger.error(
+                    "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
+                )
+                return False
+
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type(receive_id_type)
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(receive_id)
+                    .content(content)
+                    .msg_type(msg_type)
+                    .uuid(str(uuid.uuid4()))
+                    .build()
+                )
+                .build()
+            )
+            response = await lark_client.im.v1.message.acreate(request)
+
+        if not response.success():
+            logger.error(f"[Lark] 发送飞书消息失败({response.code}): {response.msg}")
+            return False
+
+        return True
+
+    @staticmethod
+    async def _upload_lark_file(
+        lark_client: lark.Client,
+        *,
+        path: str,
+        file_type: str,
+        duration: int | None = None,
+    ) -> str | None:
+        """上传文件到飞书的通用辅助函数
+
+        Args:
+            lark_client: 飞书客户端
+            path: 文件路径
+            file_type: 文件类型（stream/opus/mp4等）
+            duration: 媒体时长（毫秒），可选
+
+        Returns:
+            成功返回file_key，失败返回None
+        """
+        if not path or not os.path.exists(path):
+            logger.error(f"[Lark] 文件不存在: {path}")
+            return None
+
+        if lark_client.im is None:
+            logger.error("[Lark] API Client im 模块未初始化，无法上传文件")
+            return None
+
+        try:
+            with open(path, "rb") as file_obj:
+                body_builder = (
+                    CreateFileRequestBody.builder()
+                    .file_type(file_type)
+                    .file_name(os.path.basename(path))
+                    .file(file_obj)
+                )
+                if duration is not None:
+                    body_builder.duration(duration)
+
+                request = (
+                    CreateFileRequest.builder()
+                    .request_body(body_builder.build())
+                    .build()
+                )
+                response = await lark_client.im.v1.file.acreate(request)
+
+                if not response.success():
+                    logger.error(
+                        f"[Lark] 无法上传文件({response.code}): {response.msg}"
+                    )
+                    return None
+
+                if response.data is None:
+                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
+                    return None
+
+                file_key = response.data.file_key
+                logger.debug(f"[Lark] 文件上传成功: {file_key}")
+                return file_key
+
+        except Exception as e:
+            logger.error(f"[Lark] 无法打开或上传文件: {e}")
+            return None
+
+    @staticmethod
     async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
         ret = []
         _stage = []
@@ -151,9 +289,9 @@ class LarkMessageEvent(AstrMessageEvent):
             return
 
         # 分离文件、音频、视频组件和其他组件
-        file_components = []
-        audio_components = []
-        media_components = []
+        file_components: list[File] = []
+        audio_components: list[Record] = []
+        media_components: list[Video] = []
         other_components = []
 
         for comp in message_chain.chain:
@@ -179,74 +317,33 @@ class LarkMessageEvent(AstrMessageEvent):
                         "content": res,
                     },
                 }
+                await LarkMessageEvent._send_im_message(
+                    lark_client,
+                    content=json.dumps(wrapped),
+                    msg_type="post",
+                    reply_message_id=reply_message_id,
+                    receive_id=receive_id,
+                    receive_id_type=receive_id_type,
+                )
 
-                # 根据是回复还是主动发送构建不同的请求
-                if reply_message_id:
-                    request = (
-                        ReplyMessageRequest.builder()
-                        .message_id(reply_message_id)
-                        .request_body(
-                            ReplyMessageRequestBody.builder()
-                            .content(json.dumps(wrapped))
-                            .msg_type("post")
-                            .uuid(str(uuid.uuid4()))
-                            .reply_in_thread(False)
-                            .build(),
-                        )
-                        .build()
-                    )
-                    response = await lark_client.im.v1.message.areply(request)
-                else:
-                    # 主动推送消息
-
-                    if receive_id_type is None or receive_id is None:
-                        logger.error(
-                            "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
-                        )
-                        return
-
-                    from lark_oapi.api.im.v1 import (
-                        CreateMessageRequest,
-                        CreateMessageRequestBody,
-                    )
-
-                    request = (
-                        CreateMessageRequest.builder()
-                        .receive_id_type(receive_id_type)
-                        .request_body(
-                            CreateMessageRequestBody.builder()
-                            .receive_id(receive_id)
-                            .content(json.dumps(wrapped))
-                            .msg_type("post")
-                            .uuid(str(uuid.uuid4()))
-                            .build(),
-                        )
-                        .build()
-                    )
-                    response = await lark_client.im.v1.message.acreate(request)
-
-                if not response.success():
-                    logger.error(f"发送飞书消息失败({response.code}): {response.msg}")
-
-        # 然后单独发送文件消息
+        # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
                 file_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
-        # 发送音频消息
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
                 audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
-        # 发送视频消息
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
                 media_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
     async def send(self, message: MessageChain):
+        """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(
             message,
             self.bot,
@@ -271,95 +368,22 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
         """
-        file_path = file_comp.file if file_comp.file else ""
-
-        if not file_path:
-            logger.error("[Lark] 文件路径为空，无法上传")
+        file_path = file_comp.file or ""
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client, path=file_path, file_type="stream"
+        )
+        if not file_key:
             return
 
-        if lark_client.im is None:
-            logger.error("[Lark] API Client im 模块未初始化，无法上传文件")
-            return
-
-        try:
-            with open(file_path, "rb") as file_obj:
-                request = (
-                    CreateFileRequest.builder()
-                    .request_body(
-                        CreateFileRequestBody.builder()
-                        .file_type("stream")
-                        .file_name(os.path.basename(file_path))
-                        .file(file_obj)
-                        .build(),
-                    )
-                    .build()
-                )
-
-                response = await lark_client.im.v1.file.acreate(request)
-
-                if not response.success():
-                    logger.error(f"无法上传飞书文件({response.code}): {response.msg}")
-                    return
-
-                if response.data is None:
-                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
-                    return
-
-                file_key = response.data.file_key
-                logger.debug(f"[Lark] 文件上传成功: {file_key}")
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开或上传文件: {e}")
-            return
-
-        # 发送文件消息
-        file_content = json.dumps({"file_key": file_key})
-
-        # 根据是回复还是主动发送构建不同的请求
-        if reply_message_id:
-            request = (
-                ReplyMessageRequest.builder()
-                .message_id(reply_message_id)
-                .request_body(
-                    ReplyMessageRequestBody.builder()
-                    .content(file_content)
-                    .msg_type("file")
-                    .uuid(str(uuid.uuid4()))
-                    .reply_in_thread(False)
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.areply(request)
-        else:
-            from lark_oapi.api.im.v1 import (
-                CreateMessageRequest,
-                CreateMessageRequestBody,
-            )
-
-            if receive_id_type is None or receive_id is None:
-                logger.error(
-                    "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
-                )
-                return
-
-            request = (
-                CreateMessageRequest.builder()
-                .receive_id_type(receive_id_type)
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(receive_id)
-                    .content(file_content)
-                    .msg_type("file")
-                    .uuid(str(uuid.uuid4()))
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.acreate(request)
-
-        if not response.success():
-            logger.error(f"发送飞书文件消息失败({response.code}): {response.msg}")
-            return
+        content = json.dumps({"file_key": file_key})
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=content,
+            msg_type="file",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
 
     @staticmethod
     async def _send_audio_message(
@@ -406,106 +430,33 @@ class LarkMessageEvent(AstrMessageEvent):
         # 获取音频时长
         duration = await get_media_duration(audio_path)
 
-        if lark_client.im is None:
-            logger.error("[Lark] API Client im 模块未初始化，无法上传音频")
-            return
-
         # 上传音频文件
-        try:
-            with open(audio_path, "rb") as audio_obj:
-                # 构建请求体，设置file_type为opus
-                request_body_builder = (
-                    CreateFileRequestBody.builder()
-                    .file_type("opus")
-                    .file_name(os.path.basename(audio_path))
-                    .file(audio_obj)
-                )
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client,
+            path=audio_path,
+            file_type="opus",
+            duration=duration,
+        )
 
-                # 如果成功获取时长，添加duration参数
-                if duration is not None:
-                    request_body_builder.duration(duration)
+        # 清理转换后的临时音频文件
+        if converted_audio_path and os.path.exists(converted_audio_path):
+            try:
+                os.remove(converted_audio_path)
+                logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
+            except Exception as e:
+                logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
 
-                request = (
-                    CreateFileRequest.builder()
-                    .request_body(request_body_builder.build())
-                    .build()
-                )
-
-                response = await lark_client.im.v1.file.acreate(request)
-
-                # 删除转换后的临时音频文件
-                if converted_audio_path and os.path.exists(converted_audio_path):
-                    try:
-                        os.remove(converted_audio_path)
-                        logger.debug(
-                            f"[Lark] 已删除转换后的音频文件: {converted_audio_path}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
-
-                if not response.success():
-                    logger.error(f"无法上传飞书音频({response.code}): {response.msg}")
-                    return
-
-                if response.data is None:
-                    logger.error("[Lark] 上传音频成功但未返回数据(data is None)")
-                    return
-
-                file_key = response.data.file_key
-                logger.debug(f"[Lark] 音频上传成功: {file_key}")
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开或上传音频文件: {e}")
+        if not file_key:
             return
 
-        # 发送音频消息
-        audio_content = json.dumps({"file_key": file_key})
-
-        # 根据是回复还是主动发送构建不同的请求
-        if reply_message_id:
-            request = (
-                ReplyMessageRequest.builder()
-                .message_id(reply_message_id)
-                .request_body(
-                    ReplyMessageRequestBody.builder()
-                    .content(audio_content)
-                    .msg_type("audio")
-                    .uuid(str(uuid.uuid4()))
-                    .reply_in_thread(False)
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.areply(request)
-        else:
-            from lark_oapi.api.im.v1 import (
-                CreateMessageRequest,
-                CreateMessageRequestBody,
-            )
-
-            if receive_id_type is None or receive_id is None:
-                logger.error(
-                    "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
-                )
-                return
-
-            request = (
-                CreateMessageRequest.builder()
-                .receive_id_type(receive_id_type)
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(receive_id)
-                    .content(audio_content)
-                    .msg_type("audio")
-                    .uuid(str(uuid.uuid4()))
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.acreate(request)
-
-        if not response.success():
-            logger.error(f"发送飞书音频消息失败({response.code}): {response.msg}")
-            return
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=json.dumps({"file_key": file_key}),
+            msg_type="audio",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
 
     @staticmethod
     async def _send_media_message(
@@ -552,107 +503,33 @@ class LarkMessageEvent(AstrMessageEvent):
         # 获取视频时长
         duration = await get_media_duration(video_path)
 
-        if lark_client.im is None:
-            logger.error("[Lark] API Client im 模块未初始化，无法上传视频")
-            return
-
         # 上传视频文件
-        try:
-            with open(video_path, "rb") as video_obj:
-                # 构建请求体，设置file_type为mp4
-                request_body_builder = (
-                    CreateFileRequestBody.builder()
-                    .file_type("mp4")
-                    .file_name(os.path.basename(video_path))
-                    .file(video_obj)
-                )
+        file_key = await LarkMessageEvent._upload_lark_file(
+            lark_client,
+            path=video_path,
+            file_type="mp4",
+            duration=duration,
+        )
 
-                # 如果成功获取时长，添加duration参数
-                if duration is not None:
-                    request_body_builder.duration(duration)
+        # 清理转换后的临时视频文件
+        if converted_video_path and os.path.exists(converted_video_path):
+            try:
+                os.remove(converted_video_path)
+                logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
+            except Exception as e:
+                logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
 
-                request = (
-                    CreateFileRequest.builder()
-                    .request_body(request_body_builder.build())
-                    .build()
-                )
-
-                response = await lark_client.im.v1.file.acreate(request)
-
-                # 删除转换后的临时视频文件
-                if converted_video_path and os.path.exists(converted_video_path):
-                    try:
-                        os.remove(converted_video_path)
-                        logger.debug(
-                            f"[Lark] 已删除转换后的视频文件: {converted_video_path}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
-
-                if not response.success():
-                    logger.error(f"无法上传飞书视频({response.code}): {response.msg}")
-                    return
-
-                if response.data is None:
-                    logger.error("[Lark] 上传视频成功但未返回数据(data is None)")
-                    return
-
-                file_key = response.data.file_key
-        except Exception as e:
-            logger.error(f"[Lark] 无法打开或上传视频文件: {e}")
+        if not file_key:
             return
-        logger.debug(f"[Lark] 视频上传成功: {file_key}")
 
-        # 发送视频消息
-        media_content_dict = {"file_key": file_key}
-        media_content = json.dumps(media_content_dict)
-
-        # 根据是回复还是主动发送构建不同的请求
-        if reply_message_id:
-            request = (
-                ReplyMessageRequest.builder()
-                .message_id(reply_message_id)
-                .request_body(
-                    ReplyMessageRequestBody.builder()
-                    .content(media_content)
-                    .msg_type("media")
-                    .uuid(str(uuid.uuid4()))
-                    .reply_in_thread(False)
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.areply(request)
-        else:
-            from lark_oapi.api.im.v1 import (
-                CreateMessageRequest,
-                CreateMessageRequestBody,
-            )
-
-            if receive_id_type is None or receive_id is None:
-                logger.error(
-                    "[Lark] 主动发送消息时，receive_id 和 receive_id_type 不能为空",
-                )
-                return
-
-            request = (
-                CreateMessageRequest.builder()
-                .receive_id_type(receive_id_type)
-                .request_body(
-                    CreateMessageRequestBody.builder()
-                    .receive_id(receive_id)
-                    .content(media_content)
-                    .msg_type("media")
-                    .uuid(str(uuid.uuid4()))
-                    .build(),
-                )
-                .build()
-            )
-            response = await lark_client.im.v1.message.acreate(request)
-
-        if not response.success():
-            logger.error(f"发送飞书视频消息失败({response.code}): {response.msg}")
-            return
+        await LarkMessageEvent._send_im_message(
+            lark_client,
+            content=json.dumps({"file_key": file_key}),
+            msg_type="media",
+            reply_message_id=reply_message_id,
+            receive_id=receive_id,
+            receive_id_type=receive_id_type,
+        )
 
     async def react(self, emoji: str):
         if self.bot.im is None:
