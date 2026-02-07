@@ -1,6 +1,6 @@
 from dataclasses import asdict, dataclass
 
-from quart import Quart, jsonify
+from quart import Quart
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 

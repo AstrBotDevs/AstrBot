@@ -108,8 +108,6 @@ class AstrBotDashboard:
                     }
                 )
 
-        APP = self.app
-
         dashboard_cfg = self.config.get("dashboard", {})
         cors_cfg = dashboard_cfg.get("cors", {})
         allow_origin = cors_cfg.get("allow_origins", "*")
