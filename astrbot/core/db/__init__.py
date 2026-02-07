@@ -25,6 +25,16 @@ from astrbot.core.db.po import (
 )
 
 
+class NotGivenType:
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NOT_GIVEN"
+
+
+NOT_GIVEN = NotGivenType()
+
+
 @dataclass
 class BaseDatabase(abc.ABC):
     """数据库基类"""
@@ -288,8 +298,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str] | None | NotGivenType = NOT_GIVEN,
+        skills: list[str] | None | NotGivenType = NOT_GIVEN,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
