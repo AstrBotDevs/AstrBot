@@ -1,4 +1,7 @@
+import httpx
 from openai import AsyncOpenAI
+
+from astrbot import logger
 
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
@@ -15,6 +18,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         super().__init__(provider_config, provider_settings)
         self.provider_config = provider_config
         self.provider_settings = provider_settings
+        proxy = provider_config.get("proxy", "")
+        http_client = None
+        if proxy:
+            logger.info(f"[OpenAI Embedding] 使用代理: {proxy}")
+            http_client = httpx.AsyncClient(proxy=proxy)
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
             base_url=provider_config.get(
@@ -22,6 +30,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "https://api.openai.com/v1",
             ),
             timeout=int(provider_config.get("timeout", 20)),
+            http_client=http_client,
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
 

@@ -112,7 +112,11 @@
     "hints": {
       "id": "Provider source ID (not provider ID)",
       "key": "API key for authentication",
-      "apiBase": "Custom API endpoint URL"
+      "apiBase": "Custom API endpoint URL",
+      "proxy": "HTTP/HTTPS proxy address, e.g. http://127.0.0.1:7890. Only affects this provider's API requests, doesn't interfere with Docker internal networking."
+    },
+    "labels": {
+      "proxy": "Proxy"
     }
   },
   "models": {
@@ -141,4 +145,4 @@
       "modelId": "Model ID"
     }
   }
-} 
+}

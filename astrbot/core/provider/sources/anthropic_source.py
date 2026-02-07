@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncGenerator
 
 import anthropic
+import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 from anthropic.types.message_delta_usage import MessageDeltaUsage
@@ -14,6 +15,11 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
 
 from ..register import register_provider_adapter
 
@@ -45,11 +51,17 @@ class ProviderAnthropic(Provider):
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
+            http_client=self._create_http_client(provider_config),
         )
 
         self.thinking_config = provider_config.get("anth_thinking_config", {})
 
         self.set_model(provider_config.get("model", "unknown"))
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("Anthropic", proxy)
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -207,9 +219,19 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
-        completion = await self.client.messages.create(
-            **payloads, stream=False, extra_body=extra_body
-        )
+        try:
+            completion = await self.client.messages.create(
+                **payloads, stream=False, extra_body=extra_body
+            )
+        except httpx.RequestError as e:
+            proxy = self.provider_config.get("proxy", "")
+            log_connection_failure("Anthropic", e, proxy)
+            raise
+        except Exception as e:
+            if is_connection_error(e):
+                proxy = self.provider_config.get("proxy", "")
+                log_connection_failure("Anthropic", e, proxy)
+            raise
 
         assert isinstance(completion, Message)
         logger.debug(f"completion: {completion}")
