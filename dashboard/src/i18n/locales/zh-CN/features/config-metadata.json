@@ -293,6 +293,235 @@
   },
   "platform_group": {
     "name": "平台配置",
+    "platform": {
+      "description": "消息平台适配器",
+      "active_send_mode": {
+        "description": "是否换用主动发送接口"
+      },
+      "appid": {
+        "description": "appid",
+        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
+      },
+      "callback_server_host": {
+        "description": "回调服务器主机",
+        "hint": "回调服务器主机。留空则不启用回调服务器。"
+      },
+      "card_template_id": {
+        "description": "卡片模板 ID",
+        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。"
+      },
+      "discord_activity_name": {
+        "description": "Discord 活动名称",
+        "hint": "可选的 Discord 活动名称。留空则不设置活动。"
+      },
+      "discord_command_register": {
+        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+      },
+      "discord_proxy": {
+        "description": "Discord 代理地址",
+        "hint": "可选的代理地址：http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord Bot Token",
+        "hint": "在此处填入你的 Discord Bot Token"
+      },
+      "enable": {
+        "description": "启用",
+        "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。"
+      },
+      "enable_group_c2c": {
+        "description": "启用消息列表单聊",
+        "hint": "启用后，机器人可以接收到 QQ 消息列表中的私聊消息。你可能需要在 QQ 机器人平台上通过扫描二维码的方式添加机器人为你的好友。详见文档。"
+      },
+      "enable_guild_direct_message": {
+        "description": "启用频道私聊",
+        "hint": "启用后，机器人可以接收到频道的私聊消息。"
+      },
+      "id": {
+        "description": "机器人名称",
+        "hint": "机器人名称"
+      },
+      "is_sandbox": {
+        "description": "沙箱模式"
+      },
+      "kf_name": {
+        "description": "微信客服账号名",
+        "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+      },
+      "lark_bot_name": {
+        "description": "飞书机器人的名字",
+        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。"
+      },
+      "lark_connection_mode": {
+        "description": "订阅方式",
+        "labels": [
+          "长连接模式",
+          "推送至服务器模式"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "Encrypt Key",
+        "hint": "用于解密飞书回调数据的加密密钥"
+      },
+      "lark_verification_token": {
+        "description": "Verification Token",
+        "hint": "用于验证飞书回调请求的令牌"
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "允许不安全下载（禁用 SSL 验证）",
+        "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。"
+      },
+      "misskey_default_visibility": {
+        "description": "默认帖子可见性",
+        "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。"
+      },
+      "misskey_download_chunk_size": {
+        "description": "流式下载分块大小（字节）",
+        "hint": "流式下载和计算 MD5 时使用的每次读取字节数，过小会增加开销，过大会占用内存。"
+      },
+      "misskey_download_timeout": {
+        "description": "远端下载超时时间（秒）",
+        "hint": "下载远程文件时的超时时间（秒），用于异步上传回退到本地上传的场景。"
+      },
+      "misskey_enable_chat": {
+        "description": "启用聊天消息响应",
+        "hint": "启用后，机器人将会监听和响应私信聊天消息"
+      },
+      "misskey_enable_file_upload": {
+        "description": "启用文件上传到 Misskey",
+        "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey。URL 文件会先尝试服务器端上传，异步上传失败时会回退到下载后本地上传。"
+      },
+      "misskey_instance_url": {
+        "description": "Misskey 实例 URL",
+        "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址"
+      },
+      "misskey_local_only": {
+        "description": "仅限本站（不参与联合）",
+        "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例"
+      },
+      "misskey_max_download_bytes": {
+        "description": "最大允许下载字节数（超出则中止）",
+        "hint": "如果希望限制下载文件的最大大小以防止 OOM，请填写最大字节数；留空或 null 表示不限制。"
+      },
+      "misskey_token": {
+        "description": "Misskey Access Token",
+        "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）"
+      },
+      "misskey_upload_concurrency": {
+        "description": "并发上传限制",
+        "hint": "同时进行的文件上传任务上限（整数，默认 3）。"
+      },
+      "misskey_upload_folder": {
+        "description": "上传到网盘的目标文件夹 ID",
+        "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。"
+      },
+      "port": {
+        "description": "回调服务器端口",
+        "hint": "回调服务器端口。留空则不启用回调服务器。"
+      },
+      "satori_api_base_url": {
+        "description": "Satori API 终结点",
+        "hint": "Satori API 的基础地址。"
+      },
+      "satori_auto_reconnect": {
+        "description": "启用自动重连",
+        "hint": "断开连接时是否自动重新连接 WebSocket。"
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket 终结点",
+        "hint": "Satori 事件的 WebSocket 端点。"
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori 心跳间隔",
+        "hint": "发送心跳消息的间隔（秒）。"
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori 重连延迟",
+        "hint": "尝试重新连接前的延迟时间（秒）。"
+      },
+      "satori_token": {
+        "description": "Satori 令牌",
+        "hint": "用于 Satori API 身份验证的令牌。"
+      },
+      "secret": {
+        "description": "secret",
+        "hint": "必填项。"
+      },
+      "slack_connection_mode": {
+        "description": "Slack Connection Mode",
+        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode."
+      },
+      "slack_webhook_host": {
+        "description": "Slack Webhook Host",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_path": {
+        "description": "Slack Webhook Path",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_port": {
+        "description": "Slack Webhook Port",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "telegram_command_auto_refresh": {
+        "description": "Telegram 命令自动刷新",
+        "hint": "启用后，AstrBot 将会在运行时自动刷新 Telegram 命令。(单独设置此项无效)"
+      },
+      "telegram_command_register": {
+        "description": "Telegram 命令注册",
+        "hint": "启用后，AstrBot 将会自动注册 Telegram 命令。"
+      },
+      "telegram_command_register_interval": {
+        "description": "Telegram 命令自动刷新间隔",
+        "hint": "Telegram 命令自动刷新间隔，单位为秒。"
+      },
+      "telegram_token": {
+        "description": "Bot Token",
+        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "type": {
+        "description": "适配器类型"
+      },
+      "unified_webhook_mode": {
+        "description": "统一 Webhook 模式",
+        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+      },
+      "webhook_uuid": {
+        "description": "Webhook UUID",
+        "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。"
+      },
+      "wecom_ai_bot_name": {
+        "description": "企业微信智能机器人的名字",
+        "hint": "请务必填写正确，否则无法使用一些指令。"
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "企业微信智能机器人私聊欢迎语",
+        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。"
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "企业微信智能机器人初始响应文本",
+        "hint": "当机器人收到消息时，首先回复的文本内容。留空则使用默认值。"
+      },
+      "wpp_active_message_poll": {
+        "description": "是否启用主动消息轮询",
+        "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。"
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "主动消息轮询间隔",
+        "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
+      },
+      "ws_reverse_host": {
+        "description": "反向 Websocket 主机",
+        "hint": "AstrBot 将作为服务器端。"
+      },
+      "ws_reverse_port": {
+        "description": "反向 Websocket 端口"
+      },
+      "ws_reverse_token": {
+        "description": "反向 Websocket Token",
+        "hint": "反向 Websocket Token。未设置则不启用 Token 验证。"
+      }
+    },
     "general": {
       "description": "基本",
       "admins_id": {

@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import inspect
 import os
 import traceback
@@ -1289,11 +1290,24 @@ class ConfigRoute(Route):
 
     async def _get_astrbot_config(self):
         config = self.config
+        metadata = copy.deepcopy(CONFIG_METADATA_2)
+        platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "platform_group": {
+                    "metadata": {
+                        "platform": metadata["platform_group"]["metadata"]["platform"]
+                    }
+                }
+            }
+        )
+        metadata["platform_group"]["metadata"]["platform"] = platform_i18n[
+            "platform_group"
+        ]["metadata"]["platform"]
 
         # 平台适配器的默认配置模板注入
-        platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
-            "platform"
-        ]["config_template"]
+        platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
+            "config_template"
+        ]
 
         # 收集需要注册logo的平台
         logo_registration_tasks = []
@@ -1311,14 +1325,14 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
-            "provider"
-        ]["config_template"]
+        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
+            "config_template"
+        ]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
-        return {"metadata": CONFIG_METADATA_2, "config": config}
+        return {"metadata": metadata, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
         ret: dict = {"metadata": None, "config": None}

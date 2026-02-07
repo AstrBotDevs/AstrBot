@@ -290,6 +290,235 @@
   },
   "platform_group": {
     "name": "Platform",
+    "platform": {
+      "description": "Message Platform Adapters",
+      "active_send_mode": {
+        "description": "Use Proactive Send API"
+      },
+      "appid": {
+        "description": "App ID",
+        "hint": "Required. App ID for the QQ Official Bot platform. See the docs for how to obtain it."
+      },
+      "callback_server_host": {
+        "description": "Callback Server Host",
+        "hint": "Callback server host. Leave empty to disable the callback server."
+      },
+      "card_template_id": {
+        "description": "Card Template ID",
+        "hint": "Optional. DingTalk interactive card template ID. When enabled, streaming replies will use interactive cards."
+      },
+      "discord_activity_name": {
+        "description": "Discord Activity Name",
+        "hint": "Optional Discord activity name. Leave empty to disable."
+      },
+      "discord_command_register": {
+        "description": "Auto-register plugin commands as Discord slash commands"
+      },
+      "discord_proxy": {
+        "description": "Discord Proxy URL",
+        "hint": "Optional proxy URL: http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord Bot Token",
+        "hint": "Enter your Discord Bot Token here."
+      },
+      "enable": {
+        "description": "Enable",
+        "hint": "Whether to enable this adapter. Disabled adapters will not receive messages."
+      },
+      "enable_group_c2c": {
+        "description": "Enable Message List Private Chat",
+        "hint": "When enabled, the bot can receive private chats from QQ message list. You may need to add the bot as a friend by scanning a QR code in the QQ bot platform. See docs."
+      },
+      "enable_guild_direct_message": {
+        "description": "Enable Guild Direct Messages",
+        "hint": "When enabled, the bot can receive guild direct messages."
+      },
+      "id": {
+        "description": "Bot Name",
+        "hint": "Bot name"
+      },
+      "is_sandbox": {
+        "description": "Sandbox Mode"
+      },
+      "kf_name": {
+        "description": "WeChat Customer Service Account Name",
+        "hint": "Optional. Customer service account name (not ID). Get it at https://kf.weixin.qq.com/kf/frame#/accounts"
+      },
+      "lark_bot_name": {
+        "description": "Lark Bot Name",
+        "hint": "Must be correct; otherwise @ mentions will not wake the bot and only prefix wake will work."
+      },
+      "lark_connection_mode": {
+        "description": "Subscription Mode",
+        "labels": [
+          "Long Connection Mode",
+          "Webhook Server Mode"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "Encrypt Key",
+        "hint": "Encryption key for decrypting Lark callback data."
+      },
+      "lark_verification_token": {
+        "description": "Verification Token",
+        "hint": "Token for verifying Lark callback requests."
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "Allow Insecure Downloads (Disable SSL Verification)",
+        "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."
+      },
+      "misskey_default_visibility": {
+        "description": "Default Post Visibility",
+        "hint": "Default visibility for bot posts. public: public, home: home timeline, followers: followers only."
+      },
+      "misskey_download_chunk_size": {
+        "description": "Stream Download Chunk Size (bytes)",
+        "hint": "Bytes read per chunk during streaming download and MD5 calculation. Too small increases overhead; too large uses more memory."
+      },
+      "misskey_download_timeout": {
+        "description": "Remote Download Timeout (seconds)",
+        "hint": "Timeout for downloading remote files (seconds), used when falling back to local upload."
+      },
+      "misskey_enable_chat": {
+        "description": "Enable Chat Message Responses",
+        "hint": "When enabled, the bot listens and responds to private chat messages."
+      },
+      "misskey_enable_file_upload": {
+        "description": "Enable File Upload to Misskey",
+        "hint": "When enabled, the adapter uploads files in message chains to Misskey. URL files try server-side upload first; if async upload fails, it falls back to local download and upload."
+      },
+      "misskey_instance_url": {
+        "description": "Misskey Instance URL",
+        "hint": "e.g. https://misskey.example. The Misskey instance where the bot account lives."
+      },
+      "misskey_local_only": {
+        "description": "Local Only (No Federation)",
+        "hint": "When enabled, bot posts are visible only on this instance and are not federated."
+      },
+      "misskey_max_download_bytes": {
+        "description": "Max Download Size (bytes)",
+        "hint": "To limit download size to prevent OOM, set the maximum bytes; empty or null means no limit."
+      },
+      "misskey_token": {
+        "description": "Misskey Access Token",
+        "hint": "API access token generated in the connection service settings."
+      },
+      "misskey_upload_concurrency": {
+        "description": "Upload Concurrency Limit",
+        "hint": "Max number of concurrent upload tasks (integer, default 3)."
+      },
+      "misskey_upload_folder": {
+        "description": "Target Drive Folder ID",
+        "hint": "Optional: ID of the target folder in Misskey drive. Leave empty to use the root folder."
+      },
+      "port": {
+        "description": "Callback Server Port",
+        "hint": "Callback server port. Leave empty to disable the callback server."
+      },
+      "satori_api_base_url": {
+        "description": "Satori API Endpoint",
+        "hint": "Base URL for the Satori API."
+      },
+      "satori_auto_reconnect": {
+        "description": "Enable Auto Reconnect",
+        "hint": "Automatically reconnect the WebSocket when disconnected."
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket Endpoint",
+        "hint": "WebSocket endpoint for Satori events."
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori Heartbeat Interval",
+        "hint": "Interval in seconds between heartbeat messages."
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori Reconnect Delay",
+        "hint": "Delay before attempting to reconnect (seconds)."
+      },
+      "satori_token": {
+        "description": "Satori Token",
+        "hint": "Token for Satori API authentication."
+      },
+      "secret": {
+        "description": "Secret",
+        "hint": "Required."
+      },
+      "slack_connection_mode": {
+        "description": "Slack Connection Mode",
+        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode."
+      },
+      "slack_webhook_host": {
+        "description": "Slack Webhook Host",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_path": {
+        "description": "Slack Webhook Path",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_port": {
+        "description": "Slack Webhook Port",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "telegram_command_auto_refresh": {
+        "description": "Telegram Command Auto Refresh",
+        "hint": "When enabled, AstrBot automatically refreshes Telegram commands at runtime. (Setting this alone has no effect)"
+      },
+      "telegram_command_register": {
+        "description": "Telegram Command Registration",
+        "hint": "When enabled, AstrBot automatically registers Telegram commands."
+      },
+      "telegram_command_register_interval": {
+        "description": "Telegram Command Auto Refresh Interval",
+        "hint": "Telegram command auto-refresh interval in seconds."
+      },
+      "telegram_token": {
+        "description": "Bot Token",
+        "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+      },
+      "type": {
+        "description": "Adapter Type"
+      },
+      "unified_webhook_mode": {
+        "description": "Unified Webhook Mode",
+        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/platform/webhook/{webhook_uuid}."
+      },
+      "webhook_uuid": {
+        "description": "Webhook UUID",
+        "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
+      },
+      "wecom_ai_bot_name": {
+        "description": "WeCom AI Bot Name",
+        "hint": "Must be correct; otherwise some commands won't work."
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "WeCom AI Bot DM Welcome Message",
+        "hint": "When a user enters a DM session on that day, reply with a welcome message. Leave empty to disable."
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "WeCom AI Bot Initial Response Text",
+        "hint": "First reply when the bot receives a message. Leave empty to use default."
+      },
+      "wpp_active_message_poll": {
+        "description": "Enable Proactive Message Polling",
+        "hint": "Only enable if WeChat messages are not syncing to AstrBot on time. Disabled by default."
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "Proactive Message Poll Interval",
+        "hint": "Interval in seconds, default 3, should not exceed 60 or it may be considered old messages."
+      },
+      "ws_reverse_host": {
+        "description": "Reverse WebSocket Host",
+        "hint": "AstrBot acts as the server."
+      },
+      "ws_reverse_port": {
+        "description": "Reverse WebSocket Port"
+      },
+      "ws_reverse_token": {
+        "description": "Reverse WebSocket Token",
+        "hint": "Reverse WebSocket token. If not set, token verification is disabled."
+      }
+    },
     "general": {
       "description": "General",
       "admins_id": {
