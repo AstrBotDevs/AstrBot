@@ -23,14 +23,33 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
-from .routes import *
-from .routes.backup import BackupRoute
-from .routes.live_chat import LiveChatRoute
-from .routes.platform import PlatformRoute
-from .routes.route import Response, RouteContext
-from .routes.session_management import SessionManagementRoute
-from .routes.subagent import SubAgentRoute
-from .routes.t2i import T2iRoute
+from .routes import (
+    AuthRoute,
+    BackupRoute,
+    ChatRoute,
+    ChatUIProjectRoute,
+    CommandRoute,
+    ConfigRoute,
+    ConversationRoute,
+    CronRoute,
+    FileRoute,
+    KnowledgeBaseRoute,
+    LiveChatRoute,
+    LogRoute,
+    PersonaRoute,
+    PlatformRoute,
+    PluginRoute,
+    Response,
+    RouteContext,
+    SessionManagementRoute,
+    SkillsRoute,
+    StaticFileRoute,
+    StatRoute,
+    SubAgentRoute,
+    T2iRoute,
+    ToolsRoute,
+    UpdateRoute,
+)
 
 APP: Quart
 
@@ -314,7 +333,9 @@ class AstrBotDashboard:
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+        return asyncio.run(
+            serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
+        )
 
     @staticmethod
     def _build_bind(host: str, port: int) -> str:
