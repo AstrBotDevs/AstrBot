@@ -2,11 +2,13 @@
   "provider_id": {
     "type": "string",
     "default": "",
-    "description": "Chat provider ID override for this node."
+    "description": "Chat provider ID override for this node.",
+    "_special": "select_provider"
   },
   "persona_id": {
     "type": "string",
     "default": "",
-    "description": "Persona ID override for this node."
+    "description": "Persona ID override for this node.",
+    "_special": "select_persona"
   }
 }

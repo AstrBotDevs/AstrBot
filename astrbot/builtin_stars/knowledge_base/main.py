@@ -73,12 +73,30 @@ class KnowledgeBaseNode(NodeStar):
         config = self.context.get_config(umo=umo)
         node_config = node_config or {}
         use_global_kb = node_config.get("use_global_kb", True)
-        kb_ids = node_config.get("kb_ids", []) or []
-        if kb_ids:
+        kb_names = node_config.get("kb_names", []) or []
+
+        if kb_names:
             top_k = node_config.get("top_k", 5)
             logger.debug(
-                f"[知识库节点] 使用节点配置，知识库数量: {len(kb_ids)}",
+                f"[知识库节点] 使用节点配置，知识库数量: {len(kb_names)}",
             )
+
+            valid_kb_names = []
+            invalid_kb_names = []
+            for kb_name in kb_names:
+                kb_helper = await kb_mgr.get_kb_by_name(kb_name)
+                if kb_helper:
+                    valid_kb_names.append(kb_helper.kb.kb_name)
+                else:
+                    logger.warning(f"[知识库节点] 知识库不存在或未加载: {kb_name}")
+                    invalid_kb_names.append(kb_name)
+
+            if invalid_kb_names:
+                logger.warning(
+                    f"[知识库节点] 配置的以下知识库名称无效: {invalid_kb_names}",
+                )
+
+            kb_names = valid_kb_names
         elif use_global_kb:
             kb_names = config.get("kb_names", [])
             top_k = config.get("kb_final_top_k", 5)
@@ -97,22 +115,6 @@ class KnowledgeBaseNode(NodeStar):
         else:
             logger.info(f"[知识库节点] 节点已禁用知识库: {chain_id}")
             return None
-
-        # 将 kb_ids 转换为 kb_names
-        kb_names = []
-        invalid_kb_ids = []
-        for kb_id in kb_ids:
-            kb_helper = await kb_mgr.get_kb(kb_id)
-            if kb_helper:
-                kb_names.append(kb_helper.kb.kb_name)
-            else:
-                logger.warning(f"[知识库节点] 知识库不存在或未加载: {kb_id}")
-                invalid_kb_ids.append(kb_id)
-
-        if invalid_kb_ids:
-            logger.warning(
-                f"[知识库节点] 配置的以下知识库无效: {invalid_kb_ids}",
-            )
 
         if not kb_names:
             return None

@@ -2,7 +2,8 @@
   "provider_id": {
     "type": "string",
     "default": "",
-    "description": "TTS provider ID override for this node."
+    "description": "TTS provider ID override for this node.",
+    "_special": "select_provider_tts"
   },
   "trigger_probability": {
     "type": "float",
