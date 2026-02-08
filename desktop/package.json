@@ -1,6 +1,6 @@
 {
   "name": "astrbot-desktop",
-  "version": "4.3.2",
+  "version": "4.14.5",
   "description": "AstrBot desktop wrapper",
   "private": true,
   "main": "main.js",
@@ -49,6 +49,12 @@
     "asar": true,
     "directories": {
       "buildResources": "assets"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
     },
     "mac": {
       "target": [
