@@ -6,6 +6,7 @@
 import asyncio
 import json
 import os
+import re
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -203,10 +204,22 @@ class SocketClientHandler:
         Returns:
             JSON格式的响应字符串
         """
+        # 日志级别映射：完整名称 -> 日志文件中的缩写
+        LEVEL_MAP = {
+            "DEBUG": "DEBUG",
+            "INFO": "INFO",
+            "WARNING": "WARN",
+            "WARN": "WARN",
+            "ERROR": "ERRO",
+            "CRITICAL": "CRIT",
+        }
+
         try:
             # 获取参数
             lines = min(request.get("lines", 100), 1000)  # 最多1000行
             level_filter = request.get("level", "").upper()
+            # 映射到日志文件中的缩写
+            level_filter = LEVEL_MAP.get(level_filter, level_filter)
             pattern = request.get("pattern", "")
 
             # 日志文件路径
@@ -236,9 +249,11 @@ class SocketClientHandler:
                     if not line.strip():
                         continue
 
-                    # 级别过滤
-                    if level_filter and level_filter not in line:
-                        continue
+                    # 级别过滤（匹配 [级别] 格式）
+                    if level_filter:
+                        # 匹配 [级别] 格式，例如 [ERRO], [WARN], [INFO]
+                        if not re.search(rf'\[{level_filter}\]', line):
+                            continue
 
                     # 模式过滤
                     if pattern and pattern not in line:
