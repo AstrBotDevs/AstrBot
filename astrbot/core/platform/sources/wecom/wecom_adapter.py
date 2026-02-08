@@ -1,9 +1,10 @@
 import asyncio
 import os
 import sys
+import time
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import quart
 from requests import Response
@@ -36,6 +37,17 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+
+# 客户信息缓存条目
+class CustomerCacheEntry(NamedTuple):
+    nickname: str
+    avatar: str | None
+    expire_at: float
+
+
+# 客户信息 TTL 缓存（默认 5 分钟）
+CUSTOMER_CACHE_TTL = 300
 
 
 class WecomServer:
@@ -173,6 +185,8 @@ class WecomPlatformAdapter(Platform):
 
         # 微信客服
         self.kf_name = self.config.get("kf_name", None)
+        # 客户信息缓存 (external_userid -> CustomerCacheEntry)
+        self._customer_cache: dict[str, CustomerCacheEntry] = {}
         if self.kf_name:
             # inject
             self.wechat_kf_api = WeChatKF(client=self.client)
@@ -184,10 +198,10 @@ class WecomPlatformAdapter(Platform):
 
         async def callback(msg: BaseMessage):
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
+                token = msg._data["Token"]
+                kfid = msg._data["OpenKfId"]
 
                 def get_latest_msg_item() -> dict | None:
-                    token = msg._data["Token"]
-                    kfid = msg._data["OpenKfId"]
                     has_more = 1
                     ret = {}
                     while has_more:
@@ -203,6 +217,7 @@ class WecomPlatformAdapter(Platform):
                     get_latest_msg_item,
                 )
                 if msg_new:
+                    msg_new["open_kfid"] = kfid
                     await self.convert_wechat_kf_message(msg_new)
                 return
             await self.convert_message(msg)
@@ -350,11 +365,45 @@ class WecomPlatformAdapter(Platform):
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
         external_userid = cast(str, msg.get("external_userid"))
+
+        # 尝试从缓存获取客户信息
+        nickname = external_userid
+        avatar = None
+        now = time.time()
+        cached = self._customer_cache.get(external_userid)
+        if cached and cached.expire_at > now:
+            # 缓存命中
+            nickname = cached.nickname
+            avatar = cached.avatar
+            logger.debug(f"客户信息缓存命中: external_userid={external_userid}")
+        else:
+            # 缓存未命中或已过期，调用 API
+            try:
+                customer_info = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    self.wechat_kf_api.batchget_customer,
+                    external_userid,
+                )
+                # 避免在日志中输出完整客户信息（包含昵称、头像等敏感数据）
+                logger.debug(f"获取客户信息成功: external_userid={external_userid}")
+                customer_list = customer_info.get("customer_list", [])
+                if customer_list:
+                    nickname = customer_list[0].get("nickname", external_userid)
+                    avatar = customer_list[0].get("avatar", None)
+                # 更新缓存
+                self._customer_cache[external_userid] = CustomerCacheEntry(
+                    nickname=nickname,
+                    avatar=avatar,
+                    expire_at=now + CUSTOMER_CACHE_TTL,
+                )
+            except Exception as e:
+                logger.debug(f"获取客户信息失败: {e}")
+
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
         abm.self_id = msg["open_kfid"]
-        abm.sender = MessageMember(external_userid, external_userid)
+        abm.sender = MessageMember(external_userid, nickname, avatar)
         abm.session_id = external_userid
         abm.type = MessageType.FRIEND_MESSAGE
         abm.message_id = msg.get("msgid", uuid.uuid4().hex[:8])

@@ -145,6 +145,8 @@ class BaseDatabase(abc.ABC):
         cid: str | None = None,
         created_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
+        user_name: str | None = None,
+        avatar: str | None = None,
     ) -> ConversationV2:
         """Create a new conversation."""
         ...
@@ -157,6 +159,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
+        user_name: str | None = None,
+        avatar: str | None = None,
     ) -> None:
         """Update a conversation's history."""
         ...

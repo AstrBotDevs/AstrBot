@@ -54,6 +54,9 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     )
     platform_id: str = Field(nullable=False)
     user_id: str = Field(nullable=False)
+    user_name: str | None = Field(default=None, max_length=255)
+    avatar: str | None = Field(default=None, max_length=512)
+    """用户头像 URL"""
     content: list | None = Field(default=None, sa_type=JSON)
 
     title: str | None = Field(default=None, max_length=255)
@@ -418,6 +421,10 @@ class Conversation:
     updated_at: int = 0
     token_usage: int = 0
     """对话的总 token 数量。AstrBot 会保留最近一次 LLM 请求返回的总 token 数，方便统计。token_usage 可能为 0，表示未知。"""
+    user_name: str | None = None
+    """发送消息的用户名称"""
+    avatar: str | None = None
+    """用户头像 URL"""
 
 
 class Personality(TypedDict):
