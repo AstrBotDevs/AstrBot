@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /AstrBot
 
 COPY . /AstrBot/
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y curl gnupg \
     && apt-get install -y nodejs
 
 RUN python -m pip install uv \
-    && echo "3.11" > .python-version
+    && echo "3.12" > .python-version
 RUN uv pip install -r requirements.txt --no-cache-dir --system
 RUN uv pip install socksio uv pilk --no-cache-dir --system
 
