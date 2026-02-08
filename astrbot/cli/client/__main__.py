@@ -284,6 +284,7 @@ def get_logs(
     lines: int = 100,
     level: str = "",
     pattern: str = "",
+    use_regex: bool = False,
 ) -> dict:
     """获取AstrBot日志
 
@@ -293,6 +294,7 @@ def get_logs(
         lines: 返回的日志行数
         level: 日志级别过滤
         pattern: 模式过滤
+        use_regex: 是否使用正则表达式
 
     Returns:
         响应字典
@@ -309,6 +311,7 @@ def get_logs(
         "lines": lines,
         "level": level,
         "pattern": pattern,
+        "regex": use_regex,
     }
 
     # 添加token
@@ -436,12 +439,13 @@ EPILOG = """使用示例:
     echo "你好" | astr              从标准输入读取
 
   获取日志:
-    astr log                        获取最近 100 行日志
+    astr log                        获取最近 100 行日志（直接读取文件）
     astr --log                      同上（兼容旧用法）
     astr log --lines 50             获取最近 50 行
     astr log --level ERROR          只显示 ERROR 级别
     astr log --pattern "CLI"        只显示包含 "CLI" 的日志
-    astr log -j                     以 JSON 格式输出日志
+    astr log --pattern "ERRO|WARN" --regex  使用正则表达式匹配
+    astr log --socket               通过 Socket 连接 AstrBot 获取
 
   高级选项:
     astr -j "测试"                  输出原始 JSON 响应
@@ -546,28 +550,49 @@ def _do_send(msg: str, socket_path: str | None, timeout: float, use_json: bool) 
     "--level", default="", help="按级别过滤 (DEBUG/INFO/WARNING/ERROR/CRITICAL)"
 )
 @click.option("--pattern", default="", help="按模式过滤（子串匹配）")
-@click.option("-s", "--socket", "socket_path", default=None, help="Unix socket 路径")
-@click.option("-t", "--timeout", default=30.0, type=float, help="超时时间（秒）")
-@click.option("-j", "--json", "use_json", is_flag=True, help="输出原始 JSON 响应")
+@click.option("--regex", is_flag=True, help="使用正则表达式匹配 pattern")
+@click.option(
+    "--socket",
+    "use_socket",
+    is_flag=True,
+    help="通过 Socket 连接 AstrBot 获取日志（需要 AstrBot 运行）",
+)
+@click.option(
+    "-t", "--timeout", default=30.0, type=float, help="超时时间（仅 Socket 模式）"
+)
 def log(
     lines: int,
     level: str,
     pattern: str,
-    socket_path: str | None,
+    regex: bool,
+    use_socket: bool,
     timeout: float,
-    use_json: bool,
 ) -> None:
     """获取 AstrBot 日志
 
     \b
     示例:
-      astr log
-      astr log --lines 50
-      astr log --level ERROR
-      astr log --pattern "plugin"
+      astr log                        # 直接读取日志文件（默认）
+      astr log --lines 50             # 获取最近 50 行
+      astr log --level ERROR          # 只显示 ERROR 级别
+      astr log --pattern "plugin"      # 匹配包含 "plugin" 的日志
+      astr log --pattern "ERRO|WARN" --regex  # 使用正则表达式
+      astr log --socket               # 通过 Socket 连接 AstrBot 获取
     """
-    response = get_logs(socket_path, timeout, lines, level, pattern)
-    _output_response(response, use_json)
+    if use_socket:
+        # 通过 Socket 获取日志
+        response = get_logs(None, timeout, lines, level, pattern, regex)
+        # 输出响应（复用 _output_response，但不需要 use_json 参数）
+        if response.get("status") == "success":
+            formatted = response.get("response", "")
+            click.echo(formatted)
+        else:
+            error = response.get("error", "Unknown error")
+            click.echo(f"Error: {error}", err=True)
+            raise SystemExit(1)
+    else:
+        # 直接读取日志文件（默认）
+        _read_log_from_file(lines, level, pattern, regex)
 
 
 def _output_response(response: dict, use_json: bool) -> None:
@@ -582,6 +607,91 @@ def _output_response(response: dict, use_json: bool) -> None:
             error = response.get("error", "Unknown error")
             click.echo(f"Error: {error}", err=True)
             raise SystemExit(1)
+
+
+def _read_log_from_file(lines: int, level: str, pattern: str, use_regex: bool) -> None:
+    """直接从日志文件读取
+
+    Args:
+        lines: 返回的日志行数
+        level: 日志级别过滤
+        pattern: 模式过滤
+        use_regex: 是否使用正则表达式
+    """
+    import re
+
+    # 日志级别映射
+    LEVEL_MAP = {
+        "DEBUG": "DEBUG",
+        "INFO": "INFO",
+        "WARNING": "WARN",
+        "WARN": "WARN",
+        "ERROR": "ERRO",
+        "CRITICAL": "CRIT",
+    }
+
+    # 映射级别
+    level_filter = LEVEL_MAP.get(level.upper(), level.upper())
+
+    # 日志文件路径
+    log_path = os.path.join(get_data_path(), "logs", "astrbot.log")
+
+    if not os.path.exists(log_path):
+        click.echo(
+            f"Error: 日志文件未找到: {log_path}",
+            err=True,
+        )
+        click.echo(
+            "提示: 请在配置中启用 log_file_enable 来记录日志到文件，或使用不带 --file 的方式连接 AstrBot",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    try:
+        with open(log_path, encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+
+        # 从末尾开始筛选
+        logs = []
+        for line in reversed(all_lines):
+            # 跳过空行
+            if not line.strip():
+                continue
+
+            # 级别过滤
+            if level_filter:
+                if not re.search(rf"\[{level_filter}\]", line):
+                    continue
+
+            # 模式过滤
+            if pattern:
+                if use_regex:
+                    try:
+                        if not re.search(pattern, line):
+                            continue
+                    except re.error:
+                        # 正则表达式错误，回退到子串匹配
+                        if pattern not in line:
+                            continue
+                else:
+                    if pattern not in line:
+                        continue
+
+            logs.append(line.rstrip())
+
+            if len(logs) >= lines:
+                break
+
+        # 反转回来（使时间顺序正确）
+        logs.reverse()
+
+        # 输出
+        for log_line in logs:
+            click.echo(log_line)
+
+    except OSError as e:
+        click.echo(f"Error: 读取日志文件失败: {e}", err=True)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

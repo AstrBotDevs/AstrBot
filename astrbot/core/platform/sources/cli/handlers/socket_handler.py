@@ -221,6 +221,9 @@ class SocketClientHandler:
             # 映射到日志文件中的缩写
             level_filter = LEVEL_MAP.get(level_filter, level_filter)
             pattern = request.get("pattern", "")
+            use_regex = request.get("regex", False)  # 是否使用正则表达式
+
+            logger.debug(f"[LogFilter] lines={lines}, level={level_filter}, pattern={repr(pattern)}, regex={use_regex}")
 
             # 日志文件路径
             log_path = os.path.join(self.data_path, "logs", "astrbot.log")
@@ -255,9 +258,19 @@ class SocketClientHandler:
                         if not re.search(rf'\[{level_filter}\]', line):
                             continue
 
-                    # 模式过滤
-                    if pattern and pattern not in line:
-                        continue
+                    # 模式过滤（支持正则表达式）
+                    if pattern:
+                        if use_regex:
+                            try:
+                                if not re.search(pattern, line):
+                                    continue
+                            except re.error:
+                                # 正则表达式错误，回退到子串匹配
+                                if pattern not in line:
+                                    continue
+                        else:
+                            if pattern not in line:
+                                continue
 
                     logs.append(line.rstrip())
 
