@@ -1,6 +1,6 @@
 {
   "name": "astrbot-desktop",
-  "version": "4.14.5",
+  "version": "4.3.2",
   "description": "AstrBot desktop wrapper",
   "private": true,
   "main": "main.js",
@@ -17,7 +17,7 @@
     "sync:version": "node scripts/sync-version.mjs",
     "build:webui": "node scripts/prepare-webui.mjs",
     "build:backend": "node scripts/build-backend.mjs",
-    "dist:full": "pnpm run build:webui && pnpm run dist",
+    "dist:full": "pnpm run build:webui && pnpm run build:backend && pnpm run dist",
     "pack": "pnpm run sync:version && electron-builder --dir",
     "dist": "pnpm run sync:version && electron-builder"
   },
@@ -30,6 +30,10 @@
     "productName": "AstrBot",
     "icon": "assets/icon.png",
     "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
       {
         "from": "resources/webui",
         "to": "webui"

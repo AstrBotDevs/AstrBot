@@ -119,7 +119,7 @@ Or refer to the official documentation: [Deploy AstrBot from Source](https://ast
 
 #### Desktop Electron Build
 
-For desktop build steps (frontend-only packaging, `pnpm` workflow), see [`desktop/README.md`](desktop/README.md).
+For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/README.md`](desktop/README.md).
 
 ## Supported Messaging Platforms
 

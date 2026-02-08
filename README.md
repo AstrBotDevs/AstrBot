@@ -134,7 +134,7 @@ uv run main.py
 
 #### 桌面端 Electron 打包
 
-桌面端（前端-only 打包，`pnpm` 工作流）构建流程请参阅：[`desktop/README.md`](desktop/README.md)。
+桌面端（Electron 打包，`pnpm` 工作流）构建流程请参阅：[`desktop/README.md`](desktop/README.md)。
 
 ## 支持的消息平台
 

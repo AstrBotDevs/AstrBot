@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const {
   app,
@@ -18,8 +19,17 @@ const backendUrl = normalizeUrl(
   process.env.ASTRBOT_BACKEND_URL || 'http://127.0.0.1:6185/',
 );
 const backendAutoStart = process.env.ASTRBOT_BACKEND_AUTO_START !== '0';
-const backendTimeoutMs = Number.parseInt(
-  process.env.ASTRBOT_BACKEND_TIMEOUT_MS || '20000',
+const defaultBackendTimeoutMs = app.isPackaged ? 0 : 20000;
+const backendTimeoutMsParsed = Number.parseInt(
+  process.env.ASTRBOT_BACKEND_TIMEOUT_MS || `${defaultBackendTimeoutMs}`,
+  10,
+);
+const backendTimeoutMs =
+  Number.isFinite(backendTimeoutMsParsed) && backendTimeoutMsParsed >= 0
+    ? backendTimeoutMsParsed
+    : defaultBackendTimeoutMs;
+const dashboardTimeoutMs = Number.parseInt(
+  process.env.ASTRBOT_DASHBOARD_TIMEOUT_MS || '20000',
   10,
 );
 
@@ -28,6 +38,26 @@ let tray = null;
 let isQuitting = false;
 let backendProcess = null;
 let backendConfig = null;
+let backendLogFd = null;
+let backendLastExitReason = null;
+let backendStartupFailureReason = null;
+
+app.commandLine.appendSwitch('disable-http-cache');
+
+function getElectronLogPath() {
+  const rootDir =
+    process.env.ASTRBOT_ROOT || backendConfig?.rootDir || app.getPath('userData');
+  return path.join(rootDir, 'logs', 'electron.log');
+}
+
+function logElectron(message) {
+  const logPath = getElectronLogPath();
+  ensureDir(path.dirname(logPath));
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  try {
+    fs.appendFileSync(logPath, line, 'utf8');
+  } catch {}
+}
 
 function getAssetPath(filename) {
   if (app.isPackaged) {
@@ -61,16 +91,6 @@ function normalizeUrl(value) {
   }
 }
 
-function shellQuote(value) {
-  if (!value) {
-    return '';
-  }
-  if (process.platform === 'win32') {
-    return `"${value.replace(/"/g, '\\"')}"`;
-  }
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
 function ensureDir(value) {
   if (!value) {
     return;
@@ -79,6 +99,16 @@ function ensureDir(value) {
     return;
   }
   fs.mkdirSync(value, { recursive: true });
+}
+
+function closeBackendLogFd() {
+  if (backendLogFd === null) {
+    return;
+  }
+  try {
+    fs.closeSync(backendLogFd);
+  } catch {}
+  backendLogFd = null;
 }
 
 function getPackagedBackendPath() {
@@ -107,39 +137,53 @@ function resolveBackendRoot() {
   if (!app.isPackaged) {
     return null;
   }
-  return app.getPath('userData');
+  return path.join(os.homedir(), '.astrbot');
 }
 
 function resolveBackendCwd() {
   if (!app.isPackaged) {
     return path.resolve(__dirname, '..');
   }
-  return app.getPath('userData');
+  return resolveBackendRoot();
 }
 
-function buildDefaultBackendCmd(webuiDir) {
+function buildDefaultBackendLaunch(webuiDir) {
   if (app.isPackaged) {
     const packagedBackend = getPackagedBackendPath();
     if (!packagedBackend) {
       return null;
     }
-    let cmd = shellQuote(packagedBackend);
+    const args = [];
     if (webuiDir) {
-      cmd += ` --webui-dir ${shellQuote(webuiDir)}`;
+      args.push('--webui-dir', webuiDir);
     }
-    return cmd;
+    return {
+      cmd: packagedBackend,
+      args,
+      shell: false,
+    };
   }
-  let cmd = 'uv run main.py';
+  const args = ['run', 'main.py'];
   if (webuiDir) {
-    cmd += ` --webui-dir ${shellQuote(webuiDir)}`;
+    args.push('--webui-dir', webuiDir);
   }
-  return cmd;
+  return {
+    cmd: 'uv',
+    args,
+    shell: process.platform === 'win32',
+  };
 }
 
 function resolveBackendConfig() {
   const webuiDir = resolveWebuiDir();
-  const cmd =
-    process.env.ASTRBOT_BACKEND_CMD || buildDefaultBackendCmd(webuiDir);
+  const customCmd = process.env.ASTRBOT_BACKEND_CMD;
+  const launch = customCmd
+    ? {
+        cmd: customCmd,
+        args: [],
+        shell: true,
+      }
+    : buildDefaultBackendLaunch(webuiDir);
   const cwd = process.env.ASTRBOT_BACKEND_CWD || resolveBackendCwd();
   const rootDir = process.env.ASTRBOT_ROOT || resolveBackendRoot();
   ensureDir(cwd);
@@ -147,7 +191,9 @@ function resolveBackendConfig() {
     ensureDir(rootDir);
   }
   return {
-    cmd,
+    cmd: launch ? launch.cmd : null,
+    args: launch ? launch.args : [],
+    shell: launch ? launch.shell : true,
     cwd,
     webuiDir,
     rootDir,
@@ -162,8 +208,11 @@ async function pingBackend(timeoutMs = 800) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(backendUrl, { signal: controller.signal });
-    return response.ok;
+    await fetch(backendUrl, {
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    return true;
   } catch {
     return false;
   } finally {
@@ -171,15 +220,28 @@ async function pingBackend(timeoutMs = 800) {
   }
 }
 
-async function waitForBackend(maxWaitMs = 20000) {
+async function waitForBackend(maxWaitMs = 0, failOnProcessExit = false) {
   const start = Date.now();
-  while (Date.now() - start < maxWaitMs) {
+  while (true) {
     if (await pingBackend()) {
-      return true;
+      return { ok: true, reason: null };
+    }
+    if (failOnProcessExit && !backendProcess) {
+      return {
+        ok: false,
+        reason:
+          backendLastExitReason ||
+          'Backend process exited before becoming reachable.',
+      };
+    }
+    if (maxWaitMs > 0 && Date.now() - start >= maxWaitMs) {
+      return {
+        ok: false,
+        reason: `Timed out after ${maxWaitMs}ms waiting for backend startup.`,
+      };
     }
     await delay(600);
   }
-  return false;
 }
 
 function startBackend() {
@@ -192,22 +254,65 @@ function startBackend() {
   if (!backendConfig.cmd) {
     return;
   }
+  backendLastExitReason = null;
   const env = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
   };
   if (backendConfig.rootDir) {
     env.ASTRBOT_ROOT = backendConfig.rootDir;
+    const logsDir = path.join(backendConfig.rootDir, 'logs');
+    ensureDir(logsDir);
+    const logPath = path.join(logsDir, 'backend.log');
+    try {
+      backendLogFd = fs.openSync(logPath, 'a');
+    } catch {
+      backendLogFd = null;
+    }
   }
-  backendProcess = spawn(backendConfig.cmd, {
+  backendProcess = spawn(backendConfig.cmd, backendConfig.args || [], {
     cwd: backendConfig.cwd,
     env,
-    shell: true,
-    stdio: 'ignore',
+    shell: backendConfig.shell,
+    stdio:
+      backendLogFd === null
+        ? 'ignore'
+        : ['ignore', backendLogFd, backendLogFd],
     windowsHide: true,
   });
 
-  backendProcess.on('exit', () => {
+  if (backendLogFd !== null) {
+    const launchLine = [backendConfig.cmd, ...(backendConfig.args || [])]
+      .map((item) => JSON.stringify(item))
+      .join(' ');
+    try {
+      fs.writeSync(
+        backendLogFd,
+        `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
+      );
+    } catch {}
+  }
+
+  backendProcess.on('error', (error) => {
+    backendLastExitReason =
+      error instanceof Error ? error.message : String(error);
+    if (backendLogFd !== null) {
+      try {
+        fs.writeSync(
+          backendLogFd,
+          `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+      } catch {}
+    }
+    closeBackendLogFd();
+    backendProcess = null;
+  });
+
+  backendProcess.on('exit', (code, signal) => {
+    backendLastExitReason = `Backend process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`;
+    closeBackendLogFd();
     backendProcess = null;
   });
 }
@@ -224,7 +329,31 @@ function stopBackend() {
   } else {
     backendProcess.kill('SIGTERM');
   }
+  closeBackendLogFd();
   backendProcess = null;
+}
+
+async function loadDashboard(maxWaitMs = 20000) {
+  if (!mainWindow) {
+    return false;
+  }
+  const loadUrl = new URL(backendUrl);
+  loadUrl.searchParams.set('_electron_ts', `${Date.now()}`);
+  const start = Date.now();
+  let lastError = null;
+  while (maxWaitMs <= 0 || Date.now() - start < maxWaitMs) {
+    try {
+      await mainWindow.loadURL(loadUrl.toString());
+      return true;
+    } catch (error) {
+      lastError = error;
+      await delay(600);
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error(`Timed out loading ${backendUrl}`);
 }
 
 function createWindow() {
@@ -242,10 +371,6 @@ function createWindow() {
       sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
     },
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
   });
 
   mainWindow.on('close', (event) => {
@@ -268,6 +393,39 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) {
+        return;
+      }
+      logElectron(
+        `did-fail-load main-frame code=${errorCode} desc=${errorDescription} url=${validatedURL}`,
+      );
+    },
+  );
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    logElectron(`did-finish-load url=${mainWindow.webContents.getURL()}`);
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    logElectron(
+      `render-process-gone reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+  });
+
+  mainWindow.webContents.on(
+    'console-message',
+    (_event, level, message, line, sourceId) => {
+      if (level >= 2) {
+        logElectron(
+          `renderer-console level=${level} source=${sourceId}:${line} message=${message}`,
+        );
+      }
+    },
+  );
 
   return mainWindow;
 }
@@ -343,6 +501,7 @@ function toggleWindow() {
 }
 
 async function ensureBackend() {
+  backendStartupFailureReason = null;
   if (!backendConfig) {
     backendConfig = resolveBackendConfig();
   }
@@ -351,10 +510,17 @@ async function ensureBackend() {
     return true;
   }
   if (!backendAutoStart || !backendConfig.cmd) {
+    backendStartupFailureReason =
+      'Backend auto-start is disabled or backend command is not configured.';
     return false;
   }
   startBackend();
-  return waitForBackend(backendTimeoutMs);
+  const waitResult = await waitForBackend(backendTimeoutMs, true);
+  if (!waitResult.ok) {
+    backendStartupFailureReason = waitResult.reason;
+    return false;
+  }
+  return true;
 }
 
 app.setAppUserModelId('com.astrbot.desktop');
@@ -383,12 +549,24 @@ app.whenReady().then(async () => {
   const ready = await ensureBackend();
 
   if (!ready) {
+    const backendLogPath = backendConfig?.rootDir
+      ? path.join(backendConfig.rootDir, 'logs', 'backend.log')
+      : null;
+    const detailLines = [];
+    if (backendStartupFailureReason) {
+      detailLines.push(`Reason: ${backendStartupFailureReason}`);
+    }
+    detailLines.push(
+      'Please start the backend at http://127.0.0.1:6185 and relaunch AstrBot.',
+    );
+    if (backendLogPath) {
+      detailLines.push(`Backend log: ${backendLogPath}`);
+    }
     await dialog.showMessageBox({
       type: 'error',
       title: 'AstrBot startup failed',
       message: 'AstrBot backend is not reachable.',
-      detail:
-        'Please start the backend at http://127.0.0.1:6185 and relaunch AstrBot.',
+      detail: detailLines.join('\n'),
     });
     isQuitting = true;
     app.quit();
@@ -399,14 +577,18 @@ app.whenReady().then(async () => {
   createTray();
 
   try {
-    await mainWindow.loadURL(backendUrl);
+    await mainWindow.webContents.session.clearCache();
+    await loadDashboard(dashboardTimeoutMs);
+    showWindow();
   } catch (error) {
-    dialog.showMessageBox({
+    await dialog.showMessageBox({
       type: 'error',
       title: 'Failed to load AstrBot',
       message: 'Unable to load the AstrBot dashboard.',
       detail: error instanceof Error ? error.message : String(error),
     });
+    isQuitting = true;
+    app.quit();
   }
 });
 

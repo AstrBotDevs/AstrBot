@@ -6,9 +6,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..');
 const outputDir = path.join(rootDir, 'desktop', 'resources', 'backend');
 const workDir = path.join(rootDir, 'desktop', 'resources', '.pyinstaller');
+const dataSeparator = process.platform === 'win32' ? ';' : ':';
+const kbStopwordsSrc = path.join(
+  rootDir,
+  'astrbot',
+  'core',
+  'knowledge_base',
+  'retrieval',
+  'hit_stopwords.txt',
+);
+const kbStopwordsDest = 'astrbot/core/knowledge_base/retrieval';
 
 const args = [
   'run',
+  '--with',
+  'pyinstaller',
   'python',
   '-m',
   'PyInstaller',
@@ -19,6 +31,8 @@ const args = [
   'astrbot-backend',
   '--collect-all',
   'aiosqlite',
+  '--add-data',
+  `${kbStopwordsSrc}${dataSeparator}${kbStopwordsDest}`,
   '--distpath',
   outputDir,
   '--workpath',
