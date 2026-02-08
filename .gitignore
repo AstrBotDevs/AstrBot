@@ -32,6 +32,7 @@ tests/astrbot_plugin_openai
 # Dashboard
 dashboard/node_modules/
 dashboard/dist/
+.pnpm-store/
 desktop/node_modules/
 desktop/dist/
 desktop/out/
@@ -43,7 +44,6 @@ package-lock.json
 package.json
 yarn.lock
 !desktop/package.json
-!desktop/package-lock.json
 !desktop/resources/backend/.gitkeep
 !desktop/resources/webui/.gitkeep
 

@@ -5,15 +5,21 @@
   "private": true,
   "main": "main.js",
   "author": "AstrBot",
+  "packageManager": "pnpm@10.28.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  },
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
     "sync:version": "node scripts/sync-version.mjs",
     "build:webui": "node scripts/prepare-webui.mjs",
     "build:backend": "node scripts/build-backend.mjs",
-    "dist:full": "npm run build:webui && npm run dist",
-    "pack": "npm run sync:version && electron-builder --dir",
-    "dist": "npm run sync:version && electron-builder"
+    "dist:full": "pnpm run build:webui && pnpm run dist",
+    "pack": "pnpm run sync:version && electron-builder --dir",
+    "dist": "pnpm run sync:version && electron-builder"
   },
   "devDependencies": {
     "electron": "^30.0.0",
