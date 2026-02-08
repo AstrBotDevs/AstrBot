@@ -38,7 +38,18 @@ const pkgRaw = await readFile(desktopPackagePath, 'utf8');
 const pkg = JSON.parse(pkgRaw);
 const tag = getGitTag();
 const versionFromTag = tag ? normalizeTag(tag) : null;
-const version = versionFromTag || (await getPyprojectVersion()) || pkg.version;
+const versionFromPyproject = await getPyprojectVersion();
+const version = versionFromPyproject || versionFromTag || pkg.version;
+
+if (
+  versionFromPyproject &&
+  versionFromTag &&
+  versionFromPyproject !== versionFromTag
+) {
+  console.log(
+    `Using pyproject version ${versionFromPyproject} (ignoring git tag ${versionFromTag}).`,
+  );
+}
 
 if (!version) {
   console.warn('No version found to sync.');
