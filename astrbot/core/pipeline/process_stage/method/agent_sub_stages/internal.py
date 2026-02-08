@@ -355,9 +355,7 @@ class InternalAgentSubStage(Stage):
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            if message.role in ["assistant", "user"] and getattr(
-                message, "_no_save", None
-            ):
+            if message.role in ["assistant", "user"] and message._no_save:
                 continue
             message_to_save.append(message.model_dump())
 
